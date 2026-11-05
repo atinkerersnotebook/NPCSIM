@@ -1,0 +1,584 @@
+{
+  "schema_version": "1.0",
+  "config": {
+    "schema_version": "1.0",
+    "proxy": {
+      "base_url": "http://127.0.0.1:9901/v1",
+      "model": "claude-haiku-5.5",
+      "token_environment": null,
+      "timeout_seconds": 15.0
+    },
+    "world": {
+      "transport": "stdio",
+      "scenario": "escape-room",
+      "command": null,
+      "args": [],
+      "url": null
+    },
+    "budgets": {
+      "max_actions": 30,
+      "max_model_calls": 40,
+      "max_seconds": 120.0,
+      "repetition_window": 3
+    }
+  },
+  "summary": [
+    {
+      "scenario": "escape-room",
+      "episodes": 20,
+      "successes": 20,
+      "success_rate": 1.0,
+      "passed": true
+    },
+    {
+      "scenario": "sleepy-room",
+      "episodes": 10,
+      "successes": 10,
+      "success_rate": 1.0,
+      "passed": true
+    }
+  ],
+  "episodes": [
+    {
+      "scenario": "escape-room",
+      "episode": 1,
+      "run_id": "b24c72b820c74782a01e957f14aa8335",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 21.416,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 2,
+      "run_id": "ea9ccb402afa443e903aa5656ecf039f",
+      "status": "succeeded",
+      "actions": 7,
+      "model_calls": 7,
+      "elapsed_seconds": 25.196,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-8"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 3,
+      "run_id": "97c9ae67a79f49959b5f65f7d5a46e8b",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 20.384,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 4,
+      "run_id": "22b91e7bae4d4315aef26218595a4a0e",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 19.72,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 5,
+      "run_id": "e34bcb1d00d14627a5f44c0aed0e7210",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 20.364,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 6,
+      "run_id": "7459902a3af9464e96c5a120ca742550",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 24.194,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 7,
+      "run_id": "c2c914e925834487afbd2cf732864e7e",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 19.198,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 8,
+      "run_id": "aaa55bf8b1f243dd863258656e415d1a",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 21.971,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 9,
+      "run_id": "e3274a488dc841108ca97ca0647d6d47",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 21.637,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 10,
+      "run_id": "5e655352b3254f229145ba6b12b622d2",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 21.768,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 11,
+      "run_id": "35e8ecd6ce7e479886ad2f1837a94872",
+      "status": "succeeded",
+      "actions": 7,
+      "model_calls": 7,
+      "elapsed_seconds": 22.056,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-8"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 12,
+      "run_id": "3bcdd14c9de94f7eb5b3eb06b91d097f",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 24.242,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 13,
+      "run_id": "5ff2b9b5e29749ea8fc5e58701f25d49",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 20.458,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 14,
+      "run_id": "ed5261ad03504a2f8c5fd26e03f3acd4",
+      "status": "succeeded",
+      "actions": 7,
+      "model_calls": 7,
+      "elapsed_seconds": 24.427,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-8"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 15,
+      "run_id": "db152d71bf484997bfebb0873692c038",
+      "status": "succeeded",
+      "actions": 7,
+      "model_calls": 7,
+      "elapsed_seconds": 22.781,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-8"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 16,
+      "run_id": "df9e54f972a649f19e59c856fd698e6d",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 19.071,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 17,
+      "run_id": "59014dca783d41659e561d81fbac9618",
+      "status": "succeeded",
+      "actions": 7,
+      "model_calls": 7,
+      "elapsed_seconds": 25.603,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-8"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 18,
+      "run_id": "9f9d4edcc676412c8958002bb8fc06e4",
+      "status": "succeeded",
+      "actions": 6,
+      "model_calls": 6,
+      "elapsed_seconds": 21.537,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-7"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 19,
+      "run_id": "1191381205d6432e9d1be9927f03eb6e",
+      "status": "succeeded",
+      "actions": 7,
+      "model_calls": 7,
+      "elapsed_seconds": 23.02,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-8"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "escape-room",
+      "episode": 20,
+      "run_id": "23000a5306ff4ac79c9d62a160ab879e",
+      "status": "succeeded",
+      "actions": 7,
+      "model_calls": 7,
+      "elapsed_seconds": 22.078,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "outside"
+        },
+        "observation_revision": "obs-8"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "sleepy-room",
+      "episode": 1,
+      "run_id": "a06cc9b49f3842648c44bacbf7d6f1d9",
+      "status": "succeeded",
+      "actions": 3,
+      "model_calls": 3,
+      "elapsed_seconds": 13.425,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "courtyard"
+        },
+        "observation_revision": "obs-4"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "sleepy-room",
+      "episode": 2,
+      "run_id": "58ac1b87876944c5b5bee4a77fbe223f",
+      "status": "succeeded",
+      "actions": 2,
+      "model_calls": 2,
+      "elapsed_seconds": 8.175,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "courtyard"
+        },
+        "observation_revision": "obs-3"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "sleepy-room",
+      "episode": 3,
+      "run_id": "32dd128286814d84bf68d2355dbe7db0",
+      "status": "succeeded",
+      "actions": 2,
+      "model_calls": 2,
+      "elapsed_seconds": 7.351,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "courtyard"
+        },
+        "observation_revision": "obs-3"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "sleepy-room",
+      "episode": 4,
+      "run_id": "9087144a056848c5946c3c875d6cc9ac",
+      "status": "succeeded",
+      "actions": 3,
+      "model_calls": 3,
+      "elapsed_seconds": 14.845,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "courtyard"
+        },
+        "observation_revision": "obs-4"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "sleepy-room",
+      "episode": 5,
+      "run_id": "e2df732e8b9540829e38dc8ab5d1a57d",
+      "status": "succeeded",
+      "actions": 2,
+      "model_calls": 2,
+      "elapsed_seconds": 7.083,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "courtyard"
+        },
+        "observation_revision": "obs-3"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "sleepy-room",
+      "episode": 6,
+      "run_id": "13a9afb2c59145e48b4ed3e1c97b8957",
+      "status": "succeeded",
+      "actions": 3,
+      "model_calls": 3,
+      "elapsed_seconds": 11.684,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "courtyard"
+        },
+        "observation_revision": "obs-4"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "sleepy-room",
+      "episode": 7,
+      "run_id": "bdbbf6f6c0e142119f43085450a5b06b",
+      "status": "succeeded",
+      "actions": 2,
+      "model_calls": 2,
+      "elapsed_seconds": 7.039,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "courtyard"
+        },
+        "observation_revision": "obs-3"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "sleepy-room",
+      "episode": 8,
+      "run_id": "3f314f55febd4676b788d3c4defb93de",
+      "status": "succeeded",
+      "actions": 2,
+      "model_calls": 2,
+      "elapsed_seconds": 5.887,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "courtyard"
+        },
+        "observation_revision": "obs-3"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "sleepy-room",
+      "episode": 9,
+      "run_id": "2ef66eab7dc24ad586e163e1b0040424",
+      "status": "succeeded",
+      "actions": 3,
+      "model_calls": 3,
+      "elapsed_seconds": 13.305,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "courtyard"
+        },
+        "observation_revision": "obs-4"
+      },
+      "reason": "The world verified that this NPC left the room."
+    },
+    {
+      "scenario": "sleepy-room",
+      "episode": 10,
+      "run_id": "277e0446e28c4bf78c4ad25e410760cf",
+      "status": "succeeded",
+      "actions": 2,
+      "model_calls": 2,
+      "elapsed_seconds": 8.093,
+      "verification": {
+        "status": "achieved",
+        "evidence": {
+          "actor_id": "npc-001",
+          "location_id": "courtyard"
+        },
+        "observation_revision": "obs-3"
+      },
+      "reason": "The world verified that this NPC left the room."
+    }
+  ],
+  "report_directory": "C:\\dev\\NPCSIM\\data\\evaluations\\7da4cf1f24094fd4bfe4e9aaf9baaea3"
+}

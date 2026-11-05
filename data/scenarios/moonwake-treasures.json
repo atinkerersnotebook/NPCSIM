@@ -1,0 +1,163 @@
+{
+  "schema_version": "1.0",
+  "id": "moonwake-treasures",
+  "title": "The Moonwake Treasures",
+  "start_location": "harbor-home",
+  "exit_location": "harbor-home",
+  "objective": "Recover the moon coins and the sealed star atlas from the far island, return home, and put both treasures down in the harbor home.",
+  "opening_narrative": "Rain taps the windows of your harbor home. On the table lies a provision parcel, beside a rug pinned down with an iron fastening strip. A notice names two lost treasures. Upstairs, the late cartographer's study still smells of sea salt.",
+  "goal_type": "treasures_returned",
+  "budgets": {"max_actions": 400, "max_model_calls": 480, "max_seconds": 5400, "repetition_window": 4},
+  "body": {
+    "description": "A resourceful traveler with hands and a sea bag holding eight inventory units. Bulky timbers and digging tools take extra space.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 8
+  },
+  "needs": {},
+  "recovery": {},
+  "voyage": {
+    "teleport_item": "resonant-journal",
+    "teleport_word": "MOONWAKE",
+    "teleport_locations": ["roof-terrace", "crescent-beach"],
+    "docks": ["crescent-beach", "far-shore"],
+    "ship_id": "moonwake-cutter",
+    "cabin_id": "cutter-deck",
+    "boarding_exit": "gangway",
+    "crew_id": "navigator",
+    "crew_offer": "provision-parcel",
+    "chart_id": "bearing-chart",
+    "flotation_id": "cork-belt",
+    "tidal_locations": ["tidal-lagoon", "rock-pools"],
+    "tide_visible_locations": ["crescent-beach", "tidal-lagoon", "rock-pools", "cutter-deck", "far-shore"],
+    "turns_per_tide": 6,
+    "dig_sites": {
+      "anchor-bank": {"tool_id": "spade", "low_tide": true},
+      "bearing-ground": {"tool_id": "spade", "paces": 24}
+    },
+    "treasures": ["moon-coins", "star-atlas"],
+    "passage_rules": {
+      "narrow-fissure": {"carried": ["storm-lantern"], "max_item_units": 1},
+      "crab-crossing": {"requires": {"crab-colony": {"distracted": "yes"}}},
+      "observatory-entry": {"requires": {"vine-snakes": {"dispersed": "yes"}}}
+    }
+  },
+  "entities": {
+    "harbor-home": {"name": "Harbor home", "kind": "location", "description": "Your small home overlooks the harbor. The notice asks for both treasures to be put down here, not left in a bag or aboard ship. A pinned rug lies beside the stairs."},
+    "chart-study": {"name": "Cartographer's study", "kind": "location", "description": "A brass-bound journal rests beside a roof door. An archway leads to the storage loft."},
+    "storage-loft": {"name": "Storage loft", "kind": "location", "description": "A dry loft holds a lantern wick and spark strips. A maintenance note recommends keeping an enduring storm lantern for the island's narrow cave route."},
+    "roof-terrace": {"name": "Roof terrace", "kind": "location", "description": "A parapet makes this roof terrace safe. A silver mosaic seems to hum at the same pitch as the journal. The roof door leads back to the study."},
+    "crescent-beach": {"name": "Crescent beach", "kind": "location", "description": "A silver mosaic glimmers above a sheltered crescent beach. A cutter hull waits on the sand. The lagoon lies below; a meadow path leads inland. A gangway will be usable once the cutter is built. Tide changes are visible from this safe shore."},
+    "reed-meadow": {"name": "Reed meadow", "kind": "location", "description": "Wind bends the reeds around paths to a navigator's hut, a lookout hill and a cave forecourt."},
+    "navigator-hut": {"name": "Navigator's hut", "kind": "location", "description": "A patient navigator sits beside a lockable chart chest and a tame kite bird. They want a fresh provision parcel in exchange for crewing the cutter both ways."},
+    "lookout-hill": {"name": "Lookout hill", "kind": "location", "description": "Across the strait stands an abandoned observatory. A narrow fissure descends into a sail chamber. Carry a storm lantern through it; anything larger than one inventory unit must use the wide cave route instead."},
+    "cave-forecourt": {"name": "Cave forecourt", "kind": "location", "description": "A colony of large shore crabs blocks a stone crossing. They can be drawn aside with a jar of fish. Beyond the crossing stands a locked sea door."},
+    "stone-hall": {"name": "Stone hall", "kind": "location", "description": "A broad passage connects the crab crossing to a locked sea door. This route can carry timbers and digging tools that cannot pass through the hill fissure."},
+    "sail-chamber": {"name": "Sail chamber", "kind": "location", "description": "Dry sailcloth and heavy precut planks rest beside a workshop arch. The narrow fissure climbs to daylight, while the wide sea door leads through the stone hall."},
+    "island-workshop": {"name": "Island workshop", "kind": "location", "description": "A claw mallet, spade and cork flotation belt hang from a workbench. A jar for gathering fish in seawater stands beside them. The bulky spade cannot fit through the narrow fissure."},
+    "tidal-lagoon": {"name": "Tidal lagoon", "kind": "location", "description": "A sandbank hides an anchor. It can be excavated with a spade only at low tide. A raised shelf offers safe waiting if the tide rises. Carry the cork belt to enter flooded routes at high tide."},
+    "rock-pools": {"name": "Rock pools", "kind": "location", "description": "Small fish dart through seawater pools. A jar can collect fish together with enough seawater to keep them alive. A high shelf provides a safe place to wait."},
+    "cutter-deck": {"name": "Cutter deck", "kind": "location", "description": "The cutter's deck holds a navigation stand and the gangway to the current shore. Sailing needs the completed cutter, hired navigator, carried chart and high tide. The resonant journal disrupts the compass and must stay ashore, including out of any bag left on deck."},
+    "far-shore": {"name": "Far shore", "kind": "location", "description": "Pale sand borders the far island. The gangway returns to the moored cutter. A path leads through an orchard to old survey ground and an observatory."},
+    "salt-orchard": {"name": "Salt orchard", "kind": "location", "description": "Wind-twisted fruit trees surround a stone path. Markers lead onward to the survey field."},
+    "survey-field": {"name": "Survey field", "kind": "location", "description": "A flat survey field holds a bearing stone and an undisturbed patch of ground. Read the navigation chart to learn the correct number of paces. A vine-covered arch leads toward the observatory."},
+    "old-observatory": {"name": "Old observatory", "kind": "location", "description": "A roofless observatory shelters a chest of moon coins. The path back leads through the survey field."},
+
+    "home-stairs": {"name": "Study stairs", "kind": "door", "description": "Stairs connect the home and study.", "location": "harbor-home", "destination": "chart-study", "open": true, "health": null},
+    "loft-arch": {"name": "Loft archway", "kind": "door", "description": "An open archway joins the study and storage loft.", "location": "chart-study", "destination": "storage-loft", "open": true, "health": null},
+    "roof-door": {"name": "Roof door", "kind": "door", "description": "A closed, unlocked door opens onto a safe roof terrace.", "location": "chart-study", "destination": "roof-terrace", "open": false, "health": null},
+    "meadow-path": {"name": "Meadow path", "kind": "door", "description": "An open path runs between the beach and reed meadow.", "location": "crescent-beach", "destination": "reed-meadow", "open": true, "health": null},
+    "hut-door": {"name": "Hut doorway", "kind": "door", "description": "An open doorway leads between the meadow and navigator's hut.", "location": "reed-meadow", "destination": "navigator-hut", "open": true, "health": null},
+    "hill-path": {"name": "Lookout path", "kind": "door", "description": "Steps join the meadow to the lookout hill.", "location": "reed-meadow", "destination": "lookout-hill", "open": true, "health": null},
+    "cave-path": {"name": "Cave path", "kind": "door", "description": "A wide path leads between the meadow and cave forecourt.", "location": "reed-meadow", "destination": "cave-forecourt", "open": true, "health": null},
+    "narrow-fissure": {"name": "Narrow fissure", "kind": "door", "description": "The fissure joins the hill and sail chamber. Carry the storm lantern. Every carried item must use only one inventory unit; planks and the spade need the wider sea-door route.", "location": "lookout-hill", "destination": "sail-chamber", "open": true, "health": null},
+    "crab-crossing": {"name": "Crab crossing", "kind": "door", "description": "Crabs block this crossing. Feed the colony a jar of living fish to draw them away permanently.", "location": "cave-forecourt", "destination": "stone-hall", "open": true, "health": null},
+    "sea-door": {"name": "Wide sea door", "kind": "door", "description": "A sturdy locked door connects the stone hall and sail chamber. Its ward accepts a small iron key.", "location": "stone-hall", "destination": "sail-chamber", "open": false, "locked": true, "key_id": "iron-key", "health": null},
+    "workshop-arch": {"name": "Workshop arch", "kind": "door", "description": "A wide arch joins the sail chamber and workshop.", "location": "sail-chamber", "destination": "island-workshop", "open": true, "health": null},
+    "lagoon-steps": {"name": "Lagoon steps", "kind": "door", "description": "Steps descend from the beach into the lagoon. Enter at low tide or carry a cork belt at high tide.", "location": "crescent-beach", "destination": "tidal-lagoon", "open": true, "health": null},
+    "pool-ledge": {"name": "Pool ledge", "kind": "door", "description": "The lagoon and rock pools share a tidal ledge. Carry a cork belt when entering either at high tide.", "location": "tidal-lagoon", "destination": "rock-pools", "open": true, "health": null},
+    "gangway": {"name": "Cutter gangway", "kind": "door", "description": "The gangway connects the cutter to whichever island it is moored at. Build the cutter and use its launch key to release it.", "location": "crescent-beach", "destination": "cutter-deck", "open": false, "locked": true, "key_id": "launch-key", "health": null},
+    "orchard-path": {"name": "Orchard path", "kind": "door", "description": "A safe path joins the far shore to the orchard.", "location": "far-shore", "destination": "salt-orchard", "open": true, "health": null},
+    "survey-path": {"name": "Survey path", "kind": "door", "description": "Old markers lead between the orchard and survey field.", "location": "salt-orchard", "destination": "survey-field", "open": true, "health": null},
+    "observatory-entry": {"name": "Vine arch", "kind": "door", "description": "Snakes gather around this arch. Use the carried kite bird and its seed lure to disperse them before crossing.", "location": "survey-field", "destination": "old-observatory", "open": true, "health": null},
+
+    "home-notice": {"name": "Treasure notice", "kind": "item", "description": "A notice names the two lost treasures and their destination.", "location": "harbor-home", "health": null, "readable_text": "Recover the moon coins and sealed star atlas from the far island. Bring both home and put them down directly in this room. Merely returning, building the cutter, or carrying a treasure does not finish the assignment."},
+    "provision-parcel": {"name": "Provision parcel", "kind": "item", "description": "Fresh food and drinking water wrapped for a navigator. Keep this for recruitment.", "location": "harbor-home", "takable": true, "health": null},
+    "rug-fastening": {"name": "Rug fastening strip", "kind": "item", "description": "An iron strip pins the rug down over a small hollow. A carried claw mallet can extract it, recovering both the iron key underneath and reusable nails.", "location": "harbor-home", "health": null},
+    "resonant-journal": {"name": "Resonant journal", "kind": "item", "description": "A brass-bound journal marked with a roof mosaic and a crescent beach. Read it to learn its travel word.", "location": "chart-study", "takable": true, "health": null, "readable_text": "Carry this journal and speak MOONWAKE at either the roof terrace mosaic or the crescent beach mosaic to travel between them. The word works nowhere else. A sailor's compass cannot settle near this book: leave it on the crescent beach before sailing, and collect it after returning."},
+    "lantern-wick": {"name": "Prepared lantern wick", "kind": "item", "description": "An oil-soaked wick in a weatherproof lantern shell. Ignite it with spark strips to make a storm lantern.", "location": "storage-loft", "takable": true, "health": null},
+    "spark-strips": {"name": "Spark strips", "kind": "item", "description": "Dry strips for lighting the prepared wick. The resulting lantern burns for the whole voyage.", "location": "storage-loft", "takable": true, "health": null},
+    "moonwake-cutter": {"name": "Moonwake cutter", "kind": "vehicle", "description": "An incomplete cutter. Build it here using the hull frame, planks, sailcloth, nails and anchor while carrying the claw mallet. Read the build slate for details.", "location": "crescent-beach", "health": null},
+    "hull-frame": {"name": "Cutter hull frame", "kind": "item", "description": "A fixed keel and ribs ready for the cutter's construction.", "location": "crescent-beach", "health": null},
+    "build-slate": {"name": "Build slate", "kind": "item", "description": "A slate lists the materials needed to build the cutter.", "location": "crescent-beach", "health": null, "readable_text": "BUILD CUTTER: work here beside the cutter with the hull frame, precut planks, sailcloth, recovered nails and buried anchor all exposed locally. Carry the claw mallet. The work produces a launch key for the gangway. Hire the navigator, carry the chart, leave the journal ashore and sail at high tide. The same crew and ship bring you back."},
+    "navigator": {"name": "Navigator Sable", "kind": "character", "description": "Sable offers to crew both voyages in exchange for the fresh provision parcel from your home. Recruit them while carrying it; they will wait aboard the cutter.", "location": "navigator-hut", "health": null},
+    "chart-chest": {"name": "Chart chest", "kind": "container", "description": "A closed chest with an iron lock. Inspect it to reveal the lock, then unlock that lock with the iron key recovered at home.", "location": "navigator-hut", "open": false, "lock_id": "chart-lock", "health": null},
+    "chart-lock": {"name": "Chart chest lock", "kind": "lock", "description": "A small iron lock that matches the key under the home rug.", "location": "chart-chest", "locked": true, "key_id": "iron-key", "health": null},
+    "bearing-chart": {"name": "Bearing chart", "kind": "item", "description": "A chart of the strait and the far island's survey field. Carry it aboard and read its buried-cache bearing.", "location": "chart-chest", "takable": true, "health": null, "readable_text": "At the survey field's bearing ground, measure exactly 24 paces, then dig with the spade. The sealed star atlas lies there. Moon coins are kept in the old observatory beyond the vine arch. The snakes will scatter if you fly the kite bird with its seed lure."},
+    "kite-bird": {"name": "Tame kite bird", "kind": "item", "description": "A trained bird that can scatter the vine snakes when flown using its seed lure. Carry the bird to use it.", "location": "navigator-hut", "takable": true, "health": null},
+    "seed-lure": {"name": "Seed lure", "kind": "item", "description": "A lure for flying the kite bird over the vine snakes. Consumed when used.", "location": "chart-chest", "takable": true, "health": null},
+    "crab-colony": {"name": "Shore crab colony", "kind": "item", "description": "These crabs will abandon the crossing for fish carried alive in a jar of seawater. Feed them to make the wide route usable.", "location": "cave-forecourt", "health": null},
+    "precut-planks": {"name": "Precut planks", "kind": "item", "description": "Three units of heavy planks for the cutter. Too bulky for the hill fissure; take them through the wide sea door after clearing its route.", "location": "sail-chamber", "takable": true, "inventory_units": 3, "health": null},
+    "sailcloth": {"name": "Folded sailcloth", "kind": "item", "description": "Sound sails for the cutter.", "location": "sail-chamber", "takable": true, "health": null},
+    "claw-mallet": {"name": "Claw mallet", "kind": "item", "description": "A shipwright's tool for pulling the home rug's fastening strip and building the cutter. Keep it after pulling the nails.", "location": "island-workshop", "takable": true, "health": null},
+    "spade": {"name": "Broad spade", "kind": "item", "description": "A two-unit digging tool for the anchor bank and the far island's cache. Too bulky for the hill fissure.", "location": "island-workshop", "takable": true, "inventory_units": 2, "health": null},
+    "cork-belt": {"name": "Cork flotation belt", "kind": "item", "description": "Carrying this belt lets you enter the lagoon and rock pools at high tide.", "location": "island-workshop", "takable": true, "health": null},
+    "empty-jar": {"name": "Empty fish jar", "kind": "item", "description": "A stoppered jar. At the rock pools, fill it with fish and seawater; the resulting fish jar keeps its fish alive throughout the journey.", "location": "island-workshop", "takable": true, "health": null},
+    "pool-fish": {"name": "Pool fish", "kind": "item", "description": "Fish swimming in salt water. Collect some with the empty jar for the crab colony.", "location": "rock-pools", "health": null},
+    "anchor-bank": {"name": "Anchor sandbank", "kind": "container", "description": "The sand conceals an anchor. Dig with the carried spade at low tide; ordinary opening will not work.", "location": "tidal-lagoon", "open": false, "jammed": true, "health": null},
+    "iron-anchor": {"name": "Iron anchor", "kind": "item", "description": "A sound anchor for the cutter.", "location": "anchor-bank", "takable": true, "health": null},
+    "bearing-ground": {"name": "Bearing ground", "kind": "container", "description": "A buried cache lies along the bearing marked on the navigation chart. Pace the correct distance here, then dig with the spade.", "location": "survey-field", "open": false, "jammed": true, "health": null},
+    "star-atlas": {"name": "Sealed star atlas", "kind": "item", "description": "A rare atlas sealed against seawater: one of the two treasures to put down at home.", "location": "bearing-ground", "takable": true, "health": null},
+    "vine-snakes": {"name": "Vine snakes", "kind": "item", "description": "Snakes shelter around the observatory arch. Fly the carried kite bird using the seed lure to disperse them safely.", "location": "survey-field", "health": null},
+    "moon-coins": {"name": "Moon coins", "kind": "item", "description": "A small chest of ancient silver coins: one of the two treasures to put down at home.", "location": "old-observatory", "takable": true, "health": null}
+  },
+  "recipe_actions": {
+    "light_lantern": "Ignite the prepared wick with spark strips to make an enduring storm lantern.",
+    "pull_nails": "Use the carried claw mallet to remove the rug fastening and recover the hidden key and reusable nails.",
+    "collect_fish": "Fill the empty jar with living pool fish and seawater.",
+    "feed_crabs": "Give the fish jar to the local crab colony, permanently clearing the crossing.",
+    "build_cutter": "Build the cutter here with its five materials while carrying the claw mallet; produce the launch key.",
+    "fly_bird": "Fly the carried kite bird using the seed lure to disperse the vine snakes."
+  },
+  "recipes": [
+    {
+      "action_id": "light_lantern", "arguments": {"target": "lantern-wick", "ignition": "spark-strips"},
+      "consumes": ["lantern-wick", "spark-strips"],
+      "outputs": {"storm-lantern": {"name": "Storm lantern", "kind": "item", "description": "An enduring weatherproof light. Carry it through the hill fissure.", "takable": true, "health": null}},
+      "explanation": "You light the weatherproof lantern. It will last for the entire voyage."
+    },
+    {
+      "action_id": "pull_nails", "arguments": {"target": "rug-fastening", "item": "claw-mallet"},
+      "carried": ["claw-mallet"], "consumes": ["rug-fastening"],
+      "outputs": {
+        "iron-key": {"name": "Small iron key", "kind": "item", "description": "A key matching the chart chest lock and the wide sea door.", "takable": true, "health": null},
+        "recovered-nails": {"name": "Recovered nails", "kind": "item", "description": "Straight iron nails for the cutter.", "takable": true, "health": null}
+      },
+      "explanation": "You pull the fastening strip free, recovering reusable nails and a small iron key from beneath the rug."
+    },
+    {
+      "action_id": "collect_fish", "arguments": {"target": "pool-fish", "jar": "empty-jar"},
+      "consumes": ["pool-fish", "empty-jar"],
+      "outputs": {"fish-jar": {"name": "Jar of fish in seawater", "kind": "item", "description": "Living fish kept in seawater, ready to feed the shore crabs.", "takable": true, "health": null}},
+      "explanation": "You collect fish and seawater in the jar. The fish stay alive for the journey to the crabs."
+    },
+    {
+      "action_id": "feed_crabs", "arguments": {"target": "crab-colony", "bait": "fish-jar"},
+      "consumes": ["fish-jar"], "updates": {"crab-colony": {"distracted": "yes"}},
+      "explanation": "You set the fish down away from the crossing. The colony follows, leaving the wide path clear."
+    },
+    {
+      "action_id": "build_cutter",
+      "arguments": {"target": "moonwake-cutter", "frame": "hull-frame", "planks": "precut-planks", "sails": "sailcloth", "nails": "recovered-nails", "anchor": "iron-anchor", "item": "claw-mallet"},
+      "carried": ["claw-mallet"],
+      "consumes": ["hull-frame", "precut-planks", "sailcloth", "recovered-nails", "iron-anchor"],
+      "updates": {"moonwake-cutter": {"seaworthy": "yes"}},
+      "outputs": {"launch-key": {"name": "Gangway launch key", "kind": "item", "description": "Releases the completed cutter's gangway.", "takable": true, "health": null}},
+      "explanation": "You fasten the planks, fit the sails and rig the anchor. The cutter is seaworthy; its gangway launch key rests beside you. The treasures are still across the strait."
+    },
+    {
+      "action_id": "fly_bird", "arguments": {"target": "vine-snakes", "bird": "kite-bird", "lure": "seed-lure"},
+      "carried": ["kite-bird"], "consumes": ["seed-lure"], "updates": {"vine-snakes": {"dispersed": "yes"}},
+      "explanation": "You fly the kite bird above the arch with the seed lure. The snakes retreat into the reeds, leaving the observatory accessible."
+    }
+  ]
+}

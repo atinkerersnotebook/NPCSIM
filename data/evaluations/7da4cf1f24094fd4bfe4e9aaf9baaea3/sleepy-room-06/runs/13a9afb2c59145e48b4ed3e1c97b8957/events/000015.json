@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:18:41.809221+00:00",
+  "cycle": 2,
+  "session_id": "8359c05358f14c699c4d3279f009cd06",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "look",
+    "arguments": {
+      "target": "archway"
+    },
+    "justification": "Sleep is now at 0, but the narrative still says tiredness prevents movement and the 'go' availability is unknown. Inspecting the archway should clarify whether it can be crossed.",
+    "expected_outcome": "The archway's current state and whether passage is possible are reported.",
+    "subgoal": "Confirm whether the archway can be crossed.",
+    "plan": [
+      "Look at the archway to check its state",
+      "If it is open and passable, use go on the archway",
+      "If movement is still blocked, re-check needs and availability"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3810
+  },
+  "schema_version": "1.0",
+  "run_id": "13a9afb2c59145e48b4ed3e1c97b8957",
+  "sequence": 15,
+  "id": "13a9afb2c59145e48b4ed3e1c97b8957:15"
+}

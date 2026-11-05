@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "glassworks-relay",
+  "failures": [
+    {
+      "run_id": "b5794e329b2f4527b64402209982f15a",
+      "objective": "Explore the unfamiliar workshop and discover your assignment.",
+      "recorded_at": "2026-11-05T17:39:10.748817+00:00",
+      "findings": [
+        {
+          "reason": "The assigned task was not discovered by reading its note.",
+          "evidence_ids": [
+            "b5794e329b2f4527b64402209982f15a:6"
+          ]
+        },
+        {
+          "reason": "The assignment was not discovered; final verification confirms its note had not been read.",
+          "evidence_ids": [
+            "b5794e329b2f4527b64402209982f15a:6"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "sealed-vault",
+  "failures": [
+    {
+      "run_id": "583d262d7efb4286a03bf13e62737477",
+      "objective": "Combine lockpicking, trap disarming and magic to open the vault route and bring both adventurers to the courtyard.",
+      "recorded_at": "2026-11-05T14:08:56.294711+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "583d262d7efb4286a03bf13e62737477:194"
+          ]
+        },
+        {
+          "reason": "The gallery lock was not picked, the route remained sealed, and no trap disarming, ward dispelling, or rune activation was completed.",
+          "evidence_ids": [
+            "583d262d7efb4286a03bf13e62737477:194"
+          ]
+        },
+        {
+          "reason": "Neither adventurer reached the courtyard; both remained at the entrance when the attempt ended.",
+          "evidence_ids": [
+            "583d262d7efb4286a03bf13e62737477:191",
+            "583d262d7efb4286a03bf13e62737477:194"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "07459bedd6c340a294efdc3b1729bfd1",
+      "objective": "Combine lockpicking, trap disarming and magic to open the vault route and bring both adventurers to the courtyard.",
+      "recorded_at": "2026-11-05T14:09:20.664476+00:00",
+      "findings": [
+        {
+          "reason": "The team admits defeat: no assigned agent has the required skills: lockpicking, trap disarming. Mandatory cooperative work cannot be completed; retrying will not grant these abilities.",
+          "evidence_ids": [
+            "07459bedd6c340a294efdc3b1729bfd1:11"
+          ]
+        },
+        {
+          "reason": "The vault route was not opened: the authoritative verification reports mandatory lockpicking and trap-disarming challenges as impossible because the team lacks those skills.",
+          "evidence_ids": [
+            "07459bedd6c340a294efdc3b1729bfd1:11"
+          ]
+        },
+        {
+          "reason": "Both adventurers remain at the entrance rather than reaching the courtyard; the gallery door is still closed.",
+          "evidence_ids": [
+            "07459bedd6c340a294efdc3b1729bfd1:8",
+            "07459bedd6c340a294efdc3b1729bfd1:11"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:15:03.892208+00:00",
+  "cycle": 5,
+  "session_id": "4e3a164e390c49e19ba14843e4fce41b",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The memory shows the unlock action on the door succeeded, so the next step is to open the door before going through it.",
+    "expected_outcome": "The door opens, making the exit passable.",
+    "subgoal": "Open the door.",
+    "plan": [
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 2060
+  },
+  "schema_version": "1.0",
+  "run_id": "e34bcb1d00d14627a5f44c0aed0e7210",
+  "sequence": 39,
+  "id": "e34bcb1d00d14627a5f44c0aed0e7210:39"
+}

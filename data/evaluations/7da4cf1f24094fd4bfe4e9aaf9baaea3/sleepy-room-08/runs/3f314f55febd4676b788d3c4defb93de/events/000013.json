@@ -1,0 +1,19 @@
+{
+  "kind": "verification",
+  "timestamp": "2026-11-02T23:18:47.405987+00:00",
+  "cycle": 2,
+  "session_id": "b2326cf5ee664ce4b45893382fbcdbda",
+  "actor_id": "npc-001",
+  "payload": {
+    "status": "active",
+    "evidence": {
+      "actor_id": "npc-001",
+      "location_id": "cell"
+    },
+    "observation_revision": "obs-2"
+  },
+  "schema_version": "1.0",
+  "run_id": "3f314f55febd4676b788d3c4defb93de",
+  "sequence": 13,
+  "id": "3f314f55febd4676b788d3c4defb93de:13"
+}

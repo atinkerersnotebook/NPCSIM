@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "recent": [
+    {
+      "action_id": "nap",
+      "arguments": {
+        "duration": 3
+      },
+      "outcome": "APPLIED",
+      "code": "RECOVERED",
+      "explanation": "You recover sleep."
+    },
+    {
+      "action_id": "look",
+      "arguments": {
+        "target": "archway"
+      },
+      "outcome": "APPLIED",
+      "code": "INSPECTED",
+      "explanation": "An open exit leading into a courtyard. It is unlocked."
+    },
+    {
+      "action_id": "go",
+      "arguments": {
+        "target": "archway"
+      },
+      "outcome": "APPLIED",
+      "code": "APPLIED",
+      "explanation": "Go succeeded."
+    }
+  ],
+  "discoveries": [
+    "archway"
+  ],
+  "plan": [
+    "Attempt go on the open, unlocked archway",
+    "If go is blocked, re-observe the self state and narrative",
+    "If the actor is in the courtyard, confirm the room has been left"
+  ],
+  "subgoal": "Cross the open archway into the courtyard."
+}

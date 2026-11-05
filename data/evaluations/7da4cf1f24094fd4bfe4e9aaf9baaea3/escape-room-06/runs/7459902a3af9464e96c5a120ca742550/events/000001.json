@@ -1,0 +1,25 @@
+{
+  "kind": "started",
+  "timestamp": "2026-11-02T23:14:50.629014+00:00",
+  "cycle": 0,
+  "session_id": "6261a045b0544c7ea904c739796e8d03",
+  "actor_id": "npc-001",
+  "payload": {
+    "goal": {
+      "id": "escape-room",
+      "objective": "Leave the room.",
+      "type": "actor_outside_start_location",
+      "status": "active"
+    },
+    "tools": [
+      "world_manifest",
+      "world_observe",
+      "world_act",
+      "world_evaluate_goal"
+    ]
+  },
+  "schema_version": "1.0",
+  "run_id": "7459902a3af9464e96c5a120ca742550",
+  "sequence": 1,
+  "id": "7459902a3af9464e96c5a120ca742550:1"
+}

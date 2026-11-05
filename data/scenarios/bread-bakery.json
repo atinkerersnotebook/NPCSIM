@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "id": "bread-bakery",
+  "title": "The Clockwork Bakery",
+  "start_location": "bakery",
+  "exit_location": "bakery",
+  "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",
+  "opening_narrative": "You are the baker on the morning shift. Three empty batch bowls are waiting somewhere in the bakery, and the storeroom holds measured bread supplies. One mixer and two ovens must be shared. A real clock will run during your shift: while one dough rises, another batch can be mixed, proofed or baked. Read the recipe board, explore the cupboards, and keep an eye on every batch's readiness and deadline.",
+  "goal_type": "bread_batches_served",
+  "body": {
+    "description": "A virtual baker with two hands and a trolley for carrying three mixing bowls.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 6
+  },
+  "needs": {
+    "food": {"enabled": false, "level": 0, "rate": 0, "threshold": 80},
+    "sleep": {"enabled": false, "level": 0, "rate": 0, "threshold": 80}
+  },
+  "recovery": {
+    "food": {"action_id": "eat", "description": "Eat a carried edible item.", "recovery": 50},
+    "sleep": {"action_id": "rest", "description": "Rest briefly.", "recovery": 50}
+  },
+  "bakery": {
+    "bowls": ["batch-a", "batch-b", "batch-c"],
+    "ingredients": ["flour", "water", "yeast", "salt"],
+    "mixers": ["mixer"],
+    "ovens": ["oven-a", "oven-b"],
+    "bench": "bench",
+    "rack": "cooling-rack",
+    "display": "bread-display",
+    "rate": 120,
+    "mode": "decision_paused"
+  },
+  "entities": {
+    "bakery": {"name": "Bakery floor", "kind": "location", "description": "A working bakery with a preparation bench, a bowl cupboard, a mixer, two ovens, a cooling rack, and a bread display. A door leads to the ingredient storeroom."},
+    "storeroom": {"name": "Ingredient storeroom", "kind": "location", "description": "Flour sacks and a water dispenser sit beside a closed ingredient cupboard. Bring your bowls here to measure ingredients, then carry them back to the bakery."},
+    "storeroom-door": {"name": "Storeroom door", "kind": "door", "description": "A swinging door between the bakery and its storeroom.", "location": "bakery", "destination": "storeroom", "open": true},
+    "bowl-cupboard": {"name": "Bowl cupboard", "kind": "container", "description": "A closed cupboard for reusable mixing bowls.", "location": "bakery", "open": false},
+    "batch-a": {"name": "Batch A bowl", "kind": "container", "description": "An open mixing bowl for one separate loaf batch. Carry it to the storeroom to measure ingredients.", "location": "bowl-cupboard", "open": true, "takable": true, "inventory_units": 2},
+    "batch-b": {"name": "Batch B bowl", "kind": "container", "description": "An open mixing bowl for a second independent loaf batch.", "location": "bowl-cupboard", "open": true, "takable": true, "inventory_units": 2},
+    "batch-c": {"name": "Batch C bowl", "kind": "container", "description": "An open mixing bowl for a third independent loaf batch.", "location": "bowl-cupboard", "open": true, "takable": true, "inventory_units": 2},
+    "bench": {"name": "Preparation bench", "kind": "container", "description": "An open work surface with space for three bowls to rise and proof independently.", "location": "bakery", "open": true},
+    "cooling-rack": {"name": "Cooling rack", "kind": "container", "description": "An open rack where baked loaves cool for 20 simulated minutes.", "location": "bakery", "open": true},
+    "bread-display": {"name": "Bread display", "kind": "container", "description": "The open shop display. All three cooled batches must be served here to complete the order.", "location": "bakery", "open": true},
+    "mixer": {"name": "Stand mixer", "kind": "mixer", "description": "One batch at a time. Plug in and switch on, mix for 10 minutes, then start the rise to release the mixer. Its bowl remains accessible.", "location": "bakery", "open": true, "power": "off"},
+    "oven-a": {"name": "Oven A", "kind": "oven", "description": "An electric oven for one batch. Plug in and switch on before loading proofed dough. Bake for 30 minutes; unload within 10 more minutes or the bread burns.", "location": "bakery", "open": true, "power": "off"},
+    "oven-b": {"name": "Oven B", "kind": "oven", "description": "A second electric oven for an overlapping batch. The loaf remains accessible, but the oven is busy until unloading.", "location": "bakery", "open": true, "power": "off"},
+    "mixer-outlet": {"name": "Mixer outlet", "kind": "outlet", "description": "One electrical socket.", "location": "bakery"},
+    "oven-a-outlet": {"name": "Oven A outlet", "kind": "outlet", "description": "One electrical socket.", "location": "bakery"},
+    "oven-b-outlet": {"name": "Oven B outlet", "kind": "outlet", "description": "One electrical socket.", "location": "bakery"},
+    "recipe-board": {"name": "Bread recipe board", "kind": "item", "description": "A readable recipe and shift timing guide fixed above the bench.", "location": "bakery", "readable_text": "For each of the three bowls measure one portion each of flour, water, yeast and salt in the storeroom. Carry measured bowls back to the bakery. Use a free powered mixer for 10 minutes. Start a 2-hour rise on the bench, which frees the mixer. Shape risen dough within 30 minutes; shaping starts a 45-minute proof. Load proofed dough into a free powered oven within 20 minutes. Bake 30 minutes and unload within 10 minutes after readiness to avoid burning. Cool on the rack for 20 minutes, then serve on the display. Read the observed clock mode: decision_paused freezes time during decisions and charges fixed simulated time for successful actions; continuous mode also runs during decisions. Interleave batches and prioritize imminent deadlines. Wait only when no useful task can be done. Appliance power must remain on while a batch occupies it. At 120x a 2-hour rise takes 60 real clock-running seconds. Pause freezes the clock."},
+    "flour": {"name": "Flour sacks", "kind": "item", "description": "Three measured batch portions of bread flour; one portion is needed in each bowl.", "location": "storeroom"},
+    "water": {"name": "Water dispenser", "kind": "item", "description": "Three measured batch portions of water.", "location": "storeroom"},
+    "ingredient-cupboard": {"name": "Ingredient cupboard", "kind": "container", "description": "A closed cupboard for yeast and salt.", "location": "storeroom", "open": false},
+    "yeast": {"name": "Yeast tin", "kind": "item", "description": "Three measured batch portions of baker's yeast.", "location": "ingredient-cupboard"},
+    "salt": {"name": "Salt jar", "kind": "item", "description": "Three measured batch portions of salt.", "location": "ingredient-cupboard"}
+  }
+}

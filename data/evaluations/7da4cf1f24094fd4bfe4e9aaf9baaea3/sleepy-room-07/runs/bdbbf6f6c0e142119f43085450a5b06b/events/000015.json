@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:18:42.712741+00:00",
+  "cycle": 2,
+  "session_id": "1d0778519ca849399282da5dfdbd51a1",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "go",
+    "arguments": {
+      "target": "archway"
+    },
+    "justification": "The archway is observed as open, and the last nap reported sleep recovered. The go action is listed with unknown availability and has not been tried yet.",
+    "expected_outcome": "The actor crosses the archway into the courtyard, or the action reports why movement is still blocked.",
+    "subgoal": "Cross the open archway",
+    "plan": [
+      "Attempt to go through the open archway",
+      "If blocked, check the reported reason and the sleep need",
+      "If the archway is closed or locked, inspect or open it"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3383
+  },
+  "schema_version": "1.0",
+  "run_id": "bdbbf6f6c0e142119f43085450a5b06b",
+  "sequence": 15,
+  "id": "bdbbf6f6c0e142119f43085450a5b06b:15"
+}

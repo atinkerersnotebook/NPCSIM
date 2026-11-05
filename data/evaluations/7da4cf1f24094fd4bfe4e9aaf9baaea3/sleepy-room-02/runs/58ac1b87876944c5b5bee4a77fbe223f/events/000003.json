@@ -1,0 +1,14 @@
+{
+  "kind": "control",
+  "timestamp": "2026-11-02T23:18:08.175658+00:00",
+  "cycle": 0,
+  "session_id": "a3f42c5a5d5241b1b5cd4b00d62618e8",
+  "actor_id": "npc-001",
+  "payload": {
+    "command": "run"
+  },
+  "schema_version": "1.0",
+  "run_id": "58ac1b87876944c5b5bee4a77fbe223f",
+  "sequence": 3,
+  "id": "58ac1b87876944c5b5bee4a77fbe223f:3"
+}

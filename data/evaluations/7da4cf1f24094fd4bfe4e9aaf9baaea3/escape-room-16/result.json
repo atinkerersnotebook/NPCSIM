@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "scenario": "escape-room",
+  "episode": 16,
+  "run_id": "df9e54f972a649f19e59c856fd698e6d",
+  "status": "succeeded",
+  "actions": 6,
+  "model_calls": 6,
+  "elapsed_seconds": 19.071,
+  "verification": {
+    "status": "achieved",
+    "evidence": {
+      "actor_id": "npc-001",
+      "location_id": "outside"
+    },
+    "observation_revision": "obs-7"
+  },
+  "reason": "The world verified that this NPC left the room."
+}

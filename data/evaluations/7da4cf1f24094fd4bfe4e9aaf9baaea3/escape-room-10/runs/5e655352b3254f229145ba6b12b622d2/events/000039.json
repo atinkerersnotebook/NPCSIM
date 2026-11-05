@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:15:59.036562+00:00",
+  "cycle": 5,
+  "session_id": "acebd05c03454911a4d01f6d46b35e16",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The memory shows the unlock succeeded, so the door should no longer be locked. The door is still closed, so opening it is the next step toward leaving.",
+    "expected_outcome": "The door opens, making the exit passable for a later go action.",
+    "subgoal": "Open the unlocked door",
+    "plan": [
+      "Open the door",
+      "Go through the door",
+      "Verify the room has been left"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3251
+  },
+  "schema_version": "1.0",
+  "run_id": "5e655352b3254f229145ba6b12b622d2",
+  "sequence": 39,
+  "id": "5e655352b3254f229145ba6b12b622d2:39"
+}

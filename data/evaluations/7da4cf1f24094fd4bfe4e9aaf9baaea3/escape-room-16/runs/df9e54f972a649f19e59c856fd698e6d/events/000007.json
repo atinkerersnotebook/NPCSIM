@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:17:02.670485+00:00",
+  "cycle": 1,
+  "session_id": "5fb7da27427947e3ab752093049ec06f",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The door is the visible exit and is closed. No lock is reported, so opening it is the most direct step toward leaving.",
+    "expected_outcome": "The door opens, making the exit passable with the go action.",
+    "subgoal": "Open the door",
+    "plan": [
+      "Open the door",
+      "If the door opens, go through the door",
+      "If opening fails, look at the door to check for a lock"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3002
+  },
+  "schema_version": "1.0",
+  "run_id": "df9e54f972a649f19e59c856fd698e6d",
+  "sequence": 7,
+  "id": "df9e54f972a649f19e59c856fd698e6d:7"
+}

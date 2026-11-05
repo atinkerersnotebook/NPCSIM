@@ -1,0 +1,35 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:16:01.841543+00:00",
+  "cycle": 2,
+  "session_id": "d430ddc6f562467d97cbb5ec763d711c",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "look",
+    "arguments": {
+      "target": "box"
+    },
+    "justification": "The door is locked and opening it was rejected. The box may hold a matching item, so inspecting it is the next step.",
+    "expected_outcome": "A description of the box's contents or its state, which may reveal a key-like item.",
+    "subgoal": "Inspect the box for a matching item",
+    "plan": [
+      "Look at the box",
+      "If it may contain a key, open the box",
+      "Take a matching item if one is found",
+      "Unlock the door with the item",
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3476
+  },
+  "schema_version": "1.0",
+  "run_id": "35e8ecd6ce7e479886ad2f1837a94872",
+  "sequence": 15,
+  "id": "35e8ecd6ce7e479886ad2f1837a94872:15"
+}

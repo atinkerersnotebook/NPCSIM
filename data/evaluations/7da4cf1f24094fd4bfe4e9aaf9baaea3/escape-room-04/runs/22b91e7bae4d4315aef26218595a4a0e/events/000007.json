@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:14:32.492487+00:00",
+  "cycle": 1,
+  "session_id": "317b945962874bba924ea0d6276ce461",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The door is visible and closed, and the goal is to leave the room. Opening the door is the next step toward an exit.",
+    "expected_outcome": "The door opens, making the exit available to cross with the go action.",
+    "subgoal": "Open the door",
+    "plan": [
+      "Open the door",
+      "Cross the door with go if it opens",
+      "Check whether the room is left"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3461
+  },
+  "schema_version": "1.0",
+  "run_id": "22b91e7bae4d4315aef26218595a4a0e",
+  "sequence": 7,
+  "id": "22b91e7bae4d4315aef26218595a4a0e:7"
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "scenario": "sleepy-room",
+  "episode": 6,
+  "run_id": "13a9afb2c59145e48b4ed3e1c97b8957",
+  "status": "succeeded",
+  "actions": 3,
+  "model_calls": 3,
+  "elapsed_seconds": 11.684,
+  "verification": {
+    "status": "achieved",
+    "evidence": {
+      "actor_id": "npc-001",
+      "location_id": "courtyard"
+    },
+    "observation_revision": "obs-4"
+  },
+  "reason": "The world verified that this NPC left the room."
+}

@@ -1,0 +1,31 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:16:53.085694+00:00",
+  "cycle": 6,
+  "session_id": "9b1649d30b884562be244867128ef022",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The brass key was used to unlock the door, and the door now reads as unlocked but closed. Opening it is the next required step before going through.",
+    "expected_outcome": "The door opens, making the exit passable with the go action.",
+    "subgoal": "Open the door",
+    "plan": [
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 2977
+  },
+  "schema_version": "1.0",
+  "run_id": "ed5261ad03504a2f8c5fd26e03f3acd4",
+  "sequence": 47,
+  "id": "ed5261ad03504a2f8c5fd26e03f3acd4:47"
+}

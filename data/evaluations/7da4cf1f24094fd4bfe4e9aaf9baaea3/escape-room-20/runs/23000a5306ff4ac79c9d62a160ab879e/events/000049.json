@@ -1,0 +1,19 @@
+{
+  "kind": "action_request",
+  "timestamp": "2026-11-02T23:18:03.176819+00:00",
+  "cycle": 6,
+  "session_id": "be84fd8ca1284df59a82318e02eac02f",
+  "actor_id": "npc-001",
+  "payload": {
+    "request_id": "d7dfdd7cb5df41b6a9335b3e73c4332c",
+    "expected_observation_revision": "obs-6",
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    }
+  },
+  "schema_version": "1.0",
+  "run_id": "23000a5306ff4ac79c9d62a160ab879e",
+  "sequence": 49,
+  "id": "23000a5306ff4ac79c9d62a160ab879e:49"
+}

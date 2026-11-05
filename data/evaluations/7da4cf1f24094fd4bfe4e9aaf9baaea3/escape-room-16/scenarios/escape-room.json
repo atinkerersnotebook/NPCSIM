@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "id": "escape-room",
+  "title": "The Locked Room",
+  "start_location": "room",
+  "exit_location": "outside",
+  "objective": "Leave the room.",
+  "goal_type": "actor_outside_start_location",
+  "body": {
+    "description": "A mobile body with hands, able to carry one small item.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 1
+  },
+  "needs": {
+    "food": {"enabled": false, "level": 0, "rate": 8, "threshold": 80},
+    "sleep": {"enabled": false, "level": 0, "rate": 10, "threshold": 80}
+  },
+  "entities": {
+    "room": {"name": "Small room", "kind": "location", "description": "A small stone room with a door and a box on the floor."},
+    "outside": {"name": "Outside", "kind": "location", "description": "Fresh air. You have left the room."},
+    "door": {"name": "Door", "kind": "door", "description": "A sturdy wooden door.", "location": "room", "open": false, "locked": true, "key_id": "key", "destination": "outside"},
+    "box": {"name": "Box", "kind": "container", "description": "A small closed box on the floor.", "location": "room", "open": false},
+    "key": {"name": "Brass key", "kind": "item", "description": "A small brass key.", "location": "box", "portable": true}
+  },
+  "recovery": {
+    "food": {"action_id": "eat", "description": "Eat a carried food item.", "recovery": 100},
+    "sleep": {"action_id": "rest", "description": "Rest where you are to recover from tiredness.", "recovery": 100}
+  }
+}

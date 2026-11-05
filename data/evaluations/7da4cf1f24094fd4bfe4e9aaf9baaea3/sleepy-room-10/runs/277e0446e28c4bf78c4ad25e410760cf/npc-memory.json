@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "recent": [
+    {
+      "action_id": "nap",
+      "arguments": {
+        "duration": 3
+      },
+      "outcome": "APPLIED",
+      "code": "RECOVERED",
+      "explanation": "You recover sleep."
+    },
+    {
+      "action_id": "go",
+      "arguments": {
+        "target": "archway"
+      },
+      "outcome": "APPLIED",
+      "code": "APPLIED",
+      "explanation": "Go succeeded."
+    }
+  ],
+  "discoveries": [
+    "archway"
+  ],
+  "plan": [
+    "Attempt to go through the open archway",
+    "If movement is blocked, look at the archway to inspect the cause",
+    "Replan based on the result"
+  ],
+  "subgoal": "Cross the open archway"
+}

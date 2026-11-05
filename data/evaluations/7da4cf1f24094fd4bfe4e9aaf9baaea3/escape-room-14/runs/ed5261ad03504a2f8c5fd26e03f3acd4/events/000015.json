@@ -1,0 +1,34 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:16:38.641677+00:00",
+  "cycle": 2,
+  "session_id": "9b1649d30b884562be244867128ef022",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "look",
+    "arguments": {
+      "target": "box"
+    },
+    "justification": "The door is locked and opening it was already rejected. The box may contain an item that could unlock the door, so inspecting it is the next step.",
+    "expected_outcome": "A description of the box's contents or condition, which may reveal an item usable for unlocking the door.",
+    "subgoal": "Inspect the box for a usable item",
+    "plan": [
+      "Look at the box",
+      "If an item is found, pick it up if carrying allows",
+      "Unlock the door with a matching item",
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 2651
+  },
+  "schema_version": "1.0",
+  "run_id": "ed5261ad03504a2f8c5fd26e03f3acd4",
+  "sequence": 15,
+  "id": "ed5261ad03504a2f8c5fd26e03f3acd4:15"
+}

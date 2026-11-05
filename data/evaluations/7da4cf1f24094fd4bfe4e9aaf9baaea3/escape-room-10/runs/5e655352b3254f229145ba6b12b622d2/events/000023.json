@@ -1,0 +1,33 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:15:51.711225+00:00",
+  "cycle": 3,
+  "session_id": "acebd05c03454911a4d01f6d46b35e16",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "take",
+    "arguments": {
+      "target": "key"
+    },
+    "justification": "The brass key is visible and portable, and the body can carry one item with none used. The door is locked and a matching item is needed to unlock it.",
+    "expected_outcome": "The brass key moves into the inventory, and the carrying count becomes 1 of 1.",
+    "subgoal": "Acquire the brass key",
+    "plan": [
+      "Take the brass key",
+      "Unlock the door with the brass key",
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3226
+  },
+  "schema_version": "1.0",
+  "run_id": "5e655352b3254f229145ba6b12b622d2",
+  "sequence": 23,
+  "id": "5e655352b3254f229145ba6b12b622d2:23"
+}

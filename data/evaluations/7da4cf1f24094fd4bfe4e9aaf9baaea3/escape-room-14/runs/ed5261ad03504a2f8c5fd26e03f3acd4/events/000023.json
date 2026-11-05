@@ -1,0 +1,35 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:16:42.540188+00:00",
+  "cycle": 3,
+  "session_id": "9b1649d30b884562be244867128ef022",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "box"
+    },
+    "justification": "The box is the only unexplored container, and the previous look did not reveal its contents. Opening it may expose a usable item for the locked door.",
+    "expected_outcome": "The box opens and its contents become visible, or the action is rejected with a reason.",
+    "subgoal": "Open the box to find a usable item",
+    "plan": [
+      "Open the box",
+      "Inspect any revealed item",
+      "If the item matches the door lock, pick it up if carrying allows",
+      "Unlock the door with the matching item",
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3677
+  },
+  "schema_version": "1.0",
+  "run_id": "ed5261ad03504a2f8c5fd26e03f3acd4",
+  "sequence": 23,
+  "id": "ed5261ad03504a2f8c5fd26e03f3acd4:23"
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "rock-paper-scissors",
+  "failures": [
+    {
+      "run_id": "a29265a0eb13485d8419f7ef813b7153",
+      "objective": "Play all five rounds of rock-paper-scissors against your opponent. Try to earn the most round wins. A draw earns no points and still counts as a round; the match can end tied. Commit one private move each round with play_rps, without announcing it. The world reveals both moves together and keeps the score. Completing the match is the verified episode goal, not both players winning.",
+      "recorded_at": "2026-11-03T22:14:02.830418+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "a29265a0eb13485d8419f7ef813b7153:8"
+          ]
+        },
+        {
+          "reason": "The match was not completed: zero of five required rounds were played, so the verified episode goal is unmet.",
+          "evidence_ids": [
+            "a29265a0eb13485d8419f7ef813b7153:1",
+            "a29265a0eb13485d8419f7ef813b7153:8"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "kind": "action_request",
+  "timestamp": "2026-11-02T23:14:31.558221+00:00",
+  "cycle": 2,
+  "session_id": "463d298031884654a0165dc473916655",
+  "actor_id": "npc-001",
+  "payload": {
+    "request_id": "97b7618474c24eb5b9825bdbd4b0f46c",
+    "expected_observation_revision": "obs-2",
+    "action_id": "open",
+    "arguments": {
+      "target": "box"
+    }
+  },
+  "schema_version": "1.0",
+  "run_id": "97c9ae67a79f49959b5f65f7d5a46e8b",
+  "sequence": 17,
+  "id": "97c9ae67a79f49959b5f65f7d5a46e8b:17"
+}

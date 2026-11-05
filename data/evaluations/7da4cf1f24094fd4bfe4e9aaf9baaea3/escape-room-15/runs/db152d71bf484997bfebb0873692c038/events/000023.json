@@ -1,0 +1,34 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:16:51.538731+00:00",
+  "cycle": 3,
+  "session_id": "869de71701f84822b0ed3ff013032b28",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "box"
+    },
+    "justification": "The door is locked and I carry no item. The box is closed and may contain a key or other usable item.",
+    "expected_outcome": "The box opens, revealing its contents so I can check for an item that can unlock the door.",
+    "subgoal": "Find an item that can unlock the door.",
+    "plan": [
+      "Open the box to reveal its contents.",
+      "If a usable item is inside, carry it.",
+      "Try to unlock the door with the matching item.",
+      "If unlocked, open the door.",
+      "Go through the door."
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 2483
+  },
+  "schema_version": "1.0",
+  "run_id": "db152d71bf484997bfebb0873692c038",
+  "sequence": 23,
+  "id": "db152d71bf484997bfebb0873692c038:23"
+}

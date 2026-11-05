@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "millhaven",
+  "failures": [
+    {
+      "run_id": "7fe3685b67fe46ff8eac892338cd958b",
+      "objective": "Help Millhaven recover: ask Torvin to retrieve the borrowed shovel, receive it at your agreed meeting place, then arrange a real well-digging crew behind Elsie's tavern. When the mill drive fails at 14:00, ask Hobb to repair it with Mara and let the grain-to-flour-to-bread trade resume. Use village_ask, village_request, village_tell and village_wait to cooperate with the residents. Drop supplies at the crew's location; tell them only locations you actually know. Task progress is verified by the engine, never by dialogue.",
+      "recorded_at": "2026-11-05T17:43:03.806757+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery requires real delivery, cooperative work, repair and resumed bread trade.",
+          "evidence_ids": [
+            "7fe3685b67fe46ff8eac892338cd958b:6"
+          ]
+        },
+        {
+          "reason": "The final engine verification confirms no shovel delivery, completed well, mill repair, or resumed bread supply; no cooperative tasks were recorded.",
+          "evidence_ids": [
+            "7fe3685b67fe46ff8eac892338cd958b:6"
+          ]
+        }
+      ]
+    }
+  ]
+}

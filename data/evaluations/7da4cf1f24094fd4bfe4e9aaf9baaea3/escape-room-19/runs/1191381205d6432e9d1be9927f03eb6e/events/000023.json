@@ -1,0 +1,35 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:17:44.897851+00:00",
+  "cycle": 3,
+  "session_id": "23a9befb209e4d5c80d38a9b05c36deb",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "box"
+    },
+    "justification": "The door is locked and the box is the only other visible container. Opening it may reveal an item that can unlock the door.",
+    "expected_outcome": "The box opens and its contents become visible, possibly including an item that matches the door lock.",
+    "subgoal": "Open the box to check for a matching item",
+    "plan": [
+      "Open the box",
+      "Inspect the box contents",
+      "If a matching item is found, take it",
+      "Unlock the door with the item",
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3457
+  },
+  "schema_version": "1.0",
+  "run_id": "1191381205d6432e9d1be9927f03eb6e",
+  "sequence": 23,
+  "id": "1191381205d6432e9d1be9927f03eb6e:23"
+}

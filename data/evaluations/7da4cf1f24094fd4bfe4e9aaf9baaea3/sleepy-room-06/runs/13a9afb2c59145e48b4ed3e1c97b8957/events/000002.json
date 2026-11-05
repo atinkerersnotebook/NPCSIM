@@ -1,0 +1,196 @@
+{
+  "kind": "observation",
+  "timestamp": "2026-11-02T23:18:34.343806+00:00",
+  "cycle": 0,
+  "session_id": "8359c05358f14c699c4d3279f009cd06",
+  "actor_id": "npc-001",
+  "payload": {
+    "contract_version": "1.0",
+    "world_id": "79e4394feda44af5ab722537899dea1b",
+    "session_id": "8359c05358f14c699c4d3279f009cd06",
+    "observation_revision": "obs-1",
+    "self": {
+      "actor_id": "npc-001",
+      "location_id": "cell",
+      "body": {
+        "id": "npc-001-body",
+        "description": "A tired traveler who can move and manipulate nearby objects.",
+        "capabilities": [
+          "move",
+          "manipulate"
+        ],
+        "carrying": {
+          "rule": "item_count",
+          "limit": 2,
+          "used": 0
+        }
+      },
+      "inventory": [],
+      "needs": [
+        {
+          "id": "food",
+          "enabled": false,
+          "level": 0.0,
+          "scale": {
+            "min": 0,
+            "max": 100,
+            "higher_means": "more_hungry"
+          },
+          "effects": []
+        },
+        {
+          "id": "sleep",
+          "enabled": true,
+          "level": 90.0,
+          "scale": {
+            "min": 0,
+            "max": 100,
+            "higher_means": "more_tired"
+          },
+          "effects": [
+            "Movement is blocked until this need is recovered."
+          ]
+        }
+      ]
+    },
+    "location": {
+      "id": "cell",
+      "description": "You are in a quiet cell with an open archway. Your tiredness prevents movement."
+    },
+    "narrative": "You are in a quiet cell with an open archway. Your tiredness prevents movement.",
+    "visible_entities": [
+      {
+        "id": "archway",
+        "name": "Archway",
+        "description": "An open exit leading into a courtyard.",
+        "kind": "door",
+        "open": true
+      }
+    ],
+    "actions": [
+      {
+        "id": "look",
+        "description": "Inspect a visible object, or observe your surroundings without a target.",
+        "arguments_schema": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "enum": [
+                "archway"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "targets": [
+          "archway"
+        ],
+        "availability": "available",
+        "reason": null
+      },
+      {
+        "id": "open",
+        "description": "Open a visible container or door. A locked door must be unlocked first.",
+        "arguments_schema": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "enum": [
+                "archway"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        },
+        "targets": [
+          "archway"
+        ],
+        "availability": "unknown",
+        "reason": null
+      },
+      {
+        "id": "unlock",
+        "description": "Unlock a visible lock using a matching item you carry.",
+        "arguments_schema": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "enum": [
+                "archway"
+              ]
+            },
+            "item": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "item"
+          ],
+          "additionalProperties": false
+        },
+        "targets": [
+          "archway"
+        ],
+        "availability": "blocked",
+        "reason": "You must carry an item to try unlocking."
+      },
+      {
+        "id": "go",
+        "description": "Cross a visible exit when it is open and unlocked.",
+        "arguments_schema": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "enum": [
+                "archway"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        },
+        "targets": [
+          "archway"
+        ],
+        "availability": "blocked",
+        "reason": "An enabled need prevents movement."
+      },
+      {
+        "id": "nap",
+        "description": "Take a brief nap to recover tiredness. Specify a duration from one to three ticks.",
+        "arguments_schema": {
+          "type": "object",
+          "properties": {
+            "duration": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            }
+          },
+          "required": [
+            "duration"
+          ],
+          "additionalProperties": false
+        },
+        "targets": [],
+        "availability": "available",
+        "reason": null
+      }
+    ]
+  },
+  "schema_version": "1.0",
+  "run_id": "13a9afb2c59145e48b4ed3e1c97b8957",
+  "sequence": 2,
+  "id": "13a9afb2c59145e48b4ed3e1c97b8957:2"
+}

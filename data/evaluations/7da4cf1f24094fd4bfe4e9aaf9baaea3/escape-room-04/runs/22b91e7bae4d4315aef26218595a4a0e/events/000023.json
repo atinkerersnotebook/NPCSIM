@@ -1,0 +1,33 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:14:39.619949+00:00",
+  "cycle": 3,
+  "session_id": "317b945962874bba924ea0d6276ce461",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "take",
+    "arguments": {
+      "target": "key"
+    },
+    "justification": "The box is now open and the brass key is visible and portable. Carrying capacity is free (0 of 1 used), so picking up the key is the next step toward unlocking the door.",
+    "expected_outcome": "The brass key is added to inventory and the carrying count becomes 1 of 1.",
+    "subgoal": "Pick up the brass key",
+    "plan": [
+      "Take the brass key",
+      "Unlock the door with the key",
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3390
+  },
+  "schema_version": "1.0",
+  "run_id": "22b91e7bae4d4315aef26218595a4a0e",
+  "sequence": 23,
+  "id": "22b91e7bae4d4315aef26218595a4a0e:23"
+}

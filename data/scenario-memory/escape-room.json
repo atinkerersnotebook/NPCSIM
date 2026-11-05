@@ -1,0 +1,158 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "escape-room",
+  "failures": [
+    {
+      "run_id": "e04d505c73294af2b82b65ef371c4743",
+      "objective": "Leave the room.",
+      "recorded_at": "2026-11-03T21:40:36.770528+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "e04d505c73294af2b82b65ef371c4743:6"
+          ]
+        },
+        {
+          "reason": "The actor remained in the room at final verification; the objective to leave was not fulfilled.",
+          "evidence_ids": [
+            "e04d505c73294af2b82b65ef371c4743:6"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "e2afc5ece65341129e11fba66ce6607f",
+      "objective": "Leave the room.",
+      "recorded_at": "2026-11-05T13:46:09.376073+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "e2afc5ece65341129e11fba66ce6607f:6"
+          ]
+        },
+        {
+          "reason": "The actor remained in the room; the final authoritative verification places them at location \"room\" with active status, so the objective to leave was not achieved.",
+          "evidence_ids": [
+            "e2afc5ece65341129e11fba66ce6607f:6"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "f4cd8af1f4bb4bd0a376352beabbf01c",
+      "objective": "Leave the room.",
+      "recorded_at": "2026-11-05T15:23:58.615325+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "f4cd8af1f4bb4bd0a376352beabbf01c:68"
+          ]
+        },
+        {
+          "reason": "The actor did not leave the room; final verification confirms their location is still \"room\".",
+          "evidence_ids": [
+            "f4cd8af1f4bb4bd0a376352beabbf01c:68"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "a7478e59eaea4f82a1dc844c9986fb04",
+      "objective": "Leave the room.",
+      "recorded_at": "2026-11-05T15:30:13.936061+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "a7478e59eaea4f82a1dc844c9986fb04:6"
+          ]
+        },
+        {
+          "reason": "The final verification confirms the actor remained in the room; the objective to leave was not fulfilled.",
+          "evidence_ids": [
+            "a7478e59eaea4f82a1dc844c9986fb04:6"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "07a592ab1c6a41adb56943833776af08",
+      "objective": "Leave the room.",
+      "recorded_at": "2026-11-05T15:31:02.395573+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "07a592ab1c6a41adb56943833776af08:6"
+          ]
+        },
+        {
+          "reason": "The actor remained in the room at final verification; the objective to leave was not fulfilled.",
+          "evidence_ids": [
+            "07a592ab1c6a41adb56943833776af08:6"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "4a8bc0dee57b4200ab67cfd99758d224",
+      "objective": "Leave the room.",
+      "recorded_at": "2026-11-05T15:32:02.158295+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "4a8bc0dee57b4200ab67cfd99758d224:68"
+          ]
+        },
+        {
+          "reason": "The actor did not leave the room; final verification confirms their location is still \"room\".",
+          "evidence_ids": [
+            "4a8bc0dee57b4200ab67cfd99758d224:68"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "bbf640cba2ba48aabfa903b47b005d68",
+      "objective": "Leave the room.",
+      "recorded_at": "2026-11-05T15:48:33.313209+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "bbf640cba2ba48aabfa903b47b005d68:6"
+          ]
+        },
+        {
+          "reason": "The actor remains in the room; the objective to leave was not fulfilled.",
+          "evidence_ids": [
+            "bbf640cba2ba48aabfa903b47b005d68:6"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "a76e5261a75942b59efddd0e5e19752b",
+      "objective": "Leave the room.",
+      "recorded_at": "2026-11-05T16:08:23.138631+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "a76e5261a75942b59efddd0e5e19752b:6"
+          ]
+        },
+        {
+          "reason": "The actor remains in the room; the objective to leave was not fulfilled.",
+          "evidence_ids": [
+            "a76e5261a75942b59efddd0e5e19752b:6"
+          ]
+        }
+      ]
+    }
+  ]
+}

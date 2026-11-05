@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "id": "rock-paper-scissors",
+  "title": "Rock, Paper, Scissors - Two-Agent Showdown",
+  "start_location": "arena",
+  "exit_location": "arena",
+  "objective": "Play all five rounds of rock-paper-scissors against your opponent. Try to earn the most round wins. A draw earns no points and still counts as a round; the match can end tied. Commit one private move each round with play_rps, without announcing it. The world reveals both moves together and keeps the score. Completing the match is the verified episode goal, not both players winning.",
+  "goal_type": "rps_match_completed",
+  "opening_narrative": "Nova and Atlas face each other across a small tournament table. Five rounds will decide their rock-paper-scissors match.\n\nEach locks in a private move before either can see the other's choice. Rock beats scissors, scissors beats paper, and paper beats rock. They can learn from revealed rounds, but neither knows the opponent's next move.",
+  "rps": {"rounds": 5},
+  "agents": [
+    {"id": "nova", "role": "Nova: compete against Atlas. Choose your own private move with play_rps each round, using revealed history to vary your choices. Do not speak your move aloud. Try to win the five-round match."},
+    {"id": "atlas", "role": "Atlas: compete against Nova. Choose your own private move with play_rps each round, adapting to revealed history without assuming the opponent's current move. Do not speak your move aloud. Try to win the five-round match."}
+  ],
+  "body": {"description": "A seated player with hands for rock, paper and scissors gestures.", "capabilities": ["manipulate"], "capacity": 0},
+  "needs": {},
+  "recovery": {},
+  "budgets": {"max_actions": 30, "max_model_calls": 45, "max_seconds": 900, "repetition_window": 4},
+  "entities": {
+    "arena": {"name": "Tournament table", "kind": "location", "description": "A quiet rock-paper-scissors arena. Commit one private move per round using play_rps. The referee reveals both moves only when both players have committed."}
+  }
+}

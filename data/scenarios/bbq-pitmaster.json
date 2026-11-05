@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "id": "bbq-pitmaster",
+  "title": "BBQ Pitmaster - Steady at 225 F",
+  "start_location": "bbq-station",
+  "exit_location": "bbq-station",
+  "objective": "Tend the simulated BBQ at 225 F for 30 simulated minutes. Watch the temperature gauge and adjust the heat dial as needed, including after occasional grease flare-ups. Keep the temperature within 215-235 F for at least 80% of the session and finish inside that band. Each adjustment or monitoring action advances 30 simulated seconds.",
+  "goal_type": "bbq_temperature_controlled",
+  "opening_narrative": "You settle beside a backyard BBQ for a low-and-slow cook. The temperature gauge reads 225 F, and the heat dial sits at 50%.\n\nYour only job is to tend the heat. There are no ingredients to prepare, rooms to explore or errands to run. Watch the gauge, make small adjustments when needed, and let the BBQ settle. Grease may flare up now and then, briefly sending the temperature higher before the flames subside.\n\nThis is a temperature-control simulation, not a connection to a real grill.",
+  "body": {
+    "description": "A BBQ pitmaster watching a temperature gauge and controlling a heat dial. No movement, inventory or needs.",
+    "capabilities": ["bbq_control"],
+    "capacity": 0
+  },
+  "needs": {},
+  "recovery": {},
+  "budgets": {"max_actions": 75, "max_model_calls": 90, "max_seconds": 1800, "repetition_window": 4},
+  "entities": {
+    "bbq-station": {
+      "name": "Backyard BBQ",
+      "kind": "location",
+      "description": "A simulated BBQ with a Fahrenheit temperature gauge and a heat dial from 0% to 100%. The target is 225 F. Occasional grease flare-ups briefly spike the heat."
+    }
+  },
+  "bbq": {
+    "target_f": 225,
+    "tolerance_f": 10,
+    "duration_seconds": 1800,
+    "minimum_in_band_fraction": 0.8
+  }
+}

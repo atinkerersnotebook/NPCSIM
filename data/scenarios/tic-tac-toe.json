@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "id": "tic-tac-toe",
+  "title": "Tic-Tac-Toe - Two-Agent Showdown",
+  "start_location": "arena",
+  "exit_location": "arena",
+  "objective": "Play a complete game of tic-tac-toe against your opponent. Try to win by making three of your marks in a row, column or diagonal, and block your opponent's threats. Nova is X and moves first; Atlas is O. Alternate turns placing marks in empty cells numbered 1-9, left to right, top to bottom. A full board without a winner is a draw. Completing the game is the verified episode goal, not both players winning.",
+  "goal_type": "tic_tac_toe_completed",
+  "opening_narrative": "Nova and Atlas sit across a three-by-three tic-tac-toe board. Nova holds X and Atlas holds O.\n\nThey take turns placing one mark in an empty square. Three matching marks across a row, down a column or along a diagonal wins; a full board with no winner is a draw.",
+  "agents": [
+    {"id": "nova", "role": "Nova: you are X and move first. Compete against Atlas using play_tic_tac_toe. Study the public board, try to win, and block immediate threats. Choose only an empty cell on your turn."},
+    {"id": "atlas", "role": "Atlas: you are O and move second. Compete against Nova using play_tic_tac_toe. Study the public board, try to win, and block immediate threats. Choose only an empty cell on your turn."}
+  ],
+  "body": {"description": "A seated player able to place marks on a tic-tac-toe board.", "capabilities": ["manipulate"], "capacity": 0},
+  "needs": {},
+  "recovery": {},
+  "budgets": {"max_actions": 30, "max_model_calls": 45, "max_seconds": 900, "repetition_window": 4},
+  "entities": {
+    "arena": {"name": "Tic-tac-toe table", "kind": "location", "description": "A shared three-by-three board. Cells are numbered 1, 2, 3 across the top row, 4, 5, 6 across the middle, and 7, 8, 9 across the bottom. The public board and whose turn it is appear in each observation."}
+  }
+}

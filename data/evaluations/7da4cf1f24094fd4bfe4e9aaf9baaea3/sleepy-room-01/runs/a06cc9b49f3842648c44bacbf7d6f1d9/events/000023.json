@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:18:13.286594+00:00",
+  "cycle": 3,
+  "session_id": "1263fcb106fa4c61804510e1248926b0",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "go",
+    "arguments": {
+      "target": "archway"
+    },
+    "justification": "The archway was inspected and reported open and unlocked. Sleep was recovered by the last nap and is now at level 0, so the prior movement block should no longer apply.",
+    "expected_outcome": "The actor crosses the archway into the courtyard, which would satisfy the goal of leaving the room.",
+    "subgoal": "Cross the open archway",
+    "plan": [
+      "Attempt to cross the archway",
+      "If movement is still blocked, check the status of the sleep need",
+      "If the archway is closed, open it and retry"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3527
+  },
+  "schema_version": "1.0",
+  "run_id": "a06cc9b49f3842648c44bacbf7d6f1d9",
+  "sequence": 23,
+  "id": "a06cc9b49f3842648c44bacbf7d6f1d9:23"
+}

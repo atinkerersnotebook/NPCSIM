@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "fallen-observatory",
+  "failures": [
+    {
+      "run_id": "a5c8cdab1c7649c690977dc564605373",
+      "objective": "Use flight, lifting and digging to restore the observatory lift and bring both animals through the escape tunnel to the clearing.",
+      "recorded_at": "2026-11-03T19:54:14.888033+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "a5c8cdab1c7649c690977dc564605373:8"
+          ]
+        },
+        {
+          "reason": "The lift was not restored; final verification records no completed repair work.",
+          "evidence_ids": [
+            "a5c8cdab1c7649c690977dc564605373:8"
+          ]
+        },
+        {
+          "reason": "Neither animal reached the clearing: both remained in the courtyard, and escape digging was not completed.",
+          "evidence_ids": [
+            "a5c8cdab1c7649c690977dc564605373:8"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "4b70a9df7ce547acbb45c87330742e1a",
+      "objective": "Use flight, lifting and digging to restore the observatory lift and bring both animals through the escape tunnel to the clearing.",
+      "recorded_at": "2026-11-03T19:58:07.806224+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "4b70a9df7ce547acbb45c87330742e1a:8"
+          ]
+        },
+        {
+          "reason": "The observatory lift was not restored; repair_lift remains uncompleted.",
+          "evidence_ids": [
+            "4b70a9df7ce547acbb45c87330742e1a:8"
+          ]
+        },
+        {
+          "reason": "The escape tunnel was not dug, and both animals remain in the courtyard rather than reaching the clearing.",
+          "evidence_ids": [
+            "4b70a9df7ce547acbb45c87330742e1a:8"
+          ]
+        }
+      ]
+    }
+  ]
+}

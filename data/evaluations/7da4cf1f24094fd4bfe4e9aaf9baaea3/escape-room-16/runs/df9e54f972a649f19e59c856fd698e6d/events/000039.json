@@ -1,0 +1,31 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:17:15.955262+00:00",
+  "cycle": 5,
+  "session_id": "5fb7da27427947e3ab752093049ec06f",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The memory shows the unlock succeeded, but the door's locked flag in the current observation is stale or unclear. Opening the door is the next step toward leaving.",
+    "expected_outcome": "The door opens, which should allow the 'go' action on the door next.",
+    "subgoal": "Open the unlocked door",
+    "plan": [
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3029
+  },
+  "schema_version": "1.0",
+  "run_id": "df9e54f972a649f19e59c856fd698e6d",
+  "sequence": 39,
+  "id": "df9e54f972a649f19e59c856fd698e6d:39"
+}

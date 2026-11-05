@@ -1,0 +1,1346 @@
+{
+  "schema_version": "1.0",
+  "world_id": "75ca9876500e40d1b9920b38a5787920",
+  "scenario_id": "escape-room",
+  "revision": 7,
+  "entities": {
+    "room": {
+      "name": "Small room",
+      "kind": "location",
+      "description": "A small stone room with a door and a box on the floor.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "destination": null,
+      "portable": false,
+      "food": false
+    },
+    "outside": {
+      "name": "Outside",
+      "kind": "location",
+      "description": "Fresh air. You have left the room.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "destination": null,
+      "portable": false,
+      "food": false
+    },
+    "door": {
+      "name": "Door",
+      "kind": "door",
+      "description": "A sturdy wooden door.",
+      "location": "room",
+      "open": true,
+      "locked": false,
+      "key_id": "key",
+      "destination": "outside",
+      "portable": false,
+      "food": false
+    },
+    "box": {
+      "name": "Box",
+      "kind": "container",
+      "description": "A small closed box on the floor.",
+      "location": "room",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "destination": null,
+      "portable": false,
+      "food": false
+    },
+    "key": {
+      "name": "Brass key",
+      "kind": "item",
+      "description": "A small brass key.",
+      "location": "npc-001",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "destination": null,
+      "portable": true,
+      "food": false
+    }
+  },
+  "actors": {
+    "npc-001": {
+      "actor_id": "npc-001",
+      "session_id": "6261a045b0544c7ea904c739796e8d03",
+      "location_id": "outside",
+      "start_location_id": "room",
+      "body": {
+        "description": "A mobile body with hands, able to carry one small item.",
+        "capabilities": [
+          "move",
+          "manipulate"
+        ],
+        "capacity": 1
+      },
+      "inventory": [
+        "key"
+      ],
+      "needs": {
+        "food": {
+          "enabled": false,
+          "level": 0.0,
+          "rate": 8.0,
+          "threshold": 80.0
+        },
+        "sleep": {
+          "enabled": false,
+          "level": 0.0,
+          "rate": 10.0,
+          "threshold": 80.0
+        }
+      },
+      "inspected": [
+        "door"
+      ],
+      "action_clock": 5
+    }
+  },
+  "requests": {
+    "6261a045b0544c7ea904c739796e8d03:21e7ab720d1d44e98847b4ad6d85bf24": {
+      "request": {
+        "action_id": "open",
+        "arguments": {
+          "target": "door"
+        },
+        "expected_observation_revision": "obs-1"
+      },
+      "result": {
+        "session_id": "6261a045b0544c7ea904c739796e8d03",
+        "request_id": "21e7ab720d1d44e98847b4ad6d85bf24",
+        "outcome": "REJECTED",
+        "code": "LOCKED",
+        "explanation": "The door is locked.",
+        "observation": {
+          "contract_version": "1.0",
+          "world_id": "75ca9876500e40d1b9920b38a5787920",
+          "session_id": "6261a045b0544c7ea904c739796e8d03",
+          "observation_revision": "obs-2",
+          "self": {
+            "actor_id": "npc-001",
+            "location_id": "room",
+            "body": {
+              "id": "npc-001-body",
+              "description": "A mobile body with hands, able to carry one small item.",
+              "capabilities": [
+                "move",
+                "manipulate"
+              ],
+              "carrying": {
+                "rule": "item_count",
+                "limit": 1,
+                "used": 0
+              }
+            },
+            "inventory": [],
+            "needs": [
+              {
+                "id": "food",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_hungry"
+                },
+                "effects": []
+              },
+              {
+                "id": "sleep",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_tired"
+                },
+                "effects": []
+              }
+            ]
+          },
+          "location": {
+            "id": "room",
+            "description": "A small stone room with a door and a box on the floor."
+          },
+          "narrative": "A small stone room with a door and a box on the floor.",
+          "visible_entities": [
+            {
+              "id": "door",
+              "name": "Door",
+              "description": "A sturdy wooden door.",
+              "kind": "door",
+              "open": false,
+              "locked": true
+            },
+            {
+              "id": "box",
+              "name": "Box",
+              "description": "A small closed box on the floor.",
+              "kind": "container",
+              "open": false
+            }
+          ],
+          "actions": [
+            {
+              "id": "look",
+              "description": "Inspect a visible object, or observe your surroundings without a target.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door",
+                      "box"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door",
+                "box"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "open",
+              "description": "Open a visible container or door. A locked door must be unlocked first.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door",
+                      "box"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door",
+                "box"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "unlock",
+              "description": "Unlock a visible lock using a matching item you carry.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door"
+                    ]
+                  },
+                  "item": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "target",
+                  "item"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door"
+              ],
+              "availability": "blocked",
+              "reason": "You must carry an item to try unlocking."
+            },
+            {
+              "id": "go",
+              "description": "Cross a visible exit when it is open and unlocked.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door"
+              ],
+              "availability": "unknown",
+              "reason": null
+            }
+          ]
+        }
+      }
+    },
+    "6261a045b0544c7ea904c739796e8d03:55498d06080d4ce0be15cce22d618d6c": {
+      "request": {
+        "action_id": "open",
+        "arguments": {
+          "target": "box"
+        },
+        "expected_observation_revision": "obs-2"
+      },
+      "result": {
+        "session_id": "6261a045b0544c7ea904c739796e8d03",
+        "request_id": "55498d06080d4ce0be15cce22d618d6c",
+        "outcome": "APPLIED",
+        "code": "APPLIED",
+        "explanation": "Open succeeded.",
+        "observation": {
+          "contract_version": "1.0",
+          "world_id": "75ca9876500e40d1b9920b38a5787920",
+          "session_id": "6261a045b0544c7ea904c739796e8d03",
+          "observation_revision": "obs-3",
+          "self": {
+            "actor_id": "npc-001",
+            "location_id": "room",
+            "body": {
+              "id": "npc-001-body",
+              "description": "A mobile body with hands, able to carry one small item.",
+              "capabilities": [
+                "move",
+                "manipulate"
+              ],
+              "carrying": {
+                "rule": "item_count",
+                "limit": 1,
+                "used": 0
+              }
+            },
+            "inventory": [],
+            "needs": [
+              {
+                "id": "food",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_hungry"
+                },
+                "effects": []
+              },
+              {
+                "id": "sleep",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_tired"
+                },
+                "effects": []
+              }
+            ]
+          },
+          "location": {
+            "id": "room",
+            "description": "A small stone room with a door and a box on the floor."
+          },
+          "narrative": "A small stone room with a door and a box on the floor.",
+          "visible_entities": [
+            {
+              "id": "door",
+              "name": "Door",
+              "description": "A sturdy wooden door.",
+              "kind": "door",
+              "open": false,
+              "locked": true
+            },
+            {
+              "id": "box",
+              "name": "Box",
+              "description": "A small closed box on the floor.",
+              "kind": "container",
+              "open": true
+            },
+            {
+              "id": "key",
+              "name": "Brass key",
+              "description": "A small brass key.",
+              "kind": "item",
+              "portable": true
+            }
+          ],
+          "actions": [
+            {
+              "id": "look",
+              "description": "Inspect a visible object, or observe your surroundings without a target.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door",
+                      "box",
+                      "key"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door",
+                "box",
+                "key"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "open",
+              "description": "Open a visible container or door. A locked door must be unlocked first.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door",
+                      "box"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door",
+                "box"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "unlock",
+              "description": "Unlock a visible lock using a matching item you carry.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door"
+                    ]
+                  },
+                  "item": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "target",
+                  "item"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door"
+              ],
+              "availability": "blocked",
+              "reason": "You must carry an item to try unlocking."
+            },
+            {
+              "id": "take",
+              "description": "Pick up a visible portable item if your body has capacity.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "key"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "key"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "go",
+              "description": "Cross a visible exit when it is open and unlocked.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door"
+              ],
+              "availability": "unknown",
+              "reason": null
+            }
+          ]
+        }
+      }
+    },
+    "6261a045b0544c7ea904c739796e8d03:7d3aec95f8ce4496bbc51a71a67bb689": {
+      "request": {
+        "action_id": "take",
+        "arguments": {
+          "target": "key"
+        },
+        "expected_observation_revision": "obs-3"
+      },
+      "result": {
+        "session_id": "6261a045b0544c7ea904c739796e8d03",
+        "request_id": "7d3aec95f8ce4496bbc51a71a67bb689",
+        "outcome": "APPLIED",
+        "code": "APPLIED",
+        "explanation": "Take succeeded.",
+        "observation": {
+          "contract_version": "1.0",
+          "world_id": "75ca9876500e40d1b9920b38a5787920",
+          "session_id": "6261a045b0544c7ea904c739796e8d03",
+          "observation_revision": "obs-4",
+          "self": {
+            "actor_id": "npc-001",
+            "location_id": "room",
+            "body": {
+              "id": "npc-001-body",
+              "description": "A mobile body with hands, able to carry one small item.",
+              "capabilities": [
+                "move",
+                "manipulate"
+              ],
+              "carrying": {
+                "rule": "item_count",
+                "limit": 1,
+                "used": 1
+              }
+            },
+            "inventory": [
+              {
+                "id": "key",
+                "name": "Brass key"
+              }
+            ],
+            "needs": [
+              {
+                "id": "food",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_hungry"
+                },
+                "effects": []
+              },
+              {
+                "id": "sleep",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_tired"
+                },
+                "effects": []
+              }
+            ]
+          },
+          "location": {
+            "id": "room",
+            "description": "A small stone room with a door and a box on the floor."
+          },
+          "narrative": "A small stone room with a door and a box on the floor.",
+          "visible_entities": [
+            {
+              "id": "door",
+              "name": "Door",
+              "description": "A sturdy wooden door.",
+              "kind": "door",
+              "open": false,
+              "locked": true
+            },
+            {
+              "id": "box",
+              "name": "Box",
+              "description": "A small closed box on the floor.",
+              "kind": "container",
+              "open": true
+            },
+            {
+              "id": "key",
+              "name": "Brass key",
+              "description": "A small brass key.",
+              "kind": "item",
+              "portable": true
+            }
+          ],
+          "actions": [
+            {
+              "id": "look",
+              "description": "Inspect a visible object, or observe your surroundings without a target.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door",
+                      "box",
+                      "key"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door",
+                "box",
+                "key"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "open",
+              "description": "Open a visible container or door. A locked door must be unlocked first.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door",
+                      "box"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door",
+                "box"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "unlock",
+              "description": "Unlock a visible lock using a matching item you carry.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door"
+                    ]
+                  },
+                  "item": {
+                    "type": "string",
+                    "enum": [
+                      "key"
+                    ]
+                  }
+                },
+                "required": [
+                  "target",
+                  "item"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "drop",
+              "description": "Drop an item you carry at your current location.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "key"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "key"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "go",
+              "description": "Cross a visible exit when it is open and unlocked.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door"
+              ],
+              "availability": "unknown",
+              "reason": null
+            }
+          ]
+        }
+      }
+    },
+    "6261a045b0544c7ea904c739796e8d03:0a94ccba721347f9b88d85d66e9d2299": {
+      "request": {
+        "action_id": "unlock",
+        "arguments": {
+          "target": "door",
+          "item": "key"
+        },
+        "expected_observation_revision": "obs-4"
+      },
+      "result": {
+        "session_id": "6261a045b0544c7ea904c739796e8d03",
+        "request_id": "0a94ccba721347f9b88d85d66e9d2299",
+        "outcome": "APPLIED",
+        "code": "APPLIED",
+        "explanation": "Unlock succeeded.",
+        "observation": {
+          "contract_version": "1.0",
+          "world_id": "75ca9876500e40d1b9920b38a5787920",
+          "session_id": "6261a045b0544c7ea904c739796e8d03",
+          "observation_revision": "obs-5",
+          "self": {
+            "actor_id": "npc-001",
+            "location_id": "room",
+            "body": {
+              "id": "npc-001-body",
+              "description": "A mobile body with hands, able to carry one small item.",
+              "capabilities": [
+                "move",
+                "manipulate"
+              ],
+              "carrying": {
+                "rule": "item_count",
+                "limit": 1,
+                "used": 1
+              }
+            },
+            "inventory": [
+              {
+                "id": "key",
+                "name": "Brass key"
+              }
+            ],
+            "needs": [
+              {
+                "id": "food",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_hungry"
+                },
+                "effects": []
+              },
+              {
+                "id": "sleep",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_tired"
+                },
+                "effects": []
+              }
+            ]
+          },
+          "location": {
+            "id": "room",
+            "description": "A small stone room with a door and a box on the floor."
+          },
+          "narrative": "A small stone room with a door and a box on the floor.",
+          "visible_entities": [
+            {
+              "id": "door",
+              "name": "Door",
+              "description": "A sturdy wooden door.",
+              "kind": "door",
+              "open": false,
+              "locked": false
+            },
+            {
+              "id": "box",
+              "name": "Box",
+              "description": "A small closed box on the floor.",
+              "kind": "container",
+              "open": true
+            },
+            {
+              "id": "key",
+              "name": "Brass key",
+              "description": "A small brass key.",
+              "kind": "item",
+              "portable": true
+            }
+          ],
+          "actions": [
+            {
+              "id": "look",
+              "description": "Inspect a visible object, or observe your surroundings without a target.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door",
+                      "box",
+                      "key"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door",
+                "box",
+                "key"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "open",
+              "description": "Open a visible container or door. A locked door must be unlocked first.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door",
+                      "box"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door",
+                "box"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "unlock",
+              "description": "Unlock a visible lock using a matching item you carry.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door"
+                    ]
+                  },
+                  "item": {
+                    "type": "string",
+                    "enum": [
+                      "key"
+                    ]
+                  }
+                },
+                "required": [
+                  "target",
+                  "item"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "drop",
+              "description": "Drop an item you carry at your current location.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "key"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "key"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "go",
+              "description": "Cross a visible exit when it is open and unlocked.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door"
+              ],
+              "availability": "unknown",
+              "reason": null
+            }
+          ]
+        }
+      }
+    },
+    "6261a045b0544c7ea904c739796e8d03:d52e9600b9f24dad9611d1db0facfac0": {
+      "request": {
+        "action_id": "open",
+        "arguments": {
+          "target": "door"
+        },
+        "expected_observation_revision": "obs-5"
+      },
+      "result": {
+        "session_id": "6261a045b0544c7ea904c739796e8d03",
+        "request_id": "d52e9600b9f24dad9611d1db0facfac0",
+        "outcome": "APPLIED",
+        "code": "APPLIED",
+        "explanation": "Open succeeded.",
+        "observation": {
+          "contract_version": "1.0",
+          "world_id": "75ca9876500e40d1b9920b38a5787920",
+          "session_id": "6261a045b0544c7ea904c739796e8d03",
+          "observation_revision": "obs-6",
+          "self": {
+            "actor_id": "npc-001",
+            "location_id": "room",
+            "body": {
+              "id": "npc-001-body",
+              "description": "A mobile body with hands, able to carry one small item.",
+              "capabilities": [
+                "move",
+                "manipulate"
+              ],
+              "carrying": {
+                "rule": "item_count",
+                "limit": 1,
+                "used": 1
+              }
+            },
+            "inventory": [
+              {
+                "id": "key",
+                "name": "Brass key"
+              }
+            ],
+            "needs": [
+              {
+                "id": "food",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_hungry"
+                },
+                "effects": []
+              },
+              {
+                "id": "sleep",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_tired"
+                },
+                "effects": []
+              }
+            ]
+          },
+          "location": {
+            "id": "room",
+            "description": "A small stone room with a door and a box on the floor."
+          },
+          "narrative": "A small stone room with a door and a box on the floor.",
+          "visible_entities": [
+            {
+              "id": "door",
+              "name": "Door",
+              "description": "A sturdy wooden door.",
+              "kind": "door",
+              "open": true,
+              "locked": false
+            },
+            {
+              "id": "box",
+              "name": "Box",
+              "description": "A small closed box on the floor.",
+              "kind": "container",
+              "open": true
+            },
+            {
+              "id": "key",
+              "name": "Brass key",
+              "description": "A small brass key.",
+              "kind": "item",
+              "portable": true
+            }
+          ],
+          "actions": [
+            {
+              "id": "look",
+              "description": "Inspect a visible object, or observe your surroundings without a target.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door",
+                      "box",
+                      "key"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door",
+                "box",
+                "key"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "open",
+              "description": "Open a visible container or door. A locked door must be unlocked first.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door",
+                      "box"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door",
+                "box"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "unlock",
+              "description": "Unlock a visible lock using a matching item you carry.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door"
+                    ]
+                  },
+                  "item": {
+                    "type": "string",
+                    "enum": [
+                      "key"
+                    ]
+                  }
+                },
+                "required": [
+                  "target",
+                  "item"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "drop",
+              "description": "Drop an item you carry at your current location.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "key"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "key"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "go",
+              "description": "Cross a visible exit when it is open and unlocked.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "door"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "door"
+              ],
+              "availability": "unknown",
+              "reason": null
+            }
+          ]
+        }
+      }
+    },
+    "6261a045b0544c7ea904c739796e8d03:b7dd781cca79462faa769ab6b6cbecd8": {
+      "request": {
+        "action_id": "go",
+        "arguments": {
+          "target": "door"
+        },
+        "expected_observation_revision": "obs-6"
+      },
+      "result": {
+        "session_id": "6261a045b0544c7ea904c739796e8d03",
+        "request_id": "b7dd781cca79462faa769ab6b6cbecd8",
+        "outcome": "APPLIED",
+        "code": "APPLIED",
+        "explanation": "Go succeeded.",
+        "observation": {
+          "contract_version": "1.0",
+          "world_id": "75ca9876500e40d1b9920b38a5787920",
+          "session_id": "6261a045b0544c7ea904c739796e8d03",
+          "observation_revision": "obs-7",
+          "self": {
+            "actor_id": "npc-001",
+            "location_id": "outside",
+            "body": {
+              "id": "npc-001-body",
+              "description": "A mobile body with hands, able to carry one small item.",
+              "capabilities": [
+                "move",
+                "manipulate"
+              ],
+              "carrying": {
+                "rule": "item_count",
+                "limit": 1,
+                "used": 1
+              }
+            },
+            "inventory": [
+              {
+                "id": "key",
+                "name": "Brass key"
+              }
+            ],
+            "needs": [
+              {
+                "id": "food",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_hungry"
+                },
+                "effects": []
+              },
+              {
+                "id": "sleep",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_tired"
+                },
+                "effects": []
+              }
+            ]
+          },
+          "location": {
+            "id": "outside",
+            "description": "Fresh air. You have left the room."
+          },
+          "narrative": "Fresh air. You have left the room.",
+          "visible_entities": [
+            {
+              "id": "key",
+              "name": "Brass key",
+              "description": "A small brass key.",
+              "kind": "item",
+              "portable": true
+            }
+          ],
+          "actions": [
+            {
+              "id": "look",
+              "description": "Inspect a visible object, or observe your surroundings without a target.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "key"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "targets": [
+                "key"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "drop",
+              "description": "Drop an item you carry at your current location.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "key"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "key"
+              ],
+              "availability": "available",
+              "reason": null
+            }
+          ]
+        }
+      }
+    }
+  },
+  "admin_requests": []
+}

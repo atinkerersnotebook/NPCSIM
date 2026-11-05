@@ -1,0 +1,108 @@
+{
+  "kind": "action_result",
+  "timestamp": "2026-11-02T23:19:01.600718+00:00",
+  "cycle": 3,
+  "session_id": "8875072e895a4eb1babeeed4dc954088",
+  "actor_id": "npc-001",
+  "payload": {
+    "session_id": "8875072e895a4eb1babeeed4dc954088",
+    "request_id": "9920c32203c74832b4ff83d19653130f",
+    "outcome": "APPLIED",
+    "code": "APPLIED",
+    "explanation": "Go succeeded.",
+    "observation": {
+      "contract_version": "1.0",
+      "world_id": "652119f8046f4734947c20d229830fcf",
+      "session_id": "8875072e895a4eb1babeeed4dc954088",
+      "observation_revision": "obs-4",
+      "self": {
+        "actor_id": "npc-001",
+        "location_id": "courtyard",
+        "body": {
+          "id": "npc-001-body",
+          "description": "A tired traveler who can move and manipulate nearby objects.",
+          "capabilities": [
+            "move",
+            "manipulate"
+          ],
+          "carrying": {
+            "rule": "item_count",
+            "limit": 2,
+            "used": 0
+          }
+        },
+        "inventory": [],
+        "needs": [
+          {
+            "id": "food",
+            "enabled": false,
+            "level": 0.0,
+            "scale": {
+              "min": 0,
+              "max": 100,
+              "higher_means": "more_hungry"
+            },
+            "effects": []
+          },
+          {
+            "id": "sleep",
+            "enabled": true,
+            "level": 2.0,
+            "scale": {
+              "min": 0,
+              "max": 100,
+              "higher_means": "more_tired"
+            },
+            "effects": []
+          }
+        ]
+      },
+      "location": {
+        "id": "courtyard",
+        "description": "You have reached the courtyard."
+      },
+      "narrative": "You have reached the courtyard.",
+      "visible_entities": [],
+      "actions": [
+        {
+          "id": "look",
+          "description": "Inspect a visible object, or observe your surroundings without a target.",
+          "arguments_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "targets": [],
+          "availability": "available",
+          "reason": null
+        },
+        {
+          "id": "nap",
+          "description": "Take a brief nap to recover tiredness. Specify a duration from one to three ticks.",
+          "arguments_schema": {
+            "type": "object",
+            "properties": {
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              }
+            },
+            "required": [
+              "duration"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [],
+          "availability": "available",
+          "reason": null
+        }
+      ]
+    }
+  },
+  "schema_version": "1.0",
+  "run_id": "2ef66eab7dc24ad586e163e1b0040424",
+  "sequence": 26,
+  "id": "2ef66eab7dc24ad586e163e1b0040424:26"
+}

@@ -1,0 +1,182 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "storm-signal",
+  "failures": [
+    {
+      "run_id": "cb924f6db90e4f25a3132e47bc0f916e",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-03T21:41:06.646900+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "cb924f6db90e4f25a3132e47bc0f916e:9"
+          ]
+        },
+        {
+          "reason": "The storm beacon was not restored: all six required cooperative work steps remain uncompleted.",
+          "evidence_ids": [
+            "cb924f6db90e4f25a3132e47bc0f916e:9"
+          ]
+        },
+        {
+          "reason": "None of the three companions reached the hilltop refuge; Raven remains at the rookery, Badger at the quarry, and Otter at the river landing.",
+          "evidence_ids": [
+            "cb924f6db90e4f25a3132e47bc0f916e:9"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "82b8410d05a34becb98dc15634000fb1",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-04T20:37:08.134871+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "82b8410d05a34becb98dc15634000fb1:9"
+          ]
+        },
+        {
+          "reason": "The storm beacon was not restored: all required cooperative work remained unperformed, with no lens released, coil released, mast braced, lens mounted, wiring repaired, or signal focused.",
+          "evidence_ids": [
+            "82b8410d05a34becb98dc15634000fb1:9"
+          ]
+        },
+        {
+          "reason": "All three companions remained at their separate starting locations rather than reaching the hilltop refuge.",
+          "evidence_ids": [
+            "82b8410d05a34becb98dc15634000fb1:9",
+            "82b8410d05a34becb98dc15634000fb1:6"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "97ddfc23370f460a83e1c9581d45612d",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-04T20:44:44.425920+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "97ddfc23370f460a83e1c9581d45612d:9"
+          ]
+        },
+        {
+          "reason": "The storm beacon was not restored; none of the required cooperative engineering work was completed.",
+          "evidence_ids": [
+            "97ddfc23370f460a83e1c9581d45612d:9"
+          ]
+        },
+        {
+          "reason": "No companions reached the hilltop refuge; Raven, Badger, and Otter remained at the rookery, quarry, and river landing respectively.",
+          "evidence_ids": [
+            "97ddfc23370f460a83e1c9581d45612d:9"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "53fbd735ac624949b2ec2b4d45c65dac",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-05T16:35:04.795405+00:00",
+      "findings": [
+        {
+          "reason": "The team admits defeat: no assigned agent has the required skills: light work, water engineering. Mandatory cooperative work cannot be completed; retrying will not grant these abilities.",
+          "evidence_ids": [
+            "53fbd735ac624949b2ec2b4d45c65dac:9"
+          ]
+        },
+        {
+          "reason": "Beacon restoration is blocked: the team lacks light work and water engineering required to recover the coil, repair wiring, and focus the signal.",
+          "evidence_ids": [
+            "53fbd735ac624949b2ec2b4d45c65dac:9"
+          ]
+        },
+        {
+          "reason": "None of the three companions reached the hilltop refuge; Raven remains at the rookery, Badger at the quarry, and Otter at the river landing.",
+          "evidence_ids": [
+            "53fbd735ac624949b2ec2b4d45c65dac:9"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "8a44020e435e44a483bb6dbf6b9d0e77",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-05T16:40:09.335551+00:00",
+      "findings": [
+        {
+          "reason": "The team admits defeat: no assigned agent has the required skills: light work, water engineering. Mandatory cooperative work cannot be completed; retrying will not grant these abilities.",
+          "evidence_ids": [
+            "8a44020e435e44a483bb6dbf6b9d0e77:20"
+          ]
+        },
+        {
+          "reason": "Beacon restoration is blocked: the team lacks the required light-work and water-engineering capabilities.",
+          "evidence_ids": [
+            "8a44020e435e44a483bb6dbf6b9d0e77:20"
+          ]
+        },
+        {
+          "reason": "None of the three companions reached the hilltop refuge; final verification places Raven at the rookery, Badger at the quarry, and Otter at the river landing.",
+          "evidence_ids": [
+            "8a44020e435e44a483bb6dbf6b9d0e77:20"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "c8a0d947a43c4d94983a01859f2c8d24",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-05T16:41:55.138744+00:00",
+      "findings": [
+        {
+          "reason": "The team admits defeat: no assigned agent has the required skills: light work, water engineering. Mandatory cooperative work cannot be completed; retrying will not grant these abilities.",
+          "evidence_ids": [
+            "c8a0d947a43c4d94983a01859f2c8d24:13"
+          ]
+        },
+        {
+          "reason": "Beacon restoration is blocked: the team lacks the light-work and water-engineering skills required to recover the coil, repair wiring, and focus the signal.",
+          "evidence_ids": [
+            "c8a0d947a43c4d94983a01859f2c8d24:13"
+          ]
+        },
+        {
+          "reason": "The companions have not reached the hilltop refuge; final verification places Raven at the rookery, Badger at the quarry, and Otter at the river landing.",
+          "evidence_ids": [
+            "c8a0d947a43c4d94983a01859f2c8d24:13"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "0de095f496264b24bc6889fd82358ecc",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-05T16:42:19.546004+00:00",
+      "findings": [
+        {
+          "reason": "The team admits defeat: no assigned agent has the required skills: light work, water engineering. Mandatory cooperative work cannot be completed; retrying will not grant these abilities.",
+          "evidence_ids": [
+            "0de095f496264b24bc6889fd82358ecc:13"
+          ]
+        },
+        {
+          "reason": "Beacon restoration is blocked: the team lacks the light-work and water-engineering capabilities required to repair wiring and focus the signal.",
+          "evidence_ids": [
+            "0de095f496264b24bc6889fd82358ecc:13"
+          ]
+        },
+        {
+          "reason": "None of the companions reached the hilltop refuge; final verification places Raven at the rookery, Badger at the quarry, and Otter at the river landing.",
+          "evidence_ids": [
+            "0de095f496264b24bc6889fd82358ecc:13"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,587 @@
+{
+  "schema_version": "1.0",
+  "world_id": "59dde245a76143fe8be0af029ff1a5b8",
+  "scenario_id": "sleepy-room",
+  "revision": 4,
+  "entities": {
+    "cell": {
+      "name": "Quiet cell",
+      "kind": "location",
+      "description": "You are in a quiet cell with an open archway. Your tiredness prevents movement.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "destination": null,
+      "portable": false,
+      "food": false
+    },
+    "courtyard": {
+      "name": "Courtyard",
+      "kind": "location",
+      "description": "You have reached the courtyard.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "destination": null,
+      "portable": false,
+      "food": false
+    },
+    "archway": {
+      "name": "Archway",
+      "kind": "door",
+      "description": "An open exit leading into a courtyard.",
+      "location": "cell",
+      "open": true,
+      "locked": false,
+      "key_id": null,
+      "destination": "courtyard",
+      "portable": false,
+      "food": false
+    }
+  },
+  "actors": {
+    "npc-001": {
+      "actor_id": "npc-001",
+      "session_id": "282441d5dd454f1b9cb363ce0a2cb6b0",
+      "location_id": "courtyard",
+      "start_location_id": "cell",
+      "body": {
+        "description": "A tired traveler who can move and manipulate nearby objects.",
+        "capabilities": [
+          "move",
+          "manipulate"
+        ],
+        "capacity": 2
+      },
+      "inventory": [],
+      "needs": {
+        "food": {
+          "enabled": false,
+          "level": 0.0,
+          "rate": 0.0,
+          "threshold": 80.0
+        },
+        "sleep": {
+          "enabled": true,
+          "level": 2.0,
+          "rate": 2.0,
+          "threshold": 80.0
+        }
+      },
+      "inspected": [
+        "archway"
+      ],
+      "action_clock": 2
+    }
+  },
+  "requests": {
+    "282441d5dd454f1b9cb363ce0a2cb6b0:edae7c74753e487ba35f3d9a055a13ad": {
+      "request": {
+        "action_id": "nap",
+        "arguments": {
+          "duration": 3
+        },
+        "expected_observation_revision": "obs-1"
+      },
+      "result": {
+        "session_id": "282441d5dd454f1b9cb363ce0a2cb6b0",
+        "request_id": "edae7c74753e487ba35f3d9a055a13ad",
+        "outcome": "APPLIED",
+        "code": "RECOVERED",
+        "explanation": "You recover sleep.",
+        "observation": {
+          "contract_version": "1.0",
+          "world_id": "59dde245a76143fe8be0af029ff1a5b8",
+          "session_id": "282441d5dd454f1b9cb363ce0a2cb6b0",
+          "observation_revision": "obs-2",
+          "self": {
+            "actor_id": "npc-001",
+            "location_id": "cell",
+            "body": {
+              "id": "npc-001-body",
+              "description": "A tired traveler who can move and manipulate nearby objects.",
+              "capabilities": [
+                "move",
+                "manipulate"
+              ],
+              "carrying": {
+                "rule": "item_count",
+                "limit": 2,
+                "used": 0
+              }
+            },
+            "inventory": [],
+            "needs": [
+              {
+                "id": "food",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_hungry"
+                },
+                "effects": []
+              },
+              {
+                "id": "sleep",
+                "enabled": true,
+                "level": 0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_tired"
+                },
+                "effects": []
+              }
+            ]
+          },
+          "location": {
+            "id": "cell",
+            "description": "You are in a quiet cell with an open archway. Your tiredness prevents movement."
+          },
+          "narrative": "You are in a quiet cell with an open archway. Your tiredness prevents movement.",
+          "visible_entities": [
+            {
+              "id": "archway",
+              "name": "Archway",
+              "description": "An open exit leading into a courtyard.",
+              "kind": "door",
+              "open": true
+            }
+          ],
+          "actions": [
+            {
+              "id": "look",
+              "description": "Inspect a visible object, or observe your surroundings without a target.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "archway"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "targets": [
+                "archway"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "open",
+              "description": "Open a visible container or door. A locked door must be unlocked first.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "archway"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "archway"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "unlock",
+              "description": "Unlock a visible lock using a matching item you carry.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "archway"
+                    ]
+                  },
+                  "item": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "target",
+                  "item"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "archway"
+              ],
+              "availability": "blocked",
+              "reason": "You must carry an item to try unlocking."
+            },
+            {
+              "id": "go",
+              "description": "Cross a visible exit when it is open and unlocked.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "archway"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "archway"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "nap",
+              "description": "Take a brief nap to recover tiredness. Specify a duration from one to three ticks.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "duration": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3
+                  }
+                },
+                "required": [
+                  "duration"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [],
+              "availability": "available",
+              "reason": null
+            }
+          ]
+        }
+      }
+    },
+    "282441d5dd454f1b9cb363ce0a2cb6b0:58cdd553ffca4cbfb2103553bb5ecffa": {
+      "request": {
+        "action_id": "look",
+        "arguments": {
+          "target": "archway"
+        },
+        "expected_observation_revision": "obs-2"
+      },
+      "result": {
+        "session_id": "282441d5dd454f1b9cb363ce0a2cb6b0",
+        "request_id": "58cdd553ffca4cbfb2103553bb5ecffa",
+        "outcome": "APPLIED",
+        "code": "INSPECTED",
+        "explanation": "An open exit leading into a courtyard. It is unlocked.",
+        "observation": {
+          "contract_version": "1.0",
+          "world_id": "59dde245a76143fe8be0af029ff1a5b8",
+          "session_id": "282441d5dd454f1b9cb363ce0a2cb6b0",
+          "observation_revision": "obs-3",
+          "self": {
+            "actor_id": "npc-001",
+            "location_id": "cell",
+            "body": {
+              "id": "npc-001-body",
+              "description": "A tired traveler who can move and manipulate nearby objects.",
+              "capabilities": [
+                "move",
+                "manipulate"
+              ],
+              "carrying": {
+                "rule": "item_count",
+                "limit": 2,
+                "used": 0
+              }
+            },
+            "inventory": [],
+            "needs": [
+              {
+                "id": "food",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_hungry"
+                },
+                "effects": []
+              },
+              {
+                "id": "sleep",
+                "enabled": true,
+                "level": 0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_tired"
+                },
+                "effects": []
+              }
+            ]
+          },
+          "location": {
+            "id": "cell",
+            "description": "You are in a quiet cell with an open archway. Your tiredness prevents movement."
+          },
+          "narrative": "You are in a quiet cell with an open archway. Your tiredness prevents movement.",
+          "visible_entities": [
+            {
+              "id": "archway",
+              "name": "Archway",
+              "description": "An open exit leading into a courtyard.",
+              "kind": "door",
+              "open": true,
+              "locked": false
+            }
+          ],
+          "actions": [
+            {
+              "id": "look",
+              "description": "Inspect a visible object, or observe your surroundings without a target.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "archway"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "targets": [
+                "archway"
+              ],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "open",
+              "description": "Open a visible container or door. A locked door must be unlocked first.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "archway"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "archway"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "unlock",
+              "description": "Unlock a visible lock using a matching item you carry.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "archway"
+                    ]
+                  },
+                  "item": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "target",
+                  "item"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "archway"
+              ],
+              "availability": "blocked",
+              "reason": "You must carry an item to try unlocking."
+            },
+            {
+              "id": "go",
+              "description": "Cross a visible exit when it is open and unlocked.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "archway"
+                    ]
+                  }
+                },
+                "required": [
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [
+                "archway"
+              ],
+              "availability": "unknown",
+              "reason": null
+            },
+            {
+              "id": "nap",
+              "description": "Take a brief nap to recover tiredness. Specify a duration from one to three ticks.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "duration": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3
+                  }
+                },
+                "required": [
+                  "duration"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [],
+              "availability": "available",
+              "reason": null
+            }
+          ]
+        }
+      }
+    },
+    "282441d5dd454f1b9cb363ce0a2cb6b0:8df2934feb654b32872fedfeae58d4e6": {
+      "request": {
+        "action_id": "go",
+        "arguments": {
+          "target": "archway"
+        },
+        "expected_observation_revision": "obs-3"
+      },
+      "result": {
+        "session_id": "282441d5dd454f1b9cb363ce0a2cb6b0",
+        "request_id": "8df2934feb654b32872fedfeae58d4e6",
+        "outcome": "APPLIED",
+        "code": "APPLIED",
+        "explanation": "Go succeeded.",
+        "observation": {
+          "contract_version": "1.0",
+          "world_id": "59dde245a76143fe8be0af029ff1a5b8",
+          "session_id": "282441d5dd454f1b9cb363ce0a2cb6b0",
+          "observation_revision": "obs-4",
+          "self": {
+            "actor_id": "npc-001",
+            "location_id": "courtyard",
+            "body": {
+              "id": "npc-001-body",
+              "description": "A tired traveler who can move and manipulate nearby objects.",
+              "capabilities": [
+                "move",
+                "manipulate"
+              ],
+              "carrying": {
+                "rule": "item_count",
+                "limit": 2,
+                "used": 0
+              }
+            },
+            "inventory": [],
+            "needs": [
+              {
+                "id": "food",
+                "enabled": false,
+                "level": 0.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_hungry"
+                },
+                "effects": []
+              },
+              {
+                "id": "sleep",
+                "enabled": true,
+                "level": 2.0,
+                "scale": {
+                  "min": 0,
+                  "max": 100,
+                  "higher_means": "more_tired"
+                },
+                "effects": []
+              }
+            ]
+          },
+          "location": {
+            "id": "courtyard",
+            "description": "You have reached the courtyard."
+          },
+          "narrative": "You have reached the courtyard.",
+          "visible_entities": [],
+          "actions": [
+            {
+              "id": "look",
+              "description": "Inspect a visible object, or observe your surroundings without a target.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": false
+              },
+              "targets": [],
+              "availability": "available",
+              "reason": null
+            },
+            {
+              "id": "nap",
+              "description": "Take a brief nap to recover tiredness. Specify a duration from one to three ticks.",
+              "arguments_schema": {
+                "type": "object",
+                "properties": {
+                  "duration": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3
+                  }
+                },
+                "required": [
+                  "duration"
+                ],
+                "additionalProperties": false
+              },
+              "targets": [],
+              "availability": "available",
+              "reason": null
+            }
+          ]
+        }
+      }
+    }
+  },
+  "admin_requests": []
+}

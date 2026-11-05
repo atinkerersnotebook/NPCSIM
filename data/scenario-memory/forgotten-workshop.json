@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "forgotten-workshop",
+  "failures": [
+    {
+      "run_id": "ec6e8089b8d44adcb47a1642145279fc",
+      "objective": "Find a way out.",
+      "recorded_at": "2026-11-05T16:58:52.290062+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "ec6e8089b8d44adcb47a1642145279fc:6"
+          ]
+        },
+        {
+          "reason": "Escape was not achieved: final verification confirms the actor remains in the workshop and the task is still active.",
+          "evidence_ids": [
+            "ec6e8089b8d44adcb47a1642145279fc:6"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,207 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "bread-bakery",
+  "failures": [
+    {
+      "run_id": "983771aefd824bb196fdb14dc01a5559",
+      "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",
+      "recorded_at": "2026-11-03T16:29:16.801369+00:00",
+      "findings": [
+        {
+          "reason": "A required batch was ruined or its bowl/display broke.",
+          "evidence_ids": [
+            "983771aefd824bb196fdb14dc01a5559:337"
+          ]
+        },
+        {
+          "reason": "Batch A missed its proofing deadline and was ruined, violating the no-overproofing requirement.",
+          "evidence_ids": [
+            "983771aefd824bb196fdb14dc01a5559:337"
+          ]
+        },
+        {
+          "reason": "None of the three batches was baked, cooled, and served on the bakery display; final stages were ruined, proofed, and risen.",
+          "evidence_ids": [
+            "983771aefd824bb196fdb14dc01a5559:337"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "3a5628512ed748e2b46cba894201c4c5",
+      "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",
+      "recorded_at": "2026-11-03T16:34:22.707568+00:00",
+      "findings": [
+        {
+          "reason": "A required batch was ruined or its bowl/display broke.",
+          "evidence_ids": [
+            "3a5628512ed748e2b46cba894201c4c5:375"
+          ]
+        },
+        {
+          "reason": "Batch A missed its unloading deadline and burned, violating the no-burning requirement.",
+          "evidence_ids": [
+            "3a5628512ed748e2b46cba894201c4c5:375"
+          ]
+        },
+        {
+          "reason": "Three cooled batches were not served on the display: Batch A was ruined, Batch B remained proofed, and Batch C remained proofing.",
+          "evidence_ids": [
+            "3a5628512ed748e2b46cba894201c4c5:375"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "581b9c66109741ed86a1263c237812aa",
+      "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",
+      "recorded_at": "2026-11-03T16:38:26.636811+00:00",
+      "findings": [
+        {
+          "reason": "A required batch was ruined or its bowl/display broke.",
+          "evidence_ids": [
+            "581b9c66109741ed86a1263c237812aa:359"
+          ]
+        },
+        {
+          "reason": "Batch A burned and Batch B overproofed after missed handling deadlines; both were verified ruined.",
+          "evidence_ids": [
+            "581b9c66109741ed86a1263c237812aa:359"
+          ]
+        },
+        {
+          "reason": "Three cooled batches were not served on the display: all batch checks failed, and Batch C remained only risen.",
+          "evidence_ids": [
+            "581b9c66109741ed86a1263c237812aa:359"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "f82a5ebc21134ee39bdcfdc3fad37184",
+      "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",
+      "recorded_at": "2026-11-03T17:41:27.924579+00:00",
+      "findings": [
+        {
+          "reason": "A required batch was ruined or its bowl/display broke.",
+          "evidence_ids": [
+            "f82a5ebc21134ee39bdcfdc3fad37184:352"
+          ]
+        },
+        {
+          "reason": "Batch A burned and Batch B overproofed after missed handling deadlines; final verification marks both ruined.",
+          "evidence_ids": [
+            "f82a5ebc21134ee39bdcfdc3fad37184:352"
+          ]
+        },
+        {
+          "reason": "Three cooled batches were not served on the display: Batch C remained proofing, and all three authoritative goal checks failed.",
+          "evidence_ids": [
+            "f82a5ebc21134ee39bdcfdc3fad37184:352"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "e4f7e28bb16547a994020d5b4520d815",
+      "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",
+      "recorded_at": "2026-11-04T11:54:19.692959+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "e4f7e28bb16547a994020d5b4520d815:6"
+          ]
+        },
+        {
+          "reason": "No batch was completed or served: the final authoritative check marks all three required batches false, with no baked batches recorded.",
+          "evidence_ids": [
+            "e4f7e28bb16547a994020d5b4520d815:6"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "67f08e40af7a47c888df9f3ef484ca85",
+      "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",
+      "recorded_at": "2026-11-04T20:57:04.491958+00:00",
+      "findings": [
+        {
+          "reason": "A required batch was ruined or its bowl/display broke.",
+          "evidence_ids": [
+            "67f08e40af7a47c888df9f3ef484ca85:320"
+          ]
+        },
+        {
+          "reason": "Batch B was ruined after its handling deadline was missed, and therefore it cannot satisfy the requirement that no batch be overproofed or burned.",
+          "evidence_ids": [
+            "67f08e40af7a47c888df9f3ef484ca85:320"
+          ]
+        },
+        {
+          "reason": "None of the three batches was served on the bakery display; Batch A remained proofed, Batch B ruined, and Batch C risen at final verification.",
+          "evidence_ids": [
+            "67f08e40af7a47c888df9f3ef484ca85:320"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "6c6a37d694c84acda2161beef4fe4e76",
+      "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",
+      "recorded_at": "2026-11-05T14:46:35.222518+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "6c6a37d694c84acda2161beef4fe4e76:476"
+          ]
+        },
+        {
+          "reason": "None of the three batches was baked, cooled, and served on the bakery display; the final authoritative checks are all false, with A and B still proofing and C still rising.",
+          "evidence_ids": [
+            "6c6a37d694c84acda2161beef4fe4e76:476"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "254adacd1d074a099d80c19b2f649763",
+      "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",
+      "recorded_at": "2026-11-05T15:01:24.456404+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "254adacd1d074a099d80c19b2f649763:438"
+          ]
+        },
+        {
+          "reason": "None of the three bread batches passed the final goal check; Batch A remained mixed, while Batches B and C remained at measuring, so no batches were baked, cooled, and served on the display.",
+          "evidence_ids": [
+            "254adacd1d074a099d80c19b2f649763:438"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "519ccda4ca01414b8e36bd5fe46155c3",
+      "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",
+      "recorded_at": "2026-11-05T16:58:09.360481+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "519ccda4ca01414b8e36bd5fe46155c3:6"
+          ]
+        },
+        {
+          "reason": "No completed batches were verified; all three required batch checks failed, so three cooled bread batches were not served on the display.",
+          "evidence_ids": [
+            "519ccda4ca01414b8e36bd5fe46155c3:6"
+          ]
+        }
+      ]
+    }
+  ]
+}

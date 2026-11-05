@@ -1,0 +1,34 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:14:09.225810+00:00",
+  "cycle": 2,
+  "session_id": "fa86eb9f71bf46e592694b70445176d6",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "box"
+    },
+    "justification": "The door is locked and opening it was rejected with LOCKED. The box is visible and closed, and it may hold a matching key or item to unlock the door.",
+    "expected_outcome": "The box opens and reveals its contents, possibly an item that can unlock the door.",
+    "subgoal": "Find an item that unlocks the door.",
+    "plan": [
+      "Open the box",
+      "If an item is found, pick it up if possible",
+      "Use the item to unlock the door",
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3565
+  },
+  "schema_version": "1.0",
+  "run_id": "b24c72b820c74782a01e957f14aa8335",
+  "sequence": 15,
+  "id": "b24c72b820c74782a01e957f14aa8335:15"
+}

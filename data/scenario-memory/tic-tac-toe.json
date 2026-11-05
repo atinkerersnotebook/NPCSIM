@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "tic-tac-toe",
+  "failures": [
+    {
+      "run_id": "d64c98df8bcc42b6beb92f4a44e10fe5",
+      "objective": "Play a complete game of tic-tac-toe against your opponent. Try to win by making three of your marks in a row, column or diagonal, and block your opponent's threats. Nova is X and moves first; Atlas is O. Alternate turns placing marks in empty cells numbered 1-9, left to right, top to bottom. A full board without a winner is a draw. Completing the game is the verified episode goal, not both players winning.",
+      "recorded_at": "2026-11-03T22:14:54.497767+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "d64c98df8bcc42b6beb92f4a44e10fe5:37"
+          ]
+        },
+        {
+          "reason": "The game was not completed: only three marks were placed, the board is still active, and Atlas still has the next turn with no winner or draw.",
+          "evidence_ids": [
+            "d64c98df8bcc42b6beb92f4a44e10fe5:33",
+            "d64c98df8bcc42b6beb92f4a44e10fe5:34",
+            "d64c98df8bcc42b6beb92f4a44e10fe5:37"
+          ]
+        }
+      ]
+    }
+  ]
+}

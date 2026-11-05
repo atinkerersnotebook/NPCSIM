@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0",
+  "recent": [
+    {
+      "action_id": "open",
+      "arguments": {
+        "target": "door"
+      },
+      "outcome": "REJECTED",
+      "code": "LOCKED",
+      "explanation": "The door is locked."
+    },
+    {
+      "action_id": "open",
+      "arguments": {
+        "target": "box"
+      },
+      "outcome": "APPLIED",
+      "code": "APPLIED",
+      "explanation": "Open succeeded."
+    },
+    {
+      "action_id": "take",
+      "arguments": {
+        "target": "key"
+      },
+      "outcome": "APPLIED",
+      "code": "APPLIED",
+      "explanation": "Take succeeded."
+    },
+    {
+      "action_id": "unlock",
+      "arguments": {
+        "target": "door",
+        "item": "key"
+      },
+      "outcome": "APPLIED",
+      "code": "APPLIED",
+      "explanation": "Unlock succeeded."
+    },
+    {
+      "action_id": "open",
+      "arguments": {
+        "target": "door"
+      },
+      "outcome": "APPLIED",
+      "code": "APPLIED",
+      "explanation": "Open succeeded."
+    },
+    {
+      "action_id": "go",
+      "arguments": {
+        "target": "door"
+      },
+      "outcome": "APPLIED",
+      "code": "APPLIED",
+      "explanation": "Go succeeded."
+    }
+  ],
+  "discoveries": [
+    "door",
+    "box",
+    "key"
+  ],
+  "plan": [
+    "Go through the door",
+    "Check the new location to confirm the actor has left the room"
+  ],
+  "subgoal": "Go through the door"
+}

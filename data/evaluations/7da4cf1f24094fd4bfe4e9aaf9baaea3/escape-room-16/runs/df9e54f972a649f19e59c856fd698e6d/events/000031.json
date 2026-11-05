@@ -1,0 +1,33 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:17:12.720552+00:00",
+  "cycle": 4,
+  "session_id": "5fb7da27427947e3ab752093049ec06f",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "unlock",
+    "arguments": {
+      "target": "door",
+      "item": "key"
+    },
+    "justification": "The door is locked and the brass key is in inventory, so unlocking the door is the next step toward leaving the room.",
+    "expected_outcome": "The door becomes unlocked, making it possible to open it and then go through it.",
+    "subgoal": "Unlock the door with the brass key",
+    "plan": [
+      "Unlock the door with the brass key",
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 2700
+  },
+  "schema_version": "1.0",
+  "run_id": "df9e54f972a649f19e59c856fd698e6d",
+  "sequence": 31,
+  "id": "df9e54f972a649f19e59c856fd698e6d:31"
+}

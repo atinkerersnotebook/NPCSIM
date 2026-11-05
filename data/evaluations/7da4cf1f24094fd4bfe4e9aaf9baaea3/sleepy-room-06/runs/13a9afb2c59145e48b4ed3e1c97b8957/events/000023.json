@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:18:45.938653+00:00",
+  "cycle": 3,
+  "session_id": "8359c05358f14c699c4d3279f009cd06",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "go",
+    "arguments": {
+      "target": "archway"
+    },
+    "justification": "The archway is open and unlocked, and the last nap recovered sleep to 0. The 'tiredness prevents movement' text may be stale, so I will test whether crossing works.",
+    "expected_outcome": "The actor crosses the archway into the courtyard, or the action reports why movement is still blocked.",
+    "subgoal": "Cross the archway into the courtyard.",
+    "plan": [
+      "Attempt go on the archway",
+      "If blocked, re-check needs and action availability",
+      "If crossed, confirm the new location and check whether the room is left"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3882
+  },
+  "schema_version": "1.0",
+  "run_id": "13a9afb2c59145e48b4ed3e1c97b8957",
+  "sequence": 23,
+  "id": "13a9afb2c59145e48b4ed3e1c97b8957:23"
+}

@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "id": "erp-invoice-exception",
+  "title": "ERP Terminal - The Blocked Supplier Invoice",
+  "start_location": "erp-workspace",
+  "exit_location": "erp-workspace",
+  "objective": "Resolve the receipt-mismatch hold on supplier invoice INV-1042 within the ERP system. Investigate the purchase order, invoice and warehouse receiving evidence. Post only supported receipts, complete a valid three-way match, and release the invoice hold with an audit trail. Do not edit source documents, override controls or make a payment.",
+  "goal_type": "erp_invoice_released",
+  "opening_narrative": "The accounts payable work queue contains a supplier invoice that cannot proceed to payment approval. The buyer says the order was fulfilled, but the ERP receiving ledger and invoice do not agree.\n\nYou are an ERP operations analyst working entirely inside an information system. Your only interface is the ERP terminal: business records, validation messages and an audit log. There are no rooms to explore, objects to carry or physical tasks to perform.\n\nInvestigate the evidence and resolve the exception without bypassing financial controls. This is an isolated simulation, not a connection to a live ERP.",
+  "body": {
+    "description": "An ERP operations analyst with a terminal session scoped to receipt reconciliation and invoice matching. No physical inventory or movement.",
+    "capabilities": ["erp_terminal"],
+    "capacity": 0
+  },
+  "needs": {},
+  "recovery": {},
+  "budgets": {"max_actions": 35, "max_model_calls": 45, "max_seconds": 900, "repetition_window": 4},
+  "entities": {
+    "erp-workspace": {
+      "name": "ERP accounts payable workspace",
+      "kind": "location",
+      "description": "A virtual ERP workspace containing purchase orders, supplier invoices, warehouse receiving evidence and an audit trail. Interact using ERP terminal commands only."
+    }
+  },
+  "erp": {
+    "purchase_order": {
+      "id": "PO-45017", "supplier": "Northwind Components", "item": "BRG-6204",
+      "quantity": 100, "unit_price_cents": 2500, "currency": "USD"
+    },
+    "invoice": {
+      "id": "INV-1042", "purchase_order": "PO-45017",
+      "supplier": "Northwind Components", "item": "BRG-6204",
+      "quantity": 100, "unit_price_cents": 2500, "currency": "USD"
+    },
+    "initial_received": 80,
+    "receiving_advice": [
+      {
+        "id": "ASN-8832", "purchase_order": "PO-45018", "supplier": "Northwind Components",
+        "item": "BRG-6204", "quantity": 20, "approved": true
+      },
+      {
+        "id": "ASN-8831", "purchase_order": "PO-45017", "supplier": "Northwind Components",
+        "item": "BRG-6204", "quantity": 20, "approved": true
+      },
+      {
+        "id": "ASN-8833", "purchase_order": "PO-45017", "supplier": "Northwind Components",
+        "item": "BRG-6204", "quantity": 20, "approved": false
+      }
+    ]
+  }
+}

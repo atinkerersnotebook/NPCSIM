@@ -1,0 +1,442 @@
+{
+  "schema_version": "1.0",
+  "id": "storm-signal",
+  "title": "Raven, Badger & Otter - The Storm Signal",
+  "start_location": "rookery",
+  "exit_location": "refuge",
+  "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+  "opening_narrative": "Rain sweeps across an old coastal signal station. Raven shelters in the cliff rookery, Badger waits in the stone quarry, and Otter stands beside the river landing. Each is alone, with a different path leading toward the central signal yard.\n\nThe hilltop refuge is sealed until the storm beacon shines again. Raven can reach high places and focus its light, Badger can support heavy machinery, and Otter can recover submerged parts and repair the wet wiring. No one can restore the station alone. They will need to explore their surroundings, meet in the yard and share what they find.",
+  "goal_type": "all_actors_at_exit_location",
+  "body": {
+    "description": "A visitor to the coastal signal station.",
+    "capabilities": [
+      "move",
+      "manipulate"
+    ],
+    "capacity": 1
+  },
+  "agents": [
+    {
+      "id": "raven",
+      "role": "A flying scout and light-worker, starting alone in the cliff rookery. You can release high-up optical parts and focus the beacon, but cannot lift heavy weights, swim or repair wiring. Find the signal yard and coordinate with Badger and Otter; a stronger teammate must mount the lens.",
+      "start_location": "rookery",
+      "body": {
+        "description": "A raven with beak and claws, flight and a talent for focusing light; can carry one small item.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "fly",
+          "light_work"
+        ],
+        "capacity": 1,
+        "grips": [
+          "beak",
+          "claw"
+        ],
+        "max_held_items": 1,
+        "size": "small"
+      }
+    },
+    {
+      "id": "badger",
+      "role": "A strong builder, starting alone in the stone quarry. You can brace the beacon mast and mount its lens, but cannot fly, swim, focus light or repair wet wiring. Meet Raven and Otter at the signal yard and help install the parts they recover.",
+      "start_location": "quarry",
+      "body": {
+        "description": "A grounded badger with strong forepaws, carrying four inventory units; cannot fly or swim.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "strength"
+        ],
+        "capacity": 4,
+        "grips": [
+          "paw",
+          "mouth"
+        ],
+        "max_held_items": 2
+      }
+    },
+    {
+      "id": "otter",
+      "role": "A swimmer and underwater engineer, starting alone at the river landing. You can open submerged equipment and repair the beacon wiring, but cannot fly, lift heavy weights or focus its light. Recover useful parts, then meet Raven and Badger in the signal yard.",
+      "start_location": "river-landing",
+      "body": {
+        "description": "An otter with nimble paws and underwater engineering skills, carrying one small item; cannot fly or lift heavy weights.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "swim",
+          "water_engineering"
+        ],
+        "capacity": 1,
+        "grips": [
+          "paw",
+          "mouth"
+        ],
+        "max_held_items": 2,
+        "size": "small"
+      }
+    }
+  ],
+  "needs": {},
+  "recovery": {},
+  "budgets": {
+    "max_actions": 150,
+    "max_model_calls": 180,
+    "max_seconds": 1800,
+    "repetition_window": 5
+  },
+  "entities": {
+    "rookery": {
+      "name": "Cliff rookery",
+      "kind": "location",
+      "description": "Rain rattles the cliff ledges. An optical cache is caught high above the ground; only a flyer can release it. A sheltered footpath descends to the signal yard."
+    },
+    "quarry": {
+      "name": "Stone quarry",
+      "kind": "location",
+      "description": "A heavy mast counterweight lies among the cut stones. A broad track leads to the signal yard."
+    },
+    "river-landing": {
+      "name": "River landing",
+      "kind": "location",
+      "description": "A footpath climbs to the signal yard. Below the landing, a flooded service channel leads to an underwater equipment chamber. Only a swimmer can enter the channel."
+    },
+    "submerged-chamber": {
+      "name": "Submerged equipment chamber",
+      "kind": "location",
+      "description": "An old sealed cable chest is bolted to the floor. An underwater engineer could release its watertight catch. The service channel returns to the river landing."
+    },
+    "signal-yard": {
+      "name": "Central signal yard",
+      "kind": "location",
+      "description": "Three paths meet beneath a storm beacon. Its mast needs a heavy counterweight, its lens cradle is empty, and its wet wiring needs a replacement coil. A high focusing mirror controls the beacon light. The refuge gate remains sealed until the beacon works."
+    },
+    "refuge": {
+      "name": "Hilltop refuge",
+      "kind": "location",
+      "description": "A dry shelter above the storm. The rescue is complete only when Raven, Badger and Otter have all arrived after restoring the beacon."
+    },
+    "rookery-path": {
+      "name": "Sheltered rookery path",
+      "kind": "door",
+      "description": "A walkable path between the cliff rookery and the central signal yard.",
+      "location": "rookery",
+      "destination": "signal-yard",
+      "open": true,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "quarry-track": {
+      "name": "Broad quarry track",
+      "kind": "door",
+      "description": "A solid track between the stone quarry and the central signal yard.",
+      "location": "quarry",
+      "destination": "signal-yard",
+      "open": true,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "landing-path": {
+      "name": "River landing footpath",
+      "kind": "door",
+      "description": "A dry path between the river landing and the central signal yard.",
+      "location": "river-landing",
+      "destination": "signal-yard",
+      "open": true,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "service-channel": {
+      "name": "Flooded service channel",
+      "kind": "door",
+      "description": "A fully submerged channel with a low ceiling. Only a swimmer can pass in either direction.",
+      "location": "river-landing",
+      "destination": "submerged-chamber",
+      "open": true,
+      "traversal_capabilities": [
+        "swim"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "refuge-gate": {
+      "name": "Refuge signal gate",
+      "kind": "door",
+      "description": "The gate opens when the repaired beacon is focused. All three companions must pass through it.",
+      "location": "signal-yard",
+      "destination": "refuge",
+      "open": false,
+      "required_challenges": [
+        "focus_signal"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "optical-cache": {
+      "name": "High optical cache",
+      "kind": "container",
+      "description": "A fixed cache hanging on a high cliff ledge. Flight is needed to release its catch and expose the light lens. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "rookery",
+      "open": false,
+      "required_challenges": [
+        "release_lens"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "signal-lens": {
+      "name": "Signal lens",
+      "kind": "item",
+      "description": "A small delicate lens. A strong builder must install it in the braced mast's lens cradle in the signal yard. A padded carrier ring accepts beak, claw, paw or mouth grips.",
+      "location": "optical-cache",
+      "takable": true,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ],
+      "carry_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "mast-weight": {
+      "name": "Heavy mast counterweight",
+      "kind": "item",
+      "description": "Two inventory units of solid stone. A strong builder can install it at the signal yard's mast footing. A hauling loop and paw sling provide animal grips without reducing its weight.",
+      "location": "quarry",
+      "takable": true,
+      "inventory_units": 2,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ],
+      "carry_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "cable-chest": {
+      "name": "Watertight cable chest",
+      "kind": "container",
+      "description": "A fixed submerged chest with a catch that needs underwater engineering to release. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "submerged-chamber",
+      "open": false,
+      "required_challenges": [
+        "release_coil"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "wire-coil": {
+      "name": "Insulated wire coil",
+      "kind": "item",
+      "description": "A light waterproof replacement coil for the beacon's wet wiring box in the signal yard. Insulated mouth loops and paw clips allow animal handling.",
+      "location": "cable-chest",
+      "takable": true,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ],
+      "carry_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "mast-footing": {
+      "name": "Unstable mast footing",
+      "kind": "item",
+      "description": "Strength and the heavy counterweight are needed to brace the beacon mast. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "signal-yard",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "lens-cradle": {
+      "name": "Beacon lens cradle",
+      "kind": "item",
+      "description": "Once the mast is braced, strong forepaws must hold this sprung cradle open while installing the signal lens. A small flyer cannot mount it alone. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "signal-yard",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "wiring-box": {
+      "name": "Wet beacon wiring box",
+      "kind": "item",
+      "description": "After the lens is mounted, an underwater engineer can install the insulated wire coil and restore power safely. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "signal-yard",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "focusing-mirror": {
+      "name": "High beacon focusing mirror",
+      "kind": "item",
+      "description": "After the wiring is repaired, a light-worker can focus the beacon and release the refuge gate. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "signal-yard",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    }
+  },
+  "skill_challenges": [
+    {
+      "id": "release_lens",
+      "description": "Fly up and release the optical cache catch to expose the signal lens.",
+      "target": "optical-cache",
+      "capability": "fly",
+      "opens": [
+        "optical-cache"
+      ]
+    },
+    {
+      "id": "release_coil",
+      "description": "Release the underwater cable chest catch to expose the insulated wire coil.",
+      "target": "cable-chest",
+      "capability": "water_engineering",
+      "opens": [
+        "cable-chest"
+      ]
+    },
+    {
+      "id": "brace_mast",
+      "description": "Use strength to install the heavy counterweight and brace the beacon mast.",
+      "target": "mast-footing",
+      "capability": "strength",
+      "carried": [
+        "mast-weight"
+      ],
+      "installs": [
+        "mast-weight"
+      ]
+    },
+    {
+      "id": "mount_lens",
+      "description": "Hold the sprung cradle open and install the carried signal lens on the braced mast.",
+      "target": "lens-cradle",
+      "capability": "strength",
+      "requires": [
+        "release_lens",
+        "brace_mast"
+      ],
+      "carried": [
+        "signal-lens"
+      ],
+      "installs": [
+        "signal-lens"
+      ]
+    },
+    {
+      "id": "repair_wiring",
+      "description": "Install the insulated wire coil and safely reconnect the wet beacon wiring.",
+      "target": "wiring-box",
+      "capability": "water_engineering",
+      "requires": [
+        "release_coil",
+        "mount_lens"
+      ],
+      "carried": [
+        "wire-coil"
+      ],
+      "installs": [
+        "wire-coil"
+      ]
+    },
+    {
+      "id": "focus_signal",
+      "description": "Focus the restored storm beacon and open the hilltop refuge gate.",
+      "target": "focusing-mirror",
+      "capability": "light_work",
+      "requires": [
+        "repair_wiring"
+      ],
+      "opens": [
+        "refuge-gate"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "validation",
+  "timestamp": "2026-11-02T23:18:41.837301+00:00",
+  "cycle": 2,
+  "session_id": "8359c05358f14c699c4d3279f009cd06",
+  "actor_id": "npc-001",
+  "payload": {
+    "valid": true,
+    "action_id": "look"
+  },
+  "schema_version": "1.0",
+  "run_id": "13a9afb2c59145e48b4ed3e1c97b8957",
+  "sequence": 16,
+  "id": "13a9afb2c59145e48b4ed3e1c97b8957:16"
+}

@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "id": "forgotten-workshop",
+  "title": "The Forgotten Workshop",
+  "start_location": "workshop",
+  "exit_location": "garden",
+  "objective": "Find a way out.",
+  "opening_narrative": "You wake up on a dusty bench, with no memory of how you arrived. Your stomach aches with hunger. Around you are a warped wooden cabinet, a closed lunch tin, a brittle wooden mallet, and a sturdy door.",
+  "goal_type": "actor_at_exit_location",
+  "body": {
+    "description": "A hungry but mobile body with hands, able to carry one inventory unit.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 1
+  },
+  "needs": {
+    "food": {"enabled": true, "level": 90, "rate": 4, "threshold": 80},
+    "sleep": {"enabled": false, "level": 0, "rate": 0, "threshold": 80}
+  },
+  "entities": {
+    "workshop": {
+      "name": "Workshop", "kind": "location",
+      "description": "A shuttered workshop smells of sawdust. A warped wooden cabinet, a closed lunch tin, a brittle wooden mallet, and a sturdy door stand nearby."
+    },
+    "passage": {
+      "name": "Covered passage", "kind": "location",
+      "description": "You step into a narrow covered passage. The workshop door is behind you. A wooden gate stands ahead, and cool air slips between its slats."
+    },
+    "garden": {
+      "name": "Garden", "kind": "location",
+      "description": "You emerge into a quiet garden. Birds sing above the damp earth. You are finally clear of the building."
+    },
+    "workshop-door": {
+      "name": "Workshop door", "kind": "door", "description": "A thick wooden door with an iron handle.",
+      "location": "workshop", "destination": "passage", "open": false, "locked": true,
+      "lock_id": "door-lock", "takable": false, "damage": 0, "health": 200, "max_health": 200
+    },
+    "door-lock": {
+      "name": "Door lock", "kind": "lock", "description": "A small iron lock set into the workshop door.",
+      "location": "workshop-door", "locked": true, "key_id": "workshop-key",
+      "takable": false, "damage": 3, "health": 50, "max_health": 50
+    },
+    "garden-gate": {
+      "name": "Wooden gate", "kind": "door", "description": "A waist-high wooden gate with a simple, unlocked latch.",
+      "location": "passage", "destination": "garden", "open": false, "locked": false,
+      "takable": false, "damage": 0, "health": 100, "max_health": 100
+    },
+    "cabinet": {
+      "name": "Wooden cabinet", "kind": "container", "description": "A tall cabinet whose wooden door is warped and tightly wedged.",
+      "location": "workshop", "open": false, "jammed": true, "takable": true, "inventory_units": 3,
+      "damage": 4, "health": 40, "max_health": 40,
+      "broken_name": "Splintered cabinet",
+      "broken_description": "The cabinet's door has shattered. Its shelf and contents are exposed."
+    },
+    "workshop-key": {
+      "name": "Iron key", "kind": "item", "description": "A small iron key with a square bow.",
+      "location": "cabinet", "takable": true, "inventory_units": 1,
+      "damage": 1, "health": 20, "max_health": 20
+    },
+    "lunch-tin": {
+      "name": "Lunch tin", "kind": "container", "description": "A broad metal lunch tin with an ordinary hinged lid.",
+      "location": "workshop", "open": false, "takable": true, "inventory_units": 2,
+      "damage": 2, "health": 60, "max_health": 60
+    },
+    "bread": {
+      "name": "Bread roll", "kind": "item", "description": "A wrapped bread roll. It looks edible.",
+      "location": "lunch-tin", "takable": true, "inventory_units": 1, "food": true,
+      "nutrition": {"serving_grams": 60, "calories_kcal": 160, "protein_g": 5, "carbohydrates_g": 30, "fat_g": 2, "fiber_g": 2, "sugar_g": 2},
+      "damage": 0, "health": 20, "max_health": 20
+    },
+    "mallet": {
+      "name": "Wooden mallet", "kind": "item", "description": "A light wooden mallet. Its dry, thin handle looks fragile.",
+      "location": "workshop", "takable": true, "inventory_units": 1,
+      "damage": 20, "health": 8, "max_health": 8,
+      "broken_name": "Broken mallet",
+      "broken_description": "The mallet's handle has split. It can no longer be used as a tool.",
+      "break_into": {
+        "shards": {
+          "name": "Wooden shards", "kind": "item", "description": "Small shards from the mallet's split handle.",
+          "takable": true, "inventory_units": 1, "damage": 1, "health": 10, "max_health": 10
+        }
+      }
+    }
+  },
+  "recovery": {
+    "food": {"action_id": "eat", "description": "Eat a carried food item to recover hunger.", "recovery": 100},
+    "sleep": {"action_id": "rest", "description": "Rest where you are to recover tiredness.", "recovery": 100}
+  }
+}

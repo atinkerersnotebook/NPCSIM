@@ -1,0 +1,20 @@
+{
+  "kind": "action_request",
+  "timestamp": "2026-11-02T23:15:45.410157+00:00",
+  "cycle": 4,
+  "session_id": "ec3a114b058d4a51ae9b77efa346c45a",
+  "actor_id": "npc-001",
+  "payload": {
+    "request_id": "41bbdc2d75dc48e39028b3823872ee65",
+    "expected_observation_revision": "obs-4",
+    "action_id": "unlock",
+    "arguments": {
+      "target": "door",
+      "item": "key"
+    }
+  },
+  "schema_version": "1.0",
+  "run_id": "e3274a488dc841108ca97ca0647d6d47",
+  "sequence": 33,
+  "id": "e3274a488dc841108ca97ca0647d6d47:33"
+}

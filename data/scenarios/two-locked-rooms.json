@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "id": "two-locked-rooms",
+  "title": "The Unknown Room",
+  "start_location": "room-one",
+  "exit_location": "outside",
+  "objective": "Find a way out.",
+  "opening_narrative": "You wake up on a cold stone floor, with no memory of how you got here. You are in a small stone room with a closed wooden box, a rock, and a door.",
+  "goal_type": "actor_at_exit_location",
+  "body": {
+    "description": "A mobile body with hands, able to carry up to one inventory unit.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 1
+  },
+  "needs": {
+    "food": {"enabled": false, "level": 0, "rate": 8, "threshold": 80},
+    "sleep": {"enabled": false, "level": 0, "rate": 10, "threshold": 80}
+  },
+  "entities": {
+    "room-one": {"name": "Stone room", "kind": "location", "description": "A small stone room with a closed wooden box, a rock, and a door."},
+    "room-two": {"name": "Second room", "kind": "location", "description": "A second stone room. Another closed door stands ahead, and the first door leads back."},
+    "outside": {"name": "Outside", "kind": "location", "description": "Fresh air. You have escaped both rooms."},
+    "door-one": {"name": "Door", "kind": "door", "description": "A sturdy wooden door.", "location": "room-one", "destination": "room-two", "open": false, "locked": true, "lock_id": "lock-one", "takable": false, "health": 100, "max_health": 100},
+    "lock-one": {"name": "Door lock", "kind": "lock", "description": "A silver-colored metal lock fitted to the door.", "location": "door-one", "locked": true, "key_id": "silver-key", "takable": false, "health": 75, "max_health": 75},
+    "door-two": {"name": "Second door", "kind": "door", "description": "A heavy wooden door.", "location": "room-two", "destination": "outside", "open": false, "locked": true, "lock_id": "lock-two", "takable": false, "health": 100, "max_health": 100},
+    "lock-two": {"name": "Second door lock", "kind": "lock", "description": "A brass-colored metal lock fitted to the second door.", "location": "door-two", "locked": true, "key_id": "brass-key", "takable": false, "health": 75, "max_health": 75},
+    "box": {
+      "name": "Box", "kind": "container", "description": "A small wooden box with a tightly stuck lid.",
+      "location": "room-one", "open": false, "jammed": true, "takable": true, "inventory_units": 1,
+      "damage": 5, "health": 50, "max_health": 50,
+      "broken_name": "Broken box", "broken_description": "The shattered remains of the wooden box. Its contents are exposed."
+    },
+    "silver-key": {"name": "Silver key", "kind": "item", "description": "A small silver key.", "location": "box", "takable": true, "inventory_units": 1, "damage": 1, "health": 20, "max_health": 20},
+    "brass-key": {"name": "Brass key", "kind": "item", "description": "A small brass key.", "location": "box", "takable": true, "inventory_units": 1, "damage": 1, "health": 20, "max_health": 20},
+    "rock": {"name": "Rock", "kind": "item", "description": "A heavy, rough-edged rock.", "location": "room-one", "takable": true, "inventory_units": 1, "damage": 25, "health": 100, "max_health": 100}
+  },
+  "recovery": {
+    "food": {"action_id": "eat", "description": "Eat a carried food item.", "recovery": 100},
+    "sleep": {"action_id": "rest", "description": "Rest where you are to recover from tiredness.", "recovery": 100}
+  }
+}

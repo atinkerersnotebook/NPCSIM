@@ -1,0 +1,33 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:18:03.977767+00:00",
+  "cycle": 1,
+  "session_id": "1263fcb106fa4c61804510e1248926b0",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "nap",
+    "arguments": {
+      "duration": 3
+    },
+    "justification": "Sleep is enabled at 90 and blocks movement. Napping is available and is the only action that can recover this need.",
+    "expected_outcome": "The sleep need decreases, which may unblock movement so the archway can be crossed.",
+    "subgoal": "Recover sleep to enable movement",
+    "plan": [
+      "Nap to reduce tiredness",
+      "Check whether the go action is available",
+      "Open the archway if it is closed",
+      "Go through the archway"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3854
+  },
+  "schema_version": "1.0",
+  "run_id": "a06cc9b49f3842648c44bacbf7d6f1d9",
+  "sequence": 7,
+  "id": "a06cc9b49f3842648c44bacbf7d6f1d9:7"
+}

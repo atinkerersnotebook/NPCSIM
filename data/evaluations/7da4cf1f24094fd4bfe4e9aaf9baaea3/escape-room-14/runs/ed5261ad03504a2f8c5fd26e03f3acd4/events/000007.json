@@ -1,0 +1,33 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:16:35.770346+00:00",
+  "cycle": 1,
+  "session_id": "9b1649d30b884562be244867128ef022",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The door is visible and closed, and the goal is to leave the room. Opening it is the next step toward exiting. The door's lock state is unknown, and the result will show whether it opens.",
+    "expected_outcome": "The door opens, or the result reports that it is locked or cannot be opened.",
+    "subgoal": "Open the door",
+    "plan": [
+      "Open the door",
+      "If opened, go through the door",
+      "If locked, look for a matching item to unlock it",
+      "Inspect the box if the door cannot be opened"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3525
+  },
+  "schema_version": "1.0",
+  "run_id": "ed5261ad03504a2f8c5fd26e03f3acd4",
+  "sequence": 7,
+  "id": "ed5261ad03504a2f8c5fd26e03f3acd4:7"
+}

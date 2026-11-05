@@ -1,0 +1,251 @@
+{
+  "schema_version": "1.0",
+  "id": "sandwich-kitchen",
+  "title": "The Unfamiliar Kitchen",
+  "start_location": "kitchen",
+  "exit_location": "kitchen",
+  "objective": "Make a peanut butter and jam sandwich and serve it on the plate. Aim for a richer recognizable sandwich combination with suitable extras; plain PB&J is a passing result.",
+  "initial_objective": "Explore your surroundings and find out what you need to do.",
+  "goal_note_id": "postit-note",
+  "opening_narrative": "You wake in an unfamiliar kitchen, not knowing how you arrived or what you are supposed to do. A yellow Post-it note is stuck to the worktop. Nearby stand a cupboard, a bread bin, a fruit bin and a refrigerator.",
+  "goal_type": "entity_prepared",
+  "goal_entity_id": "pbj-sandwich",
+  "goal_location_id": "plate",
+  "body": {
+    "description": "A mobile body with hands, able to carry one inventory unit. Visible local food can be prepared in place while a tool is carried.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 1
+  },
+  "needs": {
+    "food": {"enabled": false, "level": 0, "rate": 0, "threshold": 80},
+    "sleep": {"enabled": false, "level": 0, "rate": 0, "threshold": 80}
+  },
+  "entities": {
+    "kitchen": {"name": "Kitchen", "kind": "location", "description": "An unfamiliar kitchen with a clear worktop, a cupboard, a bread bin, a fruit bin and a refrigerator."},
+    "counter": {"name": "Worktop", "kind": "container", "description": "A clear worktop where food can be prepared in place.", "location": "kitchen", "open": true, "health": null},
+    "postit-note": {
+      "name": "Post-it note", "kind": "item", "description": "A yellow Post-it stuck to the worktop, covered in handwriting that can be read.",
+      "location": "counter", "health": null,
+      "readable_text": "Make a peanut butter and jam sandwich and serve it on the plate. Aim for a richer recognizable sandwich combination with suitable extras; plain PB&J is a passing result."
+    },
+    "recipe-note": {
+      "name": "Recipe note", "kind": "item", "description": "A handwritten recipe note. Read it to learn the instructions.",
+      "location": "bread-bin", "health": null,
+      "readable_text": "Sandwich preparation: slice bread with the knife. Use the knife to spread exposed portions and add prepared fillings to either slice, then assemble and serve on the plate. Explore the storage containers for choices. Equipment instructions: plug an appliance into the free outlet and switch it on before using it; switch it off before unplugging it. The maker grinds roasted peanuts into peanut butter. Carry the frying pan to place it on the stove; cook bacon in the pan with the stove powered. Food can be prepared locally while the knife is carried. Nutrition labels describe each whole item or measured portion, not values per 100 g."
+    },
+    "cupboard": {"name": "Cupboard", "kind": "container", "description": "A closed kitchen cupboard.", "location": "kitchen", "open": false, "health": null},
+    "bread-bin": {"name": "Bread bin", "kind": "container", "description": "A closed bread bin.", "location": "kitchen", "open": false, "health": null},
+    "fruit-bin": {"name": "Fruit bin", "kind": "container", "description": "A closed fruit bin.", "location": "kitchen", "open": false, "health": null},
+    "refrigerator": {"name": "Refrigerator", "kind": "container", "description": "A closed refrigerator.", "location": "kitchen", "open": false, "health": null},
+    "knife": {"name": "Knife", "kind": "item", "description": "A sharp kitchen knife for slicing, dicing and spreading.", "location": "cupboard", "takable": true, "inventory_units": 1, "damage": 5},
+    "plate": {"name": "Plate", "kind": "container", "description": "A clean plate for serving food.", "location": "cupboard", "open": true, "takable": true, "inventory_units": 1, "damage": 1},
+    "peanut-butter-jar": {"name": "Peanut butter jar", "kind": "container", "description": "A closed jar with a peanut butter label.", "location": "cupboard", "open": false, "takable": true, "inventory_units": 1},
+    "jelly-jar": {"name": "Jelly jar", "kind": "container", "description": "A closed jar labelled jelly (jam).", "location": "cupboard", "open": false, "takable": true, "inventory_units": 1},
+    "bread-loaf": {
+      "name": "Mini bread loaf", "kind": "item", "description": "An uncut 80 g mini loaf, enough for two thick slices.",
+      "location": "bread-bin", "takable": true, "inventory_units": 1, "food": true, "preparation": {"cut": "whole"}, "ingredients": ["bread"],
+      "nutrition": {"serving_grams": 80, "calories_kcal": 210, "protein_g": 7, "carbohydrates_g": 40, "fat_g": 2, "fiber_g": 2, "sugar_g": 3}
+    },
+    "peanut-butter": {
+      "name": "Peanut butter portion", "kind": "item", "description": "A measured 20 g portion of peanut butter, enough to coat one bread slice.",
+      "location": "peanut-butter-jar", "takable": true, "inventory_units": 1, "food": true, "ingredients": ["peanut butter"],
+      "nutrition": {"serving_grams": 20, "calories_kcal": 118, "protein_g": 5, "carbohydrates_g": 4, "fat_g": 10, "fiber_g": 1.6, "sugar_g": 2}
+    },
+    "jelly": {
+      "name": "Jelly portion", "kind": "item", "description": "A measured 20 g portion of jelly (jam), enough to coat one bread slice.",
+      "location": "jelly-jar", "takable": true, "inventory_units": 1, "food": true, "ingredients": ["jelly"],
+      "nutrition": {"serving_grams": 20, "calories_kcal": 50, "protein_g": 0, "carbohydrates_g": 13, "fat_g": 0, "fiber_g": 0.2, "sugar_g": 11}
+    },
+    "tomato": {
+      "name": "Tomato", "kind": "item", "description": "A ripe 120 g tomato that can be sliced or diced.",
+      "location": "fruit-bin", "takable": true, "inventory_units": 1, "food": true, "preparation": {"cut": "whole"}, "ingredients": ["tomato"],
+      "nutrition": {"serving_grams": 120, "calories_kcal": 22, "protein_g": 1.1, "carbohydrates_g": 4.8, "fat_g": 0.2, "fiber_g": 1.4, "sugar_g": 3.2}
+    },
+    "cheese": {
+      "name": "Cheese block", "kind": "item", "description": "A 60 g block of cheese that can be sliced.",
+      "location": "refrigerator", "takable": true, "inventory_units": 1, "food": true, "preparation": {"cut": "whole"}, "ingredients": ["cheese"],
+      "nutrition": {"serving_grams": 60, "calories_kcal": 240, "protein_g": 15, "carbohydrates_g": 1.2, "fat_g": 20, "fiber_g": 0, "sugar_g": 0.3}
+    },
+    "butter": {
+      "name": "Butter portion", "kind": "item", "description": "A 10 g portion of butter that can be spread.",
+      "location": "refrigerator", "takable": true, "inventory_units": 1, "food": true, "ingredients": ["butter"],
+      "nutrition": {"serving_grams": 10, "calories_kcal": 72, "protein_g": 0.1, "carbohydrates_g": 0, "fat_g": 8, "fiber_g": 0, "sugar_g": 0}
+    },
+    "stove": {"name": "Electric stove", "kind": "stove", "description": "A compact electric stove with a plug and room for a frying pan.", "location": "kitchen", "open": true, "power": "off", "health": 100},
+    "power-outlet": {"name": "Power outlet", "kind": "outlet", "description": "One electrical outlet with a single socket.", "location": "kitchen", "health": 100},
+    "peanut-butter-maker": {"name": "Peanut butter maker", "kind": "machine", "description": "An unplugged machine that grinds roasted peanuts into peanut butter when plugged in and switched on.", "location": "counter", "power": "off", "health": 100},
+    "frying-pan": {"name": "Frying pan", "kind": "container", "description": "An empty frying pan for cooking on the stove.", "location": "cupboard", "open": true, "takable": true, "damage": 3},
+    "almond-butter-jar": {"name": "Almond butter jar", "kind": "container", "description": "A closed jar labelled almond butter.", "location": "cupboard", "open": false, "takable": true},
+    "blackberry-jam-jar": {"name": "Blackberry jam jar", "kind": "container", "description": "A closed jar labelled blackberry jam.", "location": "cupboard", "open": false, "takable": true},
+    "strawberry-jam-jar": {"name": "Strawberry jam jar", "kind": "container", "description": "A closed jar labelled strawberry jam.", "location": "cupboard", "open": false, "takable": true},
+    "almond-butter": {"name": "Almond butter portion", "kind": "item", "description": "A measured 20 g portion of almond butter.", "location": "almond-butter-jar", "takable": true, "food": true, "ingredients": ["almond butter"], "nutrition": {"serving_grams": 20, "calories_kcal": 123, "protein_g": 4.2, "carbohydrates_g": 3.8, "fat_g": 11.2, "fiber_g": 2.1, "sugar_g": 0.9}},
+    "blackberry-jam": {"name": "Blackberry jam portion", "kind": "item", "description": "A measured 20 g portion of blackberry jam.", "location": "blackberry-jam-jar", "takable": true, "food": true, "ingredients": ["blackberry jam"], "nutrition": {"serving_grams": 20, "calories_kcal": 48, "protein_g": 0.1, "carbohydrates_g": 12, "fat_g": 0, "fiber_g": 0.4, "sugar_g": 10.5}},
+    "strawberry-jam": {"name": "Strawberry jam portion", "kind": "item", "description": "A measured 20 g portion of strawberry jam.", "location": "strawberry-jam-jar", "takable": true, "food": true, "ingredients": ["strawberry jam"], "nutrition": {"serving_grams": 20, "calories_kcal": 49, "protein_g": 0.1, "carbohydrates_g": 12.5, "fat_g": 0, "fiber_g": 0.3, "sugar_g": 10.8}},
+    "peanuts": {"name": "Roasted peanuts", "kind": "item", "description": "A 20 g portion of roasted peanuts.", "location": "cupboard", "takable": true, "food": true, "ingredients": ["peanuts"], "nutrition": {"serving_grams": 20, "calories_kcal": 118, "protein_g": 5, "carbohydrates_g": 4, "fat_g": 10, "fiber_g": 1.6, "sugar_g": 2}},
+    "honey": {"name": "Honey portion", "kind": "item", "description": "A measured 10 g portion of honey for spreading.", "location": "cupboard", "takable": true, "food": true, "ingredients": ["honey"], "nutrition": {"serving_grams": 10, "calories_kcal": 30, "protein_g": 0, "carbohydrates_g": 8.2, "fat_g": 0, "fiber_g": 0, "sugar_g": 8.2}},
+    "banana": {"name": "Banana", "kind": "item", "description": "A banana with 80 g of edible flesh, ready to peel and slice.", "location": "fruit-bin", "takable": true, "food": true, "preparation": {"cut": "whole"}, "ingredients": ["banana"], "nutrition": {"serving_grams": 80, "calories_kcal": 71, "protein_g": 0.9, "carbohydrates_g": 18.2, "fat_g": 0.2, "fiber_g": 2.1, "sugar_g": 9.8}},
+    "avocado": {"name": "Avocado", "kind": "item", "description": "A ripe avocado with 70 g of edible flesh, ready to peel, pit and slice.", "location": "fruit-bin", "takable": true, "food": true, "preparation": {"cut": "whole"}, "ingredients": ["avocado"], "nutrition": {"serving_grams": 70, "calories_kcal": 112, "protein_g": 1.4, "carbohydrates_g": 6, "fat_g": 10.3, "fiber_g": 4.7, "sugar_g": 0.5}},
+    "bacon": {"name": "Raw bacon", "kind": "item", "description": "A 30 g portion of raw bacon that needs cooking before use as a sandwich filling.", "location": "refrigerator", "takable": true, "food": true, "preparation": {"cooking": "raw"}, "ingredients": ["raw bacon"], "nutrition": {"serving_grams": 30, "calories_kcal": 135, "protein_g": 9, "carbohydrates_g": 0.4, "fat_g": 11, "fiber_g": 0, "sugar_g": 0.1}},
+    "ham": {
+      "name": "Ham slices", "kind": "item", "description": "A 40 g portion of ready-cut ham slices.",
+      "location": "refrigerator", "takable": true, "inventory_units": 1, "food": true, "preparation": {"cut": "sliced"}, "ingredients": ["ham"],
+      "nutrition": {"serving_grams": 40, "calories_kcal": 58, "protein_g": 8, "carbohydrates_g": 0.8, "fat_g": 2.4, "fiber_g": 0, "sugar_g": 0.5}
+    }
+  },
+  "recovery": {
+    "food": {"action_id": "eat", "description": "Eat a carried food item to recover hunger.", "recovery": 100},
+    "sleep": {"action_id": "rest", "description": "Rest where you are to recover tiredness.", "recovery": 100}
+  },
+  "recipe_actions": {
+    "slice": "Slice a visible local whole food with a carried intact knife. Equal portions appear on the worktop; the whole food is used up.",
+    "dice": "Dice a visible local tomato or tomato slice with a carried intact knife. Its diced portion appears on the worktop.",
+    "spread": "Use a carried intact knife to spread a visible measured portion onto a local bread slice. Spreads can be layered; the portion and its nutrition become part of the slice.",
+    "add": "Use the carried knife to add a visible prepared filling to a bread slice. Its ingredients and nutrition transfer to the slice.",
+    "grind": "Grind visible roasted peanuts into peanut butter using the connected, switched-on maker.",
+    "cook": "Cook visible raw bacon in a frying pan placed on the connected, switched-on stove.",
+    "assemble": "Assemble prepared bread with peanut butter and a chosen jam into a sandwich on the worktop. Optional fillings stay included. Serve it separately."
+  },
+  "recipes": [
+    {
+      "action_id": "slice", "arguments": {"target": "bread-loaf", "item": "knife"},
+      "carried": ["knife"], "requires": {"bread-loaf": {"cut": "whole"}}, "consumes": ["bread-loaf"],
+      "outputs": {
+        "bread-a": {"name": "Bread slice A", "kind": "item", "description": "A thick slice of fresh bread.", "location": "counter", "takable": true, "inventory_units": 1, "food": true, "preparation": {"cut": "sliced", "topping": "plain"}},
+        "bread-b": {"name": "Bread slice B", "kind": "item", "description": "A thick slice of fresh bread.", "location": "counter", "takable": true, "inventory_units": 1, "food": true, "preparation": {"cut": "sliced", "topping": "plain"}}
+      },
+      "explanation": "You cut the mini loaf into two equal bread slices on the worktop. The whole loaf is used up."
+    },
+    {
+      "action_id": "slice", "arguments": {"target": "tomato", "item": "knife"},
+      "carried": ["knife"], "requires": {"tomato": {"cut": "whole"}}, "consumes": ["tomato"],
+      "outputs": {
+        "tomato-a": {"name": "Tomato slices A", "kind": "item", "description": "Half the tomato, cut into slices.", "location": "counter", "takable": true, "food": true, "preparation": {"cut": "sliced"}},
+        "tomato-b": {"name": "Tomato slices B", "kind": "item", "description": "Half the tomato, cut into slices.", "location": "counter", "takable": true, "food": true, "preparation": {"cut": "sliced"}}
+      },
+      "explanation": "You slice the tomato into two equal portions on the worktop."
+    },
+    {
+      "action_id": "dice", "arguments": {"target": "tomato", "item": "knife"},
+      "carried": ["knife"], "requires": {"tomato": {"cut": "whole"}}, "consumes": ["tomato"],
+      "outputs": {"diced-tomato": {"name": "Diced tomato", "kind": "item", "description": "The whole tomato, cut into small cubes.", "location": "counter", "takable": true, "food": true, "preparation": {"cut": "diced"}}},
+      "explanation": "You dice the tomato into small cubes on the worktop."
+    },
+    {
+      "action_id": "dice", "arguments": {"target": "tomato-a", "item": "knife"},
+      "carried": ["knife"], "requires": {"tomato-a": {"cut": "sliced"}}, "consumes": ["tomato-a"],
+      "outputs": {"diced-tomato-a": {"name": "Diced tomato A", "kind": "item", "description": "A half-tomato portion, cut into small cubes.", "location": "counter", "takable": true, "food": true, "preparation": {"cut": "diced"}}},
+      "explanation": "You dice the first portion of tomato slices into small cubes."
+    },
+    {
+      "action_id": "dice", "arguments": {"target": "tomato-b", "item": "knife"},
+      "carried": ["knife"], "requires": {"tomato-b": {"cut": "sliced"}}, "consumes": ["tomato-b"],
+      "outputs": {"diced-tomato-b": {"name": "Diced tomato B", "kind": "item", "description": "A half-tomato portion, cut into small cubes.", "location": "counter", "takable": true, "food": true, "preparation": {"cut": "diced"}}},
+      "explanation": "You dice the second portion of tomato slices into small cubes."
+    },
+    {
+      "action_id": "slice", "arguments": {"target": "cheese", "item": "knife"},
+      "carried": ["knife"], "requires": {"cheese": {"cut": "whole"}}, "consumes": ["cheese"],
+      "outputs": {
+        "cheese-a": {"name": "Cheese slices A", "kind": "item", "description": "Half the cheese block, cut into slices.", "location": "counter", "takable": true, "food": true, "preparation": {"cut": "sliced"}},
+        "cheese-b": {"name": "Cheese slices B", "kind": "item", "description": "Half the cheese block, cut into slices.", "location": "counter", "takable": true, "food": true, "preparation": {"cut": "sliced"}}
+      },
+      "explanation": "You cut the cheese block into two equal portions of cheese slices."
+    },
+    {
+      "action_id": "spread", "arguments": {"target": "bread-a", "ingredient": "peanut-butter", "item": "knife"},
+      "carried": ["knife"], "requires": {"bread-a": {"cut": "sliced"}}, "consumes": ["peanut-butter"],
+      "updates": {"bread-a": {"topping": "peanut-butter"}}, "nutrition_target": "bread-a",
+      "explanation": "You spread the peanut butter portion on bread slice A. The portion is used up."
+    },
+    {
+      "action_id": "spread", "arguments": {"target": "bread-b", "ingredient": "peanut-butter", "item": "knife"},
+      "carried": ["knife"], "requires": {"bread-b": {"cut": "sliced"}}, "consumes": ["peanut-butter"],
+      "updates": {"bread-b": {"topping": "peanut-butter"}}, "nutrition_target": "bread-b",
+      "explanation": "You spread the peanut butter portion on bread slice B. The portion is used up."
+    },
+    {
+      "action_id": "spread", "arguments": {"target": "bread-a", "ingredient": "jelly", "item": "knife"},
+      "carried": ["knife"], "requires": {"bread-a": {"cut": "sliced"}}, "consumes": ["jelly"],
+      "updates": {"bread-a": {"topping": "jelly"}}, "nutrition_target": "bread-a",
+      "explanation": "You spread the jelly (jam) portion on bread slice A. The portion is used up."
+    },
+    {
+      "action_id": "spread", "arguments": {"target": "bread-b", "ingredient": "jelly", "item": "knife"},
+      "carried": ["knife"], "requires": {"bread-b": {"cut": "sliced"}}, "consumes": ["jelly"],
+      "updates": {"bread-b": {"topping": "jelly"}}, "nutrition_target": "bread-b",
+      "explanation": "You spread the jelly (jam) portion on bread slice B. The portion is used up."
+    },
+    {
+      "action_id": "spread", "arguments": {"target": "bread-a", "ingredient": "butter", "item": "knife"},
+      "carried": ["knife"], "requires": {"bread-a": {"cut": "sliced"}}, "consumes": ["butter"],
+      "updates": {"bread-a": {"topping": "butter"}}, "nutrition_target": "bread-a",
+      "explanation": "You butter bread slice A."
+    },
+    {
+      "action_id": "spread", "arguments": {"target": "bread-b", "ingredient": "butter", "item": "knife"},
+      "carried": ["knife"], "requires": {"bread-b": {"cut": "sliced"}}, "consumes": ["butter"],
+      "updates": {"bread-b": {"topping": "butter"}}, "nutrition_target": "bread-b",
+      "explanation": "You butter bread slice B."
+    },
+    {
+      "action_id": "assemble", "arguments": {"first": "bread-a", "second": "bread-b"},
+      "requires": {"bread-a": {"cut": "sliced"}, "bread-b": {"cut": "sliced"}},
+      "ingredient_requirements": [["peanut butter"], ["jelly", "blackberry jam", "strawberry jam"]],
+      "consumes": ["bread-a", "bread-b"],
+      "outputs": {"pbj-sandwich": {"name": "Peanut butter and jam sandwich", "kind": "item", "description": "Two bread slices enclosing peanut butter, a chosen jam and any added fillings.", "location": "counter", "takable": true, "inventory_units": 1, "food": true, "preparation": {"dish": "peanut-butter-and-jam-sandwich"}}},
+      "explanation": "You put the two coated bread slices together into a peanut butter and jam sandwich on the worktop. It is not yet on the plate."
+    },
+    {"action_id": "slice", "arguments": {"target": "banana", "item": "knife"}, "carried": ["knife"], "requires": {"banana": {"cut": "whole"}}, "consumes": ["banana"], "outputs": {
+      "banana-a": {"name": "Banana slices A", "kind": "item", "description": "Half the peeled banana in slices.", "location": "counter", "food": true, "takable": true, "preparation": {"cut": "sliced"}},
+      "banana-b": {"name": "Banana slices B", "kind": "item", "description": "Half the peeled banana in slices.", "location": "counter", "food": true, "takable": true, "preparation": {"cut": "sliced"}}
+    }, "explanation": "You peel and slice the banana into two equal edible portions on the worktop."},
+    {"action_id": "slice", "arguments": {"target": "avocado", "item": "knife"}, "carried": ["knife"], "requires": {"avocado": {"cut": "whole"}}, "consumes": ["avocado"], "outputs": {
+      "avocado-a": {"name": "Avocado slices A", "kind": "item", "description": "Half the peeled and pitted avocado in slices.", "location": "counter", "food": true, "takable": true, "preparation": {"cut": "sliced"}},
+      "avocado-b": {"name": "Avocado slices B", "kind": "item", "description": "Half the peeled and pitted avocado in slices.", "location": "counter", "food": true, "takable": true, "preparation": {"cut": "sliced"}}
+    }, "explanation": "You peel, pit and slice the avocado into two equal edible portions on the worktop."},
+    {"action_id": "grind", "arguments": {"target": "peanuts", "machine": "peanut-butter-maker"}, "powered": ["peanut-butter-maker"], "consumes": ["peanuts"], "outputs": {
+      "fresh-peanut-butter": {"name": "Fresh peanut butter", "kind": "item", "description": "Peanut butter freshly ground from the roasted peanuts.", "location": "counter", "food": true, "takable": true, "ingredients": ["peanut butter"]}
+    }, "explanation": "You grind the roasted peanuts into a fresh peanut butter portion."},
+    {"action_id": "cook", "arguments": {"target": "bacon", "pan": "frying-pan", "stove": "stove"}, "powered": ["stove"], "placements": {"frying-pan": "stove"}, "requires": {"bacon": {"cooking": "raw"}}, "consumes": ["bacon"], "outputs": {
+      "cooked-bacon": {"name": "Cooked bacon", "kind": "item", "description": "The bacon cooked in the frying pan.", "location": "frying-pan", "food": true, "takable": true, "preparation": {"cooking": "cooked"}, "ingredients": ["cooked bacon"]}
+    }, "explanation": "You cook the bacon in the frying pan on the powered stove."},
+    {"action_id": "spread", "arguments": {"target": "bread-a", "ingredient": "fresh-peanut-butter", "item": "knife"}, "carried": ["knife"], "consumes": ["fresh-peanut-butter"], "updates": {"bread-a": {"topping": "filled"}}, "nutrition_target": "bread-a", "explanation": "You spread fresh peanut butter on bread slice A."},
+    {"action_id": "spread", "arguments": {"target": "bread-b", "ingredient": "fresh-peanut-butter", "item": "knife"}, "carried": ["knife"], "consumes": ["fresh-peanut-butter"], "updates": {"bread-b": {"topping": "filled"}}, "nutrition_target": "bread-b", "explanation": "You spread fresh peanut butter on bread slice B."},
+    {"action_id": "spread", "arguments": {"target": "bread-a", "ingredient": "blackberry-jam", "item": "knife"}, "carried": ["knife"], "consumes": ["blackberry-jam"], "updates": {"bread-a": {"topping": "filled"}}, "nutrition_target": "bread-a", "explanation": "You spread blackberry jam on bread slice A."},
+    {"action_id": "spread", "arguments": {"target": "bread-b", "ingredient": "blackberry-jam", "item": "knife"}, "carried": ["knife"], "consumes": ["blackberry-jam"], "updates": {"bread-b": {"topping": "filled"}}, "nutrition_target": "bread-b", "explanation": "You spread blackberry jam on bread slice B."},
+    {"action_id": "spread", "arguments": {"target": "bread-a", "ingredient": "strawberry-jam", "item": "knife"}, "carried": ["knife"], "consumes": ["strawberry-jam"], "updates": {"bread-a": {"topping": "filled"}}, "nutrition_target": "bread-a", "explanation": "You spread strawberry jam on bread slice A."},
+    {"action_id": "spread", "arguments": {"target": "bread-b", "ingredient": "strawberry-jam", "item": "knife"}, "carried": ["knife"], "consumes": ["strawberry-jam"], "updates": {"bread-b": {"topping": "filled"}}, "nutrition_target": "bread-b", "explanation": "You spread strawberry jam on bread slice B."},
+    {"action_id": "spread", "arguments": {"target": "bread-a", "ingredient": "almond-butter", "item": "knife"}, "carried": ["knife"], "consumes": ["almond-butter"], "updates": {"bread-a": {"topping": "filled"}}, "nutrition_target": "bread-a", "explanation": "You spread almond butter on bread slice A."},
+    {"action_id": "spread", "arguments": {"target": "bread-b", "ingredient": "almond-butter", "item": "knife"}, "carried": ["knife"], "consumes": ["almond-butter"], "updates": {"bread-b": {"topping": "filled"}}, "nutrition_target": "bread-b", "explanation": "You spread almond butter on bread slice B."},
+    {"action_id": "spread", "arguments": {"target": "bread-a", "ingredient": "honey", "item": "knife"}, "carried": ["knife"], "consumes": ["honey"], "updates": {"bread-a": {"topping": "filled"}}, "nutrition_target": "bread-a", "explanation": "You spread honey on bread slice A."},
+    {"action_id": "spread", "arguments": {"target": "bread-b", "ingredient": "honey", "item": "knife"}, "carried": ["knife"], "consumes": ["honey"], "updates": {"bread-b": {"topping": "filled"}}, "nutrition_target": "bread-b", "explanation": "You spread honey on bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "banana-a", "item": "knife"}, "carried": ["knife"], "consumes": ["banana-a"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add banana slices A to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "banana-a", "item": "knife"}, "carried": ["knife"], "consumes": ["banana-a"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add banana slices A to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "banana-b", "item": "knife"}, "carried": ["knife"], "consumes": ["banana-b"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add banana slices B to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "banana-b", "item": "knife"}, "carried": ["knife"], "consumes": ["banana-b"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add banana slices B to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "avocado-a", "item": "knife"}, "carried": ["knife"], "consumes": ["avocado-a"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add avocado slices A to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "avocado-a", "item": "knife"}, "carried": ["knife"], "consumes": ["avocado-a"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add avocado slices A to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "avocado-b", "item": "knife"}, "carried": ["knife"], "consumes": ["avocado-b"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add avocado slices B to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "avocado-b", "item": "knife"}, "carried": ["knife"], "consumes": ["avocado-b"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add avocado slices B to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "cheese-a", "item": "knife"}, "carried": ["knife"], "consumes": ["cheese-a"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add sliced cheese A to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "cheese-a", "item": "knife"}, "carried": ["knife"], "consumes": ["cheese-a"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add sliced cheese A to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "cheese-b", "item": "knife"}, "carried": ["knife"], "consumes": ["cheese-b"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add sliced cheese B to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "cheese-b", "item": "knife"}, "carried": ["knife"], "consumes": ["cheese-b"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add sliced cheese B to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "cooked-bacon", "item": "knife"}, "carried": ["knife"], "consumes": ["cooked-bacon"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add cooked bacon to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "cooked-bacon", "item": "knife"}, "carried": ["knife"], "consumes": ["cooked-bacon"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add cooked bacon to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "ham", "item": "knife"}, "carried": ["knife"], "consumes": ["ham"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add ham slices to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "ham", "item": "knife"}, "carried": ["knife"], "consumes": ["ham"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add ham slices to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "tomato-a", "item": "knife"}, "carried": ["knife"], "consumes": ["tomato-a"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add tomato slices A to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "tomato-a", "item": "knife"}, "carried": ["knife"], "consumes": ["tomato-a"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add tomato slices A to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "tomato-b", "item": "knife"}, "carried": ["knife"], "consumes": ["tomato-b"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add tomato slices B to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "tomato-b", "item": "knife"}, "carried": ["knife"], "consumes": ["tomato-b"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add tomato slices B to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "diced-tomato", "item": "knife"}, "carried": ["knife"], "consumes": ["diced-tomato"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add diced tomato to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "diced-tomato", "item": "knife"}, "carried": ["knife"], "consumes": ["diced-tomato"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add diced tomato to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "peanuts", "item": "knife"}, "carried": ["knife"], "consumes": ["peanuts"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add roasted peanuts to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "peanuts", "item": "knife"}, "carried": ["knife"], "consumes": ["peanuts"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add roasted peanuts to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "diced-tomato-a", "item": "knife"}, "carried": ["knife"], "consumes": ["diced-tomato-a"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add diced tomato A to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "diced-tomato-a", "item": "knife"}, "carried": ["knife"], "consumes": ["diced-tomato-a"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add diced tomato A to bread slice B."},
+    {"action_id": "add", "arguments": {"target": "bread-a", "ingredient": "diced-tomato-b", "item": "knife"}, "carried": ["knife"], "consumes": ["diced-tomato-b"], "updates": {"bread-a": {"filling": "added"}}, "nutrition_target": "bread-a", "explanation": "You add diced tomato B to bread slice A."},
+    {"action_id": "add", "arguments": {"target": "bread-b", "ingredient": "diced-tomato-b", "item": "knife"}, "carried": ["knife"], "consumes": ["diced-tomato-b"], "updates": {"bread-b": {"filling": "added"}}, "nutrition_target": "bread-b", "explanation": "You add diced tomato B to bread slice B."}
+  ]
+}

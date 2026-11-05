@@ -1,0 +1,285 @@
+{
+  "schema_version": "1.0",
+  "id": "divided-temple",
+  "title": "Fire Sprite & Ice Golem - The Divided Temple",
+  "start_location": "ember-court",
+  "exit_location": "sanctuary",
+  "objective": "Use fire, freezing and strength to make safe shared routes through the divided temple and bring both companions to the sanctuary.",
+  "goal_type": "all_actors_at_exit_location",
+  "body": {
+    "description": "A magical temple visitor.",
+    "capabilities": [
+      "move",
+      "manipulate"
+    ],
+    "capacity": 1
+  },
+  "agents": [
+    {
+      "id": "sprite",
+      "role": "A fire sprite who flies through heat and ignites magical mechanisms, but cannot swim, freeze water or lift heavy objects. Help the ice golem pass the flames, then rely on its ice bridge.",
+      "body": {
+        "description": "A tiny flying, heatproof fire sprite carrying one small item. Deep water is impassable; heavy weights cannot be carried.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "fly",
+          "heatproof",
+          "fire_magic"
+        ],
+        "capacity": 1,
+        "size": "small"
+      }
+    },
+    {
+      "id": "golem",
+      "role": "An ice golem who freezes water and lifts heavy objects, but cannot fly, pass intense heat or ignite magical beacons. Create safe crossings for the sprite.",
+      "body": {
+        "description": "A grounded ice golem carrying four inventory units, with strength and freezing magic but no swimming or heat protection.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "strength",
+          "freezing"
+        ],
+        "capacity": 4
+      }
+    }
+  ],
+  "needs": {},
+  "recovery": {},
+  "budgets": {
+    "max_actions": 120,
+    "max_model_calls": 140,
+    "max_seconds": 1500,
+    "repetition_window": 5
+  },
+  "entities": {
+    "ember-court": {
+      "name": "Ember court",
+      "kind": "location",
+      "description": "A burning arch leads upward. A heat-sealed cooling socket, a small ember seed and a heavy sluice counterweight are here. The ice golem cannot cross the raw flames."
+    },
+    "fire-balcony": {
+      "name": "Fire balcony",
+      "kind": "location",
+      "description": "An unlit brazier protects a frost seal. A heavy sluice and an unbridged water channel stand beyond. Flight cannot bypass the sealed temple walls."
+    },
+    "flooded-hall": {
+      "name": "Hall beyond the water",
+      "kind": "location",
+      "description": "A dormant fire beacon controls the sanctuary door. A safe ice bridge is needed to bring the non-swimming partners here."
+    },
+    "sanctuary": {
+      "name": "Balanced sanctuary",
+      "kind": "location",
+      "description": "Fire and ice are safely balanced. Both companions must arrive after finishing the temple mechanisms."
+    },
+    "flame-arch": {
+      "name": "Burning aerial arch",
+      "kind": "door",
+      "description": "Only a heatproof flyer can pass this high burning opening.",
+      "location": "ember-court",
+      "destination": "fire-balcony",
+      "open": true,
+      "traversal_capabilities": [
+        "fly",
+        "heatproof"
+      ],
+      "health": null
+    },
+    "cool-stair": {
+      "name": "Cooled shared stair",
+      "kind": "door",
+      "description": "A safe land route once the frost seal powers the cooling socket.",
+      "location": "ember-court",
+      "destination": "fire-balcony",
+      "open": false,
+      "required_challenges": [
+        "cool_arch"
+      ],
+      "health": null
+    },
+    "water-channel": {
+      "name": "Deep temple water",
+      "kind": "door",
+      "description": "Only swimmers can cross the raw channel. Neither companion can swim; flying is blocked by its low, sealed ceiling.",
+      "location": "fire-balcony",
+      "destination": "flooded-hall",
+      "open": true,
+      "traversal_capabilities": [
+        "swim"
+      ],
+      "health": null
+    },
+    "ice-bridge": {
+      "name": "Shared ice bridge",
+      "kind": "door",
+      "description": "A safe crossing for both companions once the sluice is raised and the water frozen.",
+      "location": "fire-balcony",
+      "destination": "flooded-hall",
+      "open": false,
+      "required_challenges": [
+        "freeze_bridge"
+      ],
+      "health": null
+    },
+    "sanctuary-door": {
+      "name": "Sanctuary seal",
+      "kind": "door",
+      "description": "The final door opens only when fire magic lights the beacon after the bridge is safe.",
+      "location": "flooded-hall",
+      "destination": "sanctuary",
+      "open": false,
+      "required_challenges": [
+        "light_beacon"
+      ],
+      "health": null
+    },
+    "ember-seed": {
+      "name": "Ember seed",
+      "kind": "item",
+      "description": "A small fuel seed that a fire mage must install in the balcony brazier.",
+      "location": "ember-court",
+      "takable": true,
+      "health": null
+    },
+    "counterweight": {
+      "name": "Heavy sluice counterweight",
+      "kind": "item",
+      "description": "Two inventory units; only a strong carrier can bring it to the balcony sluice.",
+      "location": "ember-court",
+      "takable": true,
+      "inventory_units": 2,
+      "health": null
+    },
+    "cooling-socket": {
+      "name": "Arch cooling socket",
+      "kind": "item",
+      "description": "Freezing magic and a carried frost seal can create a safe route through the heat.",
+      "location": "ember-court",
+      "health": null
+    },
+    "brazier": {
+      "name": "Balcony brazier",
+      "kind": "item",
+      "description": "Fire magic and the carried ember seed release a small frost-seal cache.",
+      "location": "fire-balcony",
+      "health": null
+    },
+    "frost-cache": {
+      "name": "Brazier frost cache",
+      "kind": "container",
+      "description": "This fixed cache opens only when the brazier is lit.",
+      "location": "fire-balcony",
+      "open": false,
+      "required_challenges": [
+        "ignite_brazier"
+      ],
+      "health": null
+    },
+    "frost-seal": {
+      "name": "Frost seal",
+      "kind": "item",
+      "description": "A light seal. Bring it back through the heat and share it with a freezing mage at the cooling socket.",
+      "location": "frost-cache",
+      "takable": true,
+      "health": null
+    },
+    "sluice": {
+      "name": "Heavy balcony sluice",
+      "kind": "item",
+      "description": "Strength and an installed counterweight raise the sluice before a stable bridge can be frozen.",
+      "location": "fire-balcony",
+      "health": null
+    },
+    "bridge-plinth": {
+      "name": "Ice bridge plinth",
+      "kind": "item",
+      "description": "Freezing magic can bridge the channel only after its sluice is secured.",
+      "location": "fire-balcony",
+      "health": null
+    },
+    "fire-beacon": {
+      "name": "Sanctuary fire beacon",
+      "kind": "item",
+      "description": "Only fire magic can ignite this final beacon.",
+      "location": "flooded-hall",
+      "health": null
+    }
+  },
+  "skill_challenges": [
+    {
+      "id": "ignite_brazier",
+      "description": "Install the ember seed and ignite the balcony brazier to release the frost seal.",
+      "target": "brazier",
+      "capability": "fire_magic",
+      "carried": [
+        "ember-seed"
+      ],
+      "installs": [
+        "ember-seed"
+      ],
+      "opens": [
+        "frost-cache"
+      ]
+    },
+    {
+      "id": "cool_arch",
+      "description": "Install the carried frost seal and use freezing magic to cool a shared staircase.",
+      "target": "cooling-socket",
+      "capability": "freezing",
+      "requires": [
+        "ignite_brazier"
+      ],
+      "carried": [
+        "frost-seal"
+      ],
+      "installs": [
+        "frost-seal"
+      ],
+      "opens": [
+        "cool-stair"
+      ]
+    },
+    {
+      "id": "raise_sluice",
+      "description": "Use strength to install the heavy counterweight and raise the balcony sluice.",
+      "target": "sluice",
+      "capability": "strength",
+      "requires": [
+        "cool_arch"
+      ],
+      "carried": [
+        "counterweight"
+      ],
+      "installs": [
+        "counterweight"
+      ]
+    },
+    {
+      "id": "freeze_bridge",
+      "description": "Use freezing magic to create a stable shared bridge across the water channel.",
+      "target": "bridge-plinth",
+      "capability": "freezing",
+      "requires": [
+        "raise_sluice"
+      ],
+      "opens": [
+        "ice-bridge"
+      ]
+    },
+    {
+      "id": "light_beacon",
+      "description": "Use fire magic to ignite the sanctuary beacon and open the final door.",
+      "target": "fire-beacon",
+      "capability": "fire_magic",
+      "requires": [
+        "freeze_bridge"
+      ],
+      "opens": [
+        "sanctuary-door"
+      ]
+    }
+  ]
+}

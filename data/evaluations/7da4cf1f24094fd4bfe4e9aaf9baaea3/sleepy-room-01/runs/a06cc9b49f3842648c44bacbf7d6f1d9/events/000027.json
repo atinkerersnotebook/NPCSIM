@@ -1,0 +1,19 @@
+{
+  "kind": "verification",
+  "timestamp": "2026-11-02T23:18:13.378861+00:00",
+  "cycle": 3,
+  "session_id": "1263fcb106fa4c61804510e1248926b0",
+  "actor_id": "npc-001",
+  "payload": {
+    "status": "achieved",
+    "evidence": {
+      "actor_id": "npc-001",
+      "location_id": "courtyard"
+    },
+    "observation_revision": "obs-4"
+  },
+  "schema_version": "1.0",
+  "run_id": "a06cc9b49f3842648c44bacbf7d6f1d9",
+  "sequence": 27,
+  "id": "a06cc9b49f3842648c44bacbf7d6f1d9:27"
+}

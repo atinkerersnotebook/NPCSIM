@@ -1,0 +1,19 @@
+{
+  "kind": "action_request",
+  "timestamp": "2026-11-02T23:18:16.258406+00:00",
+  "cycle": 2,
+  "session_id": "a3f42c5a5d5241b1b5cd4b00d62618e8",
+  "actor_id": "npc-001",
+  "payload": {
+    "request_id": "18d064cc2f134b5f8847d25473bdb4e5",
+    "expected_observation_revision": "obs-2",
+    "action_id": "go",
+    "arguments": {
+      "target": "archway"
+    }
+  },
+  "schema_version": "1.0",
+  "run_id": "58ac1b87876944c5b5bee4a77fbe223f",
+  "sequence": 17,
+  "id": "58ac1b87876944c5b5bee4a77fbe223f:17"
+}

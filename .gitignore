@@ -1,0 +1,8 @@
+.venv/
+node_modules/
+dist/
+__pycache__/
+.pytest_cache/
+data/runs/
+data/worlds/
+*.tmp

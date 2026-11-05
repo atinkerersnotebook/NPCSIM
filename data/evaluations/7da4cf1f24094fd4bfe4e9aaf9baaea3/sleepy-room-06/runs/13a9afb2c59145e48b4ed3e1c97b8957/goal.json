@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "run_id": "13a9afb2c59145e48b4ed3e1c97b8957",
+  "id": "escape-room",
+  "objective": "Leave the room.",
+  "type": "actor_outside_start_location",
+  "status": "achieved"
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0", "id": "flooded-lighthouse",
+  "title": "Merfolk & Engineer - The Flooded Lighthouse",
+  "start_location": "dock", "exit_location": "beacon-platform",
+  "objective": "Combine underwater work and electrical repairs to drain the lighthouse, restore its beacon and get both partners to the beacon platform.",
+  "goal_type": "all_actors_at_exit_location",
+  "body": {"description": "A lighthouse visitor with hands.", "capabilities": ["move", "manipulate"], "capacity": 1},
+  "agents": [
+    {"id": "merfolk", "role": "An amphibious merfolk who swims and works underwater, but cannot repair or operate electrical equipment. Retrieve submerged components and coordinate with the engineer.", "body": {"description": "An amphibious merfolk able to move on land, swim, breathe underwater and carry one small item, with no electrical skill.", "capabilities": ["move", "manipulate", "swim", "underwater"], "capacity": 1}},
+    {"id": "engineer", "role": "An electrical engineer who repairs controls, runs pumps and focuses beacons, but cannot swim or enter flooded passages. Rely on the merfolk for submerged work.", "body": {"description": "A non-swimming engineer carrying three inventory units and trained in electrical systems.", "capabilities": ["move", "manipulate", "electrical"], "capacity": 3}}
+  ],
+  "needs": {}, "recovery": {},
+  "budgets": {"max_actions": 120, "max_model_calls": 140, "max_seconds": 1500, "repetition_window": 5},
+  "entities": {
+    "dock": {"name": "Dry lighthouse dock", "kind": "location", "description": "Broken electrical controls and a pump stand beside a flooded access channel. A heavy spanner lies here. The control housing contains a valve key."},
+    "flooded-chamber": {"name": "Flooded valve chamber", "kind": "location", "description": "A submerged intake valve and waterproof lens case occupy this chamber. Initially only a swimmer can enter; draining creates a dry walkway."},
+    "pump-room": {"name": "Upper pump room", "kind": "location", "description": "A beacon housing waits for an installed lens and a trained electrical engineer."},
+    "beacon-platform": {"name": "Restored beacon platform", "kind": "location", "description": "The beacon shines above a safely drained lighthouse. Both partners must reach this platform."},
+    "water-channel": {"name": "Flooded access channel", "kind": "door", "description": "Deep water: the swim ability is mandatory.", "location": "dock", "destination": "flooded-chamber", "open": true, "traversal_capabilities": ["swim"], "health": null},
+    "dry-walkway": {"name": "Drained service walkway", "kind": "door", "description": "Safe for non-swimmers only after the pump has drained the chamber.", "location": "dock", "destination": "flooded-chamber", "open": false, "required_challenges": ["start_pump"], "health": null},
+    "service-hatch": {"name": "Upper service hatch", "kind": "door", "description": "The pumping interlock releases this hatch when drainage is complete.", "location": "flooded-chamber", "destination": "pump-room", "open": false, "required_challenges": ["start_pump"], "health": null},
+    "platform-door": {"name": "Beacon platform door", "kind": "door", "description": "The beacon interlock releases this exit after the beacon is restored.", "location": "pump-room", "destination": "beacon-platform", "open": false, "required_challenges": ["focus_beacon"], "health": null},
+    "controls": {"name": "Broken electrical controls", "kind": "item", "description": "Electrical repair with the heavy spanner also releases the valve-key housing.", "location": "dock", "health": null},
+    "spanner": {"name": "Heavy maintenance spanner", "kind": "item", "description": "Two inventory units of electrical-maintenance tools.", "location": "dock", "takable": true, "inventory_units": 2, "health": null},
+    "key-housing": {"name": "Control key housing", "kind": "container", "description": "A safety latch remains closed until the electrical controls are repaired.", "location": "dock", "open": false, "required_challenges": ["repair_controls"], "health": null},
+    "valve-key": {"name": "Intake valve key", "kind": "item", "description": "A light key that an underwater worker must install in the submerged intake.", "location": "key-housing", "takable": true, "health": null},
+    "pump": {"name": "Drainage pump", "kind": "item", "description": "An electrical engineer must use maintenance tools after the intake is open and the submerged lens case is released.", "location": "dock", "health": null},
+    "intake": {"name": "Submerged intake valve", "kind": "item", "description": "Only an underwater worker with the carried valve key can open and secure this valve.", "location": "flooded-chamber", "health": null},
+    "lens-case": {"name": "Waterproof lens case", "kind": "container", "description": "An underwater release protects the beacon lens. Ordinary opening cannot work it.", "location": "flooded-chamber", "open": false, "required_challenges": ["recover_lens"], "health": null},
+    "lens": {"name": "Beacon lens", "kind": "item", "description": "A light lens. Share it with the engineer or leave it accessible after draining.", "location": "lens-case", "takable": true, "health": null},
+    "beacon": {"name": "Beacon housing", "kind": "item", "description": "An electrical engineer can install the carried lens and restore the beacon after drainage.", "location": "pump-room", "health": null}
+  },
+  "skill_challenges": [
+    {"id": "repair_controls", "description": "Repair the electrical controls with the spanner and release the valve-key housing.", "target": "controls", "capability": "electrical", "carried": ["spanner"], "opens": ["key-housing"]},
+    {"id": "open_intake", "description": "Work underwater to install the valve key and secure the intake open.", "target": "intake", "capability": "underwater", "requires": ["repair_controls"], "carried": ["valve-key"], "installs": ["valve-key"]},
+    {"id": "recover_lens", "description": "Use underwater skill to release the waterproof lens case before the pump runs.", "target": "lens-case", "capability": "underwater", "requires": ["open_intake"], "opens": ["lens-case"]},
+    {"id": "start_pump", "description": "Use electrical skill and maintenance tools to run the pump, drain the chamber and release the dry routes.", "target": "pump", "capability": "electrical", "requires": ["repair_controls", "open_intake", "recover_lens"], "carried": ["spanner"], "opens": ["dry-walkway", "service-hatch"]},
+    {"id": "focus_beacon", "description": "Install the carried lens and electrically focus the beacon to release the platform exit.", "target": "beacon", "capability": "electrical", "requires": ["start_pump"], "carried": ["lens"], "installs": ["lens"], "opens": ["platform-door"]}
+  ]
+}

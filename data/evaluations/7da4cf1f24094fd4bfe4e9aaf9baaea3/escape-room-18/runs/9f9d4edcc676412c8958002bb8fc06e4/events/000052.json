@@ -1,0 +1,15 @@
+{
+  "kind": "finished",
+  "timestamp": "2026-11-02T23:17:42.140241+00:00",
+  "cycle": 6,
+  "session_id": "7189f6444ccf484e9167be0043f687ab",
+  "actor_id": "npc-001",
+  "payload": {
+    "status": "succeeded",
+    "reason": "The world verified that this NPC left the room."
+  },
+  "schema_version": "1.0",
+  "run_id": "9f9d4edcc676412c8958002bb8fc06e4",
+  "sequence": 52,
+  "id": "9f9d4edcc676412c8958002bb8fc06e4:52"
+}

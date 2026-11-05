@@ -1,0 +1,306 @@
+{
+  "schema_version": "1.0",
+  "id": "millhaven",
+  "title": "Millhaven - A Village That Carries On",
+  "start_location": "village-square",
+  "exit_location": "village-square",
+  "objective": "Help Millhaven recover: ask Torvin to retrieve the borrowed shovel, receive it at your agreed meeting place, then arrange a real well-digging crew behind Elsie's tavern. When the mill drive fails at 14:00, ask Hobb to repair it with Mara and let the grain-to-flour-to-bread trade resume. Use village_ask, village_request, village_tell and village_wait to cooperate with the residents. Drop supplies at the crew's location; tell them only locations you actually know. Task progress is verified by the engine, never by dialogue.",
+  "opening_narrative": "At eight in the morning, Millhaven is already awake. A hammer rings from Torvin's forge, flour dust drifts above Mara's watermill, and Elsie props open the tavern door. Beyond the square, a farm track, a stable lane and a path toward the river invite a closer look.\n\nElsie hopes for a well behind the tavern. Torvin remembers lending his shovel to Bren, but borrowed tools have a way of travelling. Ask the villagers what they know, offer practical help, and let them get on with their work. Their information may be old; their actions still have to happen in the real village.\n\nEach ordinary action gives the village five minutes. Looking and reading cost no time. A longer wait lets people travel, produce goods and carry out accepted requests without further orders.",
+  "goal_type": "village_restored",
+  "body": {
+    "description": "A visiting helper with two hands and room for four inventory units.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 4,
+    "grips": ["hand"],
+    "max_held_items": 4
+  },
+  "needs": {},
+  "recovery": {},
+  "budgets": {"max_actions": 250, "max_model_calls": 300, "max_seconds": 3600, "repetition_window": 8},
+  "entities": {
+    "village-square": {"name": "Village square", "kind": "location", "description": "A noticeboard stands beside the pump. Paths lead to the forge, stable, tavern, general store and farm."},
+    "forge": {"name": "Torvin's forge", "kind": "location", "description": "Torvin's anvil stands beside a wagon awaiting repairs. His tools are private: ask him to help rather than taking them."},
+    "stable": {"name": "Bren's stable", "kind": "location", "description": "Horses shift in straw-lined stalls. Bren keeps track of tools lent around the village."},
+    "watermill": {"name": "Mara's watermill", "kind": "location", "description": "Grain is ground here into flour. The drive is old; repairs need a carpenter, a miller, a replacement beam and a hammer."},
+    "mill-shed": {"name": "Mill shed", "kind": "location", "description": "A dry shed for borrowed tools and sacks beside the watermill."},
+    "farm": {"name": "Ada's farm", "kind": "location", "description": "Fields and a grain store supply the mill. Grain must actually be carried there by the village merchant."},
+    "general-store": {"name": "Nella's general store", "kind": "location", "description": "A counter lists local stock prices. Nella also walks the grain, flour and bread delivery circuit."},
+    "workshop": {"name": "Hobb's workshop", "kind": "location", "description": "Hobb keeps a replacement mill beam and joiner's tools here. Ask him about repair work."},
+    "tavern": {"name": "Elsie's tavern", "kind": "location", "description": "Elsie serves villagers with bread from Jory's bakery. At nineteen hundred the workers gather here to share witnessed news."},
+    "bakery": {"name": "Jory's bakery", "kind": "location", "description": "Jory turns local flour into bread. Without flour deliveries the oven cannot produce another loaf."},
+    "cottages": {"name": "Village cottages", "kind": "location", "description": "Shared courtyards and modest homes. Most villagers return here at night."},
+    "woods": {"name": "Rowan's woodlot", "kind": "location", "description": "Managed woodland supplies timber from a finite stock of felled logs."},
+    "bridge": {"name": "Stone bridge", "kind": "location", "description": "Garrick watches the river crossing. The mill, woodlot and fishing bank lie beyond."},
+    "riverbank": {"name": "Fishing bank", "kind": "location", "description": "Finn fishes while Iona gathers herbs nearby. The path returns over the bridge."},
+    "tavern-yard": {"name": "Ground behind the tavern", "kind": "location", "description": "A marked safe well site. Torvin and Bren need the actual shovel, rope and timber to complete the digging."},
+    "square-forge": {"name": "Forge lane", "kind": "door", "description": "A short walk between the square and forge.", "location": "village-square", "destination": "forge", "open": true, "health": null},
+    "square-stable": {"name": "Stable lane", "kind": "door", "description": "A short walk between the square and stable.", "location": "village-square", "destination": "stable", "open": true, "health": null},
+    "square-tavern": {"name": "Tavern approach", "kind": "door", "description": "The tavern faces the square.", "location": "village-square", "destination": "tavern", "open": true, "health": null},
+    "square-store": {"name": "Market walk", "kind": "door", "description": "The store opens onto the square.", "location": "village-square", "destination": "general-store", "open": true, "health": null},
+    "square-farm": {"name": "Farm track", "kind": "door", "description": "A broad track to the farm.", "location": "village-square", "destination": "farm", "open": true, "health": null},
+    "square-bridge": {"name": "River road", "kind": "door", "description": "A road between the square and bridge.", "location": "village-square", "destination": "bridge", "open": true, "health": null},
+    "bridge-mill": {"name": "Mill approach", "kind": "door", "description": "A path from the bridge to the mill.", "location": "bridge", "destination": "watermill", "open": true, "health": null},
+    "mill-shed-path": {"name": "Shed path", "kind": "door", "description": "A short path from the mill into the shed.", "location": "watermill", "destination": "mill-shed", "open": true, "health": null},
+    "bridge-woods": {"name": "Woodlot trail", "kind": "door", "description": "A trail from the bridge to the woodlot.", "location": "bridge", "destination": "woods", "open": true, "health": null},
+    "bridge-river": {"name": "Fishing path", "kind": "door", "description": "A path from the bridge to the fishing bank.", "location": "bridge", "destination": "riverbank", "open": true, "health": null},
+    "square-workshop": {"name": "Joiner's lane", "kind": "door", "description": "A lane to Hobb's workshop.", "location": "village-square", "destination": "workshop", "open": true, "health": null},
+    "square-bakery": {"name": "Baker's walk", "kind": "door", "description": "A walk to Jory's bakery.", "location": "village-square", "destination": "bakery", "open": true, "health": null},
+    "square-cottages": {"name": "Cottage lane", "kind": "door", "description": "A quiet residential lane.", "location": "village-square", "destination": "cottages", "open": true, "health": null},
+    "tavern-yard-gate": {"name": "Tavern yard gate", "kind": "door", "description": "An open gate to the ground behind the tavern.", "location": "tavern", "destination": "tavern-yard", "open": true, "health": null},
+    "stable-shed": {"name": "Millers' shortcut", "kind": "door", "description": "A public footpath between the stable and mill shed.", "location": "stable", "destination": "mill-shed", "open": true, "health": null},
+    "farm-mill": {"name": "Grain road", "kind": "door", "description": "A delivery road from the farm to the mill.", "location": "farm", "destination": "watermill", "open": true, "health": null},
+    "mill-bakery": {"name": "Flour lane", "kind": "door", "description": "A delivery lane from the mill to the bakery.", "location": "watermill", "destination": "bakery", "open": true, "health": null},
+    "bakery-tavern": {"name": "Bread walk", "kind": "door", "description": "A delivery walk between bakery and tavern.", "location": "bakery", "destination": "tavern", "open": true, "health": null},
+    "torvin": {"name": "Torvin", "kind": "villager", "description": "A practical blacksmith with an unfinished wagon repair. He remembers lending his shovel to Bren.", "location": "forge", "health": null},
+    "bren": {"name": "Bren", "kind": "villager", "description": "A patient stable keeper who notices where borrowed equipment goes.", "location": "stable", "health": null},
+    "mara": {"name": "Mara", "kind": "villager", "description": "A methodical miller concerned about the aging mill drive.", "location": "watermill", "health": null},
+    "elsie": {"name": "Elsie", "kind": "villager", "description": "A welcoming innkeeper who wants a well behind her tavern.", "location": "tavern", "health": null},
+    "hobb": {"name": "Hobb", "kind": "villager", "description": "A careful carpenter who will coordinate repairs with Mara.", "location": "workshop", "health": null},
+    "jory": {"name": "Jory", "kind": "villager", "description": "A baker whose bread depends on actual flour deliveries.", "location": "bakery", "health": null},
+    "ada": {"name": "Ada", "kind": "villager", "description": "A farmer who supplies grain from her fields.", "location": "farm", "health": null},
+    "nella": {"name": "Nella", "kind": "villager", "description": "A merchant who carries one resource unit at a time and settles each delivery in coins.", "location": "general-store", "health": null},
+    "rowan": {"name": "Rowan", "kind": "villager", "description": "A forester managing a finite stock of felled logs.", "location": "woods", "health": null},
+    "garrick": {"name": "Garrick", "kind": "villager", "description": "A watchful guard who patrols between the bridge and square.", "location": "bridge", "health": null},
+    "iona": {"name": "Iona", "kind": "villager", "description": "A healer who prepares tea from local herbs.", "location": "cottages", "health": null},
+    "finn": {"name": "Finn", "kind": "villager", "description": "A fisher tending lines on the riverbank.", "location": "riverbank", "health": null},
+    "shovel": {"name": "Torvin's shovel", "kind": "item", "description": "A sound iron shovel, moved here after Bren lent it for clearing the mill race.", "location": "mill-shed", "takable": true},
+    "well-timber": {"name": "Well lining timber", "kind": "item", "description": "Prepared timber reserved for Elsie's well.", "location": "forge", "takable": true},
+    "well-rope": {"name": "Well safety rope", "kind": "item", "description": "A sound rope reserved for the well crew.", "location": "forge", "takable": true},
+    "mill-beam": {"name": "Replacement mill beam", "kind": "item", "description": "A prepared replacement drive beam reserved for Mara's mill.", "location": "workshop", "takable": true},
+    "joiner-hammer": {"name": "Hobb's hammer", "kind": "item", "description": "A joiner's hammer for installing the replacement beam.", "location": "workshop", "takable": true},
+    "mill-drive": {"name": "Old mill drive", "kind": "fixture", "description": "An aging mechanism that must turn for flour production. Hobb and Mara can repair it with the proper supplies.", "location": "watermill", "health": 100, "max_health": 100},
+    "noticeboard": {"name": "Village noticeboard", "kind": "item", "description": "A public guide to the village's needs.", "location": "village-square", "health": null, "readable_text": "Elsie requests a well behind the tavern. Torvin and Bren can dig with shovel, lining timber and safety rope. Torvin is finishing urgent wagon work until 08:30. Ask him about the borrowed shovel and meet him where you made the request. Hobb keeps a replacement mill beam and hammer at his workshop; Mara must help with repairs if the old drive fails. Visit workplaces to trade posted stock. At 19:00 most residents gather at the tavern, then go home at 22:00. Looking and reading are free; other actions take five minutes. Use village_wait for longer periods."},
+    "price-board": {"name": "Store price board", "kind": "item", "description": "Posted resource prices.", "location": "general-store", "health": null, "readable_text": "Per unit: grain 1, flour 2, bread 3, iron 3, wagon-parts 5, hay 1, manure 1, logs 1, timber 2, planks 3, herbs 1, tea 2, fish 2, meals 4 coins. Resource stock is accounted separately from portable tools. The visitor starts with 20 coins."},
+    "anvil": {"name": "Forge anvil", "kind": "fixture", "description": "A fixed smithing anvil.", "location": "forge", "health": null},
+    "wagon": {"name": "Wagon under repair", "kind": "fixture", "description": "Torvin's urgent morning commitment.", "location": "forge", "health": null},
+    "bellows": {"name": "Leather bellows", "kind": "fixture", "description": "Bellows beside the hearth.", "location": "forge", "health": null},
+    "tongs": {"name": "Smithing tongs", "kind": "item", "description": "Torvin's private tongs.", "location": "forge", "takable": true},
+    "smith-hammer": {"name": "Smithing hammer", "kind": "item", "description": "Torvin's private forge hammer.", "location": "forge", "takable": true},
+    "horseshoe": {"name": "Spare horseshoe", "kind": "item", "description": "A horseshoe laid aside for the stable.", "location": "forge", "takable": true},
+    "feed-trough": {"name": "Feed trough", "kind": "fixture", "description": "A fixed wooden trough.", "location": "stable", "health": null},
+    "saddle": {"name": "Bren's saddle", "kind": "item", "description": "A well-kept saddle.", "location": "stable", "takable": true},
+    "grooming-brush": {"name": "Grooming brush", "kind": "item", "description": "A brush for the horses.", "location": "stable", "takable": true},
+    "stable-bucket": {"name": "Stable bucket", "kind": "item", "description": "A water bucket.", "location": "stable", "takable": true},
+    "hay-fork": {"name": "Hay fork", "kind": "item", "description": "Bren's hay fork.", "location": "stable", "takable": true},
+    "grain-scales": {"name": "Grain scales", "kind": "fixture", "description": "Balanced scales for mill deliveries.", "location": "watermill", "health": null},
+    "millstones": {"name": "Millstones", "kind": "fixture", "description": "Heavy stones driven by the mill mechanism.", "location": "watermill", "health": null},
+    "oil-can": {"name": "Mill oil can", "kind": "item", "description": "Mara's maintenance oil can.", "location": "mill-shed", "takable": true},
+    "rake": {"name": "Mill race rake", "kind": "item", "description": "A rake used to clear the mill race.", "location": "mill-shed", "takable": true},
+    "sack-hook": {"name": "Sack hook", "kind": "item", "description": "A hook for moving sacks.", "location": "mill-shed", "takable": true},
+    "farm-cart": {"name": "Farm cart", "kind": "fixture", "description": "A parked delivery cart.", "location": "farm", "health": null},
+    "sickle": {"name": "Ada's sickle", "kind": "item", "description": "A harvesting tool.", "location": "farm", "takable": true},
+    "watering-can": {"name": "Watering can", "kind": "item", "description": "A garden watering can.", "location": "farm", "takable": true},
+    "seed-box": {"name": "Seed box", "kind": "container", "description": "An empty box for next season's seed.", "location": "farm", "open": true, "health": null},
+    "counter": {"name": "Store counter", "kind": "fixture", "description": "Nella's shop counter.", "location": "general-store", "health": null},
+    "market-basket": {"name": "Market basket", "kind": "item", "description": "A basket left for visitors.", "location": "general-store", "takable": true},
+    "ledger": {"name": "Delivery ledger", "kind": "item", "description": "A public explanation of the delivery circuit.", "location": "general-store", "readable_text": "Nella collects grain at Ada's farm, sells it to Mara at the mill, carries Mara's flour to Jory, then brings Jory's bread to Elsie. Each delivery takes real walking time. Empty stock or insufficient coins blocks a trade; no stock appears by narration."},
+    "workbench": {"name": "Joiner's workbench", "kind": "fixture", "description": "A sturdy woodworking bench.", "location": "workshop", "health": null},
+    "saw": {"name": "Hobb's saw", "kind": "item", "description": "A carpenter's saw.", "location": "workshop", "takable": true},
+    "plane": {"name": "Joiner's plane", "kind": "item", "description": "A plane for smoothing timber.", "location": "workshop", "takable": true},
+    "chisel": {"name": "Joiner's chisel", "kind": "item", "description": "A carefully honed chisel.", "location": "workshop", "takable": true},
+    "measuring-rule": {"name": "Measuring rule", "kind": "item", "description": "A wooden measuring rule.", "location": "workshop", "takable": true},
+    "tavern-hearth": {"name": "Tavern hearth", "kind": "fixture", "description": "A warm communal hearth.", "location": "tavern", "health": null},
+    "serving-tray": {"name": "Serving tray", "kind": "item", "description": "Elsie's serving tray.", "location": "tavern", "takable": true},
+    "water-jug": {"name": "Water jug", "kind": "item", "description": "A jug filled from the old square pump.", "location": "tavern", "takable": true},
+    "guest-book": {"name": "Guest book", "kind": "item", "description": "A book by the tavern door.", "location": "tavern", "readable_text": "Welcome to Millhaven. Elsie invites willing volunteers to discuss a well behind the tavern; nobody is obliged to abandon urgent work."},
+    "oven": {"name": "Bakery oven", "kind": "fixture", "description": "Jory's bread oven.", "location": "bakery", "health": null},
+    "bread-peel": {"name": "Bread peel", "kind": "item", "description": "A long-handled baker's tool.", "location": "bakery", "takable": true},
+    "mixing-bowl": {"name": "Baker's bowl", "kind": "item", "description": "Jory's mixing bowl.", "location": "bakery", "takable": true},
+    "flour-scoop": {"name": "Flour scoop", "kind": "item", "description": "A scoop beside the flour store.", "location": "bakery", "takable": true},
+    "dough-cloth": {"name": "Dough cloth", "kind": "item", "description": "A clean baker's cloth.", "location": "bakery", "takable": true},
+    "village-pump": {"name": "Square pump", "kind": "fixture", "description": "The village's old shared pump.", "location": "village-square", "health": null},
+    "wood-axe": {"name": "Rowan's axe", "kind": "item", "description": "A woodcutter's axe.", "location": "woods", "takable": true},
+    "log-sledge": {"name": "Log sledge", "kind": "fixture", "description": "A heavy sledge for timber.", "location": "woods", "health": null},
+    "guard-lantern": {"name": "Bridge lantern", "kind": "item", "description": "Garrick's lantern.", "location": "bridge", "takable": true},
+    "fishing-rod": {"name": "Finn's rod", "kind": "item", "description": "A fishing rod.", "location": "riverbank", "takable": true},
+    "fishing-net": {"name": "Fishing net", "kind": "item", "description": "A net drying by the bank.", "location": "riverbank", "takable": true},
+    "herb-pouch": {"name": "Iona's herb pouch", "kind": "item", "description": "A pouch for gathered herbs.", "location": "cottages", "takable": true},
+    "mortar": {"name": "Healer's mortar", "kind": "item", "description": "A stone mortar for preparing herbs.", "location": "cottages", "takable": true}
+  },
+  "village": {
+    "start_minute": 480,
+    "breakdown_minute": 840,
+    "courier": "nella", "shovel": "shovel", "smith": "torvin", "helper": "bren",
+    "carpenter": "hobb", "miller": "mara", "mill": "watermill", "mill_equipment": "mill-drive",
+    "well_site": "tavern-yard", "timber": "well-timber", "rope": "well-rope",
+    "repair_part": "mill-beam", "hammer": "joiner-hammer",
+    "prices": {"grain": 1, "flour": 2, "bread": 3, "iron": 3, "wagon-parts": 5, "hay": 1, "manure": 1, "logs": 1, "timber": 2, "planks": 3, "herbs": 1, "tea": 2, "fish": 2, "meals": 4},
+    "coins": {"torvin": 40, "bren": 30, "mara": 100, "elsie": 150, "hobb": 40, "jory": 100, "ada": 30, "nella": 80, "rowan": 20, "garrick": 20, "iona": 20, "finn": 20},
+    "stocks": {
+      "forge": {"iron": 12, "wagon-parts": 0},
+      "stable": {"hay": 24, "manure": 0},
+      "watermill": {"grain": 2, "flour": 0},
+      "bakery": {"flour": 1, "bread": 0},
+      "farm": {"grain": 6},
+      "tavern": {"bread": 0, "meals": 0},
+      "woods": {"logs": 30, "timber": 0},
+      "workshop": {"timber": 12, "planks": 0},
+      "cottages": {"herbs": 20, "tea": 0},
+      "riverbank": {"fish": 0},
+      "general-store": {"grain": 3, "flour": 2, "bread": 2}
+    },
+    "owners": {
+      "shovel": "torvin", "well-timber": "elsie", "well-rope": "elsie",
+      "mill-beam": "hobb", "joiner-hammer": "hobb", "tongs": "torvin",
+      "smith-hammer": "torvin", "horseshoe": "torvin", "saddle": "bren",
+      "grooming-brush": "bren", "stable-bucket": "bren", "hay-fork": "bren",
+      "oil-can": "mara", "rake": "mara", "sack-hook": "mara", "sickle": "ada",
+      "watering-can": "ada", "saw": "hobb", "plane": "hobb", "chisel": "hobb",
+      "measuring-rule": "hobb", "serving-tray": "elsie", "water-jug": "elsie",
+      "bread-peel": "jory", "mixing-bowl": "jory", "flour-scoop": "jory",
+      "dough-cloth": "jory", "wood-axe": "rowan", "guard-lantern": "garrick",
+      "fishing-rod": "finn", "fishing-net": "finn", "herb-pouch": "iona", "mortar": "iona"
+    },
+    "deliveries": [
+      {"source": "farm", "destination": "watermill", "resource": "grain", "seller": "ada", "buyer": "mara", "price": 1},
+      {"source": "watermill", "destination": "bakery", "resource": "flour", "seller": "mara", "buyer": "jory", "price": 2},
+      {"source": "bakery", "destination": "tavern", "resource": "bread", "seller": "jory", "buyer": "elsie", "price": 3}
+    ],
+    "residents": {
+      "torvin": {
+        "occupation": "blacksmith", "personality": "Practical and proud of keeping promises; urgent wagon repairs come first.",
+        "skills": ["smithing", "digging"], "home": "cottages", "work": "forge", "busy_until": 510,
+        "relationships": {"bren": 3, "elsie": 2},
+        "beliefs": [
+          {"subject": "shovel", "location": "stable", "source": "memory:lent-to-bren", "learned_at": 420, "confidence": 0.8},
+          {"subject": "well-timber", "location": "forge", "source": "observation", "learned_at": 480, "confidence": 1},
+          {"subject": "well-rope", "location": "forge", "source": "observation", "learned_at": 480, "confidence": 1}
+        ],
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 480, "location": "forge", "activity": "Repairing the wagon"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ],
+        "job": {"location": "forge", "interval": 60, "inputs": {"iron": 1}, "outputs": {"wagon-parts": 1}, "equipment": "anvil"}
+      },
+      "bren": {
+        "occupation": "stable keeper", "personality": "Patient and helpful once the horses are fed.",
+        "skills": ["animal_care", "digging"], "home": "cottages", "work": "stable",
+        "relationships": {"torvin": 3, "mara": 2},
+        "beliefs": [{"subject": "shovel", "location": "mill-shed", "source": "observation:returned-after-mill-race-work", "learned_at": 470, "confidence": 1}],
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 360, "location": "stable", "activity": "Tending horses"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ],
+        "job": {"location": "stable", "interval": 60, "inputs": {"hay": 1}, "outputs": {"manure": 1}}
+      },
+      "mara": {
+        "occupation": "miller", "personality": "Methodical; concerned about grain deliveries and the old mill drive.",
+        "skills": ["milling"], "home": "cottages", "work": "watermill", "relationships": {"hobb": 3, "jory": 2},
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 480, "location": "watermill", "activity": "Grinding grain"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ],
+        "job": {"location": "watermill", "interval": 30, "inputs": {"grain": 1}, "outputs": {"flour": 1}, "equipment": "mill-drive"}
+      },
+      "elsie": {
+        "occupation": "innkeeper", "personality": "Welcoming but careful with the tavern budget; would love a reliable well.",
+        "skills": ["hospitality"], "home": "tavern", "work": "tavern", "relationships": {"torvin": 2, "jory": 3},
+        "schedule": [
+          {"minute": 0, "location": "tavern", "activity": "Resting upstairs"},
+          {"minute": 420, "location": "tavern", "activity": "Running the tavern"},
+          {"minute": 1380, "location": "tavern", "activity": "Closing for the night"}
+        ],
+        "job": {"location": "tavern", "interval": 60, "inputs": {"bread": 1}, "outputs": {"meals": 1}, "equipment": "tavern-hearth"}
+      },
+      "hobb": {
+        "occupation": "carpenter", "personality": "Careful and willing to help Mara, but only with the right materials.",
+        "skills": ["carpentry"], "home": "cottages", "work": "workshop", "relationships": {"mara": 3},
+        "beliefs": [
+          {"subject": "mill-beam", "location": "workshop", "source": "observation", "learned_at": 480, "confidence": 1},
+          {"subject": "joiner-hammer", "location": "workshop", "source": "observation", "learned_at": 480, "confidence": 1}
+        ],
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 480, "location": "workshop", "activity": "Planing timber"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ],
+        "job": {"location": "workshop", "interval": 60, "inputs": {"timber": 1}, "outputs": {"planks": 1}, "equipment": "workbench"}
+      },
+      "jory": {
+        "occupation": "baker", "personality": "Cheerful until the flour bin runs empty.",
+        "skills": ["baking"], "home": "cottages", "work": "bakery", "relationships": {"mara": 2, "elsie": 3},
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 360, "location": "bakery", "activity": "Baking bread"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ],
+        "job": {"location": "bakery", "interval": 30, "inputs": {"flour": 1}, "outputs": {"bread": 1}, "equipment": "oven"}
+      },
+      "ada": {
+        "occupation": "farmer", "personality": "Steady and early-rising; expects payment for deliveries.",
+        "skills": ["farming"], "home": "cottages", "work": "farm",
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 360, "location": "farm", "activity": "Harvesting grain"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ],
+        "job": {"location": "farm", "interval": 60, "inputs": {}, "outputs": {"grain": 2}}
+      },
+      "nella": {
+        "occupation": "merchant", "personality": "Resourceful and exact about stock and payment.",
+        "skills": ["trade"], "home": "cottages", "work": "general-store",
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 480, "location": "general-store", "activity": "Walking the delivery circuit"},
+          {"minute": 1080, "location": "general-store", "activity": "Balancing the shop books"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ]
+      },
+      "rowan": {
+        "occupation": "forester", "personality": "Quiet and protective of the managed woodlot.",
+        "skills": ["forestry"], "home": "cottages", "work": "woods",
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 420, "location": "woods", "activity": "Cutting timber"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ],
+        "job": {"location": "woods", "interval": 60, "inputs": {"logs": 1}, "outputs": {"timber": 1}, "equipment": "log-sledge"}
+      },
+      "garrick": {
+        "occupation": "guard", "personality": "Watchful; reports only what he has witnessed.",
+        "skills": ["patrol"], "home": "cottages", "work": "bridge",
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 480, "location": "bridge", "activity": "Watching the bridge"},
+          {"minute": 720, "location": "village-square", "activity": "Patrolling the square"},
+          {"minute": 960, "location": "bridge", "activity": "Watching the bridge"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ]
+      },
+      "iona": {
+        "occupation": "healer", "personality": "Considerate and unwilling to invent news she has not heard.",
+        "skills": ["herbalism"], "home": "cottages", "work": "cottages",
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 480, "location": "cottages", "activity": "Preparing herbal tea"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ],
+        "job": {"location": "cottages", "interval": 60, "inputs": {"herbs": 1}, "outputs": {"tea": 1}}
+      },
+      "finn": {
+        "occupation": "fisher", "personality": "Easygoing and fond of evening company.",
+        "skills": ["fishing"], "home": "cottages", "work": "riverbank",
+        "schedule": [
+          {"minute": 0, "location": "cottages", "activity": "Sleeping"},
+          {"minute": 420, "location": "riverbank", "activity": "Fishing"},
+          {"minute": 1140, "location": "tavern", "activity": "Sharing evening news"},
+          {"minute": 1320, "location": "cottages", "activity": "Sleeping"}
+        ],
+        "job": {"location": "riverbank", "interval": 60, "inputs": {}, "outputs": {"fish": 1}}
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "sandwich-kitchen",
+  "failures": [
+    {
+      "run_id": "225a76e0188640469c0bf961f2990205",
+      "objective": "Make a peanut butter and jam sandwich and serve it on the plate. Aim for a richer recognizable sandwich combination with suitable extras; plain PB&J is a passing result.",
+      "recorded_at": "2026-11-03T14:04:41.290574+00:00",
+      "findings": [
+        {
+          "reason": "The required finished item is not on the designated intact serving surface.",
+          "evidence_ids": [
+            "225a76e0188640469c0bf961f2990205:140"
+          ]
+        },
+        {
+          "reason": "A recognizable PB&J sandwich with honey and sliced banana was made, but it remained on the worktop rather than being served on the required plate. Final verification confirms served_on_target is false.",
+          "evidence_ids": [
+            "225a76e0188640469c0bf961f2990205:130",
+            "225a76e0188640469c0bf961f2990205:140"
+          ]
+        }
+      ]
+    }
+  ]
+}

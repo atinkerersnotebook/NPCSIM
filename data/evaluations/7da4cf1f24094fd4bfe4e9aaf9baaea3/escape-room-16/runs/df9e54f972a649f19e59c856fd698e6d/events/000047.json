@@ -1,0 +1,31 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:17:18.492418+00:00",
+  "cycle": 6,
+  "session_id": "5fb7da27427947e3ab752093049ec06f",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "go",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The door is observed as open and unlocked, which matches the go action's precondition.",
+    "expected_outcome": "The actor crosses the door and is no longer in the room.",
+    "subgoal": "Cross the open door",
+    "plan": [
+      "Cross the open door",
+      "Confirm the actor is outside the room"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 2331
+  },
+  "schema_version": "1.0",
+  "run_id": "df9e54f972a649f19e59c856fd698e6d",
+  "sequence": 47,
+  "id": "df9e54f972a649f19e59c856fd698e6d:47"
+}

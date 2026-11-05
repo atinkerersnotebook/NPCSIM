@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "id": "sleepy-room",
+  "title": "The Tired Traveler",
+  "start_location": "cell",
+  "exit_location": "courtyard",
+  "objective": "Leave the room.",
+  "goal_type": "actor_outside_start_location",
+  "body": {
+    "description": "A tired traveler who can move and manipulate nearby objects.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 2
+  },
+  "needs": {
+    "food": {"enabled": false, "level": 0, "rate": 0, "threshold": 80},
+    "sleep": {"enabled": true, "level": 90, "rate": 2, "threshold": 80}
+  },
+  "entities": {
+    "cell": {"name": "Quiet cell", "kind": "location", "description": "You are in a quiet cell with an open archway. Your tiredness prevents movement."},
+    "courtyard": {"name": "Courtyard", "kind": "location", "description": "You have reached the courtyard."},
+    "archway": {"name": "Archway", "kind": "door", "description": "An open exit leading into a courtyard.", "location": "cell", "open": true, "locked": false, "destination": "courtyard"}
+  },
+  "recovery": {
+    "food": {"action_id": "eat", "description": "Eat a carried food item.", "recovery": 100},
+    "sleep": {
+      "action_id": "nap",
+      "description": "Take a brief nap to recover tiredness. Specify a duration from one to three ticks.",
+      "recovery": 100,
+      "arguments_schema": {
+        "type": "object",
+        "properties": {"duration": {"type": "integer", "minimum": 1, "maximum": 3}},
+        "required": ["duration"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:18:37.780624+00:00",
+  "cycle": 1,
+  "session_id": "8359c05358f14c699c4d3279f009cd06",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "nap",
+    "arguments": {
+      "duration": 3
+    },
+    "justification": "Sleep is enabled at 90 and blocks movement. Nap is available and is the only action that can reduce tiredness, so I'll use the longest allowed duration.",
+    "expected_outcome": "Tiredness decreases, which may unblock movement toward the archway.",
+    "subgoal": "Recover sleep so movement is possible.",
+    "plan": [
+      "Nap for 3 ticks",
+      "Check whether sleep is recovered and 'go' is available",
+      "If movement unblocks, open or go through the archway"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3298
+  },
+  "schema_version": "1.0",
+  "run_id": "13a9afb2c59145e48b4ed3e1c97b8957",
+  "sequence": 7,
+  "id": "13a9afb2c59145e48b4ed3e1c97b8957:7"
+}

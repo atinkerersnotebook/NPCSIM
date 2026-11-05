@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:18:50.733640+00:00",
+  "cycle": 2,
+  "session_id": "b2326cf5ee664ce4b45893382fbcdbda",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "go",
+    "arguments": {
+      "target": "archway"
+    },
+    "justification": "The sleep need is now at 0 and the archway is observed as open. The go action is advertised with unknown availability, so attempting it directly tests whether movement is now possible.",
+    "expected_outcome": "The actor crosses the open archway into the courtyard, or the world reports why movement is still blocked.",
+    "subgoal": "Cross the archway to leave the cell",
+    "plan": [
+      "Attempt go through archway",
+      "If blocked, inspect the blocking reason",
+      "Replan based on the result"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3308
+  },
+  "schema_version": "1.0",
+  "run_id": "3f314f55febd4676b788d3c4defb93de",
+  "sequence": 15,
+  "id": "3f314f55febd4676b788d3c4defb93de:15"
+}

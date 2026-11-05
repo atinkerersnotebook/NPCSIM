@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0", "id": "sealed-vault",
+  "title": "Thief & Mage - The Sealed Vault",
+  "start_location": "entrance", "exit_location": "courtyard",
+  "objective": "Combine lockpicking, trap disarming and magic to open the vault route and bring both adventurers to the courtyard.",
+  "goal_type": "all_actors_at_exit_location",
+  "body": {"description": "An adventurer with hands.", "capabilities": ["move", "manipulate"], "capacity": 2},
+  "agents": [
+    {"id": "thief", "role": "A thief skilled at lockpicking and physical trap disarming, but without magic. Open mechanical access and share discoveries and supplies with the mage.", "body": {"description": "An agile thief carrying up to three inventory units of tools, with no magical abilities.", "capabilities": ["move", "manipulate", "lockpicking", "trap_disarming"], "capacity": 3}},
+    {"id": "mage", "role": "A mage who dispels wards and activates runes, but cannot pick locks or disarm mechanical traps. Let the thief make physical mechanisms safe.", "body": {"description": "A mage able to carry two inventory units and work arcane magic, but not mechanical locks or traps.", "capabilities": ["move", "manipulate", "arcane_magic"], "capacity": 2}}
+  ],
+  "needs": {}, "recovery": {},
+  "budgets": {"max_actions": 110, "max_model_calls": 130, "max_seconds": 1200, "repetition_window": 5},
+  "entities": {
+    "entrance": {"name": "Vault entrance", "kind": "location", "description": "A mechanical gallery lock controls both a door and a supply cache. Lockpicks are on the floor; a two-unit trap toolkit is beside them. Magic cannot pick this lock."},
+    "gallery": {"name": "Ward gallery", "kind": "location", "description": "A magical ward seals the vault. Its pedestal accepts a carried prism; lockpicks cannot dispel it."},
+    "vault": {"name": "Inner vault", "kind": "location", "description": "A pressure trap protects a covered sun seal. Beyond it, dormant runes control the courtyard exit."},
+    "courtyard": {"name": "Sunlit courtyard", "kind": "location", "description": "The vault is behind you. Success requires both adventurers and all four mechanisms completed."},
+    "gallery-door": {"name": "Mechanical gallery door", "kind": "door", "description": "Its precision lock requires a lockpicker; ordinary opening and magic do not bypass it.", "location": "entrance", "destination": "gallery", "open": false, "required_challenges": ["pick_gallery_lock"], "health": null},
+    "ward-door": {"name": "Arcane ward", "kind": "door", "description": "An intact magical barrier requiring arcane magic and a prism.", "location": "gallery", "destination": "vault", "open": false, "required_challenges": ["dispel_ward"], "health": null},
+    "courtyard-door": {"name": "Rune-sealed exit", "kind": "door", "description": "The courtyard opens only after the pressure trap is disarmed and its sun seal activates the runes.", "location": "vault", "destination": "courtyard", "open": false, "required_challenges": ["activate_runes"], "health": null},
+    "gallery-lock": {"name": "Precision gallery lock", "kind": "item", "description": "Only lockpicking with carried lockpicks can open this mechanism.", "location": "entrance", "health": null},
+    "lockpicks": {"name": "Lockpicks", "kind": "item", "description": "Light tools for a trained lockpicker.", "location": "entrance", "takable": true, "health": null},
+    "trap-kit": {"name": "Trap toolkit", "kind": "item", "description": "A two-unit toolkit needed by a trained trap disarmer.", "location": "entrance", "takable": true, "inventory_units": 2, "health": null},
+    "prism-cache": {"name": "Prism supply cache", "kind": "container", "description": "The gallery lock also releases this cache.", "location": "entrance", "open": false, "required_challenges": ["pick_gallery_lock"], "health": null},
+    "prism": {"name": "Ward prism", "kind": "item", "description": "An arcane focus used by a mage to dispel the ward.", "location": "prism-cache", "takable": true, "health": null},
+    "ward-pedestal": {"name": "Ward pedestal", "kind": "item", "description": "A prism and arcane magic can dispel its ward.", "location": "gallery", "health": null},
+    "pressure-trap": {"name": "Pressure trap mechanism", "kind": "item", "description": "A physical trap. Arcane magic does not replace a trained disarmer and toolkit.", "location": "vault", "health": null},
+    "seal-cover": {"name": "Trapped seal cover", "kind": "container", "description": "The sun seal remains inaccessible until the pressure trap is safely disarmed.", "location": "vault", "open": false, "required_challenges": ["disarm_trap"], "health": null},
+    "sun-seal": {"name": "Sun seal", "kind": "item", "description": "A light seal that must be installed by a mage in the exit runes.", "location": "seal-cover", "takable": true, "health": null},
+    "runes": {"name": "Exit runes", "kind": "item", "description": "Arcane magic and the carried sun seal can activate the courtyard exit.", "location": "vault", "health": null}
+  },
+  "skill_challenges": [
+    {"id": "pick_gallery_lock", "description": "Pick the precision lock and release the gallery door and prism cache.", "target": "gallery-lock", "capability": "lockpicking", "carried": ["lockpicks"], "opens": ["gallery-door", "prism-cache"]},
+    {"id": "dispel_ward", "description": "Use the carried prism to dispel the magical vault ward.", "target": "ward-pedestal", "capability": "arcane_magic", "requires": ["pick_gallery_lock"], "carried": ["prism"], "opens": ["ward-door"]},
+    {"id": "disarm_trap", "description": "Use the trap toolkit to disarm the pressure trap and release the sun seal cover.", "target": "pressure-trap", "capability": "trap_disarming", "requires": ["dispel_ward"], "carried": ["trap-kit"], "opens": ["seal-cover"]},
+    {"id": "activate_runes", "description": "Install the sun seal and activate the exit runes with arcane magic.", "target": "runes", "capability": "arcane_magic", "requires": ["disarm_trap"], "carried": ["sun-seal"], "installs": ["sun-seal"], "opens": ["courtyard-door"]}
+  ]
+}

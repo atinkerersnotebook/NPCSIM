@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "recent": [
+    {
+      "action_id": "nap",
+      "arguments": {
+        "duration": 3
+      },
+      "outcome": "APPLIED",
+      "code": "RECOVERED",
+      "explanation": "You recover sleep."
+    },
+    {
+      "action_id": "look",
+      "arguments": {
+        "target": "archway"
+      },
+      "outcome": "APPLIED",
+      "code": "INSPECTED",
+      "explanation": "An open exit leading into a courtyard. It is unlocked."
+    },
+    {
+      "action_id": "go",
+      "arguments": {
+        "target": "archway"
+      },
+      "outcome": "APPLIED",
+      "code": "APPLIED",
+      "explanation": "Go succeeded."
+    }
+  ],
+  "discoveries": [
+    "archway"
+  ],
+  "plan": [
+    "Attempt to cross the archway",
+    "If movement is still blocked, check the status of the sleep need",
+    "If the archway is closed, open it and retry"
+  ],
+  "subgoal": "Cross the open archway"
+}

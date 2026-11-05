@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:18:51.641790+00:00",
+  "cycle": 1,
+  "session_id": "8875072e895a4eb1babeeed4dc954088",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "nap",
+    "arguments": {
+      "duration": 3
+    },
+    "justification": "Movement is blocked by the enabled sleep need (level 90). Napping is the only available action that can reduce it, and the archway is already open, so recovering tiredness should unblock the exit.",
+    "expected_outcome": "Sleep level decreases, which may unblock movement so the archway can be crossed.",
+    "subgoal": "Recover tiredness so movement is unblocked.",
+    "plan": [
+      "Nap to recover the sleep need",
+      "Re-observe whether the go action is available",
+      "Cross the open archway into the courtyard"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3187
+  },
+  "schema_version": "1.0",
+  "run_id": "2ef66eab7dc24ad586e163e1b0040424",
+  "sequence": 7,
+  "id": "2ef66eab7dc24ad586e163e1b0040424:7"
+}

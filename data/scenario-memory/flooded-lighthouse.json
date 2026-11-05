@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "flooded-lighthouse",
+  "failures": [
+    {
+      "run_id": "b2cb1e670b844288852cfc6f5a1d8aa8",
+      "objective": "Combine underwater work and electrical repairs to drain the lighthouse, restore its beacon and get both partners to the beacon platform.",
+      "recorded_at": "2026-11-03T21:43:42.128935+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "b2cb1e670b844288852cfc6f5a1d8aa8:8"
+          ]
+        },
+        {
+          "reason": "Required underwater work, electrical repairs, drainage and beacon restoration remain incomplete; final verification records no completed cooperative work.",
+          "evidence_ids": [
+            "b2cb1e670b844288852cfc6f5a1d8aa8:8"
+          ]
+        },
+        {
+          "reason": "Both partners remain at the dock rather than the beacon platform.",
+          "evidence_ids": [
+            "b2cb1e670b844288852cfc6f5a1d8aa8:8"
+          ]
+        }
+      ]
+    }
+  ]
+}

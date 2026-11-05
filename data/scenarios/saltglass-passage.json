@@ -1,0 +1,460 @@
+{
+  "schema_version": "1.0",
+  "id": "saltglass-passage",
+  "title": "The Saltglass Passage",
+  "start_location": "sail-loft",
+  "exit_location": "escape-quay",
+  "objective": "Explore the pirate island and prepare a seaworthy escape skiff in the launch slip at the far quay.",
+  "opening_narrative": "You wake beneath patched sails in an abandoned waterfront loft. Somewhere below, waves knock against stone. A supply locker, a shipwright's notebook and a closed floor hatch are within reach. There must be a way down to the shore.",
+  "goal_type": "entity_prepared",
+  "goal_entity_id": "ready-skiff",
+  "goal_location_id": "launch-slip",
+  "budgets": {"max_actions": 300, "max_model_calls": 360, "max_seconds": 3600, "repetition_window": 3},
+  "body": {
+    "description": "A mobile body with hands and a sailor's satchel, able to carry eight inventory units. Exposed local materials can be worked in place while tools are carried.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 8
+  },
+  "needs": {
+    "food": {"enabled": false, "level": 0, "rate": 0, "threshold": 80},
+    "sleep": {"enabled": false, "level": 0, "rate": 0, "threshold": 80}
+  },
+  "entities": {
+    "sail-loft": {
+      "name": "Sail loft", "kind": "location",
+      "description": "Salt-stiff sails hang from the rafters of an abandoned loft. A supply locker stands beside a shipwright's notebook. A floor hatch leads downward."
+    },
+    "tide-cellar": {
+      "name": "Tide cellar", "kind": "location",
+      "description": "Green light filters through gaps in a waterfront cellar. A glass signal float rests in a cradle beside a closed shore gate. The hatch leads back up to the loft."
+    },
+    "hidden-cove": {
+      "name": "Hidden cove", "kind": "location",
+      "description": "You step onto a sheltered shore. A wave-marked salvage gate leads along the beach. A tide log rests beside the old moorings; the passage back to the loft is behind you."
+    },
+    "wreck-beach": {
+      "name": "Wreck beach", "kind": "location",
+      "description": "The ribs of a wreck jut from black sand. A salt-swollen cargo crate lies beside a broken rope crossing into the mangroves."
+    },
+    "mangrove-walk": {
+      "name": "Mangrove walk", "kind": "location",
+      "description": "Roots arch over a narrow walkway. A whetstone sits on a sharpening bench, while a curtain of thorny vines blocks the way onward."
+    },
+    "smugglers-camp": {
+      "name": "Smugglers' camp", "kind": "location",
+      "description": "Cold ashes mark an abandoned camp. A pay chest bears the familiar wave emblem. A watchman's turnstile guards the cliff route."
+    },
+    "cliff-stairs": {
+      "name": "Cliff stairs", "kind": "location",
+      "description": "Stone steps end at a missing span below an old watchtower. A signal box has a narrow release hole instead of a keyhole."
+    },
+    "ruined-watchtower": {
+      "name": "Ruined watchtower", "kind": "location",
+      "description": "Wind whistles around a keeper's cabinet. A completely dark stair descends toward an old lantern gallery."
+    },
+    "lantern-gallery": {
+      "name": "Lantern gallery", "kind": "location",
+      "description": "Dusty reflectors line a gallery. A prism jig stands before a shutter whose latch is controlled by a beam of light."
+    },
+    "echo-cavern": {
+      "name": "Echo cavern", "kind": "location",
+      "description": "Every footstep rings against a bronze resonance gate. A sealed clay urn sits beneath a diagram of a wired tuning fork."
+    },
+    "captains-study": {
+      "name": "Captain's study", "kind": "location",
+      "description": "A navigation desk holds an unreadable salt chart. A bearing dial seals the only passage onward."
+    },
+    "treasure-vault": {
+      "name": "Treasure vault", "kind": "location",
+      "description": "Empty treasure shelves surround a seal press. An iron portcullis bears a captain's signet impression."
+    },
+    "escape-quay": {
+      "name": "Escape quay", "kind": "location",
+      "description": "A sound but unrigged skiff waits in an open launch slip. A rigging card lists the supplies needed to make it seaworthy."
+    },
+    "supply-locker": {
+      "name": "Supply locker", "kind": "container",
+      "description": "A closed wooden locker with an ordinary latch.",
+      "location": "sail-loft", "open": false, "health": null
+    },
+    "shipwright-notebook": {
+      "name": "Shipwright's notebook", "kind": "item",
+      "description": "An open notebook with a sketch of a wooden mallet. Its instructions can be read.",
+      "location": "sail-loft", "health": null,
+      "readable_text": "Lost the mallet overboard again. To make another: hold the marlinspike and lash the hardwood billet to its short handle with the sail cord. The wood and cord can stay in the open locker while working. The spike is only a rigging tool, not a hammer. A proper wooden mallet will crack the old glass signal floats without damaging their metal contents. Keep your tools: island repairs often need them again. Spare rope, canvas and reflector foil are stowed in this locker for later jobs."
+    },
+    "spare-rope": {
+      "name": "Spare rope", "kind": "item",
+      "description": "A long coil of sound rope. It needs a hook for crossing broken walkways.",
+      "location": "supply-locker", "takable": true, "health": null
+    },
+    "canvas-strip": {
+      "name": "Sail canvas", "kind": "item",
+      "description": "Folded sailcloth, large enough to rig a small skiff. Worth keeping for the voyage out.",
+      "location": "supply-locker", "takable": true, "health": null
+    },
+    "reflector-foil": {
+      "name": "Reflector foil", "kind": "item",
+      "description": "Polished foil for backing a signal lens.",
+      "location": "supply-locker", "takable": true, "health": null
+    },
+    "marlinspike": {
+      "name": "Marlinspike", "kind": "item",
+      "description": "A slender rigging tool for tightening cord through knots. Too light to break thick glass.",
+      "location": "supply-locker", "takable": true, "inventory_units": 1,
+      "damage": 0, "health": null
+    },
+    "hardwood-billet": {
+      "name": "Hardwood billet", "kind": "item",
+      "description": "A hardwood mallet head with a short loose handle. It needs binding before it can deliver a blow.",
+      "location": "supply-locker", "takable": true, "inventory_units": 1,
+      "damage": 0, "health": null
+    },
+    "sail-cord": {
+      "name": "Sail cord", "kind": "item",
+      "description": "A length of tough cord suitable for binding the loose mallet head and handle.",
+      "location": "supply-locker", "takable": true, "inventory_units": 1,
+      "damage": 0, "health": null
+    },
+    "floor-hatch": {
+      "name": "Floor hatch", "kind": "door",
+      "description": "An unlocked hatch with a ladder below it.",
+      "location": "sail-loft", "destination": "tide-cellar",
+      "open": false, "locked": false, "health": null
+    },
+    "signal-float": {
+      "name": "Glass signal float", "kind": "container",
+      "description": "A thick glass float sealed around a small metal object. Its neck is fused shut; it has no lid to lift.",
+      "location": "tide-cellar", "open": false, "jammed": true,
+      "damage": 0, "health": 30, "max_health": 30,
+      "broken_name": "Cracked signal float",
+      "broken_description": "The glass float has split inside its cradle, exposing its metal contents."
+    },
+    "shore-key": {
+      "name": "Shore key", "kind": "item",
+      "description": "A small iron key with a wave-shaped bow.",
+      "location": "signal-float", "takable": true, "inventory_units": 1,
+      "damage": 0, "health": null
+    },
+    "shore-gate": {
+      "name": "Shore gate", "kind": "door",
+      "description": "A heavy gate with a wave scratched beside its keyhole. Beyond it comes the sound of surf.",
+      "location": "tide-cellar", "destination": "hidden-cove",
+      "open": false, "locked": true, "lock_id": "shore-lock", "health": null
+    },
+    "shore-lock": {
+      "name": "Wave lock", "kind": "lock",
+      "description": "An iron lock marked with a wave.",
+      "location": "shore-gate", "locked": true, "key_id": "shore-key", "health": null
+    },
+    "tide-log": {
+      "name": "Tide log", "kind": "item", "location": "hidden-cove", "health": null,
+      "description": "A readable salvage log pinned above the tide line.",
+      "readable_text": "The shore key also fits the salvage gate and the smugglers' pay chest: one wave, one locksmith. Do not throw it away. Supplies from the loft and wreck will be needed well inland. Open routes stay usable in both directions; return for anything left behind."
+    },
+    "salvage-gate": {
+      "name": "Salvage gate", "kind": "door", "location": "hidden-cove",
+      "destination": "wreck-beach", "open": false, "locked": true, "key_id": "shore-key", "health": null,
+      "description": "A beach gate with the same wave-shaped keyhole as the shore gate."
+    },
+    "cargo-crate": {
+      "name": "Cargo crate", "kind": "container", "location": "wreck-beach",
+      "description": "A salt-swollen crate with a jammed lid. The wood looks brittle enough for a mallet.",
+      "open": false, "jammed": true, "health": 30, "max_health": 30,
+      "broken_name": "Split cargo crate", "broken_description": "The split crate exposes its salvaged supplies."
+    },
+    "iron-hook": {
+      "name": "Iron hook", "kind": "item", "location": "cargo-crate", "takable": true, "health": null,
+      "description": "A strong hook with an eye for a rope."
+    },
+    "rusty-blade": {
+      "name": "Rusty blade", "kind": "item", "location": "cargo-crate", "takable": true, "health": null,
+      "description": "An old brush knife, too blunt to cut vines. A whetstone could restore it."
+    },
+    "copper-wire": {
+      "name": "Copper wire", "kind": "item", "location": "cargo-crate", "takable": true, "health": null,
+      "description": "A coil of fine wire for adjusting the pitch of a metal fork."
+    },
+    "lamp-oil": {
+      "name": "Lamp oil", "kind": "item", "location": "cargo-crate", "takable": true, "health": null,
+      "description": "One sealed portion of long-burning lantern oil."
+    },
+    "rope-crossing": {
+      "name": "Broken rope crossing", "kind": "door", "location": "wreck-beach",
+      "destination": "mangrove-walk", "open": false, "locked": true, "key_id": "grappling-line", "health": null,
+      "description": "A broken walkway with a sturdy ring across the gap. Rig a hook to the loft's spare rope with the marlinspike, then use the grappling line to release this crossing. The line can be carried onward afterward."
+    },
+    "whetstone": {
+      "name": "Whetstone", "kind": "item", "location": "mangrove-walk", "takable": true, "health": null,
+      "description": "A sharpening stone. Hold it to hone a rusty blade into a brush knife."
+    },
+    "thorn-curtain": {
+      "name": "Thorn curtain", "kind": "door", "location": "mangrove-walk",
+      "destination": "smugglers-camp", "open": false, "locked": true, "key_id": "brush-knife", "health": null,
+      "description": "Thick vines bar the walkway. A sharpened brush knife can free the path."
+    },
+    "pay-chest": {
+      "name": "Smugglers' pay chest", "kind": "container", "location": "smugglers-camp",
+      "open": false, "locked": true, "lock_id": "pay-lock", "health": null,
+      "description": "A strong chest marked with the same wave as the cellar gate. Inspect it to find its lock."
+    },
+    "pay-lock": {
+      "name": "Pay chest lock", "kind": "lock", "location": "pay-chest",
+      "locked": true, "key_id": "shore-key", "health": null,
+      "description": "Another wave-shaped lock, made by the shore gate's locksmith."
+    },
+    "watch-token": {
+      "name": "Watch token", "kind": "item", "location": "pay-chest", "takable": true, "health": null,
+      "description": "A brass watchman's token that fits turnstiles and keeper's cabinets."
+    },
+    "cipher-sheet": {
+      "name": "Cipher sheet", "kind": "item", "location": "pay-chest", "takable": true, "health": null,
+      "description": "A transparent cipher grid. A note says to lay it over the captain's salt chart using an aligned signal prism."
+    },
+    "tin-lantern": {
+      "name": "Empty tin lantern", "kind": "item", "location": "pay-chest", "takable": true, "health": null,
+      "description": "An empty lantern. It needs lamp oil and a spark from a carried flint."
+    },
+    "flint": {
+      "name": "Flint and steel", "kind": "item", "location": "pay-chest", "takable": true, "health": null,
+      "description": "A spark-making kit for lighting an oil-filled lantern."
+    },
+    "seal-wax": {
+      "name": "Seal wax", "kind": "item", "location": "pay-chest", "takable": true, "health": null,
+      "description": "A pellet of captain's sealing wax. It can be warmed over a lit lantern and pressed in a signet mould."
+    },
+    "watch-turnstile": {
+      "name": "Watchman's turnstile", "kind": "door", "location": "smugglers-camp",
+      "destination": "cliff-stairs", "open": false, "locked": true, "key_id": "watch-token", "health": null,
+      "description": "A turnstile with a slot for a watchman's token. The token is returned after use."
+    },
+    "signal-box": {
+      "name": "Signal box", "kind": "container", "location": "cliff-stairs",
+      "open": false, "locked": true, "lock_id": "signal-latch", "health": null,
+      "description": "A lens storage box. Inspect its narrow latch; a slender rigging spike can release it."
+    },
+    "signal-latch": {
+      "name": "Signal box latch", "kind": "lock", "location": "signal-box",
+      "locked": true, "key_id": "marlinspike", "health": null,
+      "description": "A release pin recessed just far enough for the loft's marlinspike."
+    },
+    "signal-lens": {
+      "name": "Signal lens", "kind": "item", "location": "signal-box", "takable": true, "health": null,
+      "description": "A clear lens. Fit it to reflector foil in the lantern gallery's prism jig."
+    },
+    "missing-span": {
+      "name": "Missing stair span", "kind": "door", "location": "cliff-stairs",
+      "destination": "ruined-watchtower", "open": false, "locked": true, "key_id": "grappling-line", "health": null,
+      "description": "A missing section of stair below a stout rail. The grappling line used at the wreck can secure this climb too."
+    },
+    "keeper-cabinet": {
+      "name": "Keeper's cabinet", "kind": "container", "location": "ruined-watchtower",
+      "open": false, "locked": true, "lock_id": "keeper-lock", "health": null,
+      "description": "A cabinet with a watchman's token slot. Inspect it to expose the mechanism."
+    },
+    "keeper-lock": {
+      "name": "Keeper's cabinet lock", "kind": "lock", "location": "keeper-cabinet",
+      "locked": true, "key_id": "watch-token", "health": null,
+      "description": "A token-operated latch like the camp turnstile."
+    },
+    "signet-mould": {
+      "name": "Signet mould", "kind": "item", "location": "keeper-cabinet", "takable": true, "health": null,
+      "description": "A captain's signet mould for the vault's seal press. Carry it onward with sealing wax."
+    },
+    "dark-stair": {
+      "name": "Dark stair", "kind": "door", "location": "ruined-watchtower",
+      "destination": "lantern-gallery", "open": false, "locked": true, "key_id": "lit-lantern", "health": null,
+      "description": "A stair too dark to navigate. Light the camp lantern with the wreck's lamp oil and a carried flint, then use it to make the stair passable."
+    },
+    "prism-jig": {
+      "name": "Prism jig", "kind": "item", "location": "lantern-gallery", "health": null,
+      "description": "A fixed alignment jig. Use the marlinspike to align the cliff box's lens with the loft's reflector foil."
+    },
+    "beam-shutter": {
+      "name": "Beam shutter", "kind": "door", "location": "lantern-gallery",
+      "destination": "echo-cavern", "open": false, "locked": true, "key_id": "aligned-prism", "health": null,
+      "description": "A light-operated shutter. An aligned prism releases its latch and can then be removed for later navigation."
+    },
+    "clay-urn": {
+      "name": "Sealed clay urn", "kind": "container", "location": "echo-cavern",
+      "open": false, "jammed": true, "health": 30, "max_health": 30,
+      "description": "A brittle sealed urn. A sketch shows a fork blank inside; the rigging mallet could expose it.",
+      "broken_name": "Split clay urn", "broken_description": "The broken urn exposes a metal fork blank."
+    },
+    "fork-blank": {
+      "name": "Fork blank", "kind": "item", "location": "clay-urn", "takable": true, "health": null,
+      "description": "An untuned metal fork. Wind the wreck's copper wire around it, trimming with the brush knife, to tune its pitch."
+    },
+    "resonance-gate": {
+      "name": "Resonance gate", "kind": "door", "location": "echo-cavern",
+      "destination": "captains-study", "open": false, "locked": true, "key_id": "tuning-fork", "health": null,
+      "description": "A bronze gate whose latch responds to a tuned fork. The tone releases it without using up the fork."
+    },
+    "navigation-desk": {
+      "name": "Navigation desk", "kind": "item", "location": "captains-study", "health": null,
+      "description": "A fixed reading desk. Decode the salt chart with the camp's cipher sheet while holding the gallery's aligned prism."
+    },
+    "salt-chart": {
+      "name": "Salt chart", "kind": "item", "location": "captains-study", "takable": true, "health": null,
+      "description": "A chart of overlapping bearings, unreadable without the cipher grid and signal prism."
+    },
+    "bearing-door": {
+      "name": "Bearing door", "kind": "door", "location": "captains-study",
+      "destination": "treasure-vault", "open": false, "locked": true, "key_id": "decoded-chart", "health": null,
+      "description": "A bearing dial seals the vault passage. Use a decoded chart to set its combination."
+    },
+    "seal-press": {
+      "name": "Seal press", "kind": "item", "location": "treasure-vault", "health": null,
+      "description": "A fixed signet press. Cast the camp's sealing wax in the tower's mould, using the lit lantern for heat."
+    },
+    "quay-portcullis": {
+      "name": "Quay portcullis", "kind": "door", "location": "treasure-vault",
+      "destination": "escape-quay", "open": false, "locked": true, "key_id": "captains-seal", "health": null,
+      "description": "The exit grate has a captain's signet recess. A fresh cast seal will release it."
+    },
+    "launch-slip": {
+      "name": "Launch slip", "kind": "container", "location": "escape-quay",
+      "open": true, "health": null,
+      "description": "An open slip for the repaired escape skiff. Merely reaching it is not enough: finish the rigging."
+    },
+    "skiff-hull": {
+      "name": "Unrigged skiff", "kind": "item", "location": "launch-slip", "health": null,
+      "description": "A seaworthy hull without a sail or running rigging."
+    },
+    "rigging-card": {
+      "name": "Rigging card", "kind": "item", "location": "escape-quay", "health": null,
+      "description": "A readable card showing the final skiff repairs.",
+      "readable_text": "Rig the skiff here in the slip: bring the loft's sail canvas and the grappling line used on the wreck crossing and cliff stairs. Hold both the marlinspike and the sharpened brush knife to fit the sail and running rigging. These materials become part of the finished skiff. The passage is complete only when the skiff is ready, not when you reach the quay."
+    }
+  },
+  "recipe_actions": {
+    "lash": "Lash a loose mallet head and handle together with cord, using a carried marlinspike. Exposed local materials can stay in place.",
+    "rig_line": "Rig spare rope to an iron hook using a carried marlinspike.",
+    "hone": "Hone a rusty blade into a brush knife using a carried whetstone.",
+    "light_lantern": "Fill an empty lantern with lamp oil and light it with a carried flint.",
+    "align_prism": "At the gallery jig, align a signal lens and reflector foil using a carried marlinspike.",
+    "tune_fork": "Tune a fork blank with copper wire, trimming it with a carried brush knife.",
+    "decode_chart": "At the navigation desk, decode a salt chart through a cipher sheet using a carried aligned prism.",
+    "cast_seal": "At the seal press, warm sealing wax over a carried lit lantern and cast it in the signet mould.",
+    "rig_skiff": "At the launch slip, rig the skiff with sail canvas and the grappling line while carrying both marlinspike and brush knife."
+  },
+  "recipes": [
+    {
+      "action_id": "lash",
+      "arguments": {"target": "hardwood-billet", "binding": "sail-cord", "item": "marlinspike"},
+      "carried": ["marlinspike"],
+      "consumes": ["hardwood-billet", "sail-cord"],
+      "outputs": {
+        "rigging-mallet": {
+          "name": "Rigging mallet", "kind": "item",
+          "description": "A hardwood mallet with its head and handle tightly bound together. Heavy enough to crack thick glass.",
+          "location": "sail-loft", "takable": true, "inventory_units": 1,
+          "damage": 15, "health": 100, "max_health": 100
+        }
+      },
+      "explanation": "You tighten the sail cord with the marlinspike, securing the head and handle into a rigging mallet. The finished mallet rests in the loft."
+    },
+    {
+      "action_id": "rig_line",
+      "arguments": {"target": "spare-rope", "hook": "iron-hook", "item": "marlinspike"},
+      "carried": ["marlinspike"], "consumes": ["spare-rope", "iron-hook"],
+      "outputs": {
+        "grappling-line": {
+          "name": "Grappling line", "kind": "item", "takable": true, "health": null,
+          "description": "A sound rope secured to an iron hook. Useful at more than one gap, and later as skiff rigging."
+        }
+      },
+      "explanation": "You splice the loft's spare rope to the salvaged hook with the marlinspike. The reusable grappling line lies ready beside you."
+    },
+    {
+      "action_id": "hone",
+      "arguments": {"target": "rusty-blade", "item": "whetstone"},
+      "carried": ["whetstone"], "consumes": ["rusty-blade"],
+      "outputs": {
+        "brush-knife": {
+          "name": "Brush knife", "kind": "item", "takable": true, "health": null,
+          "description": "A sharpened brush knife for vines, fine wire and sailcloth. Keep it for later repairs."
+        }
+      },
+      "explanation": "You hone the salvaged blade until it has a clean edge. The brush knife is ready to pick up."
+    },
+    {
+      "action_id": "light_lantern",
+      "arguments": {"target": "tin-lantern", "fuel": "lamp-oil", "item": "flint"},
+      "carried": ["flint"], "consumes": ["tin-lantern", "lamp-oil"],
+      "outputs": {
+        "lit-lantern": {
+          "name": "Lit lantern", "kind": "item", "takable": true, "health": null,
+          "description": "A sheltered, long-burning oil lantern. Its flame supplies both light and gentle heat; it stays lit during this adventure."
+        }
+      },
+      "explanation": "You fill the camp lantern with salvaged oil and strike the flint. The sheltered flame will last through the adventure."
+    },
+    {
+      "action_id": "align_prism",
+      "arguments": {"target": "prism-jig", "lens": "signal-lens", "backing": "reflector-foil", "item": "marlinspike"},
+      "carried": ["marlinspike"], "consumes": ["signal-lens", "reflector-foil"],
+      "outputs": {
+        "aligned-prism": {
+          "name": "Aligned prism", "kind": "item", "takable": true, "health": null,
+          "description": "A carefully aligned signal prism. It can release a light latch or separate overlapping chart markings."
+        }
+      },
+      "explanation": "You align the cliff lens with the loft's reflector foil in the jig, tightening its mount with the marlinspike. The portable prism is ready."
+    },
+    {
+      "action_id": "tune_fork",
+      "arguments": {"target": "fork-blank", "wire": "copper-wire", "item": "brush-knife"},
+      "carried": ["brush-knife"], "consumes": ["fork-blank", "copper-wire"],
+      "outputs": {
+        "tuning-fork": {
+          "name": "Tuning fork", "kind": "item", "takable": true, "health": null,
+          "description": "A fork tuned with salvaged copper wire to match the bronze gate's note."
+        }
+      },
+      "explanation": "You wind the wreck's wire around the fork and trim it with the brush knife. Its clear note matches the resonance gate."
+    },
+    {
+      "action_id": "decode_chart",
+      "arguments": {"target": "navigation-desk", "chart": "salt-chart", "cipher": "cipher-sheet", "item": "aligned-prism"},
+      "carried": ["aligned-prism"], "consumes": ["salt-chart", "cipher-sheet"],
+      "outputs": {
+        "decoded-chart": {
+          "name": "Decoded chart", "kind": "item", "takable": true, "health": null,
+          "description": "A chart with the vault's dial setting picked out clearly.",
+          "readable_text": "Set the bearing dial to the marked cove bearing. Beyond the vault, the escape skiff still needs the loft's canvas, the grappling line, the marlinspike and brush knife."
+        }
+      },
+      "explanation": "Through the aligned prism, the camp cipher isolates a single bearing on the captain's chart. You mark the vault combination on the decoded chart."
+    },
+    {
+      "action_id": "cast_seal",
+      "arguments": {"target": "seal-press", "wax": "seal-wax", "mould": "signet-mould", "item": "lit-lantern"},
+      "carried": ["lit-lantern"], "consumes": ["seal-wax"],
+      "outputs": {
+        "captains-seal": {
+          "name": "Captain's seal", "kind": "item", "takable": true, "health": null,
+          "description": "A fresh wax cast of the captain's signet, sized for the quay portcullis."
+        }
+      },
+      "explanation": "You warm the camp wax over the lantern and press it in the tower's signet mould. The captain's seal cools beside the press."
+    },
+    {
+      "action_id": "rig_skiff",
+      "arguments": {"target": "skiff-hull", "sail": "canvas-strip", "rigging": "grappling-line", "item": "marlinspike", "knife": "brush-knife"},
+      "carried": ["marlinspike", "brush-knife"],
+      "consumes": ["skiff-hull", "canvas-strip", "grappling-line"],
+      "outputs": {
+        "ready-skiff": {
+          "name": "Seaworthy escape skiff", "kind": "item", "location": "launch-slip", "health": null,
+          "description": "A fully rigged escape skiff with a fitted canvas sail and sound running rigging. The voyage can begin."
+        }
+      },
+      "explanation": "You cut and fit the loft's canvas with the brush knife, then tighten the grappling line into running rigging with the marlinspike. The escape skiff is seaworthy in its launch slip. Your passage across the island is complete."
+    }
+  ],
+  "recovery": {
+    "food": {"action_id": "eat", "description": "Eat a carried food item.", "recovery": 100},
+    "sleep": {"action_id": "rest", "description": "Rest where you are.", "recovery": 100}
+  }
+}

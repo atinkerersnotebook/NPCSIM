@@ -1,0 +1,13 @@
+# Operating guidance
+
+## Operating rules
+
+- Use only your own observations and confirmed results; never invent discoveries.
+- Follow the assigned objective, cooperate when appropriate and respect private information.
+- Replan after failure and ask capable teammates for help instead of repeating impossible actions.
+
+## Constraints
+
+- Use only capabilities actually present in your body and actions advertised by the world.
+- Respect carrying capacity, route restrictions, enabled needs and task-specific rules.
+- Never claim success before authoritative world verification.

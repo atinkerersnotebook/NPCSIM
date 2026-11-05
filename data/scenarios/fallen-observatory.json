@@ -1,0 +1,361 @@
+{
+  "schema_version": "1.0",
+  "id": "fallen-observatory",
+  "title": "Raven & Badger - The Fallen Observatory",
+  "start_location": "courtyard",
+  "exit_location": "clearing",
+  "objective": "Use flight, lifting and digging to restore the observatory lift and bring both animals through the escape tunnel to the clearing.",
+  "goal_type": "all_actors_at_exit_location",
+  "opening_narrative": "Raven and Badger find themselves in an old courtyard beneath a high balcony. Stone walls rise toward an opening that looks out over the courtyard. Below it sits a broken lift, its wooden frame still standing but its rigging in need of repair.\n\nA heavy timber beam lies on the ground nearby, along with a digging shovel. Both look useful, although neither is something Raven could hope to carry. A beak and claws are quite capable of picking up small objects, but a raven has limits, and hauling large pieces of timber is certainly one of them.\n\nThe lift's mechanism is missing a small pin, and the heavy beam will need to be installed before it can work again. Whoever repairs it will need both pieces and some knowledge of rigging.\n\nFortunately, neither animal is alone.\n\nBadger is built for heavy work. Strong enough to handle the beam and shovel, Badger knows how to dig and has the skills needed to repair the lift. Flying up to the balcony, however, is another matter entirely.\n\nThe gap above the courtyard is too high for Badger to climb across, but Raven can reach the opening with a short flight. There is no need for the lift to carry Raven. Wings will do.\n\nBadger cannot follow that way. Nor could Raven carry such a heavy passenger, even if Badger were willing to trust a bird with the attempt.\n\nThat leaves them with a promising division of labor. Raven can fly up to the balcony and search for the missing lift pin, or anything else small enough to retrieve. Badger can remain below and handle the heavy timber. If Raven finds the missing part and brings it back, Badger can install it with the beam and repair the lift.\n\nThe shovel may have a purpose later, although nothing in the courtyard yet needs digging. It will be worth remembering once the way ahead becomes clearer.\n\nFor now, the balcony seems the most promising place to investigate. The lift is broken, the route upward is open to Raven, and Badger's strength will be needed to make it a route they can share.\n\nThey have a reasonable starting point.\n\nNow they need to find that pin.",
+  "body": {
+    "description": "An animal with useful paws or claws.",
+    "capabilities": [
+      "move",
+      "manipulate"
+    ],
+    "capacity": 1
+  },
+  "agents": [
+    {
+      "id": "raven",
+      "role": "A raven who flies and retrieves small objects from high places, but cannot move heavy rubble, repair the lift or dig. Bring useful small parts to the badger.",
+      "body": {
+        "description": "A flying raven whose beak and claws hold one inventory unit. Heavy beams and shovels cannot be carried.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "fly"
+        ],
+        "capacity": 1,
+        "grips": [
+          "beak",
+          "claw"
+        ],
+        "max_held_items": 1,
+        "size": "small"
+      }
+    },
+    {
+      "id": "badger",
+      "role": "A badger who rigs heavy equipment, clears rubble and digs, but cannot fly. Depend on the raven for high-up parts, then create routes both can use.",
+      "body": {
+        "description": "A strong, grounded badger carrying four inventory units, with rigging and digging skills but no flight.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "rigging",
+          "strength",
+          "digging"
+        ],
+        "capacity": 4,
+        "grips": [
+          "paw",
+          "mouth"
+        ],
+        "max_held_items": 2
+      }
+    }
+  ],
+  "needs": {},
+  "recovery": {},
+  "budgets": {
+    "max_actions": 110,
+    "max_model_calls": 130,
+    "max_seconds": 1200,
+    "repetition_window": 5
+  },
+  "entities": {
+    "courtyard": {
+      "name": "Observatory courtyard",
+      "kind": "location",
+      "description": "Old stone walls enclose a courtyard beneath a high balcony. A wooden lift stands against the wall, with its ropes and fittings accessible from the ground. The gap above is clear enough for Raven to fly across, but Badger needs a working lift to reach the balcony."
+    },
+    "balcony": {
+      "name": "High observatory balcony",
+      "kind": "location",
+      "description": "The narrow balcony overlooks the courtyard far below. A small storage box is fixed beneath a roost, with its release latch tucked high above it. At the far end, stone steps lead down toward a tunnel; the stairway must be clear of rubble before either animal can use it."
+    },
+    "tunnel": {
+      "name": "Buried escape tunnel",
+      "kind": "location",
+      "description": "A low passage runs beneath the observatory toward the woods. The earth at its far end needs to be dug clear before the passage can serve as a way out."
+    },
+    "clearing": {
+      "name": "Forest clearing",
+      "kind": "location",
+      "description": "Beyond the observatory lies a quiet clearing among the trees. There is room here for both animals to rest once their work is finished and they have reached safety together."
+    },
+    "air-route": {
+      "name": "Gap to the balcony",
+      "kind": "door",
+      "description": "Open air separates the courtyard from the balcony above. Raven can cross it on the wing, but neither a heavy beam nor Badger can be carried along.",
+      "location": "courtyard",
+      "destination": "balcony",
+      "open": true,
+      "traversal_capabilities": [
+        "fly"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "lift-route": {
+      "name": "Wooden lift",
+      "kind": "door",
+      "description": "The lift offers a way up for an animal without wings, provided its mechanism has been repaired with a replacement beam and retaining pin.",
+      "location": "courtyard",
+      "destination": "balcony",
+      "open": false,
+      "required_challenges": [
+        "repair_lift"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "rubble-route": {
+      "name": "Stone stairway",
+      "kind": "door",
+      "description": "The steps lead from the balcony down into a tunnel. Any fallen stones must be shifted before the animals can pass safely.",
+      "location": "balcony",
+      "destination": "tunnel",
+      "open": false,
+      "required_challenges": [
+        "clear_rubble"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "forest-exit": {
+      "name": "Tunnel mouth",
+      "kind": "door",
+      "description": "The passage leads toward the forest, but its mouth must be dug clear of packed earth before either animal can get through.",
+      "location": "tunnel",
+      "destination": "clearing",
+      "open": false,
+      "required_challenges": [
+        "dig_escape"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "lift-engine": {
+      "name": "Lift mechanism",
+      "kind": "item",
+      "description": "The ropes and fittings are designed to hold a stout timber beam and a small retaining pin. Badger knows how to install both pieces and rig the lift for use. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "courtyard",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "beam": {
+      "name": "Timber beam",
+      "kind": "item",
+      "description": "A heavy length of timber has been cut to fit the lift's frame. Badger can handle its weight, but it is far too large for Raven to carry. A padded hauling sling and paw brace provide animal-compatible grips; its weight is unchanged.",
+      "location": "courtyard",
+      "takable": true,
+      "inventory_units": 2,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ],
+      "carry_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "shovel": {
+      "name": "Digging shovel",
+      "kind": "item",
+      "description": "A broad-bladed shovel is made for breaking up packed earth. It is a useful tool for Badger, but too heavy and awkward for Raven's beak or claws. A mouth loop and broad paw brace replace the ordinary hand grip.",
+      "location": "courtyard",
+      "takable": true,
+      "inventory_units": 2,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ],
+      "carry_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "roost": {
+      "name": "Release latch",
+      "kind": "item",
+      "description": "A small latch sits above the storage box, beyond Badger's reach. Raven can fly up to release it. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "balcony",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "pin-cache": {
+      "name": "Fixed storage box",
+      "kind": "container",
+      "description": "A small box is fastened beneath the roost. Its lid is controlled by the release latch above, rather than a catch within reach of the balcony. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "balcony",
+      "open": false,
+      "required_challenges": [
+        "release_pin"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "lift-pin": {
+      "name": "Retaining pin",
+      "kind": "item",
+      "description": "A small metal pin is shaped to secure the lift's mechanism. It is light enough for Raven to carry back to Badger. An oversized eye accepts beak or mouth grips, with a paw guide for installation.",
+      "location": "pin-cache",
+      "takable": true,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ],
+      "carry_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "rubble": {
+      "name": "Fallen stones",
+      "kind": "item",
+      "description": "These heavy stones take strength to shift safely. Badger can tackle them once the lift has been made stable.",
+      "location": "balcony",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "claw"
+      ]
+    },
+    "earth": {
+      "name": "Packed earth",
+      "kind": "item",
+      "description": "This dense soil needs a shovel and a skilled digger. Badger can dig a passage wide enough for both animals.",
+      "location": "tunnel",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "claw"
+      ]
+    }
+  },
+  "skill_challenges": [
+    {
+      "id": "release_pin",
+      "description": "Fly up to release the elevated latch and expose the lift pin.",
+      "target": "roost",
+      "capability": "fly",
+      "opens": [
+        "pin-cache"
+      ]
+    },
+    {
+      "id": "repair_lift",
+      "description": "Rig the lift by installing the carried pin and heavy replacement beam.",
+      "target": "lift-engine",
+      "capability": "rigging",
+      "requires": [
+        "release_pin"
+      ],
+      "carried": [
+        "lift-pin",
+        "beam"
+      ],
+      "installs": [
+        "lift-pin",
+        "beam"
+      ],
+      "opens": [
+        "lift-route"
+      ]
+    },
+    {
+      "id": "clear_rubble",
+      "description": "Use strength to clear the heavy rubble and expose the downward stair.",
+      "target": "rubble",
+      "capability": "strength",
+      "requires": [
+        "repair_lift"
+      ],
+      "opens": [
+        "rubble-route"
+      ]
+    },
+    {
+      "id": "dig_escape",
+      "description": "Use the carried shovel and digging skill to open the forest escape tunnel.",
+      "target": "earth",
+      "capability": "digging",
+      "requires": [
+        "clear_rubble"
+      ],
+      "carried": [
+        "shovel"
+      ],
+      "opens": [
+        "forest-exit"
+      ]
+    }
+  ]
+}

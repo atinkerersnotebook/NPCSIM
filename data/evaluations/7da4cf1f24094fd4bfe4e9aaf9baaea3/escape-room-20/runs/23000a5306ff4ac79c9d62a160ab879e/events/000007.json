@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:17:47.762351+00:00",
+  "cycle": 1,
+  "session_id": "be84fd8ca1284df59a82318e02eac02f",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The goal is to leave the room. The door is visible and closed, and the open action is listed with unknown availability. Opening the door is the most direct next step.",
+    "expected_outcome": "The door opens, or the result reveals that it is locked and needs an item.",
+    "subgoal": "Open the door to gain an exit.",
+    "plan": [
+      "Open the door",
+      "If the door is locked, inspect the box or look for a matching item",
+      "Go through the door once it is open and unlocked"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3519
+  },
+  "schema_version": "1.0",
+  "run_id": "23000a5306ff4ac79c9d62a160ab879e",
+  "sequence": 7,
+  "id": "23000a5306ff4ac79c9d62a160ab879e:7"
+}

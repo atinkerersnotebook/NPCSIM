@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "sleepy-room",
+  "failures": [
+    {
+      "run_id": "929a4bb152c84165abb3d146bd85cbac",
+      "objective": "Leave the room.",
+      "recorded_at": "2026-11-05T16:18:07.565233+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "929a4bb152c84165abb3d146bd85cbac:8"
+          ]
+        },
+        {
+          "reason": "The actor remained in the cell and did not leave the room.",
+          "evidence_ids": [
+            "929a4bb152c84165abb3d146bd85cbac:8"
+          ]
+        }
+      ]
+    }
+  ]
+}

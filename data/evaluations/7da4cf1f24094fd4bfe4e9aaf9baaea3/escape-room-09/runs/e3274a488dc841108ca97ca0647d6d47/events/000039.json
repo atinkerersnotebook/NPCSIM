@@ -1,0 +1,31 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:15:48.349847+00:00",
+  "cycle": 5,
+  "session_id": "ec3a114b058d4a51ae9b77efa346c45a",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The door was unlocked in a prior applied action and is now reported as not locked, but still closed. Opening it is the next step toward leaving.",
+    "expected_outcome": "The door opens, making it possible to go through the door.",
+    "subgoal": "Open the door",
+    "plan": [
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 2754
+  },
+  "schema_version": "1.0",
+  "run_id": "e3274a488dc841108ca97ca0647d6d47",
+  "sequence": 39,
+  "id": "e3274a488dc841108ca97ca0647d6d47:39"
+}

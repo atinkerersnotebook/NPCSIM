@@ -1,0 +1,34 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:17:53.833491+00:00",
+  "cycle": 3,
+  "session_id": "be84fd8ca1284df59a82318e02eac02f",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "box"
+    },
+    "justification": "The box is a visible closed container, and the previous inspection did not rule out opening it. Opening it may reveal an item that could unlock the door.",
+    "expected_outcome": "The box opens and its contents become visible, or the action is rejected with a reason.",
+    "subgoal": "Open the box and check for a matching item.",
+    "plan": [
+      "Open the box and check its contents",
+      "If an item is found, pick it up",
+      "Unlock the door with a matching item",
+      "Open the door",
+      "Go through the door"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 2880
+  },
+  "schema_version": "1.0",
+  "run_id": "23000a5306ff4ac79c9d62a160ab879e",
+  "sequence": 23,
+  "id": "23000a5306ff4ac79c9d62a160ab879e:23"
+}

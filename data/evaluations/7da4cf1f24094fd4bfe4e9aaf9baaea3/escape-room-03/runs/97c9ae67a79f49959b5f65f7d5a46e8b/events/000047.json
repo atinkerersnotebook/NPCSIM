@@ -1,0 +1,31 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:14:44.685100+00:00",
+  "cycle": 6,
+  "session_id": "463d298031884654a0165dc473916655",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "go",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The door is observed as open and unlocked, and the go action is available for it.",
+    "expected_outcome": "The actor crosses the door and leaves the room.",
+    "subgoal": "Pass through the open door",
+    "plan": [
+      "Go through the door",
+      "Verify the actor is outside the start room"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 2504
+  },
+  "schema_version": "1.0",
+  "run_id": "97c9ae67a79f49959b5f65f7d5a46e8b",
+  "sequence": 47,
+  "id": "97c9ae67a79f49959b5f65f7d5a46e8b:47"
+}

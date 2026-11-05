@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:14:54.135285+00:00",
+  "cycle": 1,
+  "session_id": "6261a045b0544c7ea904c739796e8d03",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "open",
+    "arguments": {
+      "target": "door"
+    },
+    "justification": "The goal requires leaving the room, and the door is the only visible exit. It is closed and unlocked as far as observed, so opening it is the most direct next step.",
+    "expected_outcome": "The door opens, making the exit available to cross with the go action.",
+    "subgoal": "Open the door",
+    "plan": [
+      "Open the door",
+      "Cross the door with go if it opens",
+      "Verify the actor is outside the room"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3279
+  },
+  "schema_version": "1.0",
+  "run_id": "7459902a3af9464e96c5a120ca742550",
+  "sequence": 7,
+  "id": "7459902a3af9464e96c5a120ca742550:7"
+}

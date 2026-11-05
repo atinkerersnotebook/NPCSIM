@@ -1,0 +1,32 @@
+{
+  "kind": "decision",
+  "timestamp": "2026-11-02T23:18:28.421577+00:00",
+  "cycle": 1,
+  "session_id": "92706c7ccdc3413c83ad981205a560e6",
+  "actor_id": "npc-001",
+  "payload": {
+    "action_id": "nap",
+    "arguments": {
+      "duration": 3
+    },
+    "justification": "Sleep is enabled at 90 and blocks movement, and the go action is blocked by it. A nap is the only available action that addresses this need.",
+    "expected_outcome": "Tiredness decreases, which may unblock movement so the archway can be crossed.",
+    "subgoal": "Recover sleep to enable movement.",
+    "plan": [
+      "Nap to recover tiredness",
+      "Check whether go on the archway becomes available",
+      "Cross the archway if open and unlocked"
+    ],
+    "model": "claude-haiku-5.5",
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "latency_ms": 3285
+  },
+  "schema_version": "1.0",
+  "run_id": "e2df732e8b9540829e38dc8ab5d1a57d",
+  "sequence": 7,
+  "id": "e2df732e8b9540829e38dc8ab5d1a57d:7"
+}

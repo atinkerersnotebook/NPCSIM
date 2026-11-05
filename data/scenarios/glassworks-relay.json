@@ -1,0 +1,195 @@
+{
+  "schema_version": "1.0",
+  "id": "glassworks-relay",
+  "title": "The Glassworks Relay - Precision Assembly",
+  "start_location": "assembly-room",
+  "exit_location": "metrology-room",
+  "objective": "Assemble, calibrate, seal and commission a phase relay in the acceptance cradle. A loose assembly or an untested relay does not count.",
+  "initial_objective": "Explore the unfamiliar workshop and discover your assignment.",
+  "goal_note_id": "work-order",
+  "opening_narrative": "You stand in a silent precision workshop. A copper housing waits beside two unplugged machines. A work order hangs above the bench, and a narrow doorway leads to a room of measuring instruments.\n\nThe parts drawers have no assembly numbers. Some components look almost interchangeable; a small glass disc is labelled expendable.",
+  "goal_type": "entity_prepared",
+  "goal_entity_id": "commissioned-relay",
+  "goal_location_id": "acceptance-cradle",
+  "failure_outputs": {
+    "wrong-spring-movement": "The eight-division spring was permanently staked to the rotor. With the fixture it totals thirteen, not eight; no spare rotor exists.",
+    "sealed-uncalibrated-relay": "The uncalibrated movement is permanently sealed. Calibration access is lost and the sole housing and seal are consumed.",
+    "miscalibrated-movement": "Calibration consumed the only test coupon before the instrument was zeroed. The movement cannot be certified or retested.",
+    "crushed-blank": "The press crushed the only rotor blank without supporting tooling. No replacement stock exists.",
+    "discarded-disc": "The only glass reference disc was discarded. Neither forming tooling nor a calibration gauge can now be made.",
+    "discarded-gauge": "The recovered glass gauge was discarded. Reference calibration is now impossible."
+  },
+  "required_intact_entities": [
+    "driver", "glass-disc", "arbor", "rotor-blank", "spring-dull", "housing", "seal",
+    "forming-press", "bonding-lamp", "workshop-socket", "calibrator", "reference-socket",
+    "zero-coupon", "test-coupon", "forming-mandrel", "tooled-rotor", "rotor", "glass-gauge",
+    "open-movement", "calibrated-movement", "sealed-relay"
+  ],
+  "body": {
+    "description": "A mobile technician with hands and two carrying units. Bulky relay assemblies occupy both units; local parts can be worked on without carrying them.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 2
+  },
+  "needs": {},
+  "recovery": {},
+  "budgets": {"max_actions": 100, "max_model_calls": 120, "max_seconds": 1800, "repetition_window": 4},
+  "entities": {
+    "assembly-room": {"name": "Assembly workshop", "kind": "location", "description": "A precision workshop with a bench, parts drawers, two machines and just one electrical socket."},
+    "metrology-room": {"name": "Metrology room", "kind": "location", "description": "A quiet room with a reference table, an acceptance cradle and a calibration instrument."},
+    "connecting-door": {"name": "Metrology doorway", "kind": "door", "description": "An open doorway between assembly and metrology.", "location": "assembly-room", "destination": "metrology-room", "open": true, "health": null},
+    "bench": {"name": "Assembly bench", "kind": "container", "description": "An open, fixed work surface for unfinished assemblies.", "location": "assembly-room", "open": true, "health": null},
+    "work-order": {"name": "Work order", "kind": "item", "description": "A readable commissioning order.", "location": "bench", "health": null, "readable_text": "Commission one phase relay in the acceptance cradle next door. The relay must have a formed rotor, a reference-matched spring, a calibrated open movement and a sealed housing. Appearance is not proof of calibration. Tooling instructions and reference tolerances are filed separately. There are no spare parts, replacement coupons or repair facilities. Forming, spring staking, calibration, sealing and disposal are irreversible: an incorrect commitment permanently fails this order. Read the records before committing."},
+    "drawers": {"name": "Parts drawers", "kind": "container", "description": "Closed drawers holding stock and tooling records.", "location": "assembly-room", "open": false, "health": null},
+    "tooling-card": {"name": "Tooling card", "kind": "item", "description": "A readable, oil-stained tooling record.", "location": "drawers", "health": null, "readable_text": "The disc marked expendable is not a relay window: bond it to the arbor to make a forming mandrel. Form the rotor under power, then strip the mandrel from the rotor. Stripping destroys the arbor but returns a glass reference gauge. Keep that gauge for calibration. Fit the reference-matched spring with the driver. Calibration must precede sealing. The press and bonding lamp share one socket: switch off before unplugging. Parts can remain on the local bench while you carry a tool."},
+    "driver": {"name": "Fine driver", "kind": "item", "description": "A portable driver used for fitting the spring and sealing the housing.", "location": "drawers", "takable": true},
+    "glass-disc": {"name": "Expendable glass disc", "kind": "item", "description": "A small glass disc. A faded tag says expendable; its polished edge has reference markings.", "location": "drawers", "takable": true},
+    "arbor": {"name": "Soft arbor", "kind": "item", "description": "A sacrificial arbor for forming operations.", "location": "drawers", "takable": true},
+    "rotor-blank": {"name": "Rotor blank", "kind": "item", "description": "An unformed metal rotor blank.", "location": "drawers", "takable": true},
+    "spring-bright": {"name": "Bright spring", "kind": "item", "description": "An immaculate spring stamped 8. Its appearance says nothing about its tolerance.", "location": "drawers", "takable": true},
+    "spring-dull": {"name": "Dull spring", "kind": "item", "description": "A tarnished but intact spring stamped 3.", "location": "drawers", "takable": true},
+    "housing": {"name": "Copper housing", "kind": "item", "description": "An empty housing; the open movement must be calibrated before it is sealed inside.", "location": "bench", "takable": true},
+    "seal": {"name": "Seal ring", "kind": "item", "description": "A ring used to seal a calibrated movement into its housing.", "location": "drawers", "takable": true},
+    "forming-press": {"name": "Forming press", "kind": "machine", "description": "An electrical press for a blank mounted on a glass-tipped mandrel.", "location": "assembly-room", "power": "off"},
+    "bonding-lamp": {"name": "Bonding lamp", "kind": "machine", "description": "An electrical lamp used both to bond tooling and to seal a relay.", "location": "assembly-room", "power": "off"},
+    "workshop-socket": {"name": "Workshop socket", "kind": "outlet", "description": "The only socket in the assembly workshop. It accepts one machine at a time.", "location": "assembly-room"},
+    "reference-table": {"name": "Reference table", "kind": "container", "description": "A fixed open table for local calibration work.", "location": "metrology-room", "open": true, "health": null},
+    "reference-card": {"name": "Reference card", "kind": "item", "description": "A readable tolerance record, not an assembly walkthrough.", "location": "reference-table", "health": null, "readable_text": "The acceptance fixture contributes five divisions. The relay requires a total of eight divisions; the spring stamp supplies the remainder, not the total. Surface brightness is irrelevant. Zero the calibrator using the recovered glass gauge and the zero coupon. Keep the gauge in hand while calibrating an open movement set down beside this table with the test coupon. A sealed housing cannot be calibrated. Bring the calibrated movement back to assembly, seal it under the bonding lamp with the driver, then return the sealed relay here for commissioning."},
+    "calibrator": {"name": "Reference calibrator", "kind": "machine", "description": "A powered reference instrument. Its zero is initially unset.", "location": "reference-table", "power": "off", "preparation": {"zero": "unset"}},
+    "reference-socket": {"name": "Reference socket", "kind": "outlet", "description": "A single socket beside the calibrator.", "location": "metrology-room"},
+    "zero-coupon": {"name": "Zero coupon", "kind": "item", "description": "A single-use coupon consumed when establishing the calibrator zero.", "location": "reference-table", "takable": true},
+    "test-coupon": {"name": "Test coupon", "kind": "item", "description": "A single-use coupon consumed during movement calibration.", "location": "reference-table", "takable": true},
+    "acceptance-cradle": {"name": "Acceptance cradle", "kind": "container", "description": "A fixed open fixture for commissioning the sealed relay. Simply leaving loose parts here does not commission anything.", "location": "metrology-room", "open": true, "health": null}
+  },
+  "recipe_actions": {
+    "bond_tool": "Bond a glass disc to a sacrificial arbor using the powered bonding lamp.",
+    "form_rotor": "Commit the blank to the powered press with a selected support. Forming is irreversible.",
+    "strip_tool": "Strip sacrificial tooling from a formed rotor and recover its glass gauge.",
+    "fit_spring": "Permanently stake the selected spring to a stripped rotor using a carried driver. Check the reference tolerance first.",
+    "zero_reference": "Zero the powered calibrator with a carried recovered gauge and a zero coupon.",
+    "calibrate_movement": "Commit an open movement to the powered instrument with a carried gauge and the single-use test coupon. Check zero first; testing is irreversible.",
+    "seal_relay": "Permanently seal the selected movement into its housing under the powered bonding lamp using a carried driver. Calibration access is lost.",
+    "commission_relay": "Commission a sealed, calibrated relay in the local acceptance cradle.",
+    "discard_reference": "Permanently discard the selected glass reference as waste. There are no replacements."
+  },
+  "recipes": [
+    {
+      "action_id": "bond_tool",
+      "arguments": {"disc": "glass-disc", "arbor": "arbor", "machine": "bonding-lamp"},
+      "powered": ["bonding-lamp"],
+      "consumes": ["glass-disc", "arbor"],
+      "outputs": {"forming-mandrel": {"name": "Glass-tipped forming mandrel", "kind": "item", "description": "Bonded tooling, not a component of the finished relay.", "location": "bench", "takable": true}},
+      "explanation": "The glass disc bonds to the sacrificial arbor, making a forming mandrel."
+    },
+    {
+      "action_id": "form_rotor",
+      "arguments": {"blank": "rotor-blank", "support": "forming-mandrel", "machine": "forming-press"},
+      "powered": ["forming-press"],
+      "consumes": ["rotor-blank", "forming-mandrel"],
+      "outputs": {"tooled-rotor": {"name": "Rotor on tooling", "kind": "item", "description": "A formed rotor still attached to its sacrificial tooling.", "location": "bench", "takable": true}},
+      "explanation": "The press forms the rotor, leaving the tooling attached."
+    },
+    {
+      "action_id": "strip_tool",
+      "arguments": {"target": "tooled-rotor"},
+      "consumes": ["tooled-rotor"],
+      "outputs": {
+        "rotor": {"name": "Stripped rotor", "kind": "item", "description": "A formed rotor ready for its reference-matched spring.", "location": "bench", "takable": true},
+        "glass-gauge": {"name": "Recovered glass gauge", "kind": "item", "description": "The former expendable disc is now the reference gauge needed in metrology.", "location": "bench", "takable": true}
+      },
+      "explanation": "The soft arbor is sacrificed. The rotor and reusable glass reference gauge are recovered separately."
+    },
+    {
+      "action_id": "fit_spring",
+      "arguments": {"rotor": "rotor", "spring": "spring-dull", "tool": "driver"},
+      "carried": ["driver"],
+      "consumes": ["rotor", "spring-dull"],
+      "outputs": {"open-movement": {"name": "Open relay movement", "kind": "item", "description": "A bulky rotor and spring assembly. It still needs reference calibration before sealing.", "location": "bench", "takable": true, "inventory_units": 2}},
+      "explanation": "The three-division spring matches the five-division fixture to the required total of eight."
+    },
+    {
+      "action_id": "zero_reference",
+      "arguments": {"instrument": "calibrator", "gauge": "glass-gauge", "coupon": "zero-coupon"},
+      "carried": ["glass-gauge"],
+      "powered": ["calibrator"],
+      "requires": {"calibrator": {"zero": "unset"}},
+      "consumes": ["zero-coupon"],
+      "updates": {"calibrator": {"zero": "set"}},
+      "explanation": "The coupon is consumed and the calibrator zero is set against the recovered glass gauge."
+    },
+    {
+      "action_id": "calibrate_movement",
+      "arguments": {"target": "open-movement", "instrument": "calibrator", "gauge": "glass-gauge", "coupon": "test-coupon", "surface": "reference-table"},
+      "carried": ["glass-gauge"],
+      "powered": ["calibrator"],
+      "requires": {"calibrator": {"zero": "set"}},
+      "consumes": ["open-movement", "test-coupon"],
+      "outputs": {"calibrated-movement": {"name": "Calibrated relay movement", "kind": "item", "description": "An open movement verified against the glass reference, ready for sealing in assembly.", "location": "reference-table", "takable": true, "inventory_units": 2}},
+      "explanation": "The open movement passes reference calibration. It must still be sealed back in assembly."
+    },
+    {
+      "action_id": "seal_relay",
+      "arguments": {"movement": "calibrated-movement", "housing": "housing", "seal": "seal", "tool": "driver", "machine": "bonding-lamp"},
+      "carried": ["driver"],
+      "powered": ["bonding-lamp"],
+      "consumes": ["calibrated-movement", "housing", "seal"],
+      "outputs": {"sealed-relay": {"name": "Sealed phase relay", "kind": "item", "description": "A bulky sealed and calibrated relay awaiting commissioning in the metrology cradle.", "location": "bench", "takable": true, "inventory_units": 2}},
+      "explanation": "The calibrated movement is sealed into its copper housing. Commissioning remains outstanding."
+    },
+    {
+      "action_id": "form_rotor",
+      "arguments": {"blank": "rotor-blank", "support": "arbor", "machine": "forming-press"},
+      "powered": ["forming-press"],
+      "consumes": ["rotor-blank", "arbor"],
+      "outputs": {"crushed-blank": {"name": "Crushed unsupported blank", "kind": "item", "description": "The only blank was pressed without a mandrel and is irrecoverable.", "location": "bench"}},
+      "explanation": "Without supporting tooling the press crushes the only rotor blank. This order can no longer be completed."
+    },
+    {
+      "action_id": "fit_spring",
+      "arguments": {"rotor": "rotor", "spring": "spring-bright", "tool": "driver"},
+      "carried": ["driver"],
+      "consumes": ["rotor", "spring-bright"],
+      "outputs": {"wrong-spring-movement": {"name": "Out-of-tolerance movement", "kind": "item", "description": "An eight-division spring permanently staked to the only rotor; the fixture adds five more.", "location": "bench"}},
+      "explanation": "The bright spring is permanently staked. Its eight divisions plus the fixture's five exceed the required total. There is no spare rotor."
+    },
+    {
+      "action_id": "calibrate_movement",
+      "arguments": {"target": "open-movement", "instrument": "calibrator", "gauge": "glass-gauge", "coupon": "test-coupon", "surface": "reference-table"},
+      "carried": ["glass-gauge"],
+      "powered": ["calibrator"],
+      "requires": {"calibrator": {"zero": "unset"}},
+      "consumes": ["open-movement", "test-coupon"],
+      "outputs": {"miscalibrated-movement": {"name": "Uncertifiable movement", "kind": "item", "description": "Tested against an unset zero with no test coupon left for a retry.", "location": "reference-table"}},
+      "explanation": "The instrument runs against an unset zero and consumes the only test coupon. The movement cannot be certified."
+    },
+    {
+      "action_id": "seal_relay",
+      "arguments": {"movement": "open-movement", "housing": "housing", "seal": "seal", "tool": "driver", "machine": "bonding-lamp"},
+      "carried": ["driver"],
+      "powered": ["bonding-lamp"],
+      "consumes": ["open-movement", "housing", "seal"],
+      "outputs": {"sealed-uncalibrated-relay": {"name": "Permanently sealed uncalibrated relay", "kind": "item", "description": "Calibration access is sealed off. The housing cannot be reopened without destroying it.", "location": "bench"}},
+      "explanation": "The uncalibrated movement is permanently sealed. The sole housing and seal are spent, and calibration access is lost."
+    },
+    {
+      "action_id": "discard_reference",
+      "arguments": {"target": "glass-disc"},
+      "consumes": ["glass-disc"],
+      "outputs": {"discarded-disc": {"name": "Discarded glass fragments", "kind": "item", "description": "The only reference disc is irretrievably fragmented.", "location": "bench"}},
+      "explanation": "The expendable-labelled disc is discarded and fragmented. The only forming and calibration reference is lost."
+    },
+    {
+      "action_id": "discard_reference",
+      "arguments": {"target": "glass-gauge"},
+      "consumes": ["glass-gauge"],
+      "outputs": {"discarded-gauge": {"name": "Discarded gauge fragments", "kind": "item", "description": "The sole recovered reference gauge is irretrievably fragmented.", "location": "bench"}},
+      "explanation": "The recovered gauge is discarded and fragmented. Calibration is now impossible."
+    },
+    {
+      "action_id": "commission_relay",
+      "arguments": {"target": "sealed-relay", "fixture": "acceptance-cradle"},
+      "consumes": ["sealed-relay"],
+      "outputs": {"commissioned-relay": {"name": "Commissioned phase relay", "kind": "item", "description": "A complete, calibrated, sealed relay commissioned in its acceptance fixture.", "location": "acceptance-cradle", "health": null}},
+      "explanation": "The sealed relay is installed and commissioned in the acceptance cradle."
+    }
+  ]
+}

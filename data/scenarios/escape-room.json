@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "id": "escape-room",
+  "title": "The Locked Room",
+  "start_location": "room",
+  "exit_location": "outside",
+  "objective": "Leave the room.",
+  "goal_type": "actor_outside_start_location",
+  "body": {
+    "description": "A mobile body with hands, able to carry up to one inventory unit.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 1
+  },
+  "needs": {
+    "food": {"enabled": false, "level": 0, "rate": 8, "threshold": 80},
+    "sleep": {"enabled": false, "level": 0, "rate": 10, "threshold": 80}
+  },
+  "entities": {
+    "room": {"name": "Small room", "kind": "location", "description": "A small stone room with a locked wooden door, a small open window high in the wall and a narrow flooded drain at floor level. The window and drain both lead outdoors, but neither can fit a medium or large body."},
+    "outside": {"name": "Outside", "kind": "location", "description": "Fresh air. You have left the room."},
+    "door": {"name": "Door", "kind": "door", "description": "A sturdy wooden door.", "location": "room", "open": false, "locked": true, "lock_id": "lock", "destination": "outside", "takable": false, "health": 100, "max_health": 100},
+    "window": {"name": "Small high window", "kind": "door", "description": "An open, unbarred window high in the stone wall leads outside. Only a small flying body can reach and pass through it; strength or flight alone cannot make a larger body fit.", "location": "room", "open": true, "destination": "outside", "takable": false, "health": null, "traversal_capabilities": ["fly"], "max_body_size": "small"},
+    "drain": {"name": "Small flooded drain", "kind": "door", "description": "A narrow drain at floor level leads outside through a flooded passage. Only a small swimming body can fit and traverse it. It is not a dry crawling route.", "location": "room", "open": true, "destination": "outside", "takable": false, "health": null, "traversal_capabilities": ["swim"], "max_body_size": "small"},
+    "lock": {"name": "Door lock", "kind": "lock", "description": "A metal lock fitted to the door.", "location": "door", "locked": true, "key_id": "key", "takable": false, "health": 75, "max_health": 75},
+    "box": {
+      "name": "Box", "kind": "container", "description": "A small wooden box.",
+      "location": "room", "open": false, "takable": true, "inventory_units": 1, "damage": 5, "health": 50, "max_health": 50,
+      "break_into": {
+        "splinters": {"name": "Wooden splinters", "kind": "item", "description": "Fragments of a broken wooden box.", "takable": true, "inventory_units": 1, "damage": 1, "health": 10, "max_health": 10}
+      }
+    },
+    "key": {"name": "Brass key", "kind": "item", "description": "A small brass key.", "location": "box", "takable": true, "inventory_units": 1, "damage": 1, "health": 20, "max_health": 20},
+    "rock": {"name": "Rock", "kind": "item", "description": "A heavy, rough-edged rock on the floor.", "location": "room", "takable": true, "inventory_units": 1, "damage": 25, "health": 100, "max_health": 100}
+  },
+  "recovery": {
+    "food": {"action_id": "eat", "description": "Eat a carried food item.", "recovery": 100},
+    "sleep": {"action_id": "rest", "description": "Rest where you are to recover from tiredness.", "recovery": 100}
+  }
+}

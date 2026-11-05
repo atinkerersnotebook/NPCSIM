@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "id": "two-agent-escape",
+  "title": "The Two-Agent Escape",
+  "start_location": "workroom",
+  "exit_location": "courtyard",
+  "objective": "Cooperate so that both agents reach the courtyard. Share discoveries and tools, and leave nobody behind.",
+  "goal_type": "all_actors_at_exit_location",
+  "agents": [
+    {"id": "scout", "role": "Scout: explore and inspect containers, report discoveries, and share useful items with your partner."},
+    {"id": "locksmith", "role": "Locksmith: investigate the doors, coordinate with the scout for keys, and help both of you escape."}
+  ],
+  "body": {
+    "description": "A mobile body with hands and space for one inventory unit.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 1
+  },
+  "needs": {},
+  "recovery": {},
+  "budgets": {"max_actions": 80, "max_model_calls": 100, "max_seconds": 900, "repetition_window": 4},
+  "entities": {
+    "workroom": {"name": "Workroom", "kind": "location", "description": "A stone workroom with a closed supply box and a locked passage door. You and a partner must both escape; speak nearby to coordinate and give carried tools to one another."},
+    "hall": {"name": "Entrance hall", "kind": "location", "description": "A narrow hall with a closed cabinet and a locked courtyard gate. The passage leads back to the workroom."},
+    "courtyard": {"name": "Courtyard", "kind": "location", "description": "Fresh air and daylight. The team succeeds only when both partners are here."},
+    "supply-box": {"name": "Supply box", "kind": "container", "description": "A small wooden supply box with an ordinary hinged lid.", "location": "workroom", "open": false, "health": null},
+    "passage-key": {"name": "Silver passage key", "kind": "item", "description": "A silver key stamped with the words 'passage door'.", "location": "supply-box", "takable": true, "health": null},
+    "passage": {"name": "Passage door", "kind": "door", "description": "A locked door with a silver keyhole.", "location": "workroom", "destination": "hall", "open": false, "locked": true, "key_id": "passage-key", "health": null},
+    "cabinet": {"name": "Hall cabinet", "kind": "container", "description": "A small cabinet beside the courtyard gate.", "location": "hall", "open": false, "health": null},
+    "courtyard-key": {"name": "Brass courtyard key", "kind": "item", "description": "A brass key stamped with the words 'courtyard gate'.", "location": "cabinet", "takable": true, "health": null},
+    "gate": {"name": "Courtyard gate", "kind": "door", "description": "An iron gate with a brass keyhole.", "location": "hall", "destination": "courtyard", "open": false, "locked": true, "key_id": "courtyard-key", "health": null}
+  }
+}

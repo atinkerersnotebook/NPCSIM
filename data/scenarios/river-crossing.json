@@ -1,0 +1,267 @@
+{
+  "schema_version": "1.0",
+  "id": "river-crossing",
+  "title": "Otter & Fox - The River Crossing",
+  "start_location": "near-bank",
+  "exit_location": "shelter",
+  "objective": "Restore the cable ferry and get both animals safely to the riverside shelter.",
+  "goal_type": "all_actors_at_exit_location",
+  "body": {
+    "description": "An animal able to move and handle small objects.",
+    "capabilities": [
+      "move",
+      "manipulate"
+    ],
+    "capacity": 1
+  },
+  "agents": [
+    {
+      "id": "otter",
+      "role": "An otter who swims and anchors lines, but cannot rig ropes or repair machinery. Coordinate with the fox and carry prepared supplies across the water.",
+      "body": {
+        "description": "A swimming otter with nimble paws and space for one small item. Heavy toolboxes are too large.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "swim"
+        ],
+        "capacity": 1,
+        "grips": [
+          "paw",
+          "mouth"
+        ],
+        "max_held_items": 2,
+        "size": "small"
+      }
+    },
+    {
+      "id": "fox",
+      "role": "A fox skilled in rope rigging and machinery repair, but unable to swim. Share prepared rope with the otter and build a safe crossing.",
+      "body": {
+        "description": "A land-bound fox able to carry two inventory units and operate animal-adapted tools with its mouth, but unable to swim.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "rigging",
+          "repair"
+        ],
+        "capacity": 2,
+        "grips": [
+          "mouth"
+        ],
+        "max_held_items": 1
+      }
+    }
+  ],
+  "needs": {},
+  "recovery": {},
+  "budgets": {
+    "max_actions": 100,
+    "max_model_calls": 120,
+    "max_seconds": 1200,
+    "repetition_window": 5
+  },
+  "entities": {
+    "near-bank": {
+      "name": "Near riverbank",
+      "kind": "location",
+      "description": "A fast river separates you from safety. A rigging bench, loose rope, heavy toolbox and broken ferry winch stand here. Swimming requires the swim ability; a repaired ferry carries non-swimmers."
+    },
+    "far-bank": {
+      "name": "Far riverbank",
+      "kind": "location",
+      "description": "A solid mooring post stands above the current. A marked path leads to the riverside shelter, but the crossing must be restored before the team leaves."
+    },
+    "shelter": {
+      "name": "Riverside shelter",
+      "kind": "location",
+      "description": "A dry shelter above the river. Both partners must arrive after restoring the ferry."
+    },
+    "river": {
+      "name": "Fast river channel",
+      "kind": "door",
+      "description": "A deep channel that only a swimmer can cross. Loose flight or movement commands cannot create another route.",
+      "location": "near-bank",
+      "destination": "far-bank",
+      "open": true,
+      "traversal_capabilities": [
+        "swim"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "ferry": {
+      "name": "Cable ferry crossing",
+      "kind": "door",
+      "description": "A safe crossing for both animals once a line is anchored and the winch repaired.",
+      "location": "near-bank",
+      "destination": "far-bank",
+      "open": false,
+      "required_challenges": [
+        "anchor_rope",
+        "repair_ferry"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "shelter-path": {
+      "name": "Shelter path",
+      "kind": "door",
+      "description": "The final trail. Finish restoring the ferry before leaving the river behind.",
+      "location": "far-bank",
+      "destination": "shelter",
+      "open": true,
+      "required_challenges": [
+        "repair_ferry"
+      ],
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "bench": {
+      "name": "Rigging bench",
+      "kind": "item",
+      "description": "A guide explains that a rigger must prepare the loose rope before a swimmer can secure it to the far post. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "near-bank",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "rope": {
+      "name": "Loose ferry rope",
+      "kind": "item",
+      "description": "A light rope. It must be prepared by a rigger, passed to a swimmer, and permanently anchored on the far bank. Large bite loops and paw guides let animals prepare and secure the line.",
+      "location": "near-bank",
+      "takable": true,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ],
+      "carry_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "toolbox": {
+      "name": "Heavy repair toolbox",
+      "kind": "item",
+      "description": "Two inventory units of winch repair tools. Animal-adapted repair jigs and bite-operated tools sit in a mouth-carried harness.",
+      "location": "near-bank",
+      "takable": true,
+      "inventory_units": 2,
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ],
+      "carry_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "winch": {
+      "name": "Ferry winch",
+      "kind": "item",
+      "description": "A mechanical winch on the near bank. A repairer needs the heavy toolbox and a secured far-bank line. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "near-bank",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    },
+    "mooring": {
+      "name": "Far-bank mooring post",
+      "kind": "item",
+      "description": "A swimmer can install a properly prepared rope here. Installed ropes cannot be picked up again. Oversized bite loops, beak tabs and broad paw controls make this fixture animal-adapted.",
+      "location": "far-bank",
+      "health": null,
+      "use_grips": [
+        "hand",
+        "paw",
+        "mouth",
+        "beak",
+        "claw"
+      ]
+    }
+  },
+  "skill_challenges": [
+    {
+      "id": "prepare_rope",
+      "description": "Rig the carried rope into a safe ferry line at the bench.",
+      "target": "bench",
+      "capability": "rigging",
+      "carried": [
+        "rope"
+      ]
+    },
+    {
+      "id": "anchor_rope",
+      "description": "Anchor the prepared rope permanently to the far-bank post.",
+      "target": "mooring",
+      "capability": "swim",
+      "requires": [
+        "prepare_rope"
+      ],
+      "carried": [
+        "rope"
+      ],
+      "installs": [
+        "rope"
+      ]
+    },
+    {
+      "id": "repair_ferry",
+      "description": "Repair and tension the ferry winch using the heavy toolbox and anchored line.",
+      "target": "winch",
+      "capability": "repair",
+      "requires": [
+        "anchor_rope"
+      ],
+      "carried": [
+        "toolbox"
+      ],
+      "opens": [
+        "ferry"
+      ]
+    }
+  ]
+}
