@@ -1,6 +1,6 @@
 # NPCSIM v0.1
 
-A local goal-driven NPC laboratory: a Python world and agent controller, real MCP actions, TypeScript player and admin views, and readable JSON persistence.
+A local goal-driven NPC laboratory: a Python world and agent controller, real MCP actions, TypeScript player, world-monitor and admin views, and readable JSON persistence.
 
 ## Start
 
@@ -22,7 +22,19 @@ Play/Pause/Continue controls appear; **Restart** recreates the current adventure
 with its existing cast and skills policy. Cast/scenario changes apply when you
 choose **New adventure**. **Skills & challenge options** retains the NPC-only
 ability policy. Watch the discovered map, characters, continuous story and
-outcome without configuration editors, model budgets or technical logs.
+outcome without configuration editors or technical logs.
+
+**Extend call & action budget** in Player or Admin view adds model calls, action
+attempts, or active real-time minutes to the current adventure's frozen limits,
+without changing future defaults or resetting its world, clock, cast, or history.
+Use **Add budget**, then **Continue** if the adventure stopped at a budget limit.
+Every exhausted limit must be extended; extra calls alone cannot fix an exhausted
+action limit. Extending never starts a stopped adventure or calls a model.
+World view links to this editor when a limit is reached and stays read-only.
+Budget-exhausted built-in local worlds can also reconnect from their saved world
+and frozen scenario after a server restart. Other interrupted or finished outcomes
+cannot be reopened this way. Previous outcome reviews remain in event history;
+their now-stale failure feedback is removed when the adventure is reopened.
 
 Use **Admin view** in the header (or **http://127.0.0.1:8000/?view=admin**) for
 setup, detailed perspectives, archives and technical inspection. **Player view**
@@ -31,9 +43,33 @@ live episode; unsaved form selections are reloaded. These are presentation modes
 not authentication or authorization: both use the same local API, and the admin
 view remains accessible without a login. The service is loopback-only.
 
+Player, World, and Admin views fill the available window width, keeping their
+normal edge padding and responsive layouts rather than a fixed maximum width.
+
 ### Private questions and live world changes
 
-Both views include **Ask an NPC** and **Dungeon Master intervention**:
+Use **World view** in the header (or **http://127.0.0.1:8000/?view=world**) for
+read-only monitoring: current game time and every agent grouped by actual location,
+with current activity and clearly labeled last actions. It updates live without
+model calls, simulation controls, configuration, private plans, or transcripts. Stopped
+adventures show their last recorded world state; unavailable live positions are
+explicitly labeled. Switching views never pauses or resets the adventure.
+
+Timed worlds also show a live **World timeline** Gantt chart: one row per agent,
+location-coloured bands, taller rounded action/availability tiles, free-action diamonds, sleeping
+and wagon-route bands, public milestones, and a current-time line. The 64-pixel-high
+tiles show activity, duration, clock range, and a recorded-result summary as space
+allows; zoom in to reveal more detail in shorter activities. Hover or focus a tile
+for its complete recorded result, location, and clock times. Unknown history stays blank;
+scheduled intentions are never drawn as completed work. The chart follows the
+latest activity until you scroll back, and keeps agent names visible while you
+scroll horizontally. The timeline matches the other gray panels. Use **+** and
+**-** to zoom its timescale from 100% to 800%, or **Fit** to show the full recorded
+period at the available width. Tick spacing adapts to the zoom level; zooming never
+changes simulation time. It replays saved events when opened or reconnected without
+calling the model or changing the world. The location cards remain below it.
+
+Player and Admin views include **Ask an NPC** and **Dungeon Master intervention**:
 
 - Select an NPC and ask a private question. It answers in character using only its
   observation, own goal and own memory, and remembers the exchange. Other NPCs do
@@ -71,7 +107,16 @@ Both views include **Ask an NPC** and **Dungeon Master intervention**:
   resurrect a finished run. Unsupported free-form success criteria need a new
   deterministic condition type rather than an invented success check.
 
-Interactions need the current active adventure. They pause running play at a
+Private questions remain available for the current adventure after it ends,
+including after restarting the app. Follow-ups use only that NPC's saved final
+observation and own memory, never fresh world actions. They persist as private
+conversation without changing the result, grade, action count or game time.
+User-requested follow-ups are counted separately as `followup_model_calls` and
+are not blocked by the finished adventure's model-call budget; each still makes
+one model call with the configured timeout. Older adventures in History remain
+read-only.
+
+World changes need the current active adventure. They pause running play at a
 serialized safe point and leave it paused until you continue. Private questions
 and proposal generation count against the existing model-call budget; approvals
 do not call the model. Questions and previews do not advance simulated time.
@@ -135,6 +180,182 @@ systems; unrestricted natural-language NPC planning, arbitrary projects, theft,
 weather and regional simulation are not implemented. Existing JSON saves persist
 resident locations, beliefs, memories, tasks, consumed supplies, stocks and events;
 no separate database service is needed.
+
+### Millhaven Expanded: twelve independent AI villagers
+
+Completion requires the full daily cycle, not just repairs: everyone must eat
+the evening tavern meal and be asleep at their own home, the horse must be
+released at its stable and unhitched, and automatic routes must be stopped.
+The village must also demonstrate replenishing hay/herbs/logs and using manure
+and tea. These are authoritative world checks shared with the completion reviewer.
+After midnight, the previous evening's meal counts; a missed day can recover
+with a complete later day rather than becoming permanently unwinnable.
+
+An older village adventure that stopped as succeeded but received a failed
+review offers **Continue unfinished day**. It rechecks the saved world against
+the full daily requirements, then reopens **paused** only if work remains.
+It preserves progress, budgets, time, identities and history, removes obsolete
+failure feedback, and makes no model calls. Press **Continue** to resume.
+Other completed adventures cannot be reopened this way.
+
+A local village stopped by an MCP response timeout can also use **Recover
+interrupted day** when all action requests have confirmed results and the saved
+actor still has its free-action turn, or the next actor is already durably
+scheduled but has not acted. Recovery refuses uncertain actions rather
+than replaying them. It preserves the world, history and existing budgets and
+reopens paused. The same `/api/adventure/reopen` request accepts
+`until_midnight: true` to simulate normally until the next midnight and pause
+there, including when everyone sleeps before then. This does not fast-forward,
+increase budgets or automatically resume; existing budget limits still apply.
+
+The current clock and Gantt endpoint follow the newest recorded village time,
+including a midnight observation newer than the inspection file. The scheduler
+saves the world when stopping at its time boundary, even when no actor wakes.
+The chart shows only elapsed rest, not the remaining scheduled overnight sleep.
+
+The live technical log initially shows the newest 100 events; **Show 100 older
+events** reveals earlier entries. Original technical JSON loads only when opened.
+Large model request messages stay out of the live feed but remain available on
+demand and in the full JSON export. Reconnecting does not resend history already
+loaded by the page. Unchanged world files are cached for inspection, and unchanged
+snapshots are not repeatedly sent to the browser.
+
+Choose **Millhaven Expanded - Twelve Lives**, then **New adventure**. This is a
+separate scenario; the original visiting-helper adventure is unchanged. Torvin,
+Bren, Mara, Elsie, Hobb, Jory, Ada, Nella, Rowan, Garrick, Iona and Finn are all real
+cast members, with separate AI turns, bodies, inventories, private observations,
+plans and memories. **Ask an NPC** addresses any of them, including after the
+current adventure ends.
+
+New expanded adventures begin at **05:00**, one hour before the first wake-up.
+All twelve villagers are asleep at their cottage homes in the cottage row,
+including Elsie. Bren, Jory and Ada wake at 06:00; the others follow their own
+times. Sleeping actors skip model turns. On waking, villagers are directed to
+leave for work using real movement before optional errands.
+They must physically walk to their workplaces;
+Elsie also returns to her cottage to sleep rather than staying above the tavern.
+
+The **Village-wide tracking** dashboard in both views shows all twelve residents'
+actual locations, carried tools, shipment cargo, coins, activities, scheduled
+commitments, roles, skills, plans, latest decisions, private beliefs and sources,
+relationships and witnessed memories. It also tracks construction contributions,
+mill health, bread deliveries, every resident's useful-work contribution, local
+stocks and the event ledger. This is operator knowledge, not shared NPC input.
+
+- `village_work` executes the actor's own job at its workplace, with capability,
+  equipment, input-stock, personal waking-time and cooldown checks.
+- Torvin makes real wagon parts and uses `village_fit_wagon` to fit them in a
+  committed 30-minute repair. Nella collects the working six-unit wagon and
+  accepts `village_start_route`: farm -> mill -> bakery -> tavern -> square ->
+  farm. The standing order performs real movement, batch loading/unloading and
+  buyer/seller payments; it never creates stock or money. Meals, rest, blocked
+  paths or unaffordable deliveries park the wagon with its cargo intact.
+  `village_drive_wagon` takes manual control, so subsequent `go` actions move the
+  physical wagon too. `village_load_wagon` supports mixed cargo and `village_unload_wagon` settles all
+  cargo for that destination in one action. Bread need not wait for mill repairs.
+- Garrick uses `village_patrol` at his scheduled post.
+- `village_project` requires both named partners physically at the site, actual
+  usable tools/materials, six five-minute contributions and at least two from
+  each partner. Materials are consumed only on verified completion.
+- `village_observe`, `village_ask` and `village_tell` maintain personal knowledge;
+  unverified testimony cannot create supplies or complete projects.
+- Milling, baking and cooking process up to two inputs per action. Each bread
+  makes two meals; Elsie can also use `village_cook_fish` with the same yield.
+  Opening stock includes six grain at the mill, six flour and four bread at the
+  bakery, and twelve bread at the tavern.
+- `village_eat` consumes **one daily meal at the 19:00 tavern gathering**.
+  A prepared meal, bread, or fish with tea counts; tea alone does not. There is
+  no automatic home pantry. An empty-tavern attempt records hunger once without
+  forbidding work. Meals still pending at midnight count as missed. Missing a
+  meal doubles the following day's work cooldown; eating before midnight cancels
+  that day's missed-meal penalty. A later meal never retroactively erases it.
+- `village_sleep` requires physically returning home. Each NPC keeps the existing
+  bedtime and first work-start time as their sleep/wake schedule: for example,
+  Bren/Jory/Ada wake at 06:00, Torvin at 08:00, and Elsie sleeps 23:00-07:00.
+  A late bedtime delays actual waking by the full scheduled rest duration.
+  Waiting through the night without sleeping does not satisfy rest.
+- Due meals and rest block new work, patrols, deliveries and further construction
+  contributions. Travel home and interruptible projects can pause at any action
+  boundary without losing their recorded progress, cargo or unconsumed supplies.
+  Sleeping villagers cannot work, receive tools, answer local questions or learn
+  from nearby activity; private operator questions remain separate.
+- **Baking is non-interruptible.** Starting a batch reserves real flour, then
+  commits Jory to 30 village minutes at the oven, even across dinner or bedtime.
+  He cannot leave, eat, sleep or start another job until it finishes. The shared
+  clock completes only this already-started batch, producing bread and recording
+  work exactly once; a broken oven explicitly ruins it instead. Meals and sleep
+  take priority again immediately afterward.
+
+Schedules are guidance, not automatic travel or work. There are no duplicate
+rules-driven resident entities moving behind the AI cast. The controller selects
+the **earliest available villager**, advancing the shared clock only when nobody
+is ready. Work/travel reserve that actor's time rather than charging everyone.
+`village_wait` reserves 5-60 minutes for that person, capped at 15 while other
+work or routes are active (or less until a committed batch finishes). Sleeping,
+committed work and accepted wagon/timber routes skip model turns. Looking and
+reading do not advance the clock or end that villager's turn. The clock processes
+the timed mill failure, sleep/wake and meal times, and
+already-committed baking and explicitly accepted wagon/timber standing routes; it
+never starts unrelated jobs or moves other villagers.
+AI decisions use model calls and do not
+guarantee cooperation or success. Play ends only after shovel recovery, the well,
+the mill repair, a working wagon, a bread delivery (before or after repair) and
+useful work by all twelve, with no committed batch abandoned.
+World and per-actor run state persist through the existing JSON save mechanism;
+restarting the server interrupts an unfinished run rather than silently continuing it.
+Daily routines apply to **new adventures**; existing episodes retain their frozen
+scenario and do not acquire food, needs or revised job rules retroactively.
+
+The square's noticeboard has a free, readable map of every connection. Important
+tool discoveries, agreed project rendezvous (`village_meeting`) and the 14:00
+mill failure are posted there and announced by the bell. Awake villagers hear
+these deliberately public reports; sleepers do not gain private knowledge.
+Ordinary speech never replays raw action or belief audit strings. New expanded
+events record game minute and member name; live logs, stories and copied final
+narratives display those timestamps without changing internal evidence IDs.
+Timed adventures also show a **current game-time clock** in the header in both
+views. Village availability, sleep and work messages use 24-hour clock times
+(for example, `08:05`), adding the day for overnight times. Bakery and BBQ
+adventures show simulated elapsed time; untimed adventures hide the clock.
+Older village story text is formatted for display without changing saved
+technical records.
+The remaining P2/P3 rules also apply to new expanded adventures:
+
+- Bren feeds the actual horse at the stable, leads it to the wagon and hitches
+  it for morning deliveries; at night he unhitches, returns and releases it
+  before sleeping. The wagon uses roads only, never the five marked footpaths.
+  Ada and Jory may drive a parked wagon when Nella is away or busy.
+- Foot consignments hold at most three units, counting held tools and body
+  limits. Rowan can accept an automatic timber route from woodlot to workshop.
+  Helpers can transport project supplies while leads collect their tools.
+  Buyers must afford all delivered goods plus a **one-coin fee per unloading
+  action**, paid to the actual carrier; rejected deliveries change nothing.
+- Every daily meal costs **one coin to Elsie**. Insufficient funds or food
+  records hunger, while payment and eating later that evening can recover it.
+  Awake villagers at **02:00** incur next-day tiredness: 2x cooldown, stacking
+  with hunger to 4x. Actual tea cancels today's tiredness factor only.
+  Well/mill crew members must explicitly choose `village_urgent_work` to
+  override bedtime for that project until 02:00, not ordinary production.
+- Production starts after actual waking through **19:30 inclusive**, including
+  inputs arriving in that grace period. Already-started baking still completes.
+  Ada grows two hay, Iona gathers two herbs and Rowan fells two logs per action.
+  A trader brings four iron to the square at noon, at three coins each, and
+  leaves at 18:00 with unsold stock. Payment occurs on actual forge delivery.
+- Mill repair also consumes one actual plank delivered to the mill. One manure
+  fertilization halves the next three grain-harvest cooldowns.
+- Stocks are not capped. FIFO lots retain their original expiry through storage,
+  loading, transport, unloading and saves: **meals/fish 12h, bread 24h, and
+  grain/flour/hay/herbs/tea 72h**. Other materials do not spoil.
+  Additional opening stock is farm grain 6, mill flour 2, forge iron 4,
+  stable hay 6, woodlot logs 10, workshop timber 4 and cottage herbs 10.
+- Walked paths are remembered and shareable; route suggestions use shortest
+  known topology without exposing remote changing conditions. The noticeboard
+  shows stock reports, shared project progress `/6` and completion announcements.
+  Bread is due by day-one 19:00; delivery then is on time, an overdue warning
+  permits later recovery. Hourly workplace stock/coin snapshots are persisted,
+  and free look/read entries are labeled separately from subsequent actions.
+
+Frozen earlier adventures retain their original rules and records.
 
 ### Initial setup
 
@@ -218,7 +439,7 @@ acting character, and includes a shared opening only once. Live prose, archived
 adventures, copied final stories and new completion reviews cover the entire team.
 Existing saved grading evidence is not changed by the combined archive display.
 
-No puzzle solution is embedded in the controller or model instructions. Scripted decisions exist only in automated tests. A missing proxy produces an explicit error, never simulated success. Start a fresh episode after a terminal error.
+No puzzle solution is embedded in the controller or model instructions. Scripted decisions exist only in automated tests. An unreachable or timed-out LLM proxy, HTTP 408/429, or HTTP 5xx pauses the adventure with an explicit message, preserving its world and memories. The simulation clock and episode timer stop; use **Resume** when the LLM is available. There is no automatic retry, scripted decision, or direct-provider fallback. Invalid model output and non-retryable HTTP errors remain terminal errors. Headless batch evaluations record paused episodes as ungraded and close their worlds without making a completion-review call.
 
 ### Anatomy-aware handling
 
@@ -412,7 +633,26 @@ by the world and stop the attempt without a supervisor model call.
 The supervisor cannot change the world, approve an illegal action or declare
 success. Its privileged review context and rulings are not copied into NPC
 memories. Unknown evidence references or unauthorized rulings receive one repair
-attempt; persistent invalid output or proxy failure ends with an explicit error.
+attempt; persistent invalid output ends with an explicit error. An unavailable
+proxy pauses the adventure instead; resuming retries the pending supervisor
+review before another NPC acts, without repeating an already committed action.
+Requests use compact short-term context, not repeated full observation histories:
+the supervisor receives every teammate's latest observed state and summaries of
+the latest 40 evidence events, with original citation IDs. Repeated action schemas,
+static descriptions, old route descriptions and personal beliefs are omitted from
+supervisor requests; world policies and recent public notices are shared once.
+Long result explanations are explicitly marked when shortened. Missing history
+must never be treated as proof of futility.
+
+NPC decisions and private questions receive the last six action summaries,
+conversation exchanges, incoming messages and village news items, plus the latest
+three previous-attempt failure reports. Current goals, action schemas, body and
+inventory constraints, observed discoveries, known entities, maps and active plans
+remain available. Character profiles are supplied once, in the system instructions.
+These are request-only projections: full events, memories, transcripts, saved
+adventures and the World timeline are unchanged. No extra summarization model
+calls are made.
+
 AI reviews add separately displayed model calls (at most one per round plus
 validation repairs), share the episode wall-time budget, and do not consume
 the NPC decision-call allowance. Decision and action budgets still bound the

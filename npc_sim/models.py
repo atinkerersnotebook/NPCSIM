@@ -106,6 +106,7 @@ class Entity(StrictModel):
     traversal_capabilities: list[str] = Field(default_factory=list)
     max_body_size: BodySize | None = None
     required_challenges: list[str] = Field(default_factory=list)
+    village_road: bool = True
 
     @model_validator(mode="after")
     def valid_health(self) -> "Entity":
@@ -388,6 +389,9 @@ class VillageJob(StrictModel):
     inputs: dict[str, VillageAmount] = Field(default_factory=dict)
     outputs: dict[str, VillageAmount] = Field(default_factory=dict)
     equipment: str | None = None
+    duration: int = Field(default=5, ge=5, multiple_of=5)
+    interruptible: bool = True
+    batch_size: int = Field(default=1, ge=1, le=2)
 
 
 class VillageResident(StrictModel):
@@ -401,6 +405,8 @@ class VillageResident(StrictModel):
     relationships: dict[str, int] = Field(default_factory=dict)
     busy_until: int = Field(default=0, ge=0)
     job: VillageJob | None = None
+    wake_minute: int = Field(default=480, ge=0, lt=1080, multiple_of=5)
+    bed_minute: int = Field(default=1320, gt=1080, lt=1440, multiple_of=5)
 
 
 class VillageDelivery(StrictModel):
@@ -413,6 +419,14 @@ class VillageDelivery(StrictModel):
 
 
 class VillageConfig(StrictModel):
+    ai_controlled: bool = False
+    daily_life: bool = False
+    time_based_turns: bool = False
+    expanded_rules: bool = False
+    delivery_fee: int = Field(default=0, ge=0)
+    meal_price: int = Field(default=0, ge=0)
+    spoil_after: dict[str, int] = Field(default_factory=dict)
+    goal_deadlines: dict[str, int] = Field(default_factory=dict)
     residents: dict[str, VillageResident]
     stocks: dict[str, dict[str, VillageQuantity]]
     coins: dict[str, VillageQuantity]
@@ -436,6 +450,35 @@ class VillageConfig(StrictModel):
     breakdown_minute: int = Field(default=840, ge=0)
 
 
+class VillageMeal(StrictModel):
+    kind: Literal["daily"]
+    due: int = Field(ge=0)
+    status: Literal["pending", "eaten", "missed"] = "pending"
+    source: str | None = None
+
+
+class VillageCommittedWork(StrictModel):
+    location: str
+    finishes_at: int = Field(ge=0)
+    outputs: dict[str, VillageAmount]
+    equipment: str | None = None
+    kind: Literal["production", "wagon_repair"] = "production"
+
+
+class VillageLifeState(StrictModel):
+    hungry: bool = False
+    missed_meals: int = Field(default=0, ge=0)
+    meals: dict[str, VillageMeal] = Field(default_factory=dict)
+    sleeping: bool = False
+    sleep_until: int | None = Field(default=None, ge=0)
+    last_woke: int
+    work: VillageCommittedWork | None = None
+    fatigue_days: list[int] = Field(default_factory=list)
+    tea_day: int = -1
+    urgent_project: str | None = None
+    urgent_until: int | None = None
+
+
 class VillagePersonState(StrictModel):
     beliefs: dict[str, VillageBelief] = Field(default_factory=dict)
     memories: list[int] = Field(default_factory=list)
@@ -447,6 +490,43 @@ class VillagePersonState(StrictModel):
     delivery: int | None = None
     delivery_cursor: int = 0
     last_news_day: int = -1
+    life: VillageLifeState | None = None
+    available_at: int = Field(default=0, ge=0)
+    known_routes: list[str] = Field(default_factory=list)
+    shipments: list["VillageShipment"] = Field(default_factory=list)
+    timber_route: bool = False
+    route_next_at: int = 0
+    stock_report: dict[str, dict[str, int]] = Field(default_factory=dict)
+    stock_report_at: int | None = None
+    fertilized_harvests: int = Field(default=0, ge=0)
+
+
+class VillageStockLot(StrictModel):
+    quantity: int = Field(gt=0)
+    produced_at: int = Field(ge=0)
+    expires_at: int | None = None
+
+
+class VillageShipment(StrictModel):
+    resource: str
+    quantity: int = Field(gt=0, le=6)
+    seller: str
+    buyer: str
+    destination: str
+    price: int = Field(gt=0)
+    lots: list[VillageStockLot] = Field(default_factory=list)
+
+
+class VillageWagon(StrictModel):
+    repaired: bool = False
+    driver: str | None = None
+    automatic: bool = False
+    loads: list[VillageShipment] = Field(default_factory=list)
+    route_index: int = Field(default=0, ge=0, le=4)
+    phase: Literal["travel", "unload", "load"] = "travel"
+    next_event_at: int = Field(default=0, ge=0)
+    blocker: str | None = None
+    hitched: bool = False
 
 
 class VillageTask(StrictModel):
@@ -470,6 +550,18 @@ class VillageEvent(StrictModel):
     witnesses: list[str]
 
 
+class VillageDeadline(StrictModel):
+    due: int = Field(ge=0)
+    completed_at: int | None = None
+    overdue: bool = False
+
+
+class VillageStockSnapshot(StrictModel):
+    minute: int
+    stocks: dict[str, dict[str, int]]
+    coins: dict[str, int]
+
+
 class VillageState(StrictModel):
     minute: int
     residents: dict[str, VillagePersonState]
@@ -481,6 +573,23 @@ class VillageState(StrictModel):
     repaired: bool = False
     well_dug: bool = False
     bread_after_repair: int = 0
+    roster: dict[str, VillageResident] = Field(default_factory=dict)
+    role_contributions: dict[str, int] = Field(default_factory=dict)
+    project_contributions: dict[str, dict[str, int]] = Field(default_factory=dict)
+    shovel_recovered: bool = False
+    wagon: VillageWagon | None = None
+    bread_deliveries: int = Field(default=0, ge=0)
+    turn_cursor: int = Field(default=0, ge=0)
+    last_scheduled_actor: str | None = None
+    notices: list[VillageEvent] = Field(default_factory=list)
+    meetings: dict[str, list[str]] = Field(default_factory=dict)
+    free_turn_actor: str | None = None
+    stock_lots: dict[str, dict[str, list[VillageStockLot]]] = Field(default_factory=dict)
+    stock_history: list[VillageStockSnapshot] = Field(default_factory=list)
+    deadlines: dict[str, VillageDeadline] = Field(default_factory=dict)
+    horse_leader: str | None = None
+    horse_fed_day: int = -1
+    trader_day: int = -1
 
 
 class Scenario(StrictModel):
@@ -511,7 +620,7 @@ class Scenario(StrictModel):
     bbq: BBQConfig | None = None
     village: VillageConfig | None = None
     budgets: Budgets | None = None
-    agents: list[ScenarioAgent] = Field(default_factory=list, max_length=3)
+    agents: list[ScenarioAgent] = Field(default_factory=list, max_length=12)
     skill_mode: SkillMode = "scenario"
     skill_challenges: list[SkillChallenge] = Field(default_factory=list)
 
@@ -522,6 +631,8 @@ class Scenario(StrictModel):
         if self.start_location not in self.entities or self.exit_location not in self.entities:
             raise ValueError("Scenario locations must exist")
         ids = [agent.id for agent in self.agents]
+        if len(ids) > 3 and not (self.village and self.village.ai_controlled):
+            raise ValueError("Ordinary scenarios support at most 3 agents; AI villages support up to 12")
         if len(ids) != len(set(ids)) or set(ids) & self.entities.keys():
             raise ValueError("Agent IDs must be unique and distinct from entity IDs")
         for agent in self.agents:
@@ -549,6 +660,17 @@ class Scenario(StrictModel):
                     "say", "give", "teleport", "recruit", "sail", "wait_tide", "dig", "pace", "play_rps", "play_tic_tac_toe", "erp_terminal", "adjust_bbq_heat", "monitor_bbq",
                     "cast_unlock", "cast_shrink", "cast_restore_size",
                     "village_ask", "village_request", "village_wait", "village_trade", "village_tell", "village_cancel"}
+        core_ids |= {"village_work", "village_load", "village_deliver", "village_project",
+                     "village_patrol", "village_observe", "village_eat", "village_sleep",
+                     "village_fit_wagon", "village_start_route", "village_stop_route",
+                     "village_load_wagon", "village_unload_wagon", "village_meeting", "village_cook_fish",
+                     "village_drive_wagon"}
+        core_ids |= {"village_load_goods", "village_unload_goods", "village_grow_hay",
+                     "village_gather_herbs", "village_fell_logs", "village_fertilize",
+                     "village_drink_tea", "village_buy_iron", "village_lead_horse",
+                     "village_release_horse", "village_hitch", "village_unhitch",
+                     "village_start_timber_route", "village_stop_timber_route",
+                     "village_urgent_work", "village_share_route"}
         if len(recovery_ids) != len(set(recovery_ids)) or set(recovery_ids) & core_ids:
             raise ValueError("Recovery action IDs must be unique and not conflict with core world verbs")
         if set(self.recipe_actions) & (core_ids | set(recovery_ids)):
@@ -883,6 +1005,24 @@ class StartRequest(StrictModel):
     scenario_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]+$")
     agent_assignments: dict[str, str] | None = None
     skill_mode: SkillMode | None = None
+
+
+class ReopenRequest(StrictModel):
+    run_id: str = Field(min_length=1)
+    until_midnight: bool = False
+
+
+class BudgetExtension(StrictModel):
+    run_id: str = Field(min_length=1)
+    add_actions: int = Field(default=0, ge=0, strict=True)
+    add_model_calls: int = Field(default=0, ge=0, strict=True)
+    add_seconds: float = Field(default=0, ge=0, strict=True, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def positive_extension(self) -> "BudgetExtension":
+        if not (self.add_actions or self.add_model_calls or self.add_seconds):
+            raise ValueError("Add at least one action, model call, or second.")
+        return self
 
 
 class NeedToggle(StrictModel):

@@ -2,7 +2,8 @@ from collections import deque
 from typing import TYPE_CHECKING, Any
 
 from npc_sim.models import (
-    Scenario, VillageBelief, VillageConfig, VillageEvent, VillagePersonState, VillageState, VillageTask,
+    Scenario, VillageBelief, VillageConfig, VillageEvent, VillagePersonState, VillageState, VillageTask, VillageWagon,
+    VillageDeadline, VillageStockLot, VillageStockSnapshot,
 )
 
 if TYPE_CHECKING:
@@ -23,12 +24,34 @@ def validate_config(scenario: Scenario) -> None:
     if config is None:
         raise ValueError("Missing village configuration")
     if scenario.goal_type != "village_restored" or any((
-            scenario.bakery, scenario.voyage, scenario.rps, scenario.erp, scenario.bbq, scenario.agents)):
-        raise ValueError("Villages require a single visiting agent and their own village goal")
+            scenario.bakery, scenario.voyage, scenario.rps, scenario.erp, scenario.bbq)):
+        raise ValueError("Villages require their own village goal without other simulation modes")
+    if bool(scenario.agents) != config.ai_controlled:
+        raise ValueError("Only AI-controlled villages declare resident agents")
+    if config.daily_life and (not config.ai_controlled or "tavern" not in scenario.entities):
+        raise ValueError("Daily life requires an AI village with a tavern")
+    if config.time_based_turns and (not config.daily_life or "wagon" not in scenario.entities):
+        raise ValueError("Timed village turns require daily life and a wagon")
+    if config.expanded_rules:
+        if not config.time_based_turns or not {"work-horse", "iron-trader"} <= set(scenario.entities):
+            raise ValueError("Expanded rules require timed turns, a real horse and the visiting trader")
+        if any(resource not in config.prices or minutes < 5 or minutes % 5
+               for resource, minutes in config.spoil_after.items()):
+            raise ValueError("Shelf lives must name priced resources and positive five-minute durations")
+        if any(goal not in {"bread_delivery", "dig_well", "repair_mill"}
+               or minute < config.start_minute or minute % 5 for goal, minute in config.goal_deadlines.items()):
+            raise ValueError("Goal deadlines must name village goals and future five-minute times")
     entities = scenario.entities
     locations = {eid for eid, entity in entities.items() if entity.kind == "location"}
+    if config.time_based_turns and (
+            not {"farm", "watermill", "bakery", "tavern", "village-square", "forge"} <= locations
+            or "noticeboard" not in entities or entities["wagon"].location != "forge"):
+        raise ValueError("Timed Millhaven needs its supply circuit, noticeboard and a wagon at the forge")
     residents = set(config.residents)
-    if not residents or any(eid not in entities or entities[eid].kind != "villager" for eid in residents):
+    if config.ai_controlled:
+        if residents != {agent.id for agent in scenario.agents}:
+            raise ValueError("Every AI village resident must have exactly one agent slot")
+    elif not residents or any(eid not in entities or entities[eid].kind != "villager" for eid in residents):
         raise ValueError("Village residents must reference villager entities")
     if not {config.smith, config.helper, config.carpenter, config.miller, config.courier} <= residents:
         raise ValueError("Village specialist references must name residents")
@@ -53,9 +76,13 @@ def validate_config(scenario: Scenario) -> None:
     if any(eid not in entities or owner not in residents for eid, owner in config.owners.items()):
         raise ValueError("Object ownership must reference existing objects and residents")
     for rid, resident in config.residents.items():
-        if not {resident.home, resident.work, entities[rid].location} <= locations:
+        start = (next(agent.start_location or scenario.start_location for agent in scenario.agents if agent.id == rid)
+                 if config.ai_controlled else entities[rid].location)
+        if not {resident.home, resident.work, start} <= locations:
             raise ValueError("Resident homes, workplaces and starting locations must exist")
         times = [entry.minute for entry in resident.schedule]
+        if config.daily_life and not {resident.wake_minute, resident.bed_minute} <= set(times):
+            raise ValueError("Daily-life wake and bed times must match the resident's schedule")
         if (not times or times != sorted(set(times)) or times[0] != 0
                 or any(entry.location not in locations for entry in resident.schedule)):
             raise ValueError("Schedules must start at midnight with ordered unique times and real locations")
@@ -96,6 +123,7 @@ def validate_config(scenario: Scenario) -> None:
 
 
 def initial_state(scenario: Scenario) -> VillageState:
+    from npc_sim import village_life
     config = scenario.village
     if config is None:
         raise ValueError("Missing village configuration")
@@ -103,12 +131,32 @@ def initial_state(scenario: Scenario) -> VillageState:
         minute=config.start_minute,
         residents={rid: VillagePersonState(
             beliefs={belief.subject: belief.model_copy(deep=True) for belief in resident.beliefs},
-            trust=resident.relationships.copy(), busy_until=resident.busy_until,
-            next_work=config.start_minute + (resident.job.interval if resident.job else 30))
+            trust=resident.relationships.copy(), busy_until=resident.busy_until, available_at=config.start_minute,
+            life=village_life.initial_state(resident, config.start_minute) if config.daily_life else None,
+            next_work=config.start_minute if config.ai_controlled
+            else config.start_minute + (resident.job.interval if resident.job else 30))
             for rid, resident in config.residents.items()},
         stocks={location: stock.copy() for location, stock in config.stocks.items()},
-        coins={**config.coins, "visitor": 20},
+        coins={**config.coins, "visitor": 20, **({"iron-trader": 0} if config.expanded_rules else {})},
+        roster={rid: resident.model_copy(deep=True) for rid, resident in config.residents.items()}
+        if config.ai_controlled else {},
+        wagon=VillageWagon() if config.time_based_turns else None,
+        stock_lots={location: {resource: [VillageStockLot(
+            quantity=amount, produced_at=config.start_minute,
+            expires_at=config.start_minute + config.spoil_after[resource]
+            if resource in config.spoil_after else None)] if amount else []
+            for resource, amount in stock.items()} for location, stock in config.stocks.items()}
+        if config.expanded_rules else {},
+        deadlines={goal: VillageDeadline(due=minute) for goal, minute in config.goal_deadlines.items()},
+        stock_history=[VillageStockSnapshot(minute=config.start_minute,
+            stocks={location: stock.copy() for location, stock in config.stocks.items()},
+            coins={**config.coins, "visitor": 20, "iron-trader": 0})] if config.expanded_rules else [],
     )
+
+
+def clock_time(minute: int) -> str:
+    time = f"{minute % 1440 // 60:02}:{minute % 60:02}"
+    return f"{time} on day {minute // 1440 + 1}" if minute >= 1440 else time
 
 
 def context(world: "World") -> tuple[VillageConfig, VillageState]:
@@ -120,27 +168,99 @@ def context(world: "World") -> tuple[VillageConfig, VillageState]:
 
 def local_residents(world: "World", location: str) -> list[str]:
     _, state = context(world)
-    return [rid for rid in state.residents if world.state.entities[rid].location == location]
+    return [rid for rid in state.residents if resident_location(world, rid) == location]
+
+
+def resident_location(world: "World", resident: str) -> str:
+    config, _ = context(world)
+    if config.ai_controlled:
+        actor = world.state.actors.get(resident)
+        if actor is not None:
+            return actor.location_id
+        return next(agent.start_location or world.scenario.start_location
+                    for agent in world.scenario.agents if agent.id == resident)
+    location = world.state.entities[resident].location
+    if location is None:
+        raise ValueError("A village resident has no physical location")
+    return location
+
+
+def resident_name(world: "World", resident: str) -> str:
+    entity = world.state.entities.get(resident)
+    return entity.name if entity is not None else resident.replace("-", " ").title()
 
 
 def event(world: "World", actor: str, action: str, target: str, result: str,
           location: str | None = None) -> int:
     _, state = context(world)
     if location is None:
-        entity = world.state.entities.get(actor)
-        location = entity.location if entity else world.actor.location_id
+        location = resident_location(world, actor) if actor in state.residents else world.actor.location_id
     witnesses = local_residents(world, location)
     witnesses += [aid for aid, person in world.state.actors.items() if person.location_id == location]
+    witnesses = [rid for rid in witnesses if rid not in state.residents
+                 or state.residents[rid].life is None or not state.residents[rid].life.sleeping]
+    if world.scenario.village and world.scenario.village.ai_controlled and action in {"learn", "missed_meal"}:
+        witnesses = [actor]
     if actor not in witnesses:
         witnesses.append(actor)
     state.events.append(VillageEvent(
         minute=state.minute, actor=actor, action=action, target=target,
-        result=result, witnesses=witnesses))
+        result=result, witnesses=list(dict.fromkeys(witnesses))))
     index = len(state.events) - 1
     for rid in witnesses:
         if rid in state.residents:
             state.residents[rid].memories.append(index)
     return index
+
+
+def announce(world: "World", actor: str, action: str, target: str, text: str) -> None:
+    _, state = context(world)
+    index = event(world, actor, action, target, text, "village-square")
+    notice = state.events[index]
+    for rid, person in state.residents.items():
+        if person.life is None or not person.life.sleeping:
+            if rid not in notice.witnesses:
+                notice.witnesses.append(rid)
+                person.memories.append(index)
+    state.notices.append(notice.model_copy(deep=True))
+
+
+def read_noticeboard(world: "World") -> str:
+    _, state = context(world)
+    person = state.residents[world.actor_id]
+    routes = [(eid, entity) for eid, entity in world.state.entities.items() if entity.kind == "door"]
+    person.known_routes = [eid for eid, _ in routes]
+    lines = [world.state.entities["noticeboard"].readable_text, "Village map (free):"]
+    for _, door in routes:
+        if door.location and door.destination:
+            lines.append(f"{world.state.entities[door.location].name} <-> "
+                         f"{world.state.entities[door.destination].name}: {door.name}"
+                         f"{' (road)' if door.village_road else ' (footpath)'}.")
+    lines.append("Public bell notices:")
+    config, _ = context(world)
+    if config.expanded_rules:
+        person.stock_report = {key: value.copy() for key, value in state.stocks.items()}
+        person.stock_report_at = state.minute
+        lines.append("Current workplace stock:")
+        for location, stock in state.stocks.items():
+            lines.append(f"{world.state.entities[location].name}: {stock}.")
+        for project, crew in state.project_contributions.items():
+            lines.append(f"{project.replace('_', ' ')}: {min(6, sum(crew.values()))}/6 contributions.")
+        for goal, deadline in state.deadlines.items():
+            lines.append(f"{goal.replace('_', ' ')}: due {clock_time(deadline.due)}; "
+                         f"{'completed' if deadline.completed_at is not None else 'overdue' if deadline.overdue else 'pending'}.")
+    for notice in state.notices:
+        lines.append(f"Day {notice.minute // 1440 + 1} {notice.minute % 1440 // 60:02}:"
+                     f"{notice.minute % 60:02} / {resident_name(world, notice.actor)}: {notice.result}")
+        for index, recorded in enumerate(state.events):
+            if recorded == notice:
+                if index not in person.memories:
+                    person.memories.append(index)
+                if world.actor_id not in recorded.witnesses:
+                    recorded.witnesses.append(world.actor_id)
+                    notice.witnesses.append(world.actor_id)
+                break
+    return "\n".join(lines)
 
 
 def learn(world: "World", resident: str, subject: str, location: str | None,
@@ -154,17 +274,36 @@ def learn(world: "World", resident: str, subject: str, location: str | None,
         learned_at=state.minute, confidence=confidence)
     event(world, resident, "learn", subject,
           f"Believes its location is {location or 'unknown'}; source: {source}.")
+    config = world.scenario.village
+    if config and config.time_based_turns and source == "observation" and location is not None:
+        crew = ({config.smith, config.helper} if subject in {config.shovel, config.timber, config.rope}
+                else {config.carpenter, config.miller} if subject in {config.repair_part, config.hammer} else set())
+        if crew:
+            place = world.state.entities[location].name
+            announce(world, resident, "discovery", subject,
+                     f"{resident_name(world, resident)} found {world.state.entities[subject].name} at {place}. "
+                     f"Message for {', '.join(resident_name(world, rid) for rid in sorted(crew))}.")
+            for other in crew - {resident}:
+                life = state.residents[other].life
+                if life is None or not life.sleeping:
+                    learn(world, other, subject, location, f"bell:{resident}", 0.9)
 
 
-def route(world: "World", start: str, destination: str) -> list[str] | None:
+def route(world: "World", start: str, destination: str, *, road_only: bool = False,
+          known_routes: list[str] | None = None) -> list[str] | None:
     queue = deque([(start, [])])
     visited = {start}
     while queue:
         current, path = queue.popleft()
         if current == destination:
             return path
-        for door in world.state.entities.values():
-            if (door.kind != "door" or not door.open or door.locked or door.broken
+        for eid, door in world.state.entities.items():
+            if door.kind != "door" or (road_only and not door.village_road):
+                continue
+            if known_routes is not None:
+                if eid not in known_routes:
+                    continue
+            elif (not door.open or door.locked or door.broken
                     or world.lock_for(door).locked or world.lock_for(door).broken
                     or door.traversal_capabilities or door.required_challenges
                     or door.max_body_size == "small"):
@@ -174,6 +313,15 @@ def route(world: "World", start: str, destination: str) -> list[str] | None:
                 visited.add(neighbor)
                 queue.append((neighbor, [*path, neighbor]))
     return None
+
+
+def remember_step(world: "World", resident: str, origin: str, destination: str) -> None:
+    _, state = context(world)
+    eid = next(eid for eid, door in world.state.entities.items()
+               if door.kind == "door" and {door.location, door.destination} == {origin, destination})
+    known = state.residents[resident].known_routes
+    if eid not in known:
+        known.append(eid)
 
 
 def walk(world: "World", resident: str, destination: str) -> bool:
@@ -192,7 +340,7 @@ def walk(world: "World", resident: str, destination: str) -> bool:
 
 
 def observe_local(world: "World", resident: str) -> None:
-    location = world.state.entities[resident].location
+    location = resident_location(world, resident)
     for eid, entity in world.state.entities.items():
         if entity.takable and not entity.hidden and entity.location == location:
             learn(world, resident, eid, location, "observation", 1)
@@ -291,7 +439,7 @@ def project(world: "World", task: VillageTask) -> None:
         block(world, task, "The crew will resume during working hours, 08:00-18:00.")
         return
     if state.residents[helper].busy_until > state.minute:
-        block(world, task, f"{helper} is busy until minute {state.residents[helper].busy_until}.")
+        block(world, task, f"{helper} is busy until {clock_time(state.residents[helper].busy_until)}.")
         return
     if state.residents[helper].trust.get(leader, 0) < -2:
         block(world, task, f"{helper} declines to cooperate with {leader}.")
@@ -372,7 +520,7 @@ def project(world: "World", task: VillageTask) -> None:
 def do_task(world: "World", task: VillageTask) -> None:
     _, state = context(world)
     if state.residents[task.assignee].busy_until > state.minute:
-        block(world, task, f"Urgent work takes priority until minute {state.residents[task.assignee].busy_until}.")
+        block(world, task, f"Urgent work takes priority until {clock_time(state.residents[task.assignee].busy_until)}.")
         return
     task.status = "in_progress"
     if task.kind == "fetch_shovel":
@@ -454,9 +602,25 @@ def advance(world: "World", minutes: int) -> None:
         if not state.breakdown and state.minute >= config.breakdown_minute:
             state.breakdown = True
             world.state.entities[config.mill_equipment].health = 0
-            event(world, config.miller, "breakdown", config.mill_equipment,
+            event(world, "environment" if config.ai_controlled else config.miller, "breakdown", config.mill_equipment,
                   "The mill drive failed. Flour production stops until a carpenter and miller repair it.",
                   config.mill)
+            if config.time_based_turns:
+                announce(world, "village-bell", "breakdown", config.mill_equipment,
+                         "The mill drive failed at 14:00. Flour production has stopped. "
+                         "Hobb and Mara: meet at the watermill with the replacement beam and hammer.")
+        if config.ai_controlled:
+            from npc_sim import village_goods, village_life
+            village_goods.advance(world)
+            village_life.advance(world)
+            if config.time_based_turns:
+                from npc_sim import village_wagon
+                village_wagon.advance(world)
+            if config.expanded_rules:
+                from npc_sim import village_services
+                village_services.advance(world)
+                village_goods.snapshot(world)
+            continue
         active = [task for task in state.tasks.values() if task.status not in {"completed", "cancelled"}]
         occupied = {task.assignee for task in active}
         occupied |= {config.helper if task.kind == "dig_well" else config.miller
@@ -503,6 +667,9 @@ def advance(world: "World", minutes: int) -> None:
 def after_action(world: "World", action: str, arguments: dict[str, Any]) -> int:
     if world.scenario.village is None:
         return 0
+    if world.scenario.village.ai_controlled:
+        from npc_sim import village_ai
+        return village_ai.after_action(world, action, arguments)
     duration = arguments["minutes"] if action == "village_wait" else 0 if action in {"look", "read"} else 5
     if duration:
         advance(world, duration)
@@ -512,6 +679,9 @@ def after_action(world: "World", action: str, arguments: dict[str, Any]) -> int:
 def observation(world: "World") -> dict[str, Any]:
     if world.scenario.village is None:
         return {}
+    if world.scenario.village.ai_controlled:
+        from npc_sim import village_ai
+        return village_ai.observation(world)
     config, state = context(world)
     nearby = local_residents(world, world.actor.location_id)
     events = [entry.model_dump() for entry in state.events if world.actor_id in entry.witnesses][-12:]
@@ -538,6 +708,9 @@ def observation(world: "World") -> dict[str, Any]:
 def actions(world: "World") -> list[dict[str, Any]]:
     if world.scenario.village is None:
         return []
+    if world.scenario.village.ai_controlled:
+        from npc_sim import village_ai
+        return village_ai.actions(world)
     config, state = context(world)
     nearby = local_residents(world, world.actor.location_id)
     result: list[dict[str, Any]] = []
@@ -613,7 +786,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         elif args["topic"] == "work":
             answer = f"I'm the {resident.occupation}. {resident.personality} Right now: {person.activity}."
             if person.busy_until > state.minute:
-                answer += f" I cannot leave my urgent work until minute {person.busy_until}."
+                answer += f" I cannot leave my urgent work until {clock_time(person.busy_until)}."
         else:
             memories = [state.events[index].result for index in person.memories[-3:]]
             answer = " ".join(memories) if memories else "I have no recent news of my own."
@@ -659,7 +832,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     state.tasks[tid] = task
     delayed = person.busy_until > state.minute
     if delayed:
-        block(world, task, f"Urgent work first; I can start at minute {person.busy_until}.")
+        block(world, task, f"Urgent work first; I can start at {clock_time(person.busy_until)}.")
     return result("TASK_ACCEPTED", f"{name} accepts {kind.replace('_', ' ')}"
                   + (" after finishing urgent work." if delayed else "."))
 
@@ -669,12 +842,27 @@ def permission_reason(world: "World", item: str) -> str | None:
         return None
     config, _ = context(world)
     owner = config.owners.get(item)
+    if config.ai_controlled:
+        _, state = context(world)
+        if state.residents[world.actor_id].cargo:
+            return "Deliver your shipment before taking portable tools."
+        if owner == world.actor_id:
+            return None
+        permitted = {
+            config.timber: {config.smith, config.helper},
+            config.rope: {config.smith, config.helper},
+        }
+        if world.actor_id in permitted.get(item, set()):
+            return None
     if owner:
-        return f"This belongs to {world.state.entities[owner].name}. Ask the specialist to handle it."
+        return f"This belongs to {resident_name(world, owner)}. Ask the specialist to handle it."
     return None
 
 
 def evaluate_goal(world: "World") -> dict[str, Any]:
+    if world.scenario.village and world.scenario.village.ai_controlled:
+        from npc_sim import village_ai
+        return village_ai.evaluate_goal(world)
     _, state = context(world)
     checks = {
         "shovel_delivered": any(task.kind == "fetch_shovel" and task.status == "completed"

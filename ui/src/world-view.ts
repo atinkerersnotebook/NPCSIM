@@ -60,11 +60,13 @@ export function agentPerspectives(state: State) {
 export function inventoryUnitsUsed(world: World, actorId: string): number {
   const actor = world.actors[actorId];
   if (!actor) throw new Error(`Unknown actor ${actorId}`);
-  return actor.inventory.reduce((total, id) => {
+  const carried = actor.inventory.reduce((total, id) => {
     const entity = world.entities[id];
     if (!entity) throw new Error(`Inventory references missing entity ${id}`);
     return total + (entity.inventory_units ?? 1);
   }, 0);
+  const cargo = world.village?.roster[actorId] ? world.village.residents[actorId]?.cargo : undefined;
+  return carried + Object.values(cargo ?? {}).reduce((total, amount) => total + amount, 0);
 }
 
 export function discoveredEntities(

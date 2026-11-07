@@ -2,23 +2,28 @@ import { z } from "zod";
 import {
   stateSchema, eventSchema, eventsSchema, modelsSchema, scenariosSchema, historySchema, historyDetailSchema,
   agentsSchema, agentProfileSchema, skillModeSchema, dungeonMasterConfigSchema, dungeonMasterRulingSchema,
-  completionAnalysisSchema, npcChatSchema
+  completionAnalysisSchema, npcChatSchema, budgetExtensionSchema
 } from "./contracts";
 import type { AgentProfile, CompletionAnalysis, DungeonMasterConfig, SkillMode, State, RunEvent } from "./contracts";
 import { effectiveBody, profileText, slotLabel, validateAssignments } from "./agent-profiles";
 import { evidenceReferences, explainEvidence } from "./evidence";
-import { buildNarrative, buildStory, copyStory, isTeamStory } from "./story";
+import { buildNarrative, buildStory, copyStory, isTeamStory, villageTimeline } from "./story";
 import type { StoryEntry, StoryMembers } from "./story";
 import { actorPerspective, agentPerspectives, discoveredEntities, goalPresentation, inventoryUnitsUsed, locationNetwork, nutritionLabel, teamLocationNetwork } from "./world-view";
 import { batchTiming, clockHelp, clockTime } from "./bakery-view";
-import { villageMarkup } from "./village-view";
-import { adventureStatus, isAdminView, playerCommandVisible } from "./view-mode";
+import { villageDashboardMarkup, villageMarkup } from "./village-view";
+import { adventureStatus, budgetSummary, canAskQuestions, canExtendBudget, canReopenAdventure, isAdminView, playerCommandVisible, simulationClock, villageClockText, viewMode, viewNavigation } from "./view-mode";
+import { startWorldMonitor } from "./world-monitor";
 import { conditionText } from "./secondary-goals";
 import "./style.css";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing application root");
+if (viewMode(location.search) === "world") {
+  startWorldMonitor(app);
+} else {
 const adminView = isAdminView(location.search);
+let focusBudget = new URLSearchParams(location.search).get("budget") === "extend";
 app.className = adminView ? "admin-view" : "player-view";
 document.title = adminView ? "NPCSIM · World Observatory" : "NPCSIM · Adventures";
 
@@ -33,7 +38,7 @@ app.innerHTML = `
   <main id="observatory">
     <header>
       <div><div class="eyebrow">NPCSIM / ${adminView ? "LOCAL SIMULATION" : "CHARACTERS WITH A MIND OF THEIR OWN"}</div><h1>${adminView ? "World observatory" : "Every adventure has a story"}<span class="dot">.</span></h1></div>
-      <div class="header-right"><span class="live-dot"></span><span id="connection">Connecting</span><span class="tag">${adminView ? "ADMIN VIEW" : "PLAYER VIEW"}</span><a id="view-switch" class="button subtle" href="${adminView ? "/" : "/?view=admin"}">${adminView ? "Player view" : "Admin view"}</a></div>
+      <div class="header-right"><div id="simulation-clock" class="simulation-clock" role="timer" aria-label="Current game time" hidden></div><span class="live-dot"></span><span id="connection">Connecting</span>${viewNavigation(adminView ? "admin" : "player")}</div>
     </header>
     <div id="notice" class="notice" role="alert" hidden></div>
     <section class="toolbar">
@@ -44,6 +49,7 @@ app.innerHTML = `
         <button id="run-command" data-command="run" class="button primary">▶ Run agent</button>
         <button data-command="pause" class="button">Ⅱ Pause</button>
         <button data-command="resume" class="button">↗ ${adminView ? "Resume" : "Continue"}</button>
+        <button data-command="reopen" class="button">Continue unfinished day</button>
         <button data-command="reset" class="button subtle">↺ ${adminView ? "Reset" : "Restart"}</button>
       </div>
     </section>
@@ -98,6 +104,19 @@ app.innerHTML = `
       <div class="batch-grid" id="bread-batches" aria-label="Bread batch timers"></div>
     </section>
     <section class="metrics" id="metrics"></section>
+    <details class="panel budget-panel" id="budget-controls" hidden${focusBudget ? " open" : ""}>
+      <summary>Extend call & action budget</summary>
+      <p id="budget-usage" class="muted"></p>
+      <p class="muted">Add to this adventure only. Calls can incur model charges. Time is real active time, not the village clock. Supervisor and outcome-review calls are counted separately.</p>
+      <form id="budget-form">
+        <label>Extra model calls<input id="budget-calls" type="number" min="0" step="1" value="100" required /></label>
+        <label>Extra actions<input id="budget-actions" type="number" min="0" step="1" value="100" required /></label>
+        <label>Extra active minutes<input id="budget-minutes" type="number" min="0" step="1" value="0" required /></label>
+        <button id="extend-budget" type="submit" class="button">Add budget</button>
+      </form>
+      <p id="budget-message" role="status">Extending a stopped adventure leaves it paused. Press Continue when ready.</p>
+    </details>
+    <section id="village-overview" class="village-panel" aria-label="Village-wide tracking" hidden></section>
     <section id="team-overview" class="team-overview" aria-label="Team overview" hidden>
       <div class="team-left">
         <div id="team-map-host"></div>
@@ -161,7 +180,7 @@ app.innerHTML = `
         </section>
         <section class="panel interaction-panel" aria-labelledby="npc-chat-heading">
           <h2 id="npc-chat-heading">Ask an NPC</h2>
-          <p>Private conversation. Only the selected NPC remembers it, and answers from its own knowledge. No world actions are performed.</p>
+          <p>Private conversation, including after the adventure ends. Only the selected NPC remembers it and answers from its own knowledge. Follow-up questions do not restart the world or change its result.</p>
           <form id="npc-chat-form">
             <label for="chat-actor">Speak privately with</label>
             <select id="chat-actor"></select>
@@ -204,6 +223,9 @@ let goalMarkup = "";
 const dismissedProposals = new Set<string>();
 let configured = false;
 let filter = "all";
+let timelineLimit = 100;
+let timelineFrame: number | null = null;
+const technicalEvents = new Map<string, RunEvent>();
 let selectedActor = "";
 let selectedMapLocation = "";
 let selectedScenario = "";
@@ -258,6 +280,8 @@ function applyState(next: State): void {
     selectedActor = "";
     selectedMapLocation = "";
     events = [];
+    technicalEvents.clear();
+    timelineLimit = 100;
     dismissedProposals.clear();
     element<HTMLSelectElement>("chat-actor").value = "";
     expanded.clear();
@@ -296,6 +320,10 @@ function applyState(next: State): void {
 
 function renderMetrics(): void {
   if (!state) return;
+  const clock = simulationClock(state.world ?? state.observation, state.observation);
+  const display = element("simulation-clock");
+  display.hidden = clock === null;
+  display.innerHTML = clock ? `<span class="eyebrow">CURRENT GAME TIME</span><strong>${clock.time}</strong><small>${clock.description}</small>` : "";
   const run = state.run;
   const status = run?.status ?? "idle";
   if (!adminView) {
@@ -308,7 +336,7 @@ function renderMetrics(): void {
   element("metrics").innerHTML = `
     <div class="metric goal"><span class="eyebrow">${run?.goal.revealed === false ? "UNKNOWN TASK" : "ROOT GOAL"}</span><strong>${escape(run?.goal.objective ?? "Leave the room.")}</strong><span class="muted">${escape(run?.goal.status ?? "Waiting to start")}</span></div>
     <div class="metric"><span class="eyebrow">ATTEMPT STATUS</span><strong class="status ${escape(status)}">${run?.completion_analysis ? "finished" : escape(status.replaceAll("_", " "))}</strong><span class="muted">${run?.completion_analysis ? `Execution: ${escape(status.replaceAll("_", " "))} · Grade: ${escape(run.completion_analysis.verdict ?? run.completion_analysis.status)}` : state.in_flight ? "One cycle in progress" : "Sequential action loop"}</span></div>
-    <div class="metric"><span class="eyebrow">ACTIONS / BUDGET</span><strong>${run?.actions ?? 0}<small> / ${escape(budgets.max_actions)}</small></strong><span class="muted">${run?.model_calls ?? 0} decision calls${run?.dungeon_master ? ` + ${run.dungeon_master.model_calls} supervisor` : ""}${run?.completion_analysis ? ` + ${run.completion_analysis.model_calls} review` : ""}</span></div>
+    <div class="metric"><span class="eyebrow">ACTIONS / BUDGET</span><strong>${run?.actions ?? 0}<small> / ${escape(budgets.max_actions)}</small></strong><span class="muted">${run?.model_calls ?? 0} / ${escape(budgets.max_model_calls)} decision/interaction calls${run?.dungeon_master ? ` + ${run.dungeon_master.model_calls} supervisor` : ""}${run?.completion_analysis || run?.previous_review_model_calls ? ` + ${(run.previous_review_model_calls ?? 0) + (run.completion_analysis?.model_calls ?? 0)} review` : ""}</span></div>
     <div class="metric"><span class="eyebrow">ELAPSED</span><strong>${(run?.elapsed_seconds ?? 0).toFixed(1)}<small>s</small></strong><span class="muted">${escape(budgets.max_seconds)}s episode limit</span></div>`;
 }
 
@@ -435,13 +463,25 @@ function renderControls(): void {
   const terminal = ["idle", "succeeded", "error", "blocked", "stalled", "cancelled", "budget_exceeded"].includes(status);
   document.querySelectorAll<HTMLButtonElement>("[data-command]").forEach(button => {
     const command = button.dataset.command;
-    button.hidden = !adminView && !playerCommandVisible(command, status);
+    if (command === "reopen") button.textContent = status === "error"
+      ? "Recover interrupted day" : "Continue unfinished day";
+    button.hidden = (!adminView && !playerCommandVisible(command, status)) ||
+      (command === "reopen" && !canReopenAdventure(state?.run ?? null, Boolean(state?.world)));
     button.disabled = busy || interactionBusy || Boolean(state?.in_flight) ||
       ((command === "step" || command === "run") && (terminal || status === "running")) ||
       (command === "pause" && status !== "running") ||
       (command === "resume" && status !== "paused") ||
       (command === "assess" && (!terminal || status === "idle"));
   });
+  const budgetPanel = element<HTMLDetailsElement>("budget-controls");
+  budgetPanel.hidden = !canExtendBudget(status, Boolean(state?.world));
+  if (focusBudget && !budgetPanel.hidden) {
+    budgetPanel.open = true;
+    budgetPanel.scrollIntoView({block: "start"});
+    focusBudget = false;
+  }
+  element("budget-usage").textContent = state ? budgetSummary(state) : "";
+  element<HTMLButtonElement>("extend-budget").disabled = busy || interactionBusy;
   if (state?.run?.completion_analysis?.error) notice(state.run.completion_analysis.error);
   else if (state?.run?.reason) notice(state.run.reason);
 }
@@ -450,9 +490,13 @@ function renderInteractions(): void {
   const run = state?.run;
   const enabled = Boolean(run && state?.world && ["ready", "paused", "running"].includes(run.status));
   const disabled = !enabled || busy || interactionBusy || Boolean(state?.in_flight);
+  const chatEnabled = canAskQuestions(run?.status ?? "idle", Boolean(state?.observation ||
+    Object.values(run?.agents ?? {}).some(agent => agent.observation)));
+  const chatDisabled = !chatEnabled || busy || interactionBusy || Boolean(state?.in_flight);
   const selector = element<HTMLSelectElement>("chat-actor");
   const selected = selector.value || run?.actor_id || "";
-  const options = Object.keys(state?.world?.actors ?? {}).map(id => {
+  const options = Object.keys(state?.world?.actors ?? run?.agents ??
+    (run ? { [run.actor_id]: {} } : {})).map(id => {
     const name = run?.agent_profiles?.[id]?.name ?? slotLabel(id);
     return `<option value="${escape(id)}">${escape(name)}</option>`;
   }).join("");
@@ -462,13 +506,16 @@ function renderInteractions(): void {
   }
   selector.value = selected;
   document.querySelectorAll<HTMLButtonElement | HTMLTextAreaElement | HTMLSelectElement>(
-    "#npc-chat-form button, #npc-chat-form textarea, #npc-chat-form select, #world-edit-form button, #world-edit-form textarea"
+    "#npc-chat-form button, #npc-chat-form textarea, #npc-chat-form select"
+  ).forEach(node => { node.disabled = chatDisabled; });
+  document.querySelectorAll<HTMLButtonElement | HTMLTextAreaElement>(
+    "#world-edit-form button, #world-edit-form textarea"
   ).forEach(node => { node.disabled = disabled; });
   const chats = events.filter(event => event.kind === "npc_chat" && event.actor_id === selector.value);
   const nextChat = chats.length ? chats.map(event => {
     const chat = npcChatSchema.parse(event.payload);
     return `<article><strong>You</strong><p>${escape(chat.question)}</p><strong>NPC · private</strong><p>${escape(chat.answer)}</p></article>`;
-  }).join("") : `<p class="timeline-note">${enabled ? "No private messages with this NPC yet." : "Start an active adventure to ask questions or propose changes."}</p>`;
+  }).join("") : `<p class="timeline-note">${chatEnabled ? "No private messages with this NPC yet. You can also ask questions after the adventure ends." : "Start an adventure to ask questions."}</p>`;
   if (nextChat !== chatMarkup) {
     updateReadingPane(element("npc-chat-history"), nextChat);
     chatMarkup = nextChat;
@@ -530,7 +577,7 @@ async function interact(operation: "chat" | "propose" | "approve", payload: Reco
   renderInteractions();
   try {
     applyState(stateSchema.parse(await api(`/interactions/${operation}`, "POST", { run_id: runId, ...payload })));
-    const recorded = eventsSchema.parse(await api("/events"));
+    const recorded = eventsSchema.parse(await api("/events?compact=true"));
     if (activeRun === runId) {
       events = recorded.events;
       renderTimeline();
@@ -784,6 +831,10 @@ function updateReadingPane(node: HTMLElement, html: string): void {
 }
 
 function renderTeamPerspectives(): void {
+  const villageOverview = element("village-overview");
+  const villageContent = state ? villageDashboardMarkup(state, events) : "";
+  villageOverview.hidden = !villageContent;
+  updateReadingPane(villageOverview, villageContent);
   const agents = state ? agentPerspectives(state) : [];
   const team = agents.length > 1;
   const perspectivesVisible = !adminView || agents.length > 0;
@@ -819,7 +870,7 @@ function renderTeamPerspectives(): void {
   const reviewHost = element(perspectivesVisible ? "team-review-host" : "narrative-column");
   if (completionPanel.parentElement !== reviewHost) reviewHost.append(completionPanel);
   const grid = element("agent-perspectives");
-  grid.style.setProperty("--agent-count", String(Math.max(1, agents.length)));
+  grid.style.setProperty("--agent-count", String(Math.max(1, Math.min(3, agents.length))));
   if (!perspectivesVisible) {
     grid.replaceChildren();
     delete grid.dataset.agents;
@@ -898,7 +949,7 @@ function eventSummary(event: RunEvent): { title: string; text: string; tone: str
 function storyMarkup(entries: StoryEntry[], team = false): string {
   return entries.map(entry => `<article class="story-entry ${entry.kind}" data-story-id="${escape(entry.id)}">
       <div class="story-marker">${entry.kind === "intent" ? "→" : entry.kind === "ending" ? "◇" : "·"}</div>
-      <div><span class="story-label">${entry.kind === "intent" ? (team ? "ACTION ATTEMPT" : "I TRY") : entry.kind === "result" ? "WHAT HAPPENS" : entry.kind === "ending" ? "THE OUTCOME" : (team ? "OBSERVATION" : "I OBSERVE")}${entry.cycle ? ` · STEP ${entry.cycle}` : ""}</span><p>${escape(entry.text)}</p>
+      <div><span class="story-label">${entry.timeline ? `${escape(entry.timeline)} · ` : ""}${entry.freeAction ? "FREE LOOK/READ" : entry.kind === "intent" ? (team ? "ACTION ATTEMPT" : "I TRY") : entry.kind === "result" ? "WHAT HAPPENS" : entry.kind === "ending" ? "THE OUTCOME" : (team ? "OBSERVATION" : "I OBSERVE")}${entry.cycle ? ` · STEP ${entry.cycle}` : ""}</span><p>${escape(entry.text)}</p>
       ${entry.explanation ? `<details><summary>Why this action?</summary><p class="story-explanation">${escape(entry.explanation)}</p></details>` : ""}</div>
     </article>`).join("");
 }
@@ -984,13 +1035,15 @@ element("copy-story").addEventListener("click", () => {
     state.run.completion_analysis?.story, state.run.agent_profiles));
 });
 
-function renderTimeline(): void {
-  renderInteractions();
-  renderDungeonMaster();
-  renderCompletionAnalysis();
-  renderTeamPerspectives();
-  renderStory();
-  renderNarrative();
+function renderTimeline(updateStory = true): void {
+  if (updateStory) {
+    renderInteractions();
+    renderDungeonMaster();
+    renderCompletionAnalysis();
+    renderTeamPerspectives();
+    renderStory();
+    renderNarrative();
+  }
   element("event-count").textContent = String(events.length);
   const shown = events.filter(event => filter === "all" || event.kind === filter || (filter === "error" && ["validation", "finished"].includes(event.kind)));
   if (!shown.length) {
@@ -998,15 +1051,20 @@ function renderTimeline(): void {
     return;
   }
 
-  element("timeline").innerHTML = shown.slice().reverse().map(event => {
+  element("timeline").innerHTML = (shown.length > timelineLimit
+    ? `<button class="button subtle" data-more-events>Show 100 older events (${shown.length - timelineLimit} more)</button>` : "") +
+    shown.slice(-timelineLimit).reverse().map(event => {
     const summary = eventSummary(event);
+    if (event.village_minute !== undefined) {
+      summary.text = villageClockText(summary.text);
+    }
     const payload = record(event.payload);
     const evidence = evidenceReferences(event.payload);
     const story = event.kind === "assessment_result" ?
       completionAnalysisSchema.shape.story.optional().parse(payload.story) ?? [] : [];
     return `<details class="event ${summary.tone}" data-event-id="${escape(event.id)}" ${expanded.has(event.id) ? "open" : ""}>
-      <summary><span class="event-marker"></span><div class="event-body"><div class="event-meta">CYCLE ${event.cycle.toString().padStart(2, "0")} <span>${escape(event.actor_id)}</span><span>${new Date(event.timestamp).toLocaleTimeString()}</span><span>#${event.sequence}</span></div><strong>${escape(summary.title)}</strong><p>${escape(summary.text)}</p></div><span class="expand-icon">＋</span></summary>
-      <div class="event-detail">${event.kind === "decision" ? `<div class="expected"><span class="eyebrow">EXPECTED OUTCOME</span><p>${escape(payload.expected_outcome)}</p></div>` : ""}${evidence.length ? `<h4>Evidence explained</h4>${evidenceMarkup(evidence, events, story)}` : ""}<details><summary>Original technical JSON</summary><pre>${escape(pretty(event.payload))}</pre></details></div>
+      <summary><span class="event-marker"></span><div class="event-body"><div class="event-meta">CYCLE ${event.cycle.toString().padStart(2, "0")} <span>${escape(villageTimeline(event, state?.run?.agent_profiles) ?? event.actor_name ?? event.actor_id)}</span>${event.free_action ? "<span>FREE LOOK/READ</span>" : ""}<span>${new Date(event.timestamp).toLocaleTimeString()}</span><span>#${event.sequence}</span></div><strong>${escape(summary.title)}</strong><p>${escape(summary.text)}</p></div><span class="expand-icon">＋</span></summary>
+      <div class="event-detail">${event.kind === "decision" ? `<div class="expected"><span class="eyebrow">EXPECTED OUTCOME</span><p>${escape(payload.expected_outcome)}</p></div>` : ""}${evidence.length ? `<h4>Evidence explained</h4>${evidenceMarkup(evidence, events, story)}` : ""}<details data-technical-id="${escape(event.id)}"><summary>Original technical JSON</summary><pre></pre></details></div>
     </details>`;
   }).join("");
 }
@@ -1027,10 +1085,12 @@ async function command(name: string): Promise<void> {
       if (!choice) throw new Error("Choose a scenario before starting.");
       validateAssignments(choice.agent_slots.map(slot => slot.id), assignments, profiles);
     }
-    applyState(stateSchema.parse(await api(`/control/${name}`, "POST",
-      (name === "start" || name === "reset") && scenario ? {
+    const nextState = stateSchema.parse(await api(name === "reopen" ? "/adventure/reopen" : `/control/${name}`, "POST",
+      name === "reopen" ? {run_id: state?.run?.id} : (name === "start" || name === "reset") && scenario ? {
         scenario_id: scenario, ...(name === "start" ? { agent_assignments: assignments, skill_mode: skillMode } : {})
-      } : {})));
+      } : {}));
+    notice("");
+    applyState(nextState);
   } catch (error) { notice(errorMessage(error)); }
   finally { busy = false; renderControls(); renderSelf(); }
 }
@@ -1038,6 +1098,32 @@ element("controls").addEventListener("click", event => {
   if (!(event.target instanceof Element)) return;
   const button = event.target.closest<HTMLButtonElement>("[data-command]");
   if (button?.dataset.command) void command(button.dataset.command);
+});
+element("budget-form").addEventListener("submit", event => {
+  event.preventDefault();
+  if (!state?.run || busy || interactionBusy) return;
+  const runId = state.run.id;
+  void (async () => {
+    busy = true;
+    renderControls();
+    element("budget-message").textContent = "Updating budget after the current turn...";
+    try {
+      const request = budgetExtensionSchema.parse({
+        run_id: runId,
+        add_model_calls: element<HTMLInputElement>("budget-calls").valueAsNumber,
+        add_actions: element<HTMLInputElement>("budget-actions").valueAsNumber,
+        add_seconds: element<HTMLInputElement>("budget-minutes").valueAsNumber * 60
+      });
+      applyState(stateSchema.parse(await api("/budget/extend", "POST", request)));
+      element("budget-message").textContent = state?.run?.status === "running" ?
+        "Budget extended. The adventure is still running." : "Budget extended. Press Play or Continue when ready.";
+    } catch (error) {
+      const message = error instanceof z.ZodError ?
+        error.issues.map(issue => issue.message).join(" ") : errorMessage(error);
+      element("budget-message").textContent = message;
+      notice(message);
+    } finally { busy = false; renderControls(); }
+  })();
 });
 element("self-content").addEventListener("click", event => {
   if (!(event.target instanceof Element)) return;
@@ -1144,12 +1230,37 @@ element("save-clock").addEventListener("click", () => {
 });
 element("event-filter").addEventListener("change", () => {
   filter = element<HTMLSelectElement>("event-filter").value;
-  renderTimeline();
+  timelineLimit = 100;
+  renderTimeline(false);
+});
+element("timeline").addEventListener("click", event => {
+  if (event.target instanceof Element && event.target.closest("[data-more-events]")) {
+    timelineLimit += 100;
+    renderTimeline(false);
+  }
 });
 element("timeline").addEventListener("toggle", event => {
   if (!(event.target instanceof HTMLDetailsElement)) return;
-  const id = event.target.dataset.eventId;
-  if (id) event.target.open ? expanded.add(id) : expanded.delete(id);
+  const details = event.target;
+  const id = details.dataset.eventId;
+  if (id) details.open ? expanded.add(id) : expanded.delete(id);
+  const technicalId = details.dataset.technicalId;
+  if (!technicalId || !details.open) return;
+  const recorded = events.find(item => item.id === technicalId);
+  const pre = details.querySelector("pre");
+  if (!recorded || !pre) return;
+  const cached = technicalEvents.get(technicalId);
+  if (cached || !record(recorded.payload).technical_payload_omitted) {
+    pre.textContent = pretty((cached ?? recorded).payload);
+    return;
+  }
+  pre.textContent = "Loading original technical JSON...";
+  void api(`/events/${recorded.sequence}?run_id=${encodeURIComponent(recorded.run_id)}`).then(payload => {
+    const original = eventSchema.parse(payload);
+    if (original.run_id !== activeRun) return;
+    technicalEvents.set(original.id, original);
+    pre.textContent = pretty(original.payload);
+  }).catch(error => { pre.textContent = `Could not load event: ${errorMessage(error)}`; });
 }, true);
 
 element("discover").addEventListener("click", () => {
@@ -1227,13 +1338,14 @@ async function initialize(): Promise<void> {
     select.value = selectedScenario;
     renderAssignments();
     renderProfileEditor();
-    const history = eventsSchema.parse(await api("/events"));
+    const history = eventsSchema.parse(await api("/events?compact=true"));
     if (history.run_id === activeRun) events = history.events;
     renderTimeline();
   } catch (error) {
     notice(`Could not load the simulation: ${errorMessage(error)}`);
   }
-  const stream = new EventSource("/api/stream");
+  const cursor = events.at(-1)?.sequence ?? 0;
+  const stream = new EventSource(`/api/stream?compact=true&run_id=${encodeURIComponent(activeRun ?? "")}&after=${cursor}`);
   stream.onopen = () => {
     element("connection").textContent = "Live connection";
     document.querySelector(".live-dot")?.classList.add("connected");
@@ -1251,8 +1363,13 @@ async function initialize(): Promise<void> {
       const event = eventSchema.parse(JSON.parse(message.data));
       if (event.run_id !== activeRun || events.some(item => item.id === event.id)) return;
       events.push(event);
-      renderTimeline();
+      if (timelineFrame === null) timelineFrame = requestAnimationFrame(() => {
+        timelineFrame = null;
+        renderTimeline();
+      });
     } catch (error) { notice(`Invalid event update: ${errorMessage(error)}`); }
   });
+  window.addEventListener("pagehide", () => stream.close(), {once: true});
 }
 void initialize();
+}

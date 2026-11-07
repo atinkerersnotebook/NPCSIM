@@ -1,0 +1,208 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "millhaven-expanded",
+  "failures": [
+    {
+      "run_id": "fea3f82ba6724dd0969ef33176a6a71a",
+      "objective": "Keep Millhaven alive as twelve independent villagers. Every resident must perform useful work in their own role. Torvin must recover his real borrowed shovel, then Torvin and Bren must bring shovel, well-timber and well-rope to the tavern-yard and each contribute village_project work to dig_well. After the mill drive fails at 14:00, Hobb must bring mill-beam and joiner-hammer to the watermill; Hobb and Mara must each contribute repair_mill work. Nella must carry a real bread shipment from the bakery to the tavern after the repair. Ordinary jobs consume local inputs and produce local outputs through village_work. Nella alone settles the configured grain, flour and bread deliveries. Garrick performs village_patrol at his scheduled post. Respect your personal schedule and knowledge; ask nearby people rather than using another villager's private beliefs. Nobody can command another villager's movement or work.",
+      "recorded_at": "2026-11-05T22:32:33.597525+00:00",
+      "findings": [
+        {
+          "reason": "Recovery requires real cooperative projects, resumed bread trade and a contribution from every villager.",
+          "evidence_ids": [
+            "fea3f82ba6724dd0969ef33176a6a71a:18"
+          ]
+        },
+        {
+          "reason": "Torvin has not recovered the borrowed shovel, and the well remains undug with no project contributions recorded.",
+          "evidence_ids": [
+            "fea3f82ba6724dd0969ef33176a6a71a:18"
+          ]
+        },
+        {
+          "reason": "The mill remains unrepaired, and the required post-repair bread supply has not resumed.",
+          "evidence_ids": [
+            "fea3f82ba6724dd0969ef33176a6a71a:18"
+          ]
+        },
+        {
+          "reason": "The requirement for every resident to perform useful work is unmet; no role contributions are recorded.",
+          "evidence_ids": [
+            "fea3f82ba6724dd0969ef33176a6a71a:18"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "716fa6c2832549b4a979f19522a33e50",
+      "objective": "Keep Millhaven alive as twelve independent villagers. Every resident must perform useful work in their own role. Torvin must make wagon parts and fit them with village_fit_wagon, recover his real borrowed shovel, and cooperate with Bren at the tavern-yard to dig_well using shovel, well-timber and well-rope. Agree project meeting places with village_meeting. Nella must collect the working wagon and accept village_start_route: farm, watermill, bakery, tavern, square, farm. It carries six mixed units and performs real batch loading, travel, unloading and payment automatically. Deliver bread whenever available, without waiting for the mill repair. After the mill drive fails at 14:00, Hobb must bring mill-beam and joiner-hammer to the watermill; Hobb and Mara must each contribute repair_mill work. Mill, bake and cook up to two inputs per action; one bread or fish makes two meals. Eat one daily meal at the 19:00 tavern gathering; missing it doubles the next day's work cooldown. Sleep at your own scheduled bedtime, finish committed baking before leaving, and resume work only after waking. Read the free village map and public bell notices at the square. Use personal knowledge, actual identities and natural speech. Nobody can command another villager's movement or ordinary work.",
+      "recorded_at": "2026-11-05T23:56:40.115067+00:00",
+      "findings": [
+        {
+          "reason": "Recovery requires real cooperative projects, resumed bread trade and a contribution from every villager.",
+          "evidence_ids": [
+            "716fa6c2832549b4a979f19522a33e50:18"
+          ]
+        },
+        {
+          "reason": "Final verification confirms no working wagon, recovered shovel, completed well, repaired mill, or resumed bread supply.",
+          "evidence_ids": [
+            "716fa6c2832549b4a979f19522a33e50:18"
+          ]
+        },
+        {
+          "reason": "The requirement for every resident to perform useful work is unmet: no role or project contributions were recorded.",
+          "evidence_ids": [
+            "716fa6c2832549b4a979f19522a33e50:18"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "bff56084a1a34e8e854a466432c381aa",
+      "objective": "Keep Millhaven alive as twelve independent villagers. Every resident must perform useful work in their own role. Torvin must make wagon parts and fit them with village_fit_wagon, recover his real borrowed shovel, and cooperate with Bren at the tavern-yard to dig_well using shovel, well-timber and well-rope. Agree project meeting places with village_meeting. Nella must collect the working wagon and accept village_start_route: farm, watermill, bakery, tavern, square, farm. It carries six mixed units and performs real batch loading, travel, unloading and payment automatically. Deliver bread whenever available, without waiting for the mill repair. After the mill drive fails at 14:00, Hobb must bring mill-beam and joiner-hammer to the watermill; Hobb and Mara must each contribute repair_mill work. Mill, bake and cook up to two inputs per action; one bread or fish makes two meals. Eat one daily meal at the 19:00 tavern gathering; missing it doubles the next day's work cooldown. Sleep at your own scheduled bedtime, finish committed baking before leaving, and resume work only after waking. Read the free village map and public bell notices at the square. Use personal knowledge, actual identities and natural speech. Nobody can command another villager's movement or ordinary work.",
+      "recorded_at": "2026-11-06T11:01:51.151137+00:00",
+      "findings": [
+        {
+          "reason": "Recovery requires real cooperative projects, resumed bread trade and a contribution from every villager.",
+          "evidence_ids": [
+            "bff56084a1a34e8e854a466432c381aa:1128"
+          ]
+        },
+        {
+          "reason": "The authoritative final check confirms the mill remains unrepaired; neither Hobb nor Mara has recorded repair_mill contributions.",
+          "evidence_ids": [
+            "bff56084a1a34e8e854a466432c381aa:1128"
+          ]
+        },
+        {
+          "reason": "Committed baking remains unfinished: Jory started a batch finishing at minute 615, but final verification is at minute 585 and marks committed_batches_finished false.",
+          "evidence_ids": [
+            "bff56084a1a34e8e854a466432c381aa:1110",
+            "bff56084a1a34e8e854a466432c381aa:1128"
+          ]
+        },
+        {
+          "reason": "The required 19:00 meal, scheduled sleep and post-waking resumption are not demonstrated; the verified attempt stops during the morning.",
+          "evidence_ids": [
+            "bff56084a1a34e8e854a466432c381aa:1128"
+          ]
+        },
+        {
+          "reason": "Recorded speech misidentifies personal knowledge and ownership, calling Mara's watermill Hobb's and Torvin's shovel Bren's.",
+          "evidence_ids": [
+            "bff56084a1a34e8e854a466432c381aa:426",
+            "bff56084a1a34e8e854a466432c381aa:474"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "235115e2f6e64575865bb9f3677d9f0f",
+      "objective": "Keep Millhaven alive as twelve independent villagers, each contributing useful work. Torvin makes and fits wagon parts, retrieves his shovel, and digs the well with Bren using actual shovel, timber and rope; helpers can carry supplies separately. Bren feeds the real horse at the stable, leads it to the wagon, hitches it for delivery, then unhitches and returns it at night. Nella accepts the six-unit road-only supply circuit; Ada or Jory may substitute when she is busy. Bread should reach the tavern by day-one 19:00; an overdue warning allows late recovery. Rowan accepts the timber foot route to Hobb's workshop. After the mill fails at 14:00, Hobb brings beam, hammer and one actual plank to the watermill; Hobb and Mara each contribute repairs. Confirm meetings, share known routes, and read public stock and project reports. Process two production inputs per action, including cooking fish; replenish hay, herbs, logs and paid noon trader iron. Use manure for faster harvests and tea for tiredness relief. Pay sellers, one coin per unloading action to the actual carrier, and one coin per daily tavern meal to Elsie. Stocks spoil without a warehouse cap. Eat at 19:00, sleep at home, and finish committed baking. Ordinary production starts after actual waking through 19:30, including late inputs. Only well and mill crews may explicitly choose urgent project work until 02:00; lack of sleep doubles next-day cooldown, stacking with hunger. Free looks and reads keep the turn; idle actors wait instead of aimlessly inspecting. Nobody commands another villager's movement or ordinary work. Use actual identities, natural speech and personal knowledge.",
+      "recorded_at": "2026-11-06T11:50:52.865460+00:00",
+      "findings": [
+        {
+          "reason": "Recovery requires real cooperative projects, resumed bread trade and a contribution from every villager.",
+          "evidence_ids": [
+            "235115e2f6e64575865bb9f3677d9f0f:18"
+          ]
+        },
+        {
+          "reason": "Authoritative verification shows the episode still active and incomplete: shovel not recovered, well not dug, mill not repaired, bread supply not resumed, wagon not working, and no resident or project contributions recorded.",
+          "evidence_ids": [
+            "235115e2f6e64575865bb9f3677d9f0f:18"
+          ]
+        },
+        {
+          "reason": "The attempt was interrupted by a process restart before any confirmed useful work, deliveries, payments, meetings, route sharing, or production actions occurred.",
+          "evidence_ids": [
+            "235115e2f6e64575865bb9f3677d9f0f:18"
+          ]
+        },
+        {
+          "reason": "The supplied text only states the setting and intended goal; it does not confirm that the twelve villagers performed their required tasks.",
+          "evidence_ids": [
+            "235115e2f6e64575865bb9f3677d9f0f:1",
+            "235115e2f6e64575865bb9f3677d9f0f:13"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "94f41b35e01c446db2d1d9d49b4ccb80",
+      "objective": "Keep Millhaven alive as twelve independent villagers, each contributing useful work. Torvin makes and fits wagon parts, retrieves his shovel, and digs the well with Bren using actual shovel, timber and rope; helpers can carry supplies separately. Bren feeds the real horse at the stable, leads it to the wagon, hitches it for delivery, then unhitches and returns it at night. Nella accepts the six-unit road-only supply circuit; Ada or Jory may substitute when she is busy. Bread should reach the tavern by day-one 19:00; an overdue warning allows late recovery. Rowan accepts the timber foot route to Hobb's workshop. After the mill fails at 14:00, Hobb brings beam, hammer and one actual plank to the watermill; Hobb and Mara each contribute repairs. Confirm meetings, share known routes, and read public stock and project reports. Process two production inputs per action, including cooking fish; replenish hay, herbs, logs and paid noon trader iron. Use manure for faster harvests and tea for tiredness relief. Pay sellers, one coin per unloading action to the actual carrier, and one coin per daily tavern meal to Elsie. Stocks spoil without a warehouse cap. Eat at 19:00, sleep at home, and finish committed baking. Ordinary production starts after actual waking through 19:30, including late inputs. Only well and mill crews may explicitly choose urgent project work until 02:00; lack of sleep doubles next-day cooldown, stacking with hunger. Free looks and reads keep the turn; idle actors wait instead of aimlessly inspecting. Nobody commands another villager's movement or ordinary work. Use actual identities, natural speech and personal knowledge.",
+      "recorded_at": "2026-11-06T12:16:38.831940+00:00",
+      "findings": [
+        {
+          "reason": "Recovery requires real cooperative projects, resumed bread trade and a contribution from every villager.",
+          "evidence_ids": [
+            "94f41b35e01c446db2d1d9d49b4ccb80:462"
+          ]
+        },
+        {
+          "reason": "Authoritative verification remains active at minute 505 and fails every required check: shovel not recovered, well not dug, mill not repaired, bread supply not resumed, wagon not working, committed batches unfinished, and not every resident contributed.",
+          "evidence_ids": [
+            "94f41b35e01c446db2d1d9d49b4ccb80:462"
+          ]
+        },
+        {
+          "reason": "The attempt ended by proxy error before night return of the horse, the mill failure/repair window, the 19:00 bread and meal deadlines, and completion of the well and supply circuit.",
+          "evidence_ids": [
+            "94f41b35e01c446db2d1d9d49b4ccb80:458",
+            "94f41b35e01c446db2d1d9d49b4ccb80:459",
+            "94f41b35e01c446db2d1d9d49b4ccb80:462"
+          ]
+        },
+        {
+          "reason": "Torvin only started fitting parts; the wagon was still under repair and not usable, so Nella never accepted the road supply circuit.",
+          "evidence_ids": [
+            "94f41b35e01c446db2d1d9d49b4ccb80:150",
+            "94f41b35e01c446db2d1d9d49b4ccb80:435",
+            "94f41b35e01c446db2d1d9d49b4ccb80:462"
+          ]
+        },
+        {
+          "reason": "Bren fed, led, and hitched the horse and picked up well timber, but the shovel was never recovered, the well was not dug, and the horse was not unhitched and returned.",
+          "evidence_ids": [
+            "94f41b35e01c446db2d1d9d49b4ccb80:30",
+            "94f41b35e01c446db2d1d9d49b4ccb80:417",
+            "94f41b35e01c446db2d1d9d49b4ccb80:453",
+            "94f41b35e01c446db2d1d9d49b4ccb80:462"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "dcd374f5ffaa461cae22ccae7ba69ac8",
+      "objective": "Begin at 05:00 asleep in your own cottage. When your scheduled wake/work-start time arrives, leave home and walk to your workplace using actual go actions before optional errands; never start work before waking or travel by teleportation. Keep Millhaven alive as twelve independent villagers, each contributing useful work. Torvin makes and fits wagon parts, retrieves his shovel, and digs the well with Bren using actual shovel, timber and rope; helpers can carry supplies separately. Bren feeds the real horse at the stable, leads it to the wagon, hitches it for delivery, then unhitches and returns it at night. Nella accepts the six-unit road-only supply circuit; Ada or Jory may substitute when she is busy. Bread should reach the tavern by day-one 19:00; an overdue warning allows late recovery. Rowan accepts the timber foot route to Hobb's workshop. After the mill fails at 14:00, Hobb brings beam, hammer and one actual plank to the watermill; Hobb and Mara each contribute repairs. Confirm meetings, share known routes, and read public stock and project reports. Process two production inputs per action, including cooking fish; replenish hay, herbs, logs and paid noon trader iron. Use manure for faster harvests and tea for tiredness relief. Pay sellers, one coin per unloading action to the actual carrier, and one coin per daily tavern meal to Elsie. Stocks spoil without a warehouse cap. Eat at 19:00, sleep at home, and finish committed baking. Ordinary production starts after actual waking through 19:30, including late inputs. Only well and mill crews may explicitly choose urgent project work until 02:00; lack of sleep doubles next-day cooldown, stacking with hunger. Free looks and reads keep the turn; idle actors wait instead of aimlessly inspecting. Nobody commands another villager's movement or ordinary work. Use actual identities, natural speech and personal knowledge.",
+      "recorded_at": "2026-11-06T16:31:29.911111+00:00",
+      "findings": [
+        {
+          "reason": "Recovery requires real cooperative projects, resumed bread trade and a contribution from every villager.",
+          "evidence_ids": [
+            "dcd374f5ffaa461cae22ccae7ba69ac8:3728"
+          ]
+        },
+        {
+          "reason": "The final goal check reports that the mill was not repaired and committed baking batches were not finished.",
+          "evidence_ids": [
+            "dcd374f5ffaa461cae22ccae7ba69ac8:3728"
+          ]
+        },
+        {
+          "reason": "The attempt stopped at 12:05, before the required 19:00 meal, nighttime horse return, and sleep at home could occur.",
+          "evidence_ids": [
+            "dcd374f5ffaa461cae22ccae7ba69ac8:3728"
+          ]
+        },
+        {
+          "reason": "The attempted noon iron purchase failed for insufficient carrying capacity; paid trader iron was not confirmed.",
+          "evidence_ids": [
+            "dcd374f5ffaa461cae22ccae7ba69ac8:3689"
+          ]
+        }
+      ]
+    }
+  ]
+}

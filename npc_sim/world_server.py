@@ -40,6 +40,21 @@ def main() -> None:
         return world.observe()
 
     @server.tool()
+    def world_next_village_actor(stop_at_minute: int | None = None) -> dict[str, Any]:
+        """Privileged controller scheduler; advance only to the next available village turn."""
+        from npc_sim import village_turns
+        with world._lock:
+            if world.state.village is None:
+                raise ValueError("This world does not have a village scheduler")
+            before = world.state.model_copy(deep=True)
+            try:
+                actor_id = village_turns.next_actor(world, stop_at_minute)
+                return {"actor_id": actor_id, "minute": world.state.village.minute}
+            except (OSError, ValueError):
+                world.state = before
+                raise
+
+    @server.tool()
     def world_manifest() -> dict[str, Any]:
         """Read the versioned world interface contract, not hidden scenario data."""
         return {
@@ -53,6 +68,9 @@ def main() -> None:
             "actor_selection": "world_select_actor",
             "admin_intervention": "world_apply_edit",
             "admin_validate_intervention": "world_validate_edit",
+            "village_scheduler": "world_next_village_actor"
+            if world.scenario.village and world.scenario.village.time_based_turns else None,
+            "village_full_rules": bool(world.scenario.village and world.scenario.village.expanded_rules),
         }
 
     @server.tool()

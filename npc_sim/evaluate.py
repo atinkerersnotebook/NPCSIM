@@ -44,6 +44,8 @@ async def evaluate(args: argparse.Namespace) -> dict:
                 await controller.command("run")
                 while controller.run and (controller.run["status"] not in TERMINAL
                                           or controller.run.get("completion_analysis", {}).get("status") in {"pending", "running"}):
+                    if controller.run["status"] == "paused" and not controller.in_flight:
+                        break
                     await asyncio.sleep(0.2)
                 run = controller.run
                 if run is None:
@@ -60,7 +62,7 @@ async def evaluate(args: argparse.Namespace) -> dict:
                                   ("scenario", "episode", "status", "actions", "elapsed_seconds")}), flush=True)
                 return result
             finally:
-                await controller.shutdown()
+                await controller.shutdown(preserve_paused=True)
 
     jobs = [episode(main_scenario, index) for index in range(1, args.episodes + 1)]
     jobs += [episode("sleepy-room", index) for index in range(1, args.fixture_episodes + 1)]

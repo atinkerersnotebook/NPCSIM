@@ -109,6 +109,13 @@ For the local MVP, the simulator must run in a network context that can reach th
 
 Proxy authentication secrets are resolved externally and excluded from prompts and transcripts. Provider credentials remain managed by the proxy. Proxy errors, rate limits, timeouts, and malformed responses are surfaced explicitly; there is no fallback to a direct provider connection. Requests and retries count against the model-call and wall-time budgets.
 
+During active play, connection failures, timeouts, HTTP 408/429 and HTTP 5xx pause
+the adventure rather than ending it. Freeze simulation time and the episode timer,
+preserve world state and memories, and show an explicit reason. Retry only after
+an operator resumes or steps. A failed decision retains its actor's turn; a failed
+supervisor review is retried before another action, never by replaying a committed
+action. Malformed decisions and non-retryable HTTP failures remain terminal errors.
+
 ## 4. Initial World
 
 ### Authoritative initial state
@@ -446,6 +453,20 @@ Keep current observed facts, the actor's observed `self` state and constraints, 
 
 Populate factual entity memory, discovery IDs and visited-room memory solely from actor-visible observations, starting with the initial observation. Retain these discoveries when they leave the current view, but never prepopulate them from scenario JSON or privileged snapshots. Tentative model plans are not evidence that an object exists.
 
+Build proxy requests from non-mutating short-term projections, leaving complete
+saved memories and events intact. NPC decisions and private questions include
+the latest six actions, conversation exchanges, incoming messages and village
+news entries, and three previous-attempt failure reports. Preserve current goals,
+full advertised action schemas, physical constraints, known discoveries, maps and
+active plans. Supply the character profile once rather than repeating it in memory.
+Progress reviews keep all teammates' latest observed state and up to 40 compact
+evidence records with their original IDs. Do not repeat full snapshots or action
+schemas in those records; retain authoritative outcomes, verification evidence
+and timed-work state. Deduplicate public rules and recent notices. Mark result
+explanations shortened to 600 characters and explicitly prohibit treating omitted
+history as proof of absence or futility. Compaction requires no model calls and
+must not change citation validation, saved history or simulation scheduling.
+
 Longer transcripts may be summarized for model context, but the complete transcript remains persisted. Summaries must preserve unresolved failures and supporting evidence.
 
 ### Simulator controls
@@ -471,6 +492,57 @@ Only one action may be in flight for an actor. MVP pause/resume is within the ru
 - A second such repetition window terminates as `stalled`.
 
 Terminal run statuses are `succeeded`, `blocked`, `stalled`, `budget_exceeded`, `cancelled`, and `error`. `blocked` reflects the agent's evidence-based assessment, not proof that a puzzle is impossible.
+
+`POST /api/budget/extend` accepts `run_id` and nonnegative additions
+`add_actions`, `add_model_calls`, and `add_seconds`, with at least one positive
+addition. It extends only the identified current adventure's frozen limits.
+Active runs retain their status. A `budget_exceeded` run reopens paused only if
+all exhausted limits receive enough capacity; no automatic continuation or model
+call is permitted. Preserve world, elapsed/game time, actor bindings, memory,
+history, and pending turns/reviews. Invalidate the obsolete completion grade and
+its failure feedback, retaining immutable review events and prior review-call
+counts. Reject other terminal states and stale run IDs. A saved budget-exhausted
+built-in local world may reconnect using its existing state and frozen scenario,
+without recreating either. Player/Admin provide the extension form; World remains
+read-only and links to it.
+
+Daily-life village completion must include an evening meal for every resident,
+everyone physically at their configured home and asleep, and no committed work.
+Expanded rules also require the horse released at its stable, unhitched,
+automatic routes stopped, renewable resource production and actual manure/tea
+use. Repairs and daytime trade alone cannot terminate the adventure. Verification
+exports this complete checklist to the story reviewer, including historical
+service evidence; absence from the prose is not proof of failure. Use the most
+recent evening after the scenario's starting day, including after midnight, so a
+later complete day can recover from a missed earlier meal.
+
+`POST /api/adventure/reopen` accepts the current `run_id`. Only a succeeded village
+attempt with a completed failing review and a fresh authoritative
+`full_village_day` verification still marked active may reopen. Reconnect only
+the saved built-in local world and frozen scenario. Reopen paused, retain the
+pending actor and all committed progress/budgets/timing, archive previous review
+events and charges, and remove obsolete current-attempt failure feedback.
+Never resume automatically or call a model during reopening.
+
+The same endpoint may recover a local village MCP response timeout only at a
+confirmed free-action boundary: every action request has a matching result, and
+the persisted free-turn actor matches the latest free action's actor. Reject
+uncertain mutations or other interrupted states. Optional `until_midnight: true`
+records the next midnight as a stop boundary without changing budgets. Keep
+simulating after early goal completion, process intervening night events, and
+pause exactly at that boundary rather than scheduling an actor the next morning.
+
+Recovery may also preserve an already persisted next actor after a completed
+non-free action, provided every request is confirmed and the controller has not
+switched to that new actor. Do not schedule again or repeat the completed action.
+
+Live inspection caches request-free world snapshots by file identity, size and
+modification time. The UI displays 100 technical events initially and loads raw
+JSON only on demand. `/api/events?compact=true` and `/api/stream?compact=true`
+omit model request messages without changing saved events. Original events remain
+available at `/api/events/{sequence}?run_id=...` and in full exports. SSE accepts
+`run_id` and `after` as an initial cursor, honors Last-Event-ID on reconnect, yields
+during history replay, and sends snapshots only when their content changes.
 
 An ambiguous mutation timeout is retried only with the same request ID when deduplication is supported. Otherwise stop with `error` and report the uncertain outcome rather than risk applying the action twice.
 

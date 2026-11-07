@@ -173,9 +173,14 @@ def apply_edit(world: "World", request_id: str, expected_revision: str, plan: Wo
             raise
 
 
-async def prepare(controller: "Controller", run_id: str) -> None:
-    if (not controller.run or controller.run["id"] != run_id or not controller.world
-            or controller.run["status"] not in {"ready", "paused", "running"}):
+async def prepare(controller: "Controller", run_id: str, *, allow_ended: bool = False) -> None:
+    from npc_sim.controller import TERMINAL
+
+    if not controller.run or controller.run["id"] != run_id:
+        raise ValueError("This interaction needs the current active adventure.")
+    if allow_ended and controller.run["status"] in TERMINAL:
+        return
+    if not controller.world or controller.run["status"] not in {"ready", "paused", "running"}:
         raise ValueError("This interaction needs the current active adventure.")
     if controller.run["status"] == "running":
         controller.run["status"] = "paused"
@@ -185,42 +190,62 @@ async def prepare(controller: "Controller", run_id: str) -> None:
     controller.checkpoint()
 
 
-async def model(controller: "Controller") -> str:
+async def model(controller: "Controller", *, followup: bool = False) -> str:
     if controller.run is None:
         raise ValueError("No current adventure.")
-    if controller.run["model_calls"] >= controller.budgets.max_model_calls:
+    if not followup and controller.run["model_calls"] >= controller.budgets.max_model_calls:
         raise ValueError("The adventure's model-call budget is exhausted.")
-    if not controller.run["model"]:
+    selected = controller.run["model"] or (controller.config.proxy.model if followup else None)
+    if not selected:
         models = await controller.proxy.models()
         if len(models) != 1:
             raise ValueError("Select a model in Admin view before interacting.")
-        controller.run["model"] = models[0]
-    controller.run["model_calls"] += 1
-    return controller.run["model"]
+        selected = models[0]
+    if followup:
+        controller.run["followup_model_calls"] = controller.run.get("followup_model_calls", 0) + 1
+    else:
+        controller.run["model"] = selected
+        controller.run["model_calls"] += 1
+    return selected
 
 
 async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> None:
     request = (ChatRequest.model_validate(args) if name == "npc_chat" else
                EditRequest.model_validate(args) if name == "propose_edit" else ApprovalRequest.model_validate(args))
-    await prepare(controller, request.run_id)
+    from npc_sim.controller import TERMINAL
+
+    await prepare(controller, request.run_id, allow_ended=isinstance(request, ChatRequest))
     world, run = controller.world, controller.run
-    if world is None or run is None:
-        raise ValueError("No active world.")
+    if run is None:
+        raise ValueError("No current adventure.")
+    followup = isinstance(request, ChatRequest) and run["status"] in TERMINAL
     controller.in_flight = True
     active = run["actor_id"]
     try:
         if isinstance(request, ChatRequest):
-            if request.actor_id not in world.manifest.get("actor_sessions", {}):
-                raise ValueError("Unknown NPC.")
             from npc_sim.contracts import observation
-            fresh = observation(await world.select_actor(request.actor_id), world.session_id)
             saved = controller.agents.get(request.actor_id)
+            if followup:
+                if request.actor_id not in (controller.agents or {run["actor_id"]: None}):
+                    raise ValueError("Unknown NPC.")
+                final = saved.get("observation") if saved else controller.observation
+                if final is None:
+                    raise ValueError("This NPC has no saved observation for follow-up questions.")
+                fresh = observation(copy.deepcopy(final))
+            else:
+                if world is None:
+                    raise ValueError("No active world.")
+                if request.actor_id not in world.manifest.get("actor_sessions", {}):
+                    raise ValueError("Unknown NPC.")
+                fresh = observation(await world.select_actor(request.actor_id), world.session_id)
             memory = saved["memory"] if saved else controller.memory
             goal = saved["goal"] if saved else run["goal"]
             controller.emit("npc_chat_request", {"question": request.question}, request.actor_id)
-            messages = controller.proxy.question_context(goal, fresh, memory, request.question)
+            question_memory = {**memory, "episode_outcome": {
+                "status": run["status"], "reason": run["reason"]}} if followup else memory
+            messages = controller.proxy.question_context(goal, fresh, question_memory, request.question)
             reply, metadata = await controller.proxy.answer_question(
-                await model(controller), messages, f"{run['id']}:chat:{uuid4().hex}",
+                await model(controller, followup=followup), messages, f"{run['id']}:chat:{uuid4().hex}",
                 controller.config.proxy.timeout_seconds)
             exchange = {"question": request.question, "answer": reply.answer}
             memory.setdefault("operator_conversation", []).append(exchange)
@@ -228,6 +253,8 @@ async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> N
                 saved["observation"] = fresh
             controller.emit("npc_chat", {**exchange, **metadata, "private": True}, request.actor_id)
         elif isinstance(request, EditRequest):
+            if world is None:
+                raise ValueError("No active world.")
             if (world.config.transport != "stdio" or world.config.command
                     or world.manifest.get("admin_intervention") not in world.tools
                     or world.manifest.get("admin_validate_intervention") not in world.tools):
@@ -250,6 +277,8 @@ async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> N
             run.setdefault("world_edit_proposals", {})[proposal_id] = proposal
             controller.emit("world_edit_proposed", {**proposal, **metadata})
         else:
+            if world is None:
+                raise ValueError("No active world.")
             proposal = run.get("world_edit_proposals", {}).get(request.proposal_id)
             if not proposal or proposal["status"] != "pending":
                 raise ValueError("Choose a pending proposal from this adventure.")
@@ -270,10 +299,11 @@ async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> N
     finally:
         from npc_sim.contracts import observation
         try:
-            if name == "approve_edit":
+            if not followup and world is not None and name == "approve_edit":
                 for actor_id, saved in controller.agents.items():
                     saved["observation"] = observation(await world.select_actor(actor_id), world.session_id)
-            controller.observation = observation(await world.select_actor(active), world.session_id)
+            if not followup and world is not None:
+                controller.observation = observation(await world.select_actor(active), world.session_id)
         finally:
             controller.in_flight = False
             controller.checkpoint()

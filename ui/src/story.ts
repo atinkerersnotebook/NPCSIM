@@ -2,6 +2,7 @@ import { z } from "zod";
 import { observationSchema } from "./contracts.ts";
 import type { RunEvent } from "./contracts";
 import { nutritionLabel } from "./world-view.ts";
+import { villageClockText } from "./view-mode.ts";
 
 export interface StoryEntry {
   id: string;
@@ -11,6 +12,8 @@ export interface StoryEntry {
   text: string;
   explanation?: string;
   details?: string[];
+  timeline?: string;
+  freeAction?: boolean;
 }
 
 export type StoryMembers = Readonly<Record<string, { readonly name: string }>>;
@@ -47,9 +50,32 @@ const resultSchema = z.object({
 const decisionSchema = z.object({ action_id: z.string(), justification: z.string() });
 
 function firstPerson(text: string): string {
-  return text.replace(/\bYou are\b/g, "I am").replace(/\bYou\b/g, "I")
+  return narration(text, prose => prose.replace(/\bYou are\b/g, "I am").replace(/\bYou\b/g, "I")
     .replace(/\byou are\b/g, "I am").replace(/\byou\b/g, "I")
-    .replace(/\bYour\b/g, "My").replace(/\byour\b/g, "my");
+    .replace(/\bYour\b/g, "My").replace(/\byour\b/g, "my"));
+}
+
+function narration(text: string, transform: (prose: string) => string): string {
+  return text.split(/("(?:[^"\\]|\\.)*"|“[^”]*”)/g)
+    .map((part, index) => index % 2 ? part : transform(part)).join("");
+}
+
+export function villageTimeline(event: RunEvent, members: StoryMembers = {}): string | undefined {
+  const minute = event.village_minute;
+  if (minute === undefined) return undefined;
+  return `Day ${Math.floor(minute / 1440) + 1} ${String(Math.floor(minute % 1440 / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")} / ${event.actor_name ?? actorName(event.actor_id, members)}`;
+}
+
+function timelineParagraphs(paragraphs: { id: string; text: string }[], events: readonly RunEvent[], members: StoryMembers) {
+  const byId = new Map(events.map(event => [event.id, event]));
+  const timedVillage = events.some(event => event.village_minute !== undefined);
+  return paragraphs.map(paragraph => {
+    const event = byId.get(paragraph.id);
+    const timeline = event ? villageTimeline(event, members) : undefined;
+    const prefix = timeline ? `[${timeline}${event?.free_action ? " / FREE LOOK/READ" : ""}] ` : "";
+    const text = timedVillage ? villageClockText(paragraph.text) : paragraph.text;
+    return { ...paragraph, text: prefix && !text.startsWith(prefix) ? prefix + text : text };
+  });
 }
 
 function namedVoice(text: string, name: string): string {
@@ -64,7 +90,7 @@ function namedVoice(text: string, name: string): string {
     "grind", "cook", "recruit", "sail", "want", "know", "see",
     "walk", "cross", "anchor", "repair", "prepare", "secure", "leave"
   ]) verbs.set(verb, `${verb}s`);
-  return text.replace(/\bI['’](m|ve|ll|d)\b/g, (_, ending: string) =>
+  return narration(text, prose => prose.replace(/\bI['’](m|ve|ll|d)\b/g, (_, ending: string) =>
     `I ${{m: "am", ve: "have", ll: "will", d: "would"}[ending]}`)
     .replace(/\bI (don't|can't|won't)\b/g, (_, verb: string) =>
       `I ${{"don't": "do not", "can't": "cannot", "won't": "will not"}[verb]}`)
@@ -73,7 +99,7 @@ function namedVoice(text: string, name: string): string {
     .replace(/\b[Mm]y\b|\bmine\b/g, () => `${name}'s`)
     .replace(/\bmyself\b/g, () => name)
     .replace(new RegExp(`(^|[.!?]\\s+)${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"),
-      (_, prefix: string) => prefix + name);
+      (_, prefix: string) => prefix + name));
 }
 
 export function isTeamStory(events: readonly RunEvent[]): boolean {
@@ -244,7 +270,13 @@ export function buildStory(events: readonly RunEvent[], actorId?: string, member
       text = memberNames(text, members);
       explanation = explanation ? memberNames(explanation, members) : undefined;
       details = details.map(detail => memberNames(detail, members));
-      const value = { id: event.id, actorId: event.actor_id, cycle: event.cycle, kind, text, ...(explanation ? { explanation } : {}),
+      if (event.village_minute !== undefined) {
+        text = villageClockText(text);
+        explanation = explanation ? villageClockText(explanation) : undefined;
+        details = details.map(villageClockText);
+      }
+      const value = { id: event.id, actorId: event.actor_id, cycle: event.cycle, kind, text,
+        timeline: villageTimeline(event, members), freeAction: event.free_action, ...(explanation ? { explanation } : {}),
         ...(details.length ? { details } : {}) };
       if (prepend) story.unshift(value);
       else story.push(value);
@@ -363,7 +395,7 @@ export function buildNarrative(events: readonly RunEvent[], actorId?: string,
       }
       return { id: paragraph.id, text: memberNames(text, members) };
     }).filter(paragraph => paragraph.text.length > 0);
-    return team && !actorId ? teamOrder(rendered, events) : rendered;
+    return timelineParagraphs(team && !actorId ? teamOrder(rendered, events) : rendered, events, members);
   }
   const paragraphs: { id: string; text: string }[] = [];
   let pending: { cycle: number; actorId: string; explanation: string; paragraph: { id: string; text: string } } | undefined;
@@ -390,5 +422,5 @@ export function buildNarrative(events: readonly RunEvent[], actorId?: string,
     paragraphs.push(paragraph);
     pending = entry.kind === "intent" ? { cycle: entry.cycle, actorId: entry.actorId, explanation, paragraph } : undefined;
   }
-  return paragraphs;
+  return timelineParagraphs(paragraphs, events, members);
 }

@@ -172,7 +172,10 @@ class World:
         return False
 
     def inventory_units_used(self) -> int:
-        return sum(self.state.entities[eid].inventory_units for eid in self.actor.inventory)
+        used = sum(self.state.entities[eid].inventory_units for eid in self.actor.inventory)
+        if self.scenario.village and self.scenario.village.ai_controlled and self.state.village:
+            used += sum(self.state.village.residents[self.actor_id].cargo.values())
+        return used
 
     def lock_for(self, entity: Entity) -> Entity:
         return self.state.entities[entity.lock_id] if entity.lock_id else entity
@@ -485,6 +488,12 @@ class World:
                 {"target": {"type": "string", "enum": foods},
                  "surface": {"type": "string", "enum": surfaces}}, ["target", "surface"], foods)
         handling.annotate(self, actions)
+        if self.scenario.village and self.scenario.village.daily_life:
+            from npc_sim import village_life
+            for action in actions:
+                blocked = village_life.action_blocker(self, action["id"])
+                if blocked:
+                    action["availability"], action["reason"] = "blocked", blocked[1]
         if self.state.clock is not None and self.state.clock.mode == "decision_paused":
             for action in actions:
                 action["simulation_seconds"] = bakery.action_seconds(action["id"])
@@ -717,7 +726,10 @@ class World:
                 if outcome == "APPLIED":
                     village_minutes = village.after_action(self, action_id, arguments)
                     if village_minutes:
-                        explanation += f" {village_minutes} game minutes pass."
+                        if self.scenario.village and self.scenario.village.time_based_turns:
+                            explanation += f" Available again at {village.clock_time(self.state.village.residents[self.actor_id].available_at)}."
+                        else:
+                            explanation += f" {village_minutes} game minutes pass."
                     voyage.advance(self, action_id)
                     duration = bakery.charge_action(self, action_id, arguments)
                     if duration:
@@ -727,6 +739,10 @@ class World:
                         for name, need in self.actor.needs.items():
                             if need.enabled and name != recovery_need:
                                 need.level = min(100, need.level + need.rate)
+                    self.state.revision += 1
+                elif (outcome == "NO_CHANGE" and self.scenario.village and self.scenario.village.expanded_rules
+                      and action_id in {"look", "read"}):
+                    self.state.village.free_turn_actor = self.actor_id
                     self.state.revision += 1
                 result = self._result(request_id, outcome, code, explanation)
                 return self._record(identity, request, result)
@@ -756,6 +772,17 @@ class World:
             return bbq.apply(self, args.get("heat_percent"))
         if action == "erp_terminal":
             return erp.apply(self, args["command"])
+        if self.scenario.village and self.scenario.village.ai_controlled:
+            from npc_sim import village_ai, village_life
+            if self.scenario.village.time_based_turns and action not in {"look", "read", "village_stop_route"}:
+                person = self.state.village.residents[self.actor_id]
+                if self.state.village.minute < person.available_at:
+                    return reject("ACTOR_BUSY", f"Available again at {village.clock_time(person.available_at)}.")
+            blocked = village_life.action_blocker(self, action)
+            if blocked:
+                return reject(*blocked)
+            if action in village_ai.VERBS:
+                return village_ai.apply(self, action, args)
         if action in village.VERBS:
             return village.apply(self, action, args)
         if action == "look":
@@ -771,6 +798,11 @@ class World:
                 detail += " Its lid is jammed."
             return "APPLIED", "INSPECTED", detail, None
         if action == "read":
+            if (self.scenario.village and self.scenario.village.time_based_turns
+                    and target == "noticeboard"):
+                if target not in self.actor.read_entities:
+                    self.actor.read_entities.append(target)
+                return "APPLIED", "READ", village.read_noticeboard(self), None
             if target in self.actor.read_entities:
                 return unchanged(entity.readable_text)
             self.actor.read_entities.append(target)
@@ -787,6 +819,10 @@ class World:
         if action == "say":
             message = {"actor_id": self.actor_id, "text": args["message"]}
             for other in self.state.actors.values():
+                if self.scenario.village and self.scenario.village.daily_life and self.state.village:
+                    life = self.state.village.residents[other.actor_id].life
+                    if life and life.sleeping:
+                        continue
                 if other.location_id == self.actor.location_id:
                     other.messages = (other.messages + [message.copy()])[-20:]
             return "APPLIED", "SPOKEN", f'You say: "{args["message"]}"', None
@@ -817,10 +853,21 @@ class World:
             recipient = self.state.actors[args["recipient"]]
             if target not in self.actor.inventory or recipient.location_id != self.actor.location_id:
                 return reject("OUT_OF_REACH", "The item must be carried and the recipient must be here.")
+            if self.scenario.village and self.scenario.village.daily_life and self.state.village:
+                life = self.state.village.residents[recipient.actor_id].life
+                if life and life.sleeping:
+                    return reject("RESIDENT_ASLEEP", "The recipient is sleeping; do not interrupt their rest.")
+                if life and life.work:
+                    return reject("RESIDENT_BUSY", "The recipient must finish their committed batch first.")
+            if (self.scenario.village and self.scenario.village.ai_controlled and self.state.village
+                    and self.state.village.residents[recipient.actor_id].cargo):
+                return reject("CAPACITY_EXCEEDED", "The recipient must deliver their shipment before receiving tools.")
             if target in self.state.batches and self.state.batches[target].stage not in {
                     "measuring", "cooled", "served", "ruined"}:
                 return reject("BATCH_IN_PROGRESS", "An active batch cannot be handed over.")
             used = sum(self.state.entities[eid].inventory_units for eid in recipient.inventory)
+            if self.scenario.village and self.scenario.village.ai_controlled and self.state.village:
+                used += sum(self.state.village.residents[recipient.actor_id].cargo.values())
             if used + entity.inventory_units > recipient.body.capacity:
                 return reject("CAPACITY_EXCEEDED", "The recipient does not have enough carrying capacity.")
             self.actor.inventory.remove(target)
@@ -925,6 +972,10 @@ class World:
             text += "".join(f" {detail}" for detail in details if detail)
             return "APPLIED", "BROKEN" if entity.broken or weapon.broken else "DAMAGED", text, None
         elif action == "go":
+            if (self.scenario.village and self.scenario.village.expanded_rules
+                    and self.state.village.wagon and self.state.village.wagon.driver == self.actor_id
+                    and not entity.village_road):
+                return reject("WAGON_ROAD_ONLY", "The wagon cannot use this footpath. Park it before walking here.")
             blocked = skills.barrier_reason(self, entity, moving=True)
             if blocked:
                 code = ("BODY_CAPABILITY_REQUIRED" if not set(entity.traversal_capabilities)

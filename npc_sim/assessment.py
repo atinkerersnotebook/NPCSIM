@@ -80,6 +80,14 @@ def record_feedback(data: Path, scenario_id: str, run_id: str, objective: str,
     write_json(memory_path(data, scenario_id), memory.model_dump(mode="json"))
 
 
+def remove_feedback(data: Path, scenario_id: str, run_id: str) -> None:
+    memory = load_memory(data, scenario_id)
+    failures = [failure for failure in memory.failures if failure.run_id != run_id]
+    if len(failures) != len(memory.failures):
+        memory.failures = failures
+        write_json(memory_path(data, scenario_id), memory.model_dump(mode="json"))
+
+
 def grade(review: StoryReview, verification: dict[str, Any], verification_event_id: str,
           story: list[Paragraph]) -> tuple[Literal["pass", "fail"], list[Finding]]:
     allowed = {paragraph.id for paragraph in story} | {verification_event_id}

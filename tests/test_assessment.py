@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+import argparse
+import asyncio
 import json
 import re
 
@@ -13,6 +15,40 @@ from npc_sim.storage import read_json, write_json
 from npc_sim.story import Paragraph, build_narrative
 from test_controller import ROOT, TestProxy, configuration
 from test_kitchen import ROUTE
+
+
+@pytest.mark.asyncio
+async def test_batch_outage_records_ungraded_pause_without_hanging_or_reviewing(configuration, monkeypatch):
+    import npc_sim.evaluate as evaluation
+
+    data, config = configuration
+    write_json(data / "config.json", config.model_dump(mode="json"))
+    monkeypatch.setattr(evaluation, "__file__", str(data.parent / "npc_sim" / "evaluate.py"))
+    controllers = []
+
+    class OfflineProxy(TestProxy):
+        async def choose(self, *args, **kwargs):
+            raise httpx.ConnectError("connection refused")
+
+    class OfflineController(Controller):
+        def __init__(self, root, episode_data, episode_config):
+            super().__init__(ROOT, episode_data, episode_config)
+            self.proxy = OfflineProxy(self.proxy, [])
+            controllers.append(self)
+
+    monkeypatch.setattr(evaluation, "Controller", OfflineController)
+    report = await asyncio.wait_for(evaluation.evaluate(argparse.Namespace(
+        scenario="escape-room", model="test-model", concurrency=1, episodes=1, fixture_episodes=0)), 15)
+    result = report["episodes"][0]
+    assert result["status"] == "paused"
+    assert result["successful"] is None
+    assert result["actions"] == 0
+    assert report["summary"][0]["successes"] == 0
+    controller = controllers[0]
+    assert controller.proxy.completion_contexts == []
+    assert controller.run["status"] == "paused"
+    assert read_json(controller.events.directory / "run.json")["status"] == "paused"
+    assert controller.world.session is None
 
 
 @asynccontextmanager

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildNarrative, buildStory, copyStory } from "../src/story.ts";
+import { buildNarrative, buildStory, copyStory, villageTimeline } from "../src/story.ts";
 import type { RunEvent } from "../src/contracts.ts";
 import { observationSchema } from "../src/contracts.ts";
 
@@ -117,6 +117,78 @@ function event(sequence: number, kind: string, payload: unknown, actor = "npc"):
   return { id: `run:${sequence}`, run_id: "run", session_id: "session", sequence, kind,
     cycle: Math.max(0, sequence - 2), actor_id: actor, timestamp: "2026-11-02T23:00:00Z", payload };
 }
+
+test("old village availability messages use clock time without rewriting saved events", () => {
+  const events = [
+    {...event(1, "observation", observation([]), "torvin"), village_minute: 480},
+    {...event(2, "action_result", {request_id: "wait", outcome: "APPLIED",
+      explanation: "Waiting 5 minutes. Available again at minute 485.", observation: observation([])}, "torvin"),
+      village_minute: 480}
+  ];
+  const saved = JSON.stringify(events);
+  const story = buildStory(events, undefined, {torvin: {name: "Torvin"}});
+  assert.match(story.at(-1)!.text, /Available again at 08:05/);
+  assert.doesNotMatch(story.at(-1)!.text, /minute 485/);
+  assert.match(buildNarrative(events).at(-1)!.text, /Available again at 08:05/);
+  assert.equal(JSON.stringify(events), saved);
+});
+
+test("free observations stay separately labeled from the following work action", () => {
+  const events = [
+    event(1, "observation", observation(["noticeboard"]), "torvin"),
+    { ...event(2, "action_request", {request_id: "read", action_id: "read",
+      arguments: {target: "noticeboard"}}, "torvin"), free_action: true, village_minute: 480 },
+    { ...event(3, "action_result", {request_id: "read", outcome: "APPLIED",
+      explanation: "Village map (free).", observation: observation(["noticeboard"])}, "torvin"),
+      free_action: true, village_minute: 480 },
+    { ...event(4, "action_request", {request_id: "wait", action_id: "village_wait",
+      arguments: {minutes: 5}}, "torvin"), free_action: false, village_minute: 480 },
+    { ...event(5, "action_result", {request_id: "wait", outcome: "APPLIED",
+      explanation: "Waiting 5 minutes.", observation: observation(["noticeboard"])}, "torvin"),
+      free_action: false, village_minute: 480 }
+  ];
+  const members = {torvin: {name: "Torvin"}};
+  const story = buildStory(events, undefined, members);
+  assert.equal(story.filter(entry => entry.freeAction).length, 2);
+  const paragraphs = buildNarrative(events, undefined, undefined, members);
+  assert.ok(paragraphs.some(paragraph => paragraph.text.includes("FREE LOOK/READ")));
+  assert.ok(paragraphs.some(paragraph => paragraph.text.includes("Waiting 5 minutes") &&
+    !paragraph.text.includes("FREE LOOK/READ")));
+});
+
+test("team speech retains I and you while surrounding narration uses member names", () => {
+  const events = [
+    event(1, "observation", { ...observation([]), role: "A stable keeper." }, "bren"),
+    event(2, "action_request", { request_id: "say", action_id: "say",
+      arguments: { message: "I have the shovel. Are you ready, Torvin?" } }, "bren"),
+    event(3, "action_result", { request_id: "say", outcome: "APPLIED",
+      explanation: 'Bren says: "I have the shovel. Are you ready, Torvin?"', observation: observation([]) }, "bren")
+  ];
+  const members = { bren: { name: "Bren" } };
+  const story = buildStory(events, undefined, members);
+  assert.match(story[1].text, /Bren says, "I have the shovel\. Are you ready, Torvin\?"/);
+  assert.match(story[2].text, /Bren says: "I have the shovel\. Are you ready, Torvin\?"/);
+  assert.doesNotMatch(JSON.stringify(story), /Bren has the shovel|Are Bren|Are I/);
+  assert.match(buildNarrative(events, undefined, undefined, members).at(-1)!.text, /"I have the shovel\. Are you ready/);
+});
+
+test("game time and member name survive live, reviewed and copied narratives", async () => {
+  const events = [
+    { ...event(1, "observation", observation([]), "torvin"), village_minute: 1925, actor_name: "Torvin" },
+    { ...event(2, "action_request", { request_id: "look", action_id: "look", arguments: {} }, "torvin"),
+      village_minute: 1925, actor_name: "Torvin" }
+  ];
+  assert.equal(villageTimeline(events[0]), "Day 2 08:05 / Torvin");
+  assert.equal(buildStory(events)[0].timeline, "Day 2 08:05 / Torvin");
+  const narrative = buildNarrative(events);
+  assert.ok(narrative.every(paragraph => paragraph.text.startsWith("[Day 2 08:05 / Torvin] ")));
+  const reviewed = buildNarrative(events, undefined, [{ id: events[1].id, text: "I look around." }]);
+  assert.match(reviewed[0].text, /^\[Day 2 08:05 \/ Torvin\]/);
+  let copied = "";
+  await copyStory(narrative, { writeText: async text => { copied = text; } });
+  assert.match(copied, /Day 2 08:05 \/ Torvin/);
+  assert.equal(villageTimeline(event(3, "observation", observation([]))), undefined);
+});
 
 test("adventure prose and decision reasons use the selected member name without changing events", () => {
   const events = [

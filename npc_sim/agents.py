@@ -61,10 +61,12 @@ def seed_profiles(data: Path) -> None:
             solo_name, solo_personality = SOLO_PERSONAS.get(
                 scenario.id, ("Traveler", "Thoughtful, practical and resourceful. Inspect before acting and learn from confirmed results."))
             name = slot.replace("-", " ").title() if agent else solo_name
+            resident = scenario.village.residents.get(slot) if scenario.village and scenario.village.ai_controlled else None
             profiles[pid] = AgentProfile(
                 id=pid, name=name,
-                identity=f"{name}, an embodied simulation agent with its own perspective and memory.",
-                personality=PERSONALITIES.get(slot, solo_personality),
+                identity=(f"{name}, Millhaven's {resident.occupation}, with private knowledge and commitments."
+                          if resident else f"{name}, an embodied simulation agent with its own perspective and memory."),
+                personality=resident.personality if resident else PERSONALITIES.get(slot, solo_personality),
                 operating_rules=[
                     "Use only your own observations and confirmed results; never invent discoveries.",
                     "Follow the assigned objective, cooperate when appropriate and respect private information.",

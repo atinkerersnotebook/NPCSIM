@@ -104,6 +104,60 @@ const villageTaskSchema = z.object({
   assignee: z.string(), status: z.enum(["accepted", "in_progress", "blocked", "completed", "cancelled"]),
   step: z.string(), blocker: z.string().nullable()
 });
+const villageBeliefSchema = z.object({
+  subject: z.string(), location: z.string().nullable(), source: z.string(),
+  learned_at: z.number().int().nonnegative(), confidence: z.number().min(0).max(1)
+});
+const villageRoutineSchema = z.object({ minute: z.number().int(), location: z.string(), activity: z.string() });
+const villageJobSchema = z.object({
+  location: z.string(), interval: z.number().int().positive(),
+  inputs: z.record(z.string(), z.number().int().positive()).default({}),
+  outputs: z.record(z.string(), z.number().int().positive()).default({}), equipment: z.string().nullable().default(null),
+  duration: z.number().int().positive().default(5), interruptible: z.boolean().default(true),
+  batch_size: z.number().int().min(1).max(2).default(1)
+});
+const villageDeliverySchema = z.object({
+  source: z.string(), destination: z.string(), resource: z.string(), seller: z.string(),
+  buyer: z.string(), price: z.number().int().positive()
+});
+const villageResidentSchema = z.object({
+  occupation: z.string(), personality: z.string(), skills: z.array(z.string()),
+  home: z.string(), work: z.string(), schedule: z.array(villageRoutineSchema),
+  job: villageJobSchema.nullable().default(null),
+  wake_minute: z.number().int().default(480), bed_minute: z.number().int().default(1320)
+});
+const villageLifeSchema = z.object({
+  hungry: z.boolean(), missed_meals: z.number().int().nonnegative(),
+  meals: z.record(z.string(), z.object({
+    kind: z.literal("daily"), due: z.number().int().nonnegative(),
+    status: z.enum(["pending", "eaten", "missed"]), source: z.string().nullable()
+  })),
+  sleeping: z.boolean(), sleep_until: z.number().int().nonnegative().nullable(), last_woke: z.number().int(),
+  work: z.object({
+    location: z.string(), finishes_at: z.number().int().nonnegative(),
+    outputs: z.record(z.string(), z.number().int().positive()), equipment: z.string().nullable(),
+    kind: z.enum(["production", "wagon_repair"]).default("production")
+  }).nullable(),
+  fatigue_days: z.array(z.number().int()).optional(), tea_day: z.number().int().optional(),
+  urgent_project: z.string().nullable().optional(), urgent_until: z.number().int().nullable().optional()
+});
+export type VillageLife = z.infer<typeof villageLifeSchema>;
+const villageLotSchema = z.object({
+  quantity: z.number().int().positive(), produced_at: z.number().int().nonnegative(),
+  expires_at: z.number().int().nonnegative().nullable()
+});
+const villageShipmentSchema = z.object({
+  resource: z.string(), quantity: z.number().int().positive(), seller: z.string(), buyer: z.string(),
+  destination: z.string(), price: z.number().int().positive(), lots: z.array(villageLotSchema).optional()
+});
+const villageDeadlineSchema = z.object({
+  due: z.number().int().nonnegative(), completed_at: z.number().int().nonnegative().nullable(), overdue: z.boolean()
+});
+const villageWagonSchema = z.object({
+  repaired: z.boolean(), driver: z.string().nullable(), automatic: z.boolean(),
+  loads: z.array(villageShipmentSchema), route_index: z.number().int(), phase: z.enum(["travel", "unload", "load"]),
+  next_event_at: z.number().int(), blocker: z.string().nullable(), hitched: z.boolean().optional()
+});
 export const villageObservationSchema = z.object({
   minute: z.number().int().nonnegative(), day: z.number().int().positive(), time: z.string(),
   residents: z.array(z.object({
@@ -113,21 +167,41 @@ export const villageObservationSchema = z.object({
   coins: z.number().int().nonnegative(),
   resource_inventory: z.record(z.string(), z.number().int().nonnegative()),
   tasks: z.array(villageTaskSchema.extend({ id: z.string() })),
-  events: z.array(villageEventSchema), policy: z.string()
+  events: z.array(villageEventSchema), policy: z.string(),
+  notices: z.array(villageEventSchema).optional(),
+  wagon: villageWagonSchema.extend({ location: z.string().nullable() }).nullable().optional(),
+  personal: z.object({
+    occupation: z.string(), personality: z.string(), skills: z.array(z.string()),
+    beliefs: z.record(z.string(), villageBeliefSchema),
+    relationships: z.record(z.string(), z.number().int()),
+    schedule: z.array(villageRoutineSchema), routine: villageRoutineSchema,
+    job: villageJobSchema.nullable(), next_work: z.number(), busy_until: z.number(),
+    available_at: z.number().int().optional(), known_routes: z.array(z.string()).optional(),
+    routes: z.array(z.object({destination: z.string(), path: z.array(z.string()), steps: z.number().int()})).optional(),
+    stock_report: z.record(z.string(), z.record(z.string(), z.number().int().nonnegative())).optional(),
+    stock_report_at: z.number().int().nullable().optional(), shipments: z.array(villageShipmentSchema).optional(),
+    timber_route: z.boolean().optional(), horse_location: z.string().nullable().optional(),
+    horse_fed_today: z.boolean().nullable().optional(), deadlines: z.record(z.string(), villageDeadlineSchema).optional(),
+    deliveries: z.array(villageDeliverySchema), active_delivery: z.number().int().nullable(),
+    life: villageLifeSchema.extend({
+      rest_due: z.boolean(), wake_minute: z.number().int(), bed_minute: z.number().int(), home: z.string(), tavern: z.string(),
+      cooldown_factor: z.number().int().min(1).max(4).optional()
+    }).optional()
+  }).optional()
 });
 export type VillageObservation = z.infer<typeof villageObservationSchema>;
 const villageStateSchema = z.object({
   minute: z.number().int().nonnegative(),
   residents: z.record(z.string(), z.object({
-    beliefs: z.record(z.string(), z.object({
-      subject: z.string(), location: z.string().nullable(), source: z.string(),
-      learned_at: z.number().int().nonnegative(), confidence: z.number().min(0).max(1)
-    })),
+    beliefs: z.record(z.string(), villageBeliefSchema),
     memories: z.array(z.number().int().nonnegative()), trust: z.record(z.string(), z.number().int()),
     activity: z.string(), next_work: z.number(), busy_until: z.number(),
     cargo: z.record(z.string(), z.number().int().nonnegative()),
     delivery: z.number().int().nullable(), delivery_cursor: z.number().int(),
-    last_news_day: z.number().int().default(-1)
+    last_news_day: z.number().int().default(-1), life: villageLifeSchema.nullable().default(null),
+    available_at: z.number().int().optional(), known_routes: z.array(z.string()).optional(),
+    shipments: z.array(villageShipmentSchema).optional(), timber_route: z.boolean().optional(),
+    fertilized_harvests: z.number().int().nonnegative().optional()
   })),
   stocks: z.record(z.string(), z.record(z.string(), z.number().int().nonnegative())),
   coins: z.record(z.string(), z.number().int().nonnegative()),
@@ -136,7 +210,21 @@ const villageStateSchema = z.object({
     evidence: z.array(z.number().int().nonnegative())
   })),
   events: z.array(villageEventSchema), breakdown: z.boolean(), repaired: z.boolean(),
-  well_dug: z.boolean(), bread_after_repair: z.number().int().nonnegative()
+  well_dug: z.boolean(), bread_after_repair: z.number().int().nonnegative(),
+  roster: z.record(z.string(), villageResidentSchema).default({}),
+  role_contributions: z.record(z.string(), z.number().int().nonnegative()).default({}),
+  project_contributions: z.record(z.string(), z.record(z.string(), z.number().int().nonnegative())).default({}),
+  shovel_recovered: z.boolean().default(false),
+  wagon: villageWagonSchema.nullable().default(null), bread_deliveries: z.number().int().nonnegative().default(0),
+  notices: z.array(villageEventSchema).default([]),
+  horse_leader: z.string().nullable().optional(), horse_fed_day: z.number().int().optional(),
+  deadlines: z.record(z.string(), villageDeadlineSchema).optional(),
+  stock_lots: z.record(z.string(), z.record(z.string(), z.array(villageLotSchema))).optional(),
+  stock_history: z.array(z.object({
+    minute: z.number().int().nonnegative(),
+    stocks: z.record(z.string(), z.record(z.string(), z.number().int().nonnegative())),
+    coins: z.record(z.string(), z.number().int().nonnegative())
+  })).optional()
 });
 export const observationSchema = z.object({
   contract_version: z.literal("1.0"), world_id: z.string(), session_id: z.string(),
@@ -241,11 +329,21 @@ export const worldEditProposalSchema = z.object({
   })
 });
 export const npcChatSchema = z.object({ question: z.string(), answer: z.string(), private: z.literal(true) });
+export const budgetExtensionSchema = z.strictObject({
+  run_id: z.string().min(1),
+  add_actions: z.number().int().nonnegative(),
+  add_model_calls: z.number().int().nonnegative(),
+  add_seconds: z.number().nonnegative()
+}).refine(value => value.add_actions > 0 || value.add_model_calls > 0 || value.add_seconds > 0,
+  "Add at least one action, model call, or minute.");
 export const runSchema = z.object({
   schema_version: z.literal("1.0"), id: z.string(), world_id: z.string(),
   session_id: z.string(), actor_id: z.string(), title: z.string(), scenario_id: z.string(),
   status: z.string(), reason: z.string(), created_at: z.string(),
   actions: z.number(), model_calls: z.number(), cycles: z.number(), elapsed_seconds: z.number(),
+  followup_model_calls: z.number().int().nonnegative().optional(),
+  previous_review_model_calls: z.number().int().nonnegative().optional(),
+  config: configSchema.optional(),
   model: z.string().nullable(),
   successful: z.boolean().nullable().optional(),
   completion_analysis: completionAnalysisSchema.optional(),
@@ -306,6 +404,8 @@ export const stateSchema = z.object({
 export const eventSchema = z.object({
   id: z.string(), sequence: z.number(), run_id: z.string(), session_id: z.string(),
   actor_id: z.string(), kind: z.string(), cycle: z.number(), timestamp: z.string(),
+  village_minute: z.number().int().nonnegative().optional(), actor_name: z.string().optional(),
+  free_action: z.boolean().optional(),
   payload: z.unknown()
 });
 export const eventsSchema = z.object({ run_id: z.string().nullable(), events: z.array(eventSchema) });

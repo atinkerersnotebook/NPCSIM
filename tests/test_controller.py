@@ -1,3 +1,4 @@
+import asyncio
 import json
 import shutil
 from pathlib import Path
@@ -314,20 +315,241 @@ async def test_nonprogress_stalls_and_pause_reset(configuration):
 
 
 @pytest.mark.asyncio
-async def test_proxy_failure_is_error_not_scripted_success(configuration):
+@pytest.mark.parametrize("failure", [
+    httpx.ConnectError("connection refused"),
+    httpx.ReadTimeout("model timed out"),
+    *[httpx.HTTPStatusError("proxy unavailable",
+                           request=httpx.Request("POST", "http://localhost/chat/completions"),
+                           response=httpx.Response(code))
+      for code in (408, 429, 500, 502, 503, 504)],
+])
+async def test_proxy_failure_pauses_without_finishing_or_retrying(configuration, failure):
     data, config = configuration
     controller = Controller(ROOT, data, config)
     class OfflineProxy(TestProxy):
         async def choose(self, *args, **kwargs):
-            raise httpx.ConnectError("connection refused")
+            raise failure
     controller.proxy = OfflineProxy(controller.proxy, [])
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        await controller.command("run")
+        async with asyncio.timeout(5):
+            while controller.run["status"] != "paused" or controller.in_flight:
+                await asyncio.sleep(0.01)
+        assert controller.run["status"] == "paused"
+        assert controller.run["actions"] == 0
+        assert controller.run["model_calls"] == 1
+        assert "Adventure paused" in controller.run["reason"]
+        assert controller.run["goal"]["status"] != "failed"
+        assert controller.started_clock is None
+        assert not any(event["kind"] in {"finished", "assessment_started", "error"}
+                       for event in controller.events.events)
+        saved = read_json(controller.events.directory / "run.json")
+        assert saved["status"] == "paused"
+        await asyncio.sleep(0.1)
+        assert controller.run["model_calls"] == 1
+        assert controller.run["elapsed_seconds"] == saved["elapsed_seconds"]
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_proxy_recovery_resumes_same_world_and_actor(configuration):
+    data, config = configuration
+    config.world.scenario = "storm-signal"
+    controller = Controller(ROOT, data, config)
+    recovered = asyncio.Event()
+
+    class RecoveringProxy(TestProxy):
+        offline = True
+
+        async def choose(self, *args, **kwargs):
+            if self.offline:
+                self.offline = False
+                raise httpx.ConnectError("connection refused")
+            recovered.set()
+            return await super().choose(*args, **kwargs)
+
+    fake = RecoveringProxy(controller.proxy, [("release_lens", {"target": "optical-cache"})])
+    controller.proxy = fake
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        world, run_id = controller.world, controller.run["id"]
+        await controller.command("step")
+        assert controller.run["next_agent_index"] == 0
+        assert controller.run["status"] == "paused"
+        await controller.command("resume")
+        await asyncio.wait_for(recovered.wait(), 5)
+        await controller.command("pause")
+        assert controller.world is world
+        assert controller.run["id"] == run_id
+        assert controller.run["actions"] == 1
+        assert controller.run["actor_id"] == "raven"
+        assert controller.run["reason"] == ""
+        assert [context["observation"]["self"]["actor_id"] for context in fake.contexts] == ["raven", "raven"]
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_model_discovery_outage_pauses_and_can_be_retried(configuration):
+    data, config = configuration
+    config.proxy.model = ""
+    controller = Controller(ROOT, data, config)
+
+    class DiscoveryProxy(TestProxy):
+        offline = True
+
+        async def models(self):
+            if self.offline:
+                self.offline = False
+                raise httpx.ConnectError("connection refused")
+            return ["test-model"]
+
+    controller.proxy = DiscoveryProxy(controller.proxy, [SOLUTION[0]])
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        await controller.command("step")
+        assert controller.run["status"] == "paused"
+        assert controller.run["model_calls"] == 0
+        assert controller.run["actions"] == 0
+        assert "Adventure paused" in controller.run["reason"]
+        await controller.command("step")
+        assert controller.run["model"] == "test-model"
+        assert controller.run["actions"] == 1
+        assert controller.run["reason"] == ""
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_supervisor_outage_retries_review_before_next_action(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+
+    class SupervisorProxy(TestProxy):
+        offline = True
+        operations = []
+
+        async def choose(self, *args, **kwargs):
+            self.operations.append("decision")
+            return await super().choose(*args, **kwargs)
+
+        async def review_progress(self, *args, **kwargs):
+            self.operations.append("review")
+            if self.offline:
+                raise httpx.ConnectError("connection refused")
+            return await super().review_progress(*args, **kwargs)
+
+    fake = SupervisorProxy(controller.proxy, SOLUTION[:2])
+    controller.proxy = fake
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        await controller.command("step")
+        assert controller.run["actions"] == 1
+        assert controller.run["pending_dungeon_master_review"]
+        assert "Adventure paused" in controller.run["reason"]
+        await controller.command("step")
+        assert controller.run["actions"] == 1
+        fake.offline = False
+        await controller.command("step")
+        assert controller.run["actions"] == 2
+        assert "pending_dungeon_master_review" not in controller.run
+        assert fake.operations == ["decision", "review", "review", "review", "decision", "review"]
+        assert len([event for event in controller.events.events if event["kind"] == "action_request"]) == 2
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_proxy_outage_freezes_continuous_simulation_clock(configuration):
+    data, config = configuration
+    config.world.scenario = "bread-bakery"
+    controller = Controller(ROOT, data, config)
+
+    class OfflineProxy(TestProxy):
+        async def choose(self, *args, **kwargs):
+            raise httpx.ConnectError("connection refused")
+
+    controller.proxy = OfflineProxy(controller.proxy, [])
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        await controller.command("clock", {"mode": "continuous", "rate": 120})
+        await controller.command("step")
+        clock = controller.status()["world"]["clock"]
+        assert controller.run["status"] == "paused"
+        assert not clock["running"]
+        await asyncio.sleep(0.1)
+        observed = await controller.world.operation("observe", {})
+        assert observed["clock"]["seconds"] == clock["seconds"]
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_nonretryable_proxy_error_still_terminates(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+
+    class UnauthorizedProxy(TestProxy):
+        async def choose(self, *args, **kwargs):
+            raise httpx.HTTPStatusError("unauthorized",
+                                       request=httpx.Request("POST", "http://localhost/chat/completions"),
+                                       response=httpx.Response(401))
+
+    controller.proxy = UnauthorizedProxy(controller.proxy, [])
     await controller.start_worker()
     try:
         await controller.command("start")
         await controller.command("step")
         assert controller.run["status"] == "error"
         assert controller.run["actions"] == 0
-        assert "unreachable" in controller.run["reason"]
+        assert "HTTP 401" in controller.run["reason"]
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_preserving_paused_shutdown_does_not_request_completion_review(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    fake = TestProxy(controller.proxy, [SOLUTION[0]])
+    controller.proxy = fake
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        await controller.command("step")
+    finally:
+        await controller.shutdown(preserve_paused=True)
+    assert controller.run["status"] == "paused"
+    assert read_json(controller.events.directory / "run.json")["status"] == "paused"
+    assert fake.completion_contexts == []
+    assert not any(event["kind"] == "finished" for event in controller.events.events)
+
+
+@pytest.mark.asyncio
+async def test_world_connection_failure_is_not_treated_as_llm_outage(configuration, monkeypatch):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.proxy = TestProxy(controller.proxy, [])
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+
+        async def offline_world(*args, **kwargs):
+            raise httpx.ConnectError("world transport unavailable")
+
+        monkeypatch.setattr(controller.world, "operation", offline_world)
+        await controller.command("step")
+        assert controller.run["status"] == "error"
+        assert controller.run["model_calls"] == 0
+        assert not any(event["kind"] == "control" and event["payload"].get("source") == "llm_unavailable"
+                       for event in controller.events.events)
     finally:
         await controller.shutdown()
 

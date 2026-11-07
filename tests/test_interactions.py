@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from npc_sim.controller import Controller
+from npc_sim.assessment import CompletionAnalysis
 from npc_sim.interactions import NpcReply, WorldEditPlan, apply_edit, validate_edit
 from npc_sim.models import AppConfig, Entity, Scenario
 from npc_sim.storage import read_json
@@ -277,3 +278,101 @@ async def test_chat_pauses_running_adventure_and_enforces_budget(configuration):
         assert not controller.in_flight
     finally:
         await controller.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["succeeded", "blocked", "stalled", "budget_exceeded", "cancelled", "error"])
+async def test_followup_questions_preserve_finished_results_and_use_separate_budget(configuration, status, monkeypatch):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    proxy = InteractionProxy(controller.proxy)
+    controller.proxy = proxy
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        controller.run["status"] = status
+        controller.run["reason"] = "The recorded adventure outcome."
+        controller.run["completion_analysis"] = CompletionAnalysis(
+            status="completed", verdict="pass" if status == "succeeded" else "fail").model_dump(mode="json")
+        controller.run["model_calls"] = controller.budgets.max_model_calls
+        controller.checkpoint()
+        before = copy.deepcopy(controller.status())
+        before_events = len(controller.events.events)
+
+        async def no_world_access(*args, **kwargs):
+            raise AssertionError("A follow-up must not select actors or observe the live world.")
+        monkeypatch.setattr(controller.world, "select_actor", no_world_access)
+        actor_id = controller.run["actor_id"]
+        result = await controller.command("npc_chat", {
+            "run_id": controller.run["id"], "actor_id": actor_id, "question": "What happened at the end?"})
+        assert result["world"] == before["world"]
+        assert result["observation"] == before["observation"]
+        for field in ("status", "reason", "goal", "successful", "completion_analysis",
+                      "model_calls", "actions", "cycles", "elapsed_seconds"):
+            assert result["run"].get(field) == before["run"].get(field)
+        assert result["run"]["followup_model_calls"] == 1
+        assert result["memory"]["operator_conversation"][-1]["question"] == "What happened at the end?"
+        context = json.loads(proxy.questions[-1][1]["content"])
+        assert context["memory"]["episode_outcome"] == {
+            "status": status, "reason": "The recorded adventure outcome."}
+        assert not result["in_flight"]
+        assert [event["kind"] for event in controller.events.events[before_events:]] == [
+            "npc_chat_request", "npc_chat"]
+        with pytest.raises(ValueError, match="active adventure"):
+            await controller.command("propose_edit", {
+                "run_id": controller.run["id"], "instruction": "Add a spare key."})
+        assert controller.status()["world"] == before["world"]
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_followups_work_after_restart_without_reopening_world_and_remain_private(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.proxy = InteractionProxy(controller.proxy)
+    await controller.start_worker()
+    await controller.command("start", {"scenario_id": "storm-signal"})
+    controller.agents["badger"]["memory"]["secret"] = "PRIVATE_BADGER_FACT"
+    controller.run["status"] = "succeeded"
+    controller.run["reason"] = "Saved outcome."
+    controller.run["completion_analysis"] = CompletionAnalysis(
+        status="completed", verdict="pass").model_dump(mode="json")
+    controller.checkpoint()
+    run_id = controller.run["id"]
+    before = copy.deepcopy(controller.status()["world"])
+    await controller.shutdown()
+
+    restored = Controller(ROOT, data, config)
+    proxy = InteractionProxy(restored.proxy)
+    restored.proxy = proxy
+    await restored.start_worker()
+    try:
+        assert restored.world is None
+        other_memories = {actor: copy.deepcopy(restored.agents[actor]["memory"])
+                          for actor in ["raven", "badger"]}
+        result = await restored.command("npc_chat", {
+            "run_id": run_id, "actor_id": "otter", "question": "What do you remember?"})
+        assert restored.world is None
+        assert result["world"] == before
+        assert "PRIVATE_BADGER_FACT" not in json.dumps(proxy.questions[-1])
+        assert json.loads(proxy.questions[-1][1]["content"])["observation"]["self"]["actor_id"] == "otter"
+        for actor, memory in other_memories.items():
+            assert restored.agents[actor]["memory"] == memory
+        assert restored.agents["otter"]["memory"]["operator_conversation"][-1]["question"] == "What do you remember?"
+        saved = read_json(data / "runs" / run_id / "run.json")
+        assert saved["followup_model_calls"] == 1
+        assert saved["agents"]["otter"]["memory"]["operator_conversation"]
+        request = {"run_id": run_id, "actor_id": "otter", "question": "And then?"}
+        proxy.fail = True
+        memory = copy.deepcopy(restored.agents["otter"]["memory"])
+        with pytest.raises(RuntimeError, match="Proxy unavailable"):
+            await restored.command("npc_chat", request)
+        assert restored.agents["otter"]["memory"] == memory
+        assert not restored.in_flight
+        with pytest.raises(ValueError, match="Unknown NPC"):
+            await restored.command("npc_chat", {**request, "actor_id": "foreign"})
+        with pytest.raises(ValueError, match="active adventure"):
+            await restored.command("npc_chat", {**request, "run_id": "older-run"})
+    finally:
+        await restored.shutdown()

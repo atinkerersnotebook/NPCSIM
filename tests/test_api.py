@@ -13,6 +13,46 @@ from test_controller import assessment_response
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def test_live_event_projection_keeps_original_details_available(monkeypatch):
+    from types import SimpleNamespace
+    original = {"id": "run:1", "sequence": 1, "kind": "proxy_request",
+                "payload": {"model": "test", "messages": [{"content": "x" * 1_000_000}]}}
+    active = SimpleNamespace(run={"id": "run"}, events=SimpleNamespace(events=[original]))
+    monkeypatch.setattr(application.app.state, "controller", active, raising=False)
+    client = TestClient(application.app)
+    compact = client.get("/api/events?compact=true")
+    assert len(compact.content) < 1000
+    assert compact.json()["events"][0]["payload"]["technical_payload_omitted"] is True
+    assert "messages" not in compact.json()["events"][0]["payload"]
+    assert client.get("/api/events/1?run_id=run").json() == original
+    assert client.get("/api/events").json()["events"] == [original]
+    assert client.get("/api/events/1?run_id=old").status_code == 409
+    assert client.get("/api/events/2?run_id=run").status_code == 404
+    assert client.get("/api/events?compact=true&after=1").json()["events"] == []
+
+
+@pytest.mark.asyncio
+async def test_stream_cursor_skips_loaded_history_and_unchanged_snapshots(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    recorded = [{"id": f"run:{i}", "sequence": i, "kind": "proxy_request",
+                 "payload": {"messages": ["private context"]}} for i in range(1, 4)]
+    active = SimpleNamespace(run={"id": "run"}, events=SimpleNamespace(events=recorded),
+                             status=lambda: {"run": {"id": "run"}})
+    monkeypatch.setattr(application, "controller", lambda request: active)
+    request = SimpleNamespace(headers={}, is_disconnected=AsyncMock(return_value=False))
+    response = await application.stream(request, run_id="run", after=2, compact=True)
+    iterator = response.body_iterator
+    try:
+        assert "event: snapshot" in await anext(iterator)
+        next_event = await anext(iterator)
+        assert "id: run:3" in next_event and "private context" not in next_event
+        assert "heartbeat" in await anext(iterator)
+        assert "heartbeat" in await anext(iterator)
+    finally:
+        await iterator.aclose()
+
+
 @pytest.fixture(autouse=True)
 def local_assessment_fixture(monkeypatch):
     async def assess(self, model, messages, correlation_id, timeout):

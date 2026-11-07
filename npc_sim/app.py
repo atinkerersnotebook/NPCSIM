@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from npc_sim.controller import Controller
-from npc_sim.models import AgentProfile, AppConfig, ClockRequest, NeedToggle, Scenario, StartRequest
+from npc_sim.models import AgentProfile, AppConfig, BudgetExtension, ClockRequest, NeedToggle, ReopenRequest, Scenario, StartRequest
 from npc_sim.storage import read_json, write_json
 from npc_sim.agents import default_profile_id, load_profiles, save_profile, slots
 from npc_sim.dungeon_master import DungeonMasterConfig, load_config as load_dungeon_master
@@ -60,8 +60,8 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/api/state")
-async def state(request: Request) -> dict[str, Any]:
-    return controller(request).status()
+async def state(request: Request) -> JSONResponse:
+    return JSONResponse(controller(request).status())
 
 
 @app.get("/api/scenarios")
@@ -138,6 +138,26 @@ async def control(command: str, body: StartRequest, request: Request) -> dict[st
         raise HTTPException(500, controller(request).safe_error(error)) from error
 
 
+@app.post("/api/budget/extend")
+async def extend_budget(body: BudgetExtension, request: Request) -> dict[str, Any]:
+    try:
+        return await controller(request).command("extend_budget", body.model_dump())
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    except Exception as error:
+        raise HTTPException(500, controller(request).safe_error(error)) from error
+
+
+@app.post("/api/adventure/reopen")
+async def reopen(body: ReopenRequest, request: Request) -> dict[str, Any]:
+    try:
+        return await controller(request).command("reopen", body.model_dump())
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    except Exception as error:
+        raise HTTPException(500, controller(request).safe_error(error)) from error
+
+
 @app.put("/api/actors/{actor_id}/needs/{need}")
 async def need_toggle(actor_id: str, need: str, body: NeedToggle, request: Request) -> dict[str, Any]:
     try:
@@ -172,20 +192,40 @@ async def clock_settings(body: ClockRequest, request: Request) -> dict[str, Any]
         raise HTTPException(409, str(error)) from error
 
 
+def live_event(event: dict[str, Any]) -> dict[str, Any]:
+    if event["kind"] not in {"proxy_request", "dungeon_master_request", "assessment_request"}:
+        return event
+    payload = {key: value for key, value in event["payload"].items() if key != "messages"}
+    return {**event, "payload": {**payload, "technical_payload_omitted": True}}
+
+
 @app.get("/api/events")
-async def events(request: Request, after: int = 0) -> dict[str, Any]:
+async def events(request: Request, after: int = 0, compact: bool = False):
     active = controller(request)
-    return {"run_id": active.run["id"] if active.run else None,
-            "events": active.events.events[max(0, after):] if active.events else []}
+    recorded = active.events.events[max(0, after):] if active.events else []
+    payload = {"run_id": active.run["id"] if active.run else None,
+               "events": [live_event(event) for event in recorded] if compact else recorded}
+    return await asyncio.to_thread(JSONResponse, payload)
+
+
+@app.get("/api/events/{sequence}")
+async def event_detail(sequence: int, run_id: str, request: Request):
+    active = controller(request)
+    if not active.run or active.run["id"] != run_id:
+        raise HTTPException(409, "The adventure changed. Refresh before inspecting an event.")
+    if not active.events or not 1 <= sequence <= len(active.events.events):
+        raise HTTPException(404, "Unknown event sequence")
+    return JSONResponse(active.events.events[sequence - 1])
 
 
 @app.get("/api/stream")
-async def stream(request: Request):
+async def stream(request: Request, run_id: str = "", after: int = 0, compact: bool = False):
     active = controller(request)
-    last_id = request.headers.get("last-event-id", "")
+    last_id = request.headers.get("last-event-id", f"{run_id}:{max(0, after)}" if run_id else "")
 
     async def generate():
         run_id, sequence = "", 0
+        previous_snapshot = ""
         if ":" in last_id:
             run_id, raw_sequence = last_id.rsplit(":", 1)
             if raw_sequence.isdigit():
@@ -194,13 +234,21 @@ async def stream(request: Request):
             current = active.run["id"] if active.run else ""
             if current != run_id:
                 run_id, sequence = current, 0
-                yield f"event: snapshot\ndata: {json.dumps(active.status())}\n\n"
+                previous_snapshot = ""
+            snapshot = json.dumps(active.status())
+            if snapshot != previous_snapshot:
+                previous_snapshot = snapshot
+                yield f"event: snapshot\ndata: {snapshot}\n\n"
             if active.events:
-                for event in active.events.events[sequence:]:
+                for index, event in enumerate(active.events.events[sequence:]):
                     sequence = event["sequence"]
-                    yield f"id: {event['id']}\nevent: run-event\ndata: {json.dumps(event)}\n\n"
-            yield f"event: snapshot\ndata: {json.dumps(active.status())}\n\n"
-            await asyncio.sleep(0.4)
+                    yield f"id: {event['id']}\nevent: run-event\ndata: {json.dumps(live_event(event) if compact else event)}\n\n"
+                    if index % 20 == 19:
+                        await asyncio.sleep(0)
+                        if await request.is_disconnected():
+                            return
+            yield ": heartbeat\n\n"
+            await asyncio.sleep(1)
 
     return StreamingResponse(generate(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

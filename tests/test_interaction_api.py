@@ -107,3 +107,56 @@ def test_goal_only_intervention_api_requires_approval_and_keeps_primary_goal(tmp
         assert final["world"]["entities"] == initial["world"]["entities"]
         assert final["world"]["secondary_goals"]["find-key"]["status"] == "active"
         assert final["observation"]["secondary_goals"][0]["id"] == "find-key"
+
+
+def test_questions_after_verified_completion_preserve_grade_and_do_not_reopen_play(tmp_path, monkeypatch):
+    import copy
+    from npc_sim.models import Decision
+    from test_controller import SOLUTION, assessment_response
+
+    data = tmp_path / "data"
+    shutil.copytree(ROOT / "data" / "scenarios", data / "scenarios")
+    config = read_json(ROOT / "data" / "config.json")
+    config["proxy"]["model"] = "test-model"
+    config["world"]["scenario"] = "escape-room"
+    write_json(data / "config.json", config)
+    monkeypatch.setattr(application, "DATA", data)
+    route = iter(SOLUTION)
+
+    async def choose(self, *args):
+        action, arguments = next(route)
+        return Decision(action_id=action, arguments=arguments,
+                        justification="Use the observed route.", expected_outcome="A validated action."), {}
+
+    async def assess(self, model, messages, correlation_id, timeout):
+        return assessment_response(messages), {}
+
+    async def answer(self, *args):
+        return NpcReply(answer="I found the key and used it to leave the room."), {}
+
+    monkeypatch.setattr(Proxy, "choose", choose)
+    monkeypatch.setattr(Proxy, "assess", assess)
+    monkeypatch.setattr(Proxy, "answer_question", answer)
+    with TestClient(application.app) as client:
+        client.post("/api/control/start", json={}).raise_for_status()
+        for _ in SOLUTION:
+            response = client.post("/api/control/step", json={})
+            response.raise_for_status()
+        before = response.json()
+        assert before["run"]["status"] == "succeeded"
+        assert before["run"]["completion_analysis"]["verdict"] == "pass"
+        original_review = copy.deepcopy(before["run"]["completion_analysis"])
+        request = {"run_id": before["run"]["id"], "actor_id": before["run"]["actor_id"],
+                   "question": "How did you get out?"}
+        response = client.post("/api/interactions/chat", json=request)
+        assert response.status_code == 200
+        after = response.json()
+        assert after["run"]["status"] == "succeeded"
+        assert after["run"]["completion_analysis"] == original_review
+        assert after["world"] == before["world"]
+        assert after["run"]["model_calls"] == before["run"]["model_calls"]
+        assert after["run"]["followup_model_calls"] == 1
+        assert after["memory"]["operator_conversation"][-1]["answer"] == (
+            "I found the key and used it to leave the room.")
+        assert client.post("/api/interactions/propose", json={
+            "run_id": request["run_id"], "instruction": "Add another key."}).status_code == 409

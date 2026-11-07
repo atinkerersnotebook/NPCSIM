@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "proxy": {
     "base_url": "http://127.0.0.1:9901/v1",
-    "model": "gpt-6.1-sol",
+    "model": "gpt-6-sol",
     "token_environment": null,
     "timeout_seconds": 120.0
   },
