@@ -2,13 +2,229 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { agentProfileSchema, eventSchema, observationSchema, stateSchema, villageObservationSchema } from "../src/contracts.ts";
-import { villageDashboardMarkup, villageMarkup } from "../src/village-view.ts";
+import { agentProfileSchema, communicationSchema, eventSchema, observationSchema, stateSchema, villageFirewoodSchema, villageObservationSchema, villageResearchSchema } from "../src/contracts.ts";
+import { communicationMarkup, firewoodMarkup, villageDashboardMarkup, villageMarkup, villageSystemsMarkup } from "../src/village-view.ts";
 import { inventoryUnitsUsed } from "../src/world-view.ts";
 import { monitoredAgents, worldMonitorMarkup } from "../src/world-monitor.ts";
 import { buildWorldTimeline, locationColour, timelineEventProjection, worldGanttMarkup } from "../src/world-gantt.ts";
 import type { RunEvent } from "../src/contracts.ts";
 import { budgetSummary, canReopenAdventure } from "../src/view-mode.ts";
+
+test("firewood view distinguishes local observation from operator heating truth", () => {
+  const firewood = villageFirewoodSchema.parse({
+    enabled: true, season: "winter", supplier: "Rowan", firewood_per_log: 4, split_minutes: 15,
+    sites: [{ location: "cottages", buyer: "Iona", stock: 0, reserve: 14, consumed: 3 }],
+    households: [{ id: "hearth-1", location: "cottages", members: ["Ada", "Bren"],
+      occupied: true, status: "cold", warm_until: 0 }], policy: "Real logs and funded physical deliveries."
+  });
+  const local = villageMarkup(villageObservationSchema.parse({ ...view(), firewood }));
+  assert.ok(local.includes("Local firewood"));
+  assert.ok(local.includes("Only fuel stocks and hearths physically here"));
+  assert.ok(local.includes("Cold homes have no health penalties"));
+  assert.ok(local.includes("FUEL SHORTAGE"));
+  assert.ok(local.includes("Ada, Bren"));
+  assert.ok(!local.includes("Privileged world view"));
+  const state = expanded();
+  state.world!.village!.dashboard = {
+    firewood, orders: [], products: [], accounts: [], activities: [], projects: [],
+    quests: [], visitors: [], incidents: [], time_use: {}
+  };
+  const operator = villageSystemsMarkup(state);
+  assert.ok(operator.includes("Town firewood"));
+  assert.ok(operator.includes("Privileged world view; not shared NPC knowledge"));
+  assert.ok(operator.includes("funded by Iona"));
+  assert.ok(operator.includes("3 consumed"));
+  assert.ok(!villageFirewoodSchema.safeParse({ ...firewood,
+    sites: [{ ...firewood.sites[0], stock: -1 }] }).success);
+  assert.equal(firewoodMarkup({ ...firewood, enabled: false }), "");
+});
+
+test("hearth panels escape text and display real warm-until times", () => {
+  const unsafe = "<img onerror=alert(1)>";
+  const firewood = villageFirewoodSchema.parse({
+    enabled: true, season: "autumn", supplier: unsafe, firewood_per_log: 4, split_minutes: 15,
+    sites: [{ location: unsafe, buyer: unsafe, stock: 1, reserve: 2, consumed: 1 }],
+    households: [{ id: unsafe, location: "cottages", members: [unsafe],
+      occupied: true, status: "warm", warm_until: 1505 }], policy: unsafe
+  });
+  const markup = firewoodMarkup(firewood);
+  assert.ok(!markup.includes("<img"));
+  assert.ok(markup.includes("&lt;img"));
+  assert.ok(markup.includes("warm until day 2 01:05"));
+});
+
+test("communication separates operator truth from stale personal receipts with named boxes and appointments", () => {
+  const communication = communicationSchema.parse({
+    enabled: true, scope: "personal received snapshots", policy: "No remote delivery.",
+    notices: [{
+      id: "notice-99", version: 2, author: "Torvin", recipients: ["Bren"],
+      subject: "Well <repair>", description: "Bring real supplies", type: "meeting",
+      status: "accepted", quantity: null, destination: "Village Well", due_at: 3420, updated_at: 3370,
+      private: false, response: "I can come.", source: "conversation: Garrick", learned_at: 3380,
+      confidence: "secondhand", hops: 1, source_chain: ["noticeboard", "Garrick"],
+      freshness: "Snapshot; may be out of date",
+      appointment: {
+        id: "appointment-notice-99", version: 2, project: "dig_well", members: ["Torvin", "Bren"],
+        accepted: ["Torvin", "Bren"], place: "Village Well", due_at: 3420, end_at: 3480, status: "confirmed"
+      }, commitment: null
+    }],
+    boxes: [{ id: "workplace-inbox-torvin", owner: "Torvin", place: "Forge", here: true, can_read: true }],
+    share_candidates: []
+  });
+  const personal = communicationMarkup(communication);
+  for (const text of ["Personally received snapshots", "may be stale", "Garrick", "secondhand",
+    "Torvin &amp;", "day 3 09:00", "Forge", "Here; yours to read", "No remote delivery",
+    "Well &lt;repair&gt;"]) {
+    assert.ok(personal.includes(text), text);
+  }
+  assert.ok(!personal.includes("appointment-notice-99"));
+  assert.ok(!personal.includes("workplace-inbox-torvin"));
+  const operator = communicationMarkup(communication, true);
+  assert.ok(operator.includes("Privileged world view"));
+  assert.ok(operator.includes("not shared NPC knowledge"));
+  assert.ok(!operator.includes("Here; yours to read"));
+});
+
+test("commitment UI never describes acceptance as delivery and escapes reply text", () => {
+  const communication = communicationSchema.parse({
+    enabled: true, scope: "personal received snapshots", policy: "Physical only",
+    notices: [{
+      id: "notice-1", version: 2, author: "Jory", recipients: ["Mara"], subject: "Flour",
+      description: "For the bakery", type: "supply_request", status: "accepted", quantity: 2,
+      destination: "Bakery", due_at: 900, updated_at: 510, private: false, response: "<script>reply</script>",
+      source: "noticeboard", learned_at: 520, confidence: "direct", hops: 0, source_chain: ["noticeboard"],
+      freshness: "Snapshot; may be out of date", appointment: null,
+      commitment: { status: "accepted", delivered: 0, paid: 0, buyer: "Jory", supplier: "Mara" }
+    }], boxes: [], share_candidates: []
+  });
+  const markup = communicationMarkup(communication);
+  assert.ok(markup.includes("0 units unloaded"));
+  assert.ok(markup.includes("0 coins paid"));
+  assert.ok(markup.includes("Acceptance alone transfers nothing"));
+  assert.ok(markup.includes("&lt;script&gt;reply"));
+  assert.ok(!markup.includes("<script>"));
+});
+
+test("World view shows enabled empty operator noticeboard and all physical inboxes exactly once", () => {
+  const state = expanded();
+  const world = state.world!;
+  const communication = communicationSchema.parse({
+    enabled: true, scope: "operator world view", policy: "Physical channels only.",
+    notices: [], share_candidates: [],
+    boxes: Object.entries(world.village!.roster).map(([id, resident]) => ({
+      id: `workplace-inbox-${id}`, owner: world.entities[id]?.name ?? id[0].toUpperCase() + id.slice(1),
+      place: world.entities[resident.work]?.name ?? resident.work,
+      here: false, can_read: false, notes: 0
+    }))
+  });
+  assert.equal(communication.boxes.length, 12);
+  world.village!.dashboard = {
+    communication, orders: [], products: [], accounts: [], activities: [], projects: [],
+    quests: [], visitors: [], incidents: [], time_use: {}
+  };
+  const parsed = stateSchema.parse(state);
+  for (const markup of [worldMonitorMarkup(parsed), villageDashboardMarkup(parsed, []),
+    villageSystemsMarkup(parsed)]) {
+    const heading = "Operator: noticeboard, commitments & appointments";
+    assert.equal(markup.split(heading).length - 1, 1);
+    for (const text of ["Privileged world view. This is not shared NPC knowledge.",
+      "No notices posted yet.", "Physical workplace inboxes", "No remote delivery.",
+      "Torvin", "Finn"]) {
+      assert.ok(markup.includes(text), text);
+    }
+    assert.equal(markup.match(/0 physical notes/g)?.length, 12);
+    assert.ok(!markup.includes("workplace-inbox-"));
+    assert.ok(!markup.includes("Your learned notices"));
+  }
+  for (const disabled of [undefined, null, { ...communication, enabled: false }]) {
+    parsed.world!.village!.dashboard!.communication = disabled;
+    assert.ok(!worldMonitorMarkup(parsed).includes("Operator: noticeboard"));
+  }
+});
+
+test("shared World systems use operator communication only, never selected NPC receipts", () => {
+  const state = expanded();
+  const personal = communicationSchema.parse({
+    enabled: true, scope: "personal received snapshots", policy: "Only actual receipts",
+    notices: [], boxes: [], share_candidates: []
+  });
+  state.observation = observationSchema.parse({
+    contract_version: "1.0", world_id: "world", session_id: "session", observation_revision: "r1",
+    self: { actor_id: "torvin", location_id: "forge", inventory: [], needs: [],
+      body: { id: "human", description: "Human", capabilities: [],
+        carrying: { rule: "slots", limit: 2, used: 0 } } },
+    location: { id: "forge", description: "Forge" }, narrative: "", visible_entities: [], actions: [],
+    village: { ...view(), communication: personal }
+  });
+  state.world!.village!.dashboard = {
+    communication: { ...personal, scope: "operator world view", notices: [{
+      id: "notice-operator-only", version: 1, author: "Finn", recipients: [],
+      subject: "Unreceived operator-only warning", description: "Not personally learned",
+      type: "warning", status: "posted", quantity: null, unit_price: null, delivery_fee: null,
+      destination: null, due_at: null, updated_at: 480, private: false, response: null,
+      source: "authoritative world", learned_at: null, last_verified_at: null,
+      confidence: null, hops: 0, source_chain: [], freshness: "World state",
+      appointment: null, commitment: null
+    }] },
+    orders: [], products: [], accounts: [], activities: [], projects: [],
+    quests: [], visitors: [], incidents: [], time_use: {}
+  };
+  assert.ok(worldMonitorMarkup(state).includes("Unreceived operator-only warning"));
+  const learned = villageMarkup(state.observation.village!);
+  assert.ok(learned.includes("Your learned notices, commitments & appointments"));
+  assert.ok(learned.includes("No notices received yet."));
+  assert.ok(!learned.includes("Unreceived operator-only warning"));
+  assert.ok(!learned.includes("Privileged world view"));
+  delete state.world!.village!.dashboard!.communication;
+  assert.ok(!worldMonitorMarkup(state).includes("Operator: noticeboard"));
+  assert.ok(!worldMonitorMarkup(state).includes("Your learned notices"));
+});
+
+test("visitor rows retain history but departed visitors leave current location cards", () => {
+  const state = expanded();
+  state.world!.village!.minute = 700;
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [], incidents: [], time_use: {},
+    visitors: [{ id: "merchant-1", name: "Cora", location: "tavern", arrival: 500, departure: 650,
+      status: "departed", activities: [{ actor: "merchant-1", label: "Trading", location: "tavern",
+        start: 510, end: 640, status: "completed" }] }]
+  };
+  const agents = monitoredAgents(state);
+  const visitor = agents.find(agent => agent.id === "merchant-1")!;
+  assert.equal(visitor.name, "Cora");
+  assert.equal(visitor.current, false);
+  const timeline = buildWorldTimeline(state, [], agents)!;
+  const row = timeline.rows.find(item => item.id === visitor.id)!;
+  assert.equal(row.occupation, "Visitor");
+  assert.ok(row.spans.some(span => span.label === "Trading" && span.end === 640));
+  assert.ok(row.locations.every(location => location.end <= 650));
+  const markup = worldMonitorMarkup(state);
+  assert.ok(!markup.includes('data-monitor-agent="merchant-1"'));
+  assert.ok(markup.includes("Cora"));
+});
+
+test("personal activities clip at now and economy reporting escapes generated labels", () => {
+  const state = expanded();
+  state.world!.village!.minute = 600;
+  state.world!.village!.dashboard = {
+    orders: [{ id: "order", buyer: "elsie", seller: "jory", product: "bread", quantity: 4,
+      delivered: 2, status: "accepted", deadline: 1100 }],
+    products: [{ location: "forge", product: "iron", quantity: 0, usable: 0, expiring: 0, reserve: 2 }],
+    accounts: [{ owner: "elsie", sales: 12, purchases: 8, fees: -1, subsidies: 0,
+      net_cash: 3, inventory_value: 20 }],
+    activities: [{ actor: "iona", label: "Writing <book>", location: "cottages",
+      start: 580, end: 640, status: "active" }],
+    projects: [{ id: "book", owner: "iona", title: "<script>book</script>", progress: 1,
+      required: 5, status: "active" }], quests: [], visitors: [], incidents: [], time_use: {}
+  };
+  const timeline = buildWorldTimeline(state, [], monitoredAgents(state))!;
+  assert.equal(timeline.rows.find(row => row.id === "iona")!.spans.at(-1)!.end, 600);
+  const markup = villageDashboardMarkup(state, []);
+  for (const text of ["2 delivered", "SHORTAGE", "not net profit", "&lt;script&gt;book"]) {
+    assert.ok(markup.includes(text), text);
+  }
+  assert.ok(!markup.includes("<script>"));
+});
 
 const view = () => villageObservationSchema.parse({
   minute: 505, day: 1, time: "08:25", coins: 20,
@@ -19,6 +235,259 @@ const view = () => villageObservationSchema.parse({
   events: [{ minute: 500, actor: "torvin", action: "talk", target: "visitor",
     result: "I last heard it was at the stable.", witnesses: ["torvin", "visitor"] }],
   policy: "Every action takes five minutes."
+});
+
+test("livestock contracts show today's real care, retained work and escaped policy", () => {
+  const value = view();
+  const care = { day: 0, fed: true, watered: true, cleaned: false, progress: 5, eggs: 0, milk_sessions: [] };
+  value.livestock = { enabled: true, keeper: "ada", hen_count: 12, bucket_water: 1,
+    cow: care, hens: { ...care, fed: false }, policy: "<script>real care</script>" };
+  const markup = villageMarkup(villageObservationSchema.parse(value));
+  for (const text of ["1 cow + 12 hens", "fed yes", "fed due", "5 carried work min", "Bucket water: 1", "&lt;script&gt;"]) {
+    assert.ok(markup.includes(text), text);
+  }
+  assert.ok(!markup.includes("<script>"));
+  value.minute = 1440;
+  const tomorrow = villageMarkup(value);
+  assert.ok(!tomorrow.includes("fed yes"));
+  assert.throws(() => villageObservationSchema.parse({ ...value,
+    livestock: { ...value.livestock, bucket_water: -1 } }));
+});
+
+test("recycling stocks and provenance survive safe UI contracts without becoming manure", () => {
+  const value = view();
+  value.stocks = { "plant-scraps": 1, "compost-material": 2, compost: 1, manure: 0, milk: 0, eggs: 0 };
+  const markup = villageMarkup(value);
+  for (const text of ["plant-scraps: 1", "compost-material: 2", "compost: 1", "manure: 0"]) {
+    assert.ok(markup.includes(text), text);
+  }
+  const state = expanded();
+  state.world!.village!.stock_lots = { farm: { "plant-scraps": [
+    { quantity: 1, produced_at: 600, expires_at: 1200, ingredients: ["flour"], source_resource: "bread" }
+  ] } };
+  assert.deepEqual(stateSchema.parse(state).world!.village!.stock_lots!.farm["plant-scraps"][0].ingredients, ["flour"]);
+});
+
+test("World view shows enabled unworked livestock from live run observation without dashboard livestock", () => {
+  const state = expanded();
+  state.world!.village!.minute = 2880;
+  state.world!.village!.dashboard = {
+    research: [], orders: [], products: [], accounts: [], activities: [], projects: [], quests: [],
+    visitors: [], incidents: [], time_use: {}
+  };
+  state.world!.village!.stocks.farm = {
+    grain: 4, manure: 0, milk: 0, eggs: 0, "plant-scraps": 0, "compost-material": 0, compost: 0
+  };
+  const care = { day: -1, fed: false, watered: false, cleaned: false, progress: 0, eggs: 0, milk_sessions: [] };
+  state.run!.observation = {
+    contract_version: "1.0", world_id: "world", session_id: "session", observation_revision: "r1",
+    self: { actor_id: "torvin", location_id: "forge", inventory: [], needs: [],
+      body: { id: "human", description: "Human", capabilities: [],
+        carrying: { rule: "slots", limit: 2, used: 0 } } },
+    location: { id: "forge", description: "Forge" }, narrative: "", visible_entities: [], actions: [],
+    village: { ...view(), minute: 2880, day: 3, time: "00:00",
+      livestock: { enabled: true, keeper: "ada", hen_count: 12, cow: care, hens: care, bucket_water: 0,
+        policy: "<script>Real daily care and safe recycling</script>" } }
+  };
+  const parsed = stateSchema.parse(state);
+  const markup = worldMonitorMarkup(parsed);
+  for (const text of ["Farm livestock", "1 cow + 12 hens", "Cow: fed due", "Hens: fed due",
+    "Bucket water: 0", "Food recycling", "plant-scraps: 0", "compost-material: 0", "compost: 0",
+    "&lt;script&gt;Real daily care"]) {
+    assert.ok(markup.includes(text), text);
+  }
+  assert.ok(!markup.includes("<script>"));
+  assert.ok(!markup.includes("fed yes"));
+  parsed.observation = observationSchema.parse(parsed.run!.observation);
+  assert.ok(worldMonitorMarkup(parsed).includes("Farm livestock"));
+  delete parsed.world!.village!.dashboard;
+  assert.ok(worldMonitorMarkup(parsed).includes("Food recycling"));
+  parsed.observation!.village!.livestock!.enabled = false;
+  assert.ok(!worldMonitorMarkup(parsed).includes("Farm livestock"));
+});
+
+const researchProject = () => villageResearchSchema.parse({
+  id: "research:torvin", title: "Hardy shovel", description: "Trial a stronger shovel for town repairs.",
+  owner: "torvin", location: "forge", product: "hardy_shovel", kind: "tool",
+  inputs: { iron: 2, timber: 1 }, equipment: ["anvil"], duration: 35,
+  worked_minutes: 90, required_minutes: 240, attempts: 4, successes: 2,
+  required_successes: 3, discovered_at: null, status: "blocked", blocker: "Missing iron"
+});
+
+test("town research shows named researchers, sites, real recipe and honest trial progress", () => {
+  const state = expanded();
+  state.run!.agent_profiles = {
+    torvin: agentProfileSchema.parse({
+      schema_version: "1.0", id: "torvin", name: "Torvin Smith",
+      identity: "Smith", personality: "Practical", operating_rules: ["Be honest"],
+      constraints: ["Use own knowledge"], body: state.world!.actors.torvin.body, scenario_bodies: {}
+    })
+  };
+  state.world!.entities.forge.name = "Village Forge";
+  state.world!.entities.anvil.name = "Smith's Anvil";
+  state.world!.village!.dashboard = { research: [researchProject()],
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [],
+    visitors: [], incidents: [], time_use: {} };
+  const markup = villageSystemsMarkup(state);
+  for (const text of ["Town research & discoveries", "Torvin Smith", "Village Forge", "Hardy shovel",
+    "90/240 min", "2/4 successful/total trials", "3 successes required", "blocked", "Missing iron",
+    "Proposed recipe (not unlocked)", "2 iron, 1 timber", "→ 1 hardy shovel / 35 min",
+    "Equipment: Smith&#39;s Anvil", "repairs actual damaged objects"]) assert.ok(markup.includes(text), text);
+  assert.ok(!markup.includes("Unlocked recipe"));
+  assert.ok(villageDashboardMarkup(state, []).includes("Town research & discoveries"));
+});
+
+test("discoveries display unlocked recipes, discovery clocks and product-specific uses", () => {
+  const state = expanded();
+  const projects = (["food", "crop", "material", "tool"] as const).map(kind => ({
+    ...researchProject(), id: `research:${kind}`, kind, product: `${kind}_discovery`,
+    status: "discovered" as const, blocker: null, discovered_at: 1505,
+    worked_minutes: 240, successes: 3, attempts: 5
+  }));
+  state.world!.village!.dashboard = {
+    research: projects, orders: [], products: [], accounts: [], activities: [], projects: [],
+    quests: [], visitors: [], incidents: [], time_use: {}
+  };
+  const markup = villageSystemsMarkup(state);
+  assert.equal(markup.match(/Unlocked recipe/g)?.length, 4);
+  assert.equal(markup.match(/Use: 2 meal portions/g)?.length, 2);
+  for (const text of ["240/240 min", "3/5 successful/total trials", "Discovered day 2", "01:05",
+    "ingredient for further recipes", "repairs actual damaged objects", "→ 1 material discovery / 35 min"]) {
+    assert.ok(markup.includes(text), text);
+  }
+  assert.ok(!markup.includes("not unlocked"));
+});
+
+test("NPC known research escapes every proposal string and policy in both views", () => {
+  const payload = '<img src=x onerror="bad()">&\'';
+  const project = { ...researchProject(), title: payload, description: payload, owner: payload,
+    location: payload, product: payload, inputs: { [payload]: 2 }, equipment: [payload], blocker: payload };
+  const village = villageObservationSchema.parse({
+    ...view(), research: { enabled: true, projects: [project], policy: payload }
+  });
+  const state = expanded();
+  state.world!.village!.dashboard = {
+    research: [project], orders: [], products: [], accounts: [], activities: [], projects: [],
+    quests: [], visitors: [], incidents: [], time_use: {}
+  };
+  for (const markup of [villageMarkup(village), villageSystemsMarkup(state)]) {
+    assert.ok(!markup.includes("<img"));
+    assert.ok(markup.includes("&lt;img src=x onerror=&quot;bad()&quot;&gt;&amp;&#39;"));
+    assert.equal(markup.match(/&lt;img/g)?.length, markup.includes("Your known research") ? 9 : 8);
+  }
+  assert.ok(villageMarkup(village).includes("Your known research projects & discoveries"));
+  village.research!.projects = [researchProject()];
+  assert.ok(villageMarkup(village).includes("Torvin"));
+});
+
+test("research contracts retain both optional views and reject invented statuses", () => {
+  const project = researchProject();
+  for (const status of ["researching", "in_progress", "blocked", "discovered"]) {
+    assert.equal(villageResearchSchema.safeParse({ ...project, status }).success, true);
+  }
+  const invalid = { ...project, status: "claimed_complete" };
+  assert.equal(villageResearchSchema.safeParse(invalid).success, false);
+  assert.equal(villageObservationSchema.safeParse({
+    ...view(), research: { enabled: true, projects: [invalid], policy: "" }
+  }).success, false);
+  const state = expanded();
+  state.world!.village!.dashboard = {
+    research: [project], orders: [], products: [], accounts: [], activities: [], projects: [],
+    quests: [], visitors: [], incidents: [], time_use: {}
+  };
+  assert.deepEqual(stateSchema.parse(state).world!.village!.dashboard!.research, [project]);
+  const badState = structuredClone(state);
+  Object.assign(badState.world!.village!.dashboard!.research![0], { status: invalid.status });
+  assert.equal(stateSchema.safeParse(badState).success, false);
+  const observation = villageObservationSchema.parse({
+    ...view(), research: { enabled: true, projects: [project], policy: "Research after funded work." }
+  });
+  assert.deepEqual(observation.research!.projects, [project]);
+});
+
+test("absent, empty and disabled research preserve legacy views", () => {
+  const village = view();
+  const legacy = villageMarkup(village);
+  assert.equal(village.research, undefined);
+  assert.equal(villageMarkup({ ...village, research: undefined }), legacy);
+  assert.equal(villageMarkup({ ...village, research: { enabled: false, projects: [researchProject()], policy: "" } }), legacy);
+  assert.ok(villageMarkup({ ...village, research: { enabled: true, projects: [], policy: "" } })
+    .includes("No research projects assigned or observed here."));
+  const state = expanded();
+  assert.equal(villageSystemsMarkup(state), "");
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [],
+    visitors: [], incidents: [], time_use: {}
+  };
+  const dashboardLegacy = villageSystemsMarkup(state);
+  assert.equal(stateSchema.parse(state).world!.village!.dashboard!.research, undefined);
+  state.world!.village!.dashboard.research = [];
+  assert.equal(villageSystemsMarkup(state), dashboardLegacy);
+  assert.ok(!legacy.includes("research"));
+  assert.ok(!dashboardLegacy.includes("research"));
+});
+
+test("enabled town research is visible before proposals while legacy dashboards stay unchanged", () => {
+  const state = expanded();
+  state.world!.village!.dashboard = {
+    research: [], orders: [], products: [], accounts: [], activities: [], projects: [], quests: [],
+    visitors: [], incidents: [], time_use: {}
+  };
+  const legacy = villageSystemsMarkup(state);
+  const legacyDashboard = villageDashboardMarkup(state, []);
+  assert.equal(villageSystemsMarkup(state, [], false), legacy);
+  state.observation = observationSchema.parse({
+    contract_version: "1.0", world_id: "world", session_id: "session", observation_revision: "r1",
+    self: { actor_id: "torvin", location_id: "forge", inventory: [], needs: [],
+      body: { id: "human", description: "Human", capabilities: [],
+        carrying: { rule: "slots", limit: 2, used: 0 } } },
+    location: { id: "forge", description: "Forge" }, narrative: "",
+    visible_entities: [], actions: [],
+    village: { ...view(), research: { enabled: true, projects: [], policy: "" } }
+  });
+  state.observation!.village!.research!.enabled = false;
+  const legacyMonitor = worldMonitorMarkup(state);
+  assert.ok(!legacyMonitor.includes("Town research & discoveries"));
+  state.observation!.village!.research!.enabled = true;
+  const parsed = stateSchema.parse(state);
+  const markup = villageSystemsMarkup(parsed, [], parsed.observation?.village?.research?.enabled);
+  assert.ok(markup.includes("Town research & discoveries"));
+  assert.ok(markup.includes("Occupational research is enabled. No research projects proposed or discoveries yet."));
+  assert.ok(!markup.includes('class="maintenance-list research-list"'));
+  assert.ok(villageDashboardMarkup(parsed, []).includes("Town research & discoveries"));
+  assert.ok(worldMonitorMarkup(parsed).includes("Town research & discoveries"));
+  delete parsed.world!.village!.dashboard!.research;
+  assert.equal(villageSystemsMarkup(parsed, [], true), markup);
+  parsed.observation!.village!.research!.enabled = false;
+  assert.equal(villageDashboardMarkup(parsed, []), legacyDashboard);
+  assert.equal(worldMonitorMarkup(parsed), legacyMonitor);
+  delete parsed.observation!.village!.research;
+  assert.equal(villageDashboardMarkup(parsed, []), legacyDashboard);
+  assert.equal(worldMonitorMarkup(parsed), legacyMonitor);
+});
+
+test("town maintenance checklist shows assignments, carryover and escaped blockers", () => {
+  const state = expanded();
+  state.world!.village!.minute = 1440;
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [],
+    visitors: [], incidents: [], time_use: {},
+    maintenance: [{
+      id: "maintenance:0:forge", title: "Forge <inspection>", assignee: "torvin", location: "forge",
+      day: 1, release_at: 480, due_at: 1020, worked_minutes: 15, required_minutes: 30,
+      supplies: { iron: 1 }, status: "blocked", blocker: "Missing <iron>", completed_at: null
+    }]
+  };
+  const markup = villageDashboardMarkup(state, []);
+  for (const text of ["Town maintenance checklist", "carried from day 1", "15/30 min",
+    "Missing &lt;iron&gt;", "Forge &lt;inspection&gt;", "1 iron"]) assert.ok(markup.includes(text), text);
+  assert.ok(!markup.includes("<inspection>"));
+  assert.equal(stateSchema.safeParse({
+    ...state, world: { ...state.world, village: { ...state.world!.village,
+      dashboard: { ...state.world!.village!.dashboard, maintenance: [{
+        ...state.world!.village!.dashboard!.maintenance![0], status: "claimed_complete"
+      }] } } }
+  }).success, false);
 });
 
 test("village view shows local people, clock, stock and honest blocked progress", () => {
@@ -103,6 +572,17 @@ test("budget summary uses frozen adventure limits and exhausted World stays read
   assert.ok(!markup.includes("data-command"));
 });
 
+test("run until complete shows usage without enforced limits and the village cycle boundary", () => {
+  const state = expanded();
+  state.run!.run_until_complete = true;
+  state.run!.actions = 1500;
+  state.run!.model_calls = 1600;
+  state.run!.elapsed_seconds = 3600;
+  assert.equal(budgetSummary(state),
+    "1500 actions · 1600 calls · 60.0 active minutes · No budget limits · Cycle ends at midnight");
+  state.world!.village = null;
+  assert.ok(budgetSummary(state).endsWith("Until verified completion"));
+});
 test("only failed village completions offer reopening and World links without controls", () => {
   const state = expanded();
   state.run!.status = "succeeded";
@@ -517,7 +997,8 @@ test("Gantt handles midnight, stale runs, unknown history, escaping and untimed 
   assert.equal(locationColour("farm"), locationColour("farm"));
   assert.match(locationColour("unknown-place"), /^#[0-9a-f]{6}$/i);
   state.world!.village = null;
-  assert.equal(worldGanttMarkup(state, events, agents), "");
+  assert.equal(buildWorldTimeline(state, events, agents)!.turns, true);
+  assert.ok(worldGanttMarkup(state, events, agents).includes("Turn 0"));
 });
 
 test("midnight observation extends the paused chart and shows Elsie's recorded sleep", () => {
@@ -679,4 +1160,155 @@ test("Gantt cells show recorded quantities, duration and clock range with escape
   assert.ok(narrow.includes("Used 2 iron; made 2 wagon parts. &lt;img src=x&gt;"));
   const zoomed = worldGanttMarkup(state, events, agents, { viewportWidth: 188, zoom: 8 });
   assert.ok(zoomed.includes('class="gantt-cell-detail"'));
+});
+
+function untimedRoom() {
+  const state = expanded();
+  const scenario = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "two-locked-rooms.json"), "utf8"));
+  const actor = state.world!.actors.torvin;
+  state.world!.village = null;
+  state.world!.entities = scenario.entities;
+  state.world!.actors = {
+    finch: { ...actor, actor_id: "finch", location_id: "room-one", start_location_id: "room-one" }
+  };
+  state.run!.actor_id = "finch";
+  state.run!.agents = { finch: { role: "Explorer", memory: {}, observation: null } };
+  state.run!.title = scenario.title;
+  state.run!.scenario_id = scenario.id;
+  return state;
+}
+
+function roomObservation(location = "room-one", actor = "finch") {
+  return { self: { actor_id: actor, location_id: location } };
+}
+
+function roomEvent(sequence: number, kind: string, payload: unknown, actor = "finch", runId = "run") {
+  const event = timelineEvent(sequence, kind, 9999, payload, actor, runId);
+  delete event.village_minute;
+  return event;
+}
+
+test("untimed Gantt shows Unknown Room actions and backtracking on integer turns, never wall time", () => {
+  const state = untimedRoom();
+  const events = [roomEvent(1, "observation", roomObservation())];
+  for (const [index, action, target, location, outcome] of [
+    [2, "look", "door-one", "room-one", "OBSERVED"],
+    [4, "take", "silver-key", "room-one", "APPLIED"],
+    [6, "unlock", "door-one", "room-one", "APPLIED"],
+    [8, "go", "door-one", "room-two", "APPLIED"],
+    [10, "go", "door-one", "room-one", "APPLIED"],
+    [12, "drop", "silver-key", "room-one", "APPLIED"],
+    [14, "take", "brass-key", "room-one", "APPLIED"],
+    [16, "go", "door-one", "room-two", "APPLIED"]
+  ] as const) {
+    events.push(roomEvent(index, "action_request", {
+      request_id: String(index), action_id: action, arguments: { target }
+    }), { ...roomEvent(index + 1, "action_result", {
+      request_id: String(index), outcome, explanation: `Recorded ${action}. <script>`,
+      observation: roomObservation(location)
+    }), free_action: action === "look" });
+  }
+  state.world!.actors.finch.location_id = "room-two";
+  state.run!.elapsed_seconds = 5000;
+  const before = JSON.stringify({ state, events });
+  const projected = events.map(timelineEventProjection).filter(event => event !== null);
+  const agents = monitoredAgents(state);
+  const model = buildWorldTimeline(state, projected, agents)!;
+  assert.equal(model.turns, true);
+  assert.equal(model.now, 8);
+  assert.equal(model.start, 0);
+  assert.equal(model.rows.length, 1);
+  assert.deepEqual(model.rows[0].spans.map(span => [span.start, span.end]), [
+    [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8]
+  ]);
+  assert.deepEqual(model.rows[0].locations, [
+    { start: 0, end: 4, location: "room-one" },
+    { start: 4, end: 5, location: "room-two" },
+    { start: 5, end: 8, location: "room-one" }
+  ]);
+  assert.equal(model.rows[0].spans.filter(span => span.kind === "travel").length, 3);
+  const markup = worldMonitorMarkup(state, projected);
+  assert.ok(markup.includes("World timeline"));
+  assert.ok(markup.includes("Turn 8"));
+  assert.ok(markup.includes("1 action attempt"));
+  assert.ok(markup.includes("not elapsed time"));
+  assert.ok(markup.includes("&lt;script&gt;"));
+  assert.ok(!markup.includes("<script>"));
+  assert.ok(!markup.includes(" sec"));
+  assert.ok(!markup.includes(" min"));
+  assert.ok(!markup.includes("Wagon route"));
+  assert.equal(JSON.stringify({ state, events }), before);
+  assert.deepEqual(buildWorldTimeline(state, [...projected].reverse(), agents), model);
+  const zoomed = worldGanttMarkup(state, projected, agents, { zoom: 8, viewportWidth: 188 });
+  assert.ok(zoomed.includes('width="1504"'));
+  assert.ok(!/Turn \d+\.\d/.test(zoomed));
+});
+
+test("untimed Gantt counts rejected attempts once, ignores stale runs and unconfirmed requests", () => {
+  const state = untimedRoom();
+  const rejected = roomEvent(3, "action_result", {
+    request_id: "locked", outcome: "REJECTED", explanation: "The door is locked.",
+    observation: roomObservation()
+  });
+  const events = [
+    roomEvent(1, "observation", roomObservation()),
+    roomEvent(2, "action_request", { request_id: "locked", action_id: "open", arguments: { target: "door-one" } }),
+    rejected, { ...rejected, id: "retry", sequence: 4 },
+    roomEvent(5, "action_request", { request_id: "pending", action_id: "look", arguments: {} }),
+    roomEvent(6, "action_result", { request_id: "missing", outcome: "APPLIED", explanation: "No request.",
+      observation: roomObservation("outside") }),
+    roomEvent(7, "observation", roomObservation("outside"), "finch", "old-run")
+  ];
+  const model = buildWorldTimeline(state, events, monitoredAgents(state))!;
+  assert.equal(model.now, 1);
+  assert.equal(model.rows[0].spans.length, 1);
+  assert.equal(model.rows[0].spans[0].kind, "rejected");
+  assert.equal(model.rows[0].spans[0].end, 0);
+  assert.ok(model.rows[0].locations.every(band => band.location === "room-one"));
+  const markup = worldGanttMarkup(state, events, monitoredAgents(state));
+  assert.ok(markup.includes('class="gantt-marker rejected"'));
+  assert.ok(markup.includes("Turn 1 / open: The door is locked."));
+  assert.ok(!markup.includes("Outside"));
+});
+
+test("untimed Gantt leaves unavailable history blank and handles idle and stopped adventures", () => {
+  const state = untimedRoom();
+  state.run!.status = "completed";
+  const agents = monitoredAgents(state);
+  const model = buildWorldTimeline(state, [], agents)!;
+  assert.equal(model.now, 0);
+  assert.deepEqual(model.rows[0].locations, []);
+  assert.deepEqual(model.rows[0].spans, []);
+  const markup = worldGanttMarkup(state, [], agents, { viewportWidth: 188 });
+  assert.ok(markup.includes("Waiting for recorded history"));
+  assert.ok(markup.includes("Stopped Turn 0"));
+  assert.ok(markup.includes('width="188"'));
+  state.world = null;
+  assert.equal(buildWorldTimeline(state, [], agents)!.now, 0);
+  state.run = null;
+  assert.equal(worldGanttMarkup(state, [], []), "");
+});
+
+test("untimed Gantt uses one shared action sequence across agents and keeps waits distinct", () => {
+  const state = untimedRoom();
+  const second = { ...state.world!.actors.finch, actor_id: "guest" };
+  state.world!.actors.guest = second;
+  const events = [
+    roomEvent(1, "observation", roomObservation()),
+    roomEvent(2, "observation", roomObservation("room-one", "guest"), "guest")
+  ];
+  for (const [sequence, actor] of [[3, "finch"], [5, "guest"], [7, "finch"], [9, "finch"]] as const) {
+    events.push(roomEvent(sequence, "action_request", {
+      request_id: String(sequence), action_id: "wait", arguments: { seconds: 600 }
+    }, actor), roomEvent(sequence + 1, "action_result", {
+      request_id: String(sequence), outcome: "APPLIED", explanation: "Waited.",
+      observation: roomObservation("room-one", actor)
+    }, actor));
+  }
+  const model = buildWorldTimeline(state, events, monitoredAgents(state))!;
+  assert.equal(model.now, 4);
+  assert.deepEqual(model.rows.find(row => row.id === "finch")!.spans.map(span => [span.start, span.end]), [
+    [0, 1], [2, 3], [3, 4]
+  ]);
+  assert.deepEqual(model.rows.find(row => row.id === "guest")!.spans.map(span => [span.start, span.end]), [[1, 2]]);
 });

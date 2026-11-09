@@ -18,6 +18,46 @@ export interface StoryEntry {
 
 export type StoryMembers = Readonly<Record<string, { readonly name: string }>>;
 
+export function storyDays(events: readonly RunEvent[]): number[] {
+  return [...new Set(events.flatMap(event => event.village_minute === undefined ? [] :
+    [Math.floor(event.village_minute / 1440) + 1]))].sort((a, b) => a - b);
+}
+
+function eventDays(events: readonly RunEvent[]): Map<string, number | undefined> {
+  const ordered = [...events].sort((a, b) => a.sequence - b.sequence);
+  let day = ordered.find(event => event.village_minute !== undefined)?.village_minute;
+  day = day === undefined ? undefined : Math.floor(day / 1440) + 1;
+  return new Map(ordered.map(event => {
+    if (event.village_minute !== undefined) day = Math.floor(event.village_minute / 1440) + 1;
+    return [event.id, day];
+  }));
+}
+
+export function buildDayNarrative(events: readonly RunEvent[], actorId?: string,
+  reviewedStory?: readonly { id: string; text: string }[], members: StoryMembers = {},
+  day: number | null = null): { id: string; text: string }[] {
+  const paragraphs = buildNarrative(events, actorId, reviewedStory, members);
+  if (day === null || !storyDays(events).length) return paragraphs;
+  const days = eventDays(events);
+  return paragraphs.filter(paragraph => days.get(paragraph.id) === day);
+}
+
+export function canCopyStory(run: { status: string } | null | undefined,
+  paragraphs: readonly { text: string }[]): boolean {
+  return Boolean(run && paragraphs.length);
+}
+
+export async function copyRecordedStory(
+  loadEvents: () => Promise<{ run_id: string | null; events: RunEvent[] }>,
+  runId: string, clipboard: Pick<Clipboard, "writeText"> | undefined, actorId?: string,
+  reviewedStory?: readonly { id: string; text: string }[], members: StoryMembers = {},
+  day: number | null = null
+): Promise<void> {
+  const recorded = await loadEvents();
+  if (recorded.run_id !== runId) throw new Error("The adventure changed. Select its story again before copying.");
+  await copyStory(buildDayNarrative(recorded.events, actorId, reviewedStory, members, day), clipboard);
+}
+
 function memberNames(text: string, members: StoryMembers): string {
   const ids = Object.keys(members);
   if (!ids.length) return text;
@@ -34,7 +74,7 @@ function actorName(actor: string, members: StoryMembers): string {
 export async function copyStory(
   paragraphs: readonly { text: string }[], clipboard: Pick<Clipboard, "writeText"> | undefined
 ): Promise<void> {
-  if (!paragraphs.length) throw new Error("There is no final story to copy.");
+  if (!paragraphs.length) throw new Error("There is no story to copy.");
   if (!clipboard) throw new Error("Clipboard access is unavailable. Open the dashboard on localhost or HTTPS.");
   await clipboard.writeText(paragraphs.map(paragraph => paragraph.text).join("\n\n"));
 }
@@ -398,10 +438,12 @@ export function buildNarrative(events: readonly RunEvent[], actorId?: string,
     return timelineParagraphs(team && !actorId ? teamOrder(rendered, events) : rendered, events, members);
   }
   const paragraphs: { id: string; text: string }[] = [];
+  const days = eventDays(events);
   let pending: { cycle: number; actorId: string; explanation: string; paragraph: { id: string; text: string } } | undefined;
   for (const entry of buildStory(events, actorId, members)) {
     const details = entry.details?.length ? ` ${entry.details.join(" ")}` : "";
     if (entry.kind === "result" && pending && pending.actorId === entry.actorId &&
+        days.get(pending.paragraph.id) === days.get(entry.id) &&
         (pending.cycle === entry.cycle || confirmed.get(pending.paragraph.id) === entry.id) &&
         paragraphs.at(-1) === pending.paragraph) {
       if (confirmed.get(pending.paragraph.id) === entry.id) {

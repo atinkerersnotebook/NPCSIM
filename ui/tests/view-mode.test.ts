@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { adventureStatus, canAskQuestions, canExtendBudget, canReopenAdventure, isAdminView, playerCommandVisible, simulationClock, villageClockText, villageClockTime, viewMode, viewNavigation } from "../src/view-mode.ts";
-import { budgetExtensionSchema } from "../src/contracts.ts";
+import { budgetExtensionSchema, runModeSchema } from "../src/contracts.ts";
+
+test("run mode requires an explicit boolean and current run ID", () => {
+  assert.deepEqual(runModeSchema.parse({run_id: "run", run_until_complete: true}),
+    {run_id: "run", run_until_complete: true});
+  for (const invalid of [
+    {run_id: "", run_until_complete: true}, {run_id: "run"},
+    {run_id: "run", run_until_complete: "true"},
+    {run_id: "run", run_until_complete: true, unknown: 1}
+  ]) assert.equal(runModeSchema.safeParse(invalid).success, false);
+});
 
 test("budget extension requires a saved world and an active or budget-exhausted adventure", () => {
   for (const status of ["ready", "running", "paused", "budget_exceeded"]) {
@@ -21,8 +31,30 @@ test("village timeout recovery is offered only for saved MCP timeout worlds", ()
   assert.equal(canReopenAdventure(run, true), true);
   assert.equal(canReopenAdventure(run, false), false);
   assert.equal(canReopenAdventure({...run, reason: "Another error."}, true), false);
+  assert.equal(canReopenAdventure({...run, reason: "TimeoutError"}, true), true);
+  assert.equal(canReopenAdventure({...run, reason: "TimeoutError"}, false), false);
   assert.equal(canReopenAdventure({...run, goal: {type: "other"}}, true), false);
   assert.equal(playerCommandVisible("reopen", "error"), true);
+});
+
+test("recoverable daily AI defeat offers reopening but real world defeat does not", () => {
+  const run = {
+    status: "blocked", reason: "Dungeon Master rules that the team must admit defeat.",
+    goal: {type: "village_restored"},
+    verification: {status: "active", evidence: {
+      completion_scope: "full_village_day", daily_requirements_recoverable: true
+    }}
+  };
+  assert.equal(canReopenAdventure(run, true), true);
+  assert.equal(playerCommandVisible("reopen", "blocked"), true);
+  assert.equal(canReopenAdventure(run, false), false);
+  assert.equal(canReopenAdventure({...run, reason: "The world reported an impossible goal."}, true), false);
+  assert.equal(canReopenAdventure({...run, verification: {
+    status: "blocked", evidence: run.verification.evidence
+  }}, true), false);
+  assert.equal(canReopenAdventure({...run, verification: {
+    status: "active", evidence: {completion_scope: "full_village_day"}
+  }}, true), false);
 });
 
 test("budget extension payload accepts independent additions and rejects invalid amounts", () => {

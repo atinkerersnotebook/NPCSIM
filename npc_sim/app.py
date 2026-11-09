@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from npc_sim.controller import Controller
-from npc_sim.models import AgentProfile, AppConfig, BudgetExtension, ClockRequest, NeedToggle, ReopenRequest, Scenario, StartRequest
+from npc_sim.models import AgentProfile, AppConfig, BudgetExtension, ClockRequest, EpisodeLoadRequest, EpisodeSaveRequest, NeedToggle, ReopenRequest, RunModeRequest, Scenario, StartRequest, VillageConfigurationRequest
 from npc_sim.storage import read_json, write_json
 from npc_sim.agents import default_profile_id, load_profiles, save_profile, slots
 from npc_sim.dungeon_master import DungeonMasterConfig, load_config as load_dungeon_master
@@ -158,6 +158,25 @@ async def reopen(body: ReopenRequest, request: Request) -> dict[str, Any]:
         raise HTTPException(500, controller(request).safe_error(error)) from error
 
 
+@app.post("/api/adventure/run-mode")
+async def run_mode(body: RunModeRequest, request: Request) -> dict[str, Any]:
+    try:
+        return await controller(request).command("run_mode", body.model_dump())
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    except Exception as error:
+        raise HTTPException(500, controller(request).safe_error(error)) from error
+
+
+@app.post("/api/village/configure")
+async def village_configuration(body: VillageConfigurationRequest, request: Request) -> dict[str, Any]:
+    try:
+        return await controller(request).command("configure_village", body.model_dump(mode="json", exclude_none=True))
+    except ValueError as error:
+        LOGGER.warning("Village configuration rejected: %s", error)
+        raise HTTPException(409, str(error)) from error
+
+
 @app.put("/api/actors/{actor_id}/needs/{need}")
 async def need_toggle(actor_id: str, need: str, body: NeedToggle, request: Request) -> dict[str, Any]:
     try:
@@ -267,6 +286,36 @@ async def transcript(request: Request):
 async def history() -> dict[str, Any]:
     runs = [read_json(path) for path in DATA.glob("runs/*/run.json")]
     return {"runs": sorted(runs, key=lambda run: run["created_at"], reverse=True)}
+
+
+@app.get("/api/saves")
+async def episode_saves() -> dict[str, Any]:
+    from npc_sim.episode_saves import list_saves
+    try:
+        return {"saves": await asyncio.to_thread(list_saves, DATA)}
+    except (ValueError, OSError) as error:
+        LOGGER.exception("Saved episodes could not be listed")
+        raise HTTPException(409, str(error)) from error
+
+
+@app.post("/api/saves")
+async def save_episode(body: EpisodeSaveRequest, request: Request) -> dict[str, Any]:
+    try:
+        return await controller(request).command("save_episode", body.model_dump())
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    except Exception as error:
+        raise HTTPException(500, controller(request).safe_error(error)) from error
+
+
+@app.post("/api/saves/load")
+async def load_episode(body: EpisodeLoadRequest, request: Request) -> dict[str, Any]:
+    try:
+        return await controller(request).command("load_episode", body.model_dump())
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    except Exception as error:
+        raise HTTPException(500, controller(request).safe_error(error)) from error
 
 
 @app.get("/api/history/{run_id}")

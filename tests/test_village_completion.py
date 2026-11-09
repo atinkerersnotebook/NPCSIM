@@ -5,7 +5,7 @@ import pytest
 
 from npc_sim.assessment import load_memory
 from npc_sim.controller import Controller
-from npc_sim.models import ReopenRequest, VillageEvent, VillageMeal
+from npc_sim.models import ReopenRequest, VillageDayPolicy, VillageEvent, VillageMeal
 from npc_sim.storage import EventStore, read_json, write_json
 from npc_sim.world import World
 from npc_sim import village_turns
@@ -108,6 +108,79 @@ def test_after_midnight_uses_previous_evening_and_allows_later_daily_recovery(co
     assert completed.evaluate_goal("village_restored")["status"] == "achieved"
 
 
+@pytest.mark.parametrize("breakfast", ["missing", "missed"])
+def test_breakfast_is_optional_for_daily_completion(completed, breakfast):
+    state = completed.state.village
+    state.day_policy = VillageDayPolicy(breakfast=True, demand_led_completion=True)
+    if breakfast == "missed":
+        for person in state.residents.values():
+            person.life.meals["0:breakfast"] = VillageMeal(
+                kind="breakfast", due=480, status="missed")
+    before = copy.deepcopy(state.model_dump(mode="json"))
+    result = completed.evaluate_goal("village_restored")
+    assert result["status"] == "achieved", result
+    assert result["evidence"]["daily_requirements_recoverable"] is True
+    assert state.model_dump(mode="json") == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("restart", [False, True])
+async def test_reopen_recoverable_daily_ai_defeat_preserves_progress(configuration, restart):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.proxy = TestProxy(controller.proxy, [("village_wait", {"minutes": 5})])
+    await controller.start_worker()
+    try:
+        await controller.command("start", {"scenario_id": "millhaven-living"})
+        await controller.command("step")
+        controller.dungeon_master_ruling(
+            "episode", "defeat", "An earlier supper was missed.",
+            [controller.events.events[-1]["id"]], "ai")
+        controller.finish("blocked", "Dungeon Master rules that the team must admit defeat.")
+        await controller.command("assess")
+        before = copy.deepcopy(controller.status())
+        if restart:
+            await controller.shutdown()
+            controller = Controller(ROOT, data, config)
+            controller.proxy = TestProxy(controller.proxy, [])
+            await controller.start_worker()
+        proxy = controller.proxy
+        calls = (len(proxy.contexts), len(proxy.completion_contexts))
+        await controller.command("reopen", {"run_id": before["run"]["id"], "until_midnight": True})
+        assert controller.status()["world"] == before["world"]
+        assert controller.run["status"] == "paused"
+        assert controller.run["goal"]["status"] == "active"
+        assert all(agent["goal"]["status"] == "active" for agent in controller.agents.values())
+        for key in ("id", "world_id", "actions", "model_calls", "elapsed_seconds"):
+            assert controller.run[key] == before["run"][key]
+        assert controller.run["village_stop_minute"] == (
+            before["world"]["village"]["minute"] // 1440 + 1) * 1440
+        assert (len(proxy.contexts), len(proxy.completion_contexts)) == calls
+    finally:
+        await controller.shutdown(preserve_paused=True)
+
+
+@pytest.mark.asyncio
+async def test_reopen_does_not_override_authoritative_world_defeat(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.proxy = TestProxy(controller.proxy, [])
+    await controller.start_worker()
+    try:
+        await controller.command("start", {"scenario_id": "millhaven-living"})
+        controller.dungeon_master_ruling(
+            "episode", "defeat", "Authoritative world failure.",
+            [controller.events.events[-1]["id"]], "world")
+        controller.finish("blocked", "Authoritative world failure.")
+        await controller.command("assess")
+        before = copy.deepcopy(controller.run)
+        with pytest.raises(ValueError, match="Only a prematurely"):
+            await controller.command("reopen", {"run_id": before["id"]})
+        assert controller.run == before
+    finally:
+        await controller.shutdown()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("restart,acted", [(False, False), (True, False), (False, True)])
 async def test_reopen_premature_completion_preserves_world_and_does_not_run_models(configuration, restart, acted):
@@ -189,6 +262,105 @@ async def test_reopen_never_changes_completed_or_unrelated_worlds(configuration,
         await controller._command("reopen", {"run_id": "run"})
     assert controller.run == before
     assert not controller.events.events
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("restart", [False, True])
+async def test_recover_committed_action_timeout_without_replaying_or_paying_again(configuration, monkeypatch, restart):
+    data, config = configuration
+    value = scenario()
+    value.village.start_minute = 480
+    value.agents[0].start_location = value.village.residents["torvin"].work
+    write_json(data / "scenarios" / "millhaven-expanded.json", value.model_dump(mode="json"))
+    config.world.scenario = "millhaven-expanded"
+    controller = Controller(ROOT, data, config)
+    controller.proxy = TestProxy(controller.proxy, [("village_wait", {"minutes": 5})] * 2)
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        operation = controller.world.operation
+
+        async def lose_response(name, arguments, timeout=15):
+            result = await operation(name, arguments, timeout)
+            if name == "act":
+                raise TimeoutError
+            return result
+
+        with monkeypatch.context() as patch:
+            patch.setattr(controller.world, "operation", lose_response)
+            await controller.command("step")
+        assert controller.run["status"] == "error"
+        assert controller.run["reason"] == "TimeoutError"
+        pending = next(event for event in reversed(controller.events.events) if event["kind"] == "action_request")
+        assert not any(event["kind"] == "action_result" for event in controller.events.events)
+        before = copy.deepcopy(controller.status())
+        if restart:
+            await controller.shutdown()
+            controller = Controller(ROOT, data, config)
+            controller.proxy = TestProxy(controller.proxy, [("village_wait", {"minutes": 5})])
+            await controller.start_worker()
+        await controller.command("reopen", {"run_id": before["run"]["id"], "until_midnight": True})
+        assert controller.status()["world"] == before["world"]
+        assert controller.run["status"] == "paused"
+        for key in ("id", "world_id", "actions", "model_calls", "elapsed_seconds", "cycles"):
+            assert controller.run[key] == before["run"][key]
+        results = [event for event in controller.events.events if event["kind"] == "action_result"
+                   and event["payload"]["request_id"] == pending["payload"]["request_id"]]
+        assert len(results) == 1
+        assert results[0]["payload"]["outcome"] == "APPLIED"
+        assert controller.run["village_stop_minute"] == 1440
+        assert controller.run.get("pending_actor_id") is None
+        await controller.command("step")
+        assert controller.run["actions"] == before["run"]["actions"] + 1
+        assert controller.run["model_calls"] == before["run"]["model_calls"] + 1
+    finally:
+        await controller.shutdown(preserve_paused=True)
+
+
+@pytest.mark.parametrize("damage", [
+    "missing", "arguments", "session", "cycle", "revision", "multiple_pending", "world", "recorded_conflict"
+])
+def test_committed_timeout_proof_refuses_missing_or_conflicting_evidence(configuration, cast, damage):
+    data, config = configuration
+    world = cast["torvin"]
+    request = {"request_id": "confirmed", "expected_observation_revision": world.revision(),
+               "action_id": "look", "arguments": {"target": "anvil"}}
+    result = world.act(request["request_id"], request["expected_observation_revision"],
+                       request["action_id"], request["arguments"])
+    controller = Controller(ROOT, data, config)
+    controller.run = {"actor_id": world.actor_id, "session_id": world.session_id,
+                      "world_id": world.state.world_id, "cycles": 1}
+    controller.events = EventStore(data / "proof-test", "run")
+    event = {"id": "run:1", "kind": "action_request", "actor_id": world.actor_id,
+             "session_id": world.session_id, "cycle": 1, "payload": copy.deepcopy(request)}
+    controller.events.events = [event]
+    saved = world.state.model_copy(deep=True)
+    if damage == "missing":
+        saved.requests = {}
+        saved.request_history_id = None
+    elif damage == "arguments":
+        event["payload"]["arguments"]["target"] = "different"
+    elif damage == "session":
+        event["session_id"] = "different"
+    elif damage == "cycle":
+        event["cycle"] = 2
+    elif damage == "revision":
+        saved.revision += 1
+    elif damage == "multiple_pending":
+        extra = copy.deepcopy(event)
+        extra["payload"]["request_id"] = "another-pending-action"
+        controller.events.events.append(extra)
+    elif damage == "world":
+        controller.run["world_id"] = "different"
+    else:
+        altered = copy.deepcopy(result)
+        altered["explanation"] = "Different result"
+        controller.events.events.append({
+            "kind": "action_result", "actor_id": world.actor_id, "payload": altered})
+    before = world.snapshot()
+    with pytest.raises(ValueError, match="confirmed free-action boundary or durable action result"):
+        controller._confirmed_timeout_action(saved, world.path)
+    assert world.snapshot() == before
 
 
 @pytest.mark.asyncio
@@ -287,23 +459,28 @@ def test_midnight_scheduler_processes_night_without_skipping_to_morning(complete
     assert read_json(completed.path)["village"]["minute"] == 1440
     assert all(person.life.sleeping for person in state.residents.values())
     before = completed.state.model_dump(mode="json")
+    state.free_turn_actor = next(iter(state.residents))
     assert village_turns.next_actor(completed, stop_at_minute=1440) is None
+    state.free_turn_actor = before["village"]["free_turn_actor"]
     assert completed.state.model_dump(mode="json") == before
     assert village_turns.next_actor(completed) in state.residents
     assert state.minute > 1440
 
 
 @pytest.mark.asyncio
-async def test_goal_reached_before_midnight_does_not_end_monitoring(configuration):
+@pytest.mark.parametrize("unlimited", [False, True])
+async def test_goal_reached_before_midnight_does_not_end_monitoring(configuration, unlimited):
     data, config = configuration
     controller = Controller(ROOT, data, config)
     controller.run = {
         "id": "run", "actor_id": "torvin", "session_id": "session", "scenario_id": "fixture",
         "cycles": 1, "goal": {"type": "village_restored"}, "config": config.model_dump(mode="json"),
         "village_stop_minute": 1440, "village_minute": 1380,
+        "run_until_complete": unlimited,
     }
     controller.events = EventStore(data / "test-run", "run")
     controller.world = AsyncMock()
+    controller.world.manifest = {}
     controller.world.operation.return_value = {
         "status": "achieved", "reason": "Everyone is home and asleep.", "observation_revision": "r1",
         "evidence": {"completion_scope": "full_village_day"},

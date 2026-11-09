@@ -22,6 +22,12 @@ def observation_context(value: dict[str, Any], *, supervisor: bool = False) -> d
         result["messages"] = result["messages"][-RECENT_MESSAGES:]
     village = result.get("village")
     if village is not None:
+        communication = village.get("communication")
+        if isinstance(communication, dict):
+            communication["notices"] = communication.get("notices", [])[:6]
+            for notice in communication["notices"]:
+                notice.pop("source_chain", None)
+            communication["share_candidates"] = communication.get("share_candidates", [])[:3]
         for key in ("events", "notices"):
             if key in village:
                 village[key] = village[key][-RECENT_MESSAGES:]

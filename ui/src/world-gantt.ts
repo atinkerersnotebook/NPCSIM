@@ -41,6 +41,7 @@ export interface GanttAgent {
   name: string;
   locationId: string;
   current: boolean;
+  visitor?: boolean;
 }
 export interface GanttScale {
   zoom?: number;
@@ -97,11 +98,20 @@ function actionLabel(action: string, args: Record<string, unknown>, state: State
 export function buildWorldTimeline(state: State, events: readonly RunEvent[], agents: readonly GanttAgent[]) {
   const snapshot = timeSchema.parse(state.world ?? state.observation ?? {});
   const villageMinute = latestVillageMinute(state.world, state.observation);
-  const now = villageMinute ?? timeOf(snapshot);
-  if (now === undefined) return null;
+  const clockNow = villageMinute ?? timeOf(snapshot);
+  const turns = clockNow === undefined;
+  if (turns && !state.run) return null;
+  let now = clockNow ?? 0;
   const village = villageMinute !== undefined;
-  const rows = agents.map(agent => ({
-    ...agent, occupation: state.world?.village?.roster[agent.id]?.occupation ?? "",
+  const visitors = (state.world?.village?.dashboard?.visitors ?? []).filter(visitor =>
+    visitor.arrival <= now && visitor.status !== "scheduled");
+  const existing = new Set(agents.map(agent => agent.id));
+  const cast = [...agents, ...visitors.filter(visitor => !existing.has(visitor.id)).map(visitor => ({
+    id: visitor.id, name: visitor.name, locationId: visitor.location,
+    current: visitor.departure === null, visitor: true
+  }))];
+  const rows = cast.map(agent => ({
+    ...agent, occupation: agent.visitor ? "Visitor" : state.world?.village?.roster[agent.id]?.occupation ?? "",
     positions: [] as Position[], locations: [] as { start: number; end: number; location: string }[],
     spans: [] as GanttSpan[]
   }));
@@ -110,7 +120,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
   const milestones: Milestone[] = [];
   const routeChanges: { at: number; actor: string; active: boolean }[] = [];
   const recordObservation = (raw: z.infer<typeof observedSchema>, order: number) => {
-    const at = timeOf(raw);
+    const at = turns ? now : timeOf(raw);
     const row = byId.get(raw.self.actor_id);
     if (!row || at === undefined || at > now) return;
     const life = raw.village?.personal?.life;
@@ -119,6 +129,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
   };
   const source = events.filter(event => event.run_id === state.run?.id).slice()
     .sort((a, b) => a.sequence - b.sequence);
+  const completedRequests = new Set<string>();
   for (const event of source) {
     if (event.kind === "action_request") {
       const request = requestSchema.parse(event.payload);
@@ -127,23 +138,30 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       recordObservation(observedSchema.parse(event.payload), event.sequence);
     } else if (event.kind === "action_result") {
       const result = resultSchema.parse(event.payload);
-      const at = timeOf(result.observation);
       const linked = requests.get(result.request_id);
       const row = byId.get(event.actor_id);
+      if (turns && (!linked || !row || completedRequests.has(result.request_id))) continue;
+      if (turns) {
+        completedRequests.add(result.request_id);
+        now += 1;
+      }
+      const at = turns ? now : timeOf(result.observation);
       recordObservation(result.observation, event.sequence);
       if (!linked || !row || at === undefined || at > now) continue;
       const { action_id: action, arguments: args } = linked.request;
       const prior = row.positions.filter(point => point.order < event.sequence).at(-1);
-      const start = village ? linked.event.village_minute ?? prior?.at ?? at : prior?.at ?? at;
+      const start = turns ? at - 1
+        : village ? linked.event.village_minute ?? prior?.at ?? at : prior?.at ?? at;
       if (start > now) continue;
       const accepted = result.outcome === "APPLIED" || result.code === "WAITING";
       const life = result.observation.village?.personal?.life;
       const reserved = result.observation.village?.personal?.available_at;
-      let end = accepted ? Math.max(at, reserved ?? at, life?.work?.finishes_at ?? at) : start;
-      if (accepted && !village && action === "wait" && typeof args.seconds === "number") {
+      let end = turns ? result.outcome === "REJECTED" ? start : at
+        : accepted ? Math.max(at, reserved ?? at, life?.work?.finishes_at ?? at) : start;
+      if (accepted && !turns && !village && action === "wait" && typeof args.seconds === "number") {
         end = Math.max(end, start + args.seconds / 60);
       }
-      if (event.free_action || (village && ["look", "read"].includes(action))) end = start;
+      if (!turns && (event.free_action || (village && ["look", "read"].includes(action)))) end = start;
       const kind = result.outcome === "REJECTED" ? "rejected" : !accepted ? "event"
         : end === start ? "free" : action === "go" ? "travel"
         : /wait/.test(action) ? "wait" : life?.sleeping ? "sleep" : "action";
@@ -186,13 +204,30 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
     if (label && notice.minute <= now) milestones.push({ at: notice.minute, label, detail: notice.result });
   }
   for (const row of rows) {
+    const visitor = visitors.find(person => person.id === row.id);
+    const activityHistory = [
+      ...(state.world?.village?.dashboard?.activities ?? []).filter(item => item.actor === row.id),
+      ...(visitor?.activities ?? [])
+    ];
+    if (visitor) row.positions.push({ at: visitor.arrival, order: -1, location: visitor.location });
+    for (const activity of activityHistory) {
+      if (activity.start > now) continue;
+      const end = Math.min(now, activity.end, visitor?.departure ?? now);
+      if (end < activity.start) continue;
+      row.spans = row.spans.filter(span => !(span.kind === "action" && span.start === activity.start));
+      row.spans.push({
+        start: activity.start, end, location: activity.location, label: activity.label,
+        detail: `${activity.label} / ${activity.status}`, kind: "action"
+      });
+      row.positions.push({ at: activity.start, order: activity.start, location: activity.location });
+    }
     if (row.current && row.locationId) row.positions.push({
       at: now, order: Number.MAX_SAFE_INTEGER, location: row.locationId
     });
     row.positions.sort((a, b) => a.at - b.at || a.order - b.order);
     const points = row.positions.filter((point, index, list) => list[index + 1]?.at !== point.at);
     points.forEach((point, index) => {
-      const end = points[index + 1]?.at ?? now;
+      const end = Math.min(points[index + 1]?.at ?? now, visitor?.departure ?? now);
       if (end > point.at) {
         const previous = row.locations.at(-1);
         if (previous?.location === point.location && previous.end === point.at) previous.end = end;
@@ -219,7 +254,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
     const merged: GanttSpan[] = [];
     for (const item of row.spans.sort((a, b) => a.start - b.start)) {
       const previous = merged.at(-1);
-      if (previous && ["wait", "sleep"].includes(item.kind) && previous.kind === item.kind
+      if (!turns && previous && ["wait", "sleep"].includes(item.kind) && previous.kind === item.kind
         && previous.location === item.location && previous.end === item.start) {
         previous.end = item.end;
         if (previous.detail !== item.detail) previous.detail += `\n${item.detail}`;
@@ -229,18 +264,19 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
   }
   const times = rows.flatMap(row => [...row.positions.map(point => point.at), ...row.spans.map(span => span.start)]);
   const start = Math.min(now, ...times);
-  return { start, now, village, rows, milestones: milestones.filter(mark => mark.at >= start && mark.at <= now) };
+  return { start, now, village, turns, rows, milestones: milestones.filter(mark => mark.at >= start && mark.at <= now) };
 }
 
 export function worldGanttMarkup(state: State, events: readonly RunEvent[], agents: readonly GanttAgent[],
   scale: GanttScale = {}): string {
   const chart = buildWorldTimeline(state, events, agents);
-  if (!chart || !agents.length) return "";
-  const format = (minute: number) => chart.village ? villageClockTime(minute) : clockTime(minute * 60);
-  const span = Math.max(10, chart.now - chart.start);
+  if (!chart || !chart.rows.length) return "";
+  const format = (minute: number) => chart.turns ? `Turn ${minute}`
+    : chart.village ? villageClockTime(minute) : clockTime(minute * 60);
+  const span = Math.max(chart.turns ? 1 : 10, chart.now - chart.start);
   const zoom = Math.max(1, Math.min(8, scale.zoom ?? 1));
   const width = Math.round(Math.max(120, scale.viewportWidth ?? 900) * zoom);
-  const spacing = Math.max(chart.village ? 5 : 0.5, span / Math.max(1, width / 65));
+  const spacing = Math.max(chart.turns ? 1 : chart.village ? 5 : 0.5, span / Math.max(1, width / 65));
   const tick = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 360, 720, 1440, 10080].find(value => value >= spacing)
     ?? Math.ceil(spacing / 1440) * 1440;
   const start = Math.floor(chart.start / tick) * tick;
@@ -277,10 +313,12 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const tileWidth = w - inset * 2;
       const id = `gantt-clip-${index}-${barIndex}`;
       const location = item.location ? placeName(item.location) : "";
-      const duration = chart.village ? `${Math.round((item.end - item.start) * 10) / 10} min`
+      const duration = chart.turns ? `${item.end - item.start} action attempt`
+        : chart.village ? `${Math.round((item.end - item.start) * 10) / 10} min`
         : `${Math.round((item.end - item.start) * 600) / 10} sec`;
-      const timing = `${duration} / ${format(item.start)} - ${format(item.end)}`;
-      const detail = `${row.name} / ${format(item.start)} - ${format(item.end)} / ${duration}${location ? ` / ${location}` : ""} / ${item.label}. ${item.detail}`;
+      const range = chart.turns ? format(item.end) : `${format(item.start)} - ${format(item.end)}`;
+      const timing = `${duration} / ${range}`;
+      const detail = `${row.name} / ${range} / ${duration}${location ? ` / ${location}` : ""} / ${item.label}. ${item.detail}`;
       const label = item.kind === "wait" ? "Waiting" : item.label;
       const summary = (item.detail || location).replace(/\s+/g, " ").trim();
       const characters = Math.floor((tileWidth - 16) / 7);
@@ -299,7 +337,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       markers.set(item.start, list);
     }
     const dots = [...markers].map(([at, items]) => {
-      const detail = `${row.name} / ${format(at)} / ${items.map(item => `${item.label}: ${item.detail}`).join("; ")}`;
+      const detail = `${row.name} / ${format(chart.turns ? at + 1 : at)} / ${items.map(item => `${item.label}: ${item.detail}`).join("; ")}`;
       return `<g tabindex="0" role="img" aria-label="${escape(detail)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}">
         ${tooltip(detail)}<path d="M ${x(at)} ${y + 88} l 4 4 l -4 4 l -4 -4 Z"/>
         ${items.length > 1 ? `<text x="${x(at) + 6}" y="${y + 95}">${items.length}</text>` : ""}</g>`;
@@ -326,8 +364,10 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
           <button type="button" class="button subtle" data-timeline-zoom="in" aria-label="Zoom in timescale"${zoom >= 8 ? " disabled" : ""}>+</button>
           <button type="button" class="button subtle" data-timeline-zoom="fit">Fit</button>
         </div></div></div>
-    <p class="gantt-help">Location colours show recorded positions. Boxes show action time or reserved availability, not model thinking time.
-      Diamonds mark instant or free actions; red diamonds are rejected actions. Hover or focus for details. Scroll sideways to explore.</p>
+    <p class="gantt-help">Location colours show recorded positions. ${chart.turns
+      ? "Turns count recorded action attempts across all agents, including inspections and rejected actions, not elapsed time. Turn 0 is the initial observation. Boxes show recorded actions; red diamonds mark rejected attempts."
+      : "Boxes show action time or reserved availability, not model thinking time. Diamonds mark instant or free actions; red diamonds are rejected actions."}
+      Hover or focus for details. Scroll sideways to explore.</p>
     <div class="gantt-layout">
       <div class="gantt-names" style="padding-top:${top}px">${chart.rows.map(row =>
         `<div style="height:${rowHeight}px"><strong>${escape(row.name)}</strong><small>${escape(row.occupation)}</small></div>`).join("")}</div>
@@ -348,7 +388,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     </div>
     <div class="gantt-legend">${[...legend].map(([id, name]) =>
       `<span><i style="background:${locationColour(id)}"></i>${escape(name)}</span>`).join("")}
-      <span><i class="route"></i>Wagon route</span><span><i class="sleep"></i>Sleeping</span><span><i class="travel"></i>Walking</span>
+      ${chart.turns ? "" : '<span><i class="route"></i>Wagon route</span><span><i class="sleep"></i>Sleeping</span>'}<span><i class="travel"></i>Walking</span>
     </div>
     ${events.length ? "" : '<p class="gantt-help">Waiting for recorded history. Unknown earlier positions are left blank.</p>'}
   </section>`;

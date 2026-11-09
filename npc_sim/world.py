@@ -8,7 +8,8 @@ from jsonschema import ValidationError, validate
 
 from npc_sim.models import Actor, Body, ClockRequest, Entity, ERPState, RPSState, Scenario, SimulationClock, TicTacToeState, VoyageState, WorldState
 from npc_sim import bakery, bbq, equipment, erp, handling, recipes, rps, skills, spells, tic_tac_toe, village, voyage
-from npc_sim.storage import read_json, write_json
+from npc_sim.storage import read_json
+from npc_sim.world_storage import WorldStorage
 
 
 class World:
@@ -20,9 +21,11 @@ class World:
         self.session_id = session_id
         self._lock = threading.RLock()
         self._owner = self
+        self._storage = WorldStorage(path)
+        self._defer_save = False
         self._last_tick = time.monotonic()
         if path.exists():
-            self.state = WorldState.model_validate(read_json(path))
+            self.state = self._storage.load()
             if self.state.world_id != world_id or self.state.scenario_id != scenario.id:
                 raise ValueError("World identity or scenario does not match saved state")
         else:
@@ -66,6 +69,8 @@ class World:
             self.save()
         elif self.state.actors[actor_id].session_id != session_id:
             raise ValueError("Actor session does not match the saved binding")
+        if len(self.state.requests) > 1:
+            self.save()
 
     @property
     def state(self) -> WorldState:
@@ -109,7 +114,15 @@ class World:
         return self.state.actors[self.actor_id]
 
     def save(self) -> None:
-        write_json(self.path, self.state.model_dump(mode="json"))
+        if not self._owner._defer_save:
+            self._owner._storage.save(self.state)
+
+    def get_request(self, identity: str) -> dict[str, Any] | None:
+        return self._owner._storage.get_request(self.state, identity)
+
+    def export_state(self) -> WorldState:
+        with self._lock:
+            return self._owner._storage.export(self.state)
 
     def revision(self) -> str:
         return f"obs-{self.state.revision}"
@@ -491,9 +504,11 @@ class World:
         if self.scenario.village and self.scenario.village.daily_life:
             from npc_sim import village_life
             for action in actions:
-                blocked = village_life.action_blocker(self, action["id"])
+                blocked = village_life.action_blocker(self, action["id"], personal=True)
                 if blocked:
                     action["availability"], action["reason"] = "blocked", blocked[1]
+            from npc_sim import village_fallback
+            village_fallback.annotate(self, actions)
         if self.state.clock is not None and self.state.clock.mode == "decision_paused":
             for action in actions:
                 action["simulation_seconds"] = bakery.action_seconds(action["id"])
@@ -660,10 +675,8 @@ class World:
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
-            result = self.state.model_dump(mode="json")
-            result.pop("requests")
-            result.pop("admin_requests")
-            return result
+            return self.state.model_dump(
+                mode="json", exclude={"requests", "admin_requests", "request_history_id"})
 
     def _admin_controls(self) -> None:
         path = self.path.parent / "needs-command.json"
@@ -701,7 +714,7 @@ class World:
             request = {"action_id": action_id, "arguments": arguments,
                        "expected_observation_revision": expected_observation_revision}
             identity = f"{self.session_id}:{request_id}"
-            previous = self.state.requests.get(identity)
+            previous = self.get_request(identity)
             if previous:
                 if previous["request"] != request:
                     return self._result(request_id, "REJECTED", "REQUEST_ID_CONFLICT",
@@ -722,8 +735,15 @@ class World:
                     request_id, "REJECTED", "INVALID_ARGUMENTS", error.message))
             before = self.state.model_copy(deep=True)
             try:
+                self._owner._defer_save = True
+                from npc_sim import village_firewood
+                heated = bool(self.state.village and village_firewood.fuel_required(self, action_id, arguments))
+                fuel_before = self.state.village.stocks.get(self.actor.location_id, {}).get("firewood", 0) if heated else 0
                 outcome, code, explanation, recovery_need = self._apply(action_id, arguments)
                 if outcome == "APPLIED":
+                    if heated:
+                        already_consumed = fuel_before - self.state.village.stocks.get(self.actor.location_id, {}).get("firewood", 0)
+                        village_firewood.record_action(self, action_id, max(0, already_consumed))
                     village_minutes = village.after_action(self, action_id, arguments)
                     if village_minutes:
                         if self.scenario.village and self.scenario.village.time_based_turns:
@@ -744,15 +764,28 @@ class World:
                       and action_id in {"look", "read"}):
                     self.state.village.free_turn_actor = self.actor_id
                     self.state.revision += 1
+                if self.scenario.village and self.scenario.village.ai_controlled:
+                    from npc_sim import village_fallback
+                    if village_fallback.record_result(self, action_id, arguments, outcome, code, explanation):
+                        if outcome != "APPLIED":
+                            self.state.revision += 1
                 result = self._result(request_id, outcome, code, explanation)
+                self._owner._defer_save = False
                 return self._record(identity, request, result)
             except (OSError, ValueError):
                 self.state = before
                 raise
+            finally:
+                self._owner._defer_save = False
 
     def _record(self, identity: str, request: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-        self.state.requests[identity] = {"request": request, "result": result}
-        self.save()
+        previous = self.state.requests.copy()
+        self.state.requests[identity] = {"request": copy.deepcopy(request), "result": copy.deepcopy(result)}
+        try:
+            self.save()
+        except (OSError, ValueError):
+            self.state.requests = previous
+            raise
         return result
 
     def _result(self, rid: str, outcome: str, code: str, explanation: str) -> dict[str, Any]:
@@ -773,12 +806,20 @@ class World:
         if action == "erp_terminal":
             return erp.apply(self, args["command"])
         if self.scenario.village and self.scenario.village.ai_controlled:
-            from npc_sim import village_ai, village_life
-            if self.scenario.village.time_based_turns and action not in {"look", "read", "village_stop_route"}:
+            from npc_sim import village_ai, village_life, village_fallback
+            if self.scenario.village.time_based_turns and action not in {
+                    "look", "read", "village_stop_route", "village_maintenance_pause", "village_research_pause", "village_mining_pause", "village_livestock_pause"}:
                 person = self.state.village.residents[self.actor_id]
                 if self.state.village.minute < person.available_at:
                     return reject("ACTOR_BUSY", f"Available again at {village.clock_time(person.available_at)}.")
+            blocked = village_fallback.action_blocker(self, action, args)
+            if blocked:
+                return reject(*blocked)
             blocked = village_life.action_blocker(self, action)
+            if blocked:
+                return reject(*blocked)
+            from npc_sim import village_firewood
+            blocked = village_firewood.action_blocker(self, action, args)
             if blocked:
                 return reject(*blocked)
             if action in village_ai.VERBS:

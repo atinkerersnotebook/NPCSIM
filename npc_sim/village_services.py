@@ -1,12 +1,12 @@
 from typing import TYPE_CHECKING, Any
 
-from npc_sim import village, village_goods, village_life
+from npc_sim import village, village_economy, village_goods, village_life
 
 if TYPE_CHECKING:
     from npc_sim.world import World
 
 
-VERBS = {"village_load_goods", "village_unload_goods", "village_fertilize", "village_drink_tea",
+VERBS = {"village_load_goods", "village_unload_goods", "village_fertilize", "village_fertilize_compost", "village_drink_tea",
          "village_buy_iron", "village_lead_horse", "village_release_horse", "village_hitch",
          "village_unhitch", "village_start_timber_route", "village_stop_timber_route", "village_urgent_work"}
 JOBS = {"village_grow_hay": ("farming", "hay", "sickle"),
@@ -78,18 +78,28 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             destination = config.residents[config.smith].work if action == "village_buy_iron" else args["destination"]
             if action == "village_buy_iron" and location != "village-square":
                 return reject("Collect the trader's real iron at the village square.")
+            policy = village_economy.config(world)
+            if action == "village_buy_iron" and policy and policy.require_orders:
+                return purchase_iron(world, args["quantity"])
             reason = foot_load(world, rid, goods, destination)
         if reason:
+            if village_economy.config(world) and ": " in reason:
+                code, text = reason.split(": ", 1)
+                if code.isupper():
+                    return "REJECTED", code, text, None
             return reject(reason)
         return done("GOODS_TRANSFERRED", "Transferred the selected goods in one action; actual payments occur on unloading.")
-    if action == "village_fertilize":
+    if action in {"village_fertilize", "village_fertilize_compost"}:
         if location != "farm" or "farming" not in world.actor.body.capabilities:
             return reject("The farmer must fertilize at the farm.")
-        if state.stocks["farm"].get("manure", 0) < 1:
-            return reject("Bring one real manure unit to the farm.")
-        village_goods.take(world, "farm", "manure", 1)
+        resource = "compost" if action == "village_fertilize_compost" else "manure"
+        if action == "village_fertilize_compost" and not (state.livestock and state.livestock.config.enabled):
+            return reject("Farm food recycling is not enabled.")
+        if village_economy.usable_stock(world, "farm", resource, state.minute) < 1:
+            return reject(f"Bring one real {resource} unit to the farm.")
+        village_goods.take(world, "farm", resource, 1)
         person.fertilized_harvests += 3
-        return done("FARM_FERTILIZED", "Used manure; the next three grain harvests take half the usual cooldown.")
+        return done("FARM_FERTILIZED", f"Used {resource}; the next three grain harvests take half the usual cooldown.")
     if action == "village_drink_tea":
         if person.life is None:
             raise ValueError("Drinking tea requires daily-life state")
@@ -100,12 +110,11 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         owner = next((other for other, resident in config.residents.items() if resident.work == location), None)
         if owner is None:
             return reject("There is no local tea seller.")
-        price = config.prices["tea"] if owner != rid else 0
+        price = village_economy.unit_price(world, "tea") if owner != rid else 0
         if state.coins[rid] < price:
             return reject("You cannot afford this cup of tea.")
         village_goods.take(world, location, "tea", 1)
-        state.coins[rid] -= price
-        state.coins[owner] += price
+        village_economy.record_payment(world, rid, owner, price, "tea")
         person.life.tea_day = state.minute // 1440
         return done("TEA_DRUNK", "Drank real tea; today's tiredness slowdown is relieved, but hunger and the need to sleep remain.")
     if action == "village_urgent_work":
@@ -159,6 +168,53 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         return reject("The horse is not hitched.")
     wagon.hitched, wagon.automatic, wagon.driver, state.horse_leader = False, False, None, rid
     return done("HORSE_UNHITCHED", "Unhitched the horse; lead it back to the stable for the night.")
+
+
+def purchase_iron(world: "World", quantity: int) -> tuple[str, str, str, None]:
+    from npc_sim.village_economy_models import VillageSupplierOrder
+    base, state = village.context(world)
+    economy = state.economy
+    if economy is None:
+        raise ValueError("An ordered iron purchase requires economy state")
+    trader = world.state.entities["iron-trader"]
+    if world.actor.location_id != "village-square" or trader.location != "village-square" or trader.hidden:
+        return "REJECTED", "TRADER_NOT_PRESENT", "Meet the actual iron trader at the square between noon and 18:00.", None
+    if type(quantity) is not int or not 1 <= quantity <= foot_capacity(world, world.actor_id):
+        return "REJECTED", "IRON_CARRYING_CAPACITY", "Choose a positive iron quantity that fits your actual free carrying capacity.", None
+    destination = base.residents[base.smith].work
+    existing = any(order.status == "accepted" and order.supplier == "iron-trader"
+                   and order.buyer == base.smith and order.product == "iron" and order.loadable >= quantity
+                   and order.deadline >= state.minute for order in economy.orders.values())
+    if existing:
+        reason = foot_load(world, world.actor_id, {"iron": quantity}, destination)
+        if reason:
+            return "REJECTED", "IRON_COLLECTION_BLOCKED", reason, None
+        village.event(world, world.actor_id, "iron_collected", "iron", "Collected a previously funded iron consignment in person.")
+        return "APPLIED", "IRON_COLLECTED", "Carry the ordered iron physically to the forge and unload it to settle payment.", None
+    if world.actor_id != base.smith:
+        return "REJECTED", "BUYER_MUST_ORDER", "The smith must meet the trader and place the funded purchase first; carriers may then collect that order.", None
+    if village_economy.usable_stock(world, "village-square", "iron", state.minute) < quantity:
+        return "REJECTED", "TRADER_STOCK_SHORTAGE", "The trader's finite iron consignment is insufficient; wait for another delivery or mine ore.", None
+    price, fee = village_economy.unit_price(world, "iron"), village_economy.delivery_fee(world)
+    if state.coins[base.smith] - village_economy.commitments(world, base.smith) < quantity * (price + fee):
+        return "REJECTED", "INSUFFICIENT_COINS", "The forge cannot fund this iron order after existing commitments and delivery fees.", None
+    identifier = f"order-{economy.next_order}"
+    order = VillageSupplierOrder(
+        id=identifier, request_key=f"iron-trader:{identifier}", buyer=base.smith, supplier="iron-trader",
+        source="village-square", destination=destination, product="iron", quantity=quantity,
+        price=price, delivery_fee=fee, created_at=state.minute,
+        deadline=(state.minute // 1440 + 1) * 1440, required_fresh_until=(state.minute // 1440 + 1) * 1440,
+        status="accepted")
+    economy.orders[identifier] = order
+    reason = foot_load(world, world.actor_id, {"iron": quantity}, destination)
+    if reason:
+        del economy.orders[identifier]
+        return "REJECTED", "IRON_COLLECTION_BLOCKED", reason, None
+    economy.next_order += 1
+    village.event(world, world.actor_id, "iron_order_placed", identifier,
+                  f"Ordered {quantity} iron face-to-face from the visiting trader at {price} coins per unit, "
+                  f"plus the agreed delivery fee; collected real cargo for the forge.")
+    return "APPLIED", "IRON_ORDER_COLLECTED", "The trader accepted the funded purchase in person. Carry it to the forge and unload to pay.", None
 
 
 def advance(world: "World") -> None:

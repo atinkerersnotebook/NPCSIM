@@ -1,8 +1,14 @@
 from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, field_validator, model_validator, model_serializer
 
 from npc_sim.agent_documents import validate_documents
+from npc_sim.village_economy_models import VillageEconomyConfig, VillageEconomyState
+from npc_sim.village_communication_models import VillageCommunicationConfig, VillageCommunicationState, CommunicationView
+from npc_sim.village_social_models import VillageSocialConfig, VillageSocialState
+from npc_sim.village_events_models import VillageEventsConfig, VillageEventsState
+from npc_sim.village_research_models import VillageResearchConfig, VillageResearchState, VillageResearchView
+from npc_sim.village_livestock_models import VillageLivestockConfig, VillageLivestockState
 
 
 class StrictModel(BaseModel):
@@ -418,11 +424,185 @@ class VillageDelivery(StrictModel):
     price: int = Field(gt=0)
 
 
-class VillageConfig(StrictModel):
+class VillageMaintenanceTask(StrictModel):
+    title: str = Field(min_length=1, max_length=160)
+    assignee: str
+    location: str
+    duration: int = Field(default=30, ge=5, le=240, multiple_of=5)
+    release_minute: int = Field(default=480, ge=0, lt=1440, multiple_of=5)
+    due_minute: int = Field(default=1020, ge=0, lt=1440, multiple_of=5)
+    equipment: list[str] = Field(default_factory=list)
+    supplies: dict[str, VillageAmount] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def valid_schedule(self) -> "VillageMaintenanceTask":
+        if self.due_minute <= self.release_minute:
+            raise ValueError("Maintenance must be due after its daily release time")
+        return self
+
+
+class VillageMaintenanceConfig(StrictModel):
+    enabled: bool = True
+    tasks: dict[str, VillageMaintenanceTask] = Field(default_factory=dict)
+
+
+class VillageMaintenanceChunk(StrictModel):
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+    minutes: int = Field(ge=0)
+    status: Literal["active", "completed", "interrupted"] = "active"
+
+
+class VillageMaintenanceJob(StrictModel):
+    template: str
+    definition: VillageMaintenanceTask
+    day: int = Field(ge=0)
+    release_at: int = Field(ge=0)
+    due_at: int = Field(ge=0)
+    worked_minutes: int = Field(default=0, ge=0)
+    materials_consumed: bool = False
+    completed_at: int | None = None
+    chunks: list[VillageMaintenanceChunk] = Field(default_factory=list)
+
+
+class VillageMaintenanceState(StrictModel):
+    config: VillageMaintenanceConfig
+    jobs: dict[str, VillageMaintenanceJob] = Field(default_factory=dict)
+    last_generated_day: int = -1
+    last_maintained: dict[str, int] = Field(default_factory=dict)
+
+
+class VillageMaintenanceView(StrictModel):
+    id: str
+    title: str
+    assignee: str
+    location: str
+    day: int
+    release_at: int
+    due_at: int
+    worked_minutes: int
+    required_minutes: int
+    supplies: dict[str, int]
+    status: Literal["upcoming", "pending", "in_progress", "overdue", "blocked", "completed"]
+    completed_at: int | None = None
+    blocker: str | None = None
+
+
+class VillageDayPolicy(StrictModel):
+    breakfast: bool = False
+    breakfast_delay: int = Field(default=30, ge=5, le=180, multiple_of=5)
+    meal_window: int = Field(default=90, ge=5, le=240, multiple_of=5)
+    event_driven_waits: bool = False
+    anti_idle: bool = False
+    idle_review_minutes: int = Field(default=60, ge=15, le=240, multiple_of=5)
+    require_tea_use: bool = True
+    require_manure_use: bool = True
+    demand_led_completion: bool = False
+
+
+class VillageMiningConfig(StrictModel):
+    enabled: bool = True
+    miner: str
+    mining_minutes: int = Field(default=30, ge=5, le=240, multiple_of=5, strict=True)
+    smelting_minutes: int = Field(default=30, ge=5, le=240, multiple_of=5, strict=True)
+
+
+class VillageMiningChunk(StrictModel):
+    actor: str
+    operation: Literal["mine", "smelt"]
+    location: str
+    equipment: str
+    start: int
+    end: int
+    status: Literal["active", "completed", "interrupted"] = "active"
+
+
+class VillageMiningState(StrictModel):
+    config: VillageMiningConfig
+    chunks: list[VillageMiningChunk] = Field(default_factory=list)
+
+
+class VillageFirewoodConfig(StrictModel):
+    enabled: bool = True
+    supplier: str
+    household_buyer: str
+    households: dict[str, list[str]] = Field(min_length=1)
+    businesses: list[str] = Field(min_length=1)
+    season: Literal["spring", "summer", "autumn", "winter"] = "autumn"
+    split_minutes: int = Field(default=15, ge=5, le=60, multiple_of=5, strict=True)
+    firewood_per_log: int = Field(default=4, ge=1, le=8, strict=True)
+    reserve: int = Field(default=2, ge=1, le=12, strict=True)
+
+
+class VillageFirewoodState(StrictModel):
+    config: VillageFirewoodConfig
+    warm_until: dict[str, int] = Field(default_factory=dict)
+    statuses: dict[str, str] = Field(default_factory=dict)
+    consumed: dict[str, int] = Field(default_factory=dict)
+
+
+class VillageFirewoodSiteView(StrictModel):
+    location: str
+    buyer: str
+    stock: int = Field(ge=0)
+    reserve: int = Field(ge=0)
+    consumed: int = Field(ge=0)
+
+
+class VillageHearthView(StrictModel):
+    id: str
+    location: str
+    members: list[str]
+    occupied: bool
+    status: Literal["warm", "cold", "unoccupied", "not_needed"]
+    warm_until: int = Field(ge=0)
+
+
+class VillageFirewoodView(StrictModel):
+    enabled: bool
+    season: Literal["spring", "summer", "autumn", "winter"]
+    supplier: str
+    firewood_per_log: int = Field(gt=0)
+    split_minutes: int = Field(gt=0)
+    sites: list[VillageFirewoodSiteView]
+    households: list[VillageHearthView]
+    policy: str
+
+
+class VillageConfigurationPatch(StrictModel):
+    firewood: VillageFirewoodConfig | None = None
+    communication: VillageCommunicationConfig | None = None
+    economy: VillageEconomyConfig | None = None
+    social: VillageSocialConfig | None = None
+    events: VillageEventsConfig | None = None
+    maintenance: VillageMaintenanceConfig | None = None
+    research: VillageResearchConfig | None = None
+    mining: VillageMiningConfig | None = None
+    livestock: VillageLivestockConfig | None = None
+    day_policy: VillageDayPolicy | None = None
+
+
+class VillageConfigurationRequest(StrictModel):
+    run_id: str = Field(min_length=1)
+    request_id: str = Field(min_length=1)
+    expected_revision: str = Field(min_length=1)
+    configuration: VillageConfigurationPatch
+
+
+class VillageConfig(VillageDayPolicy):
+    firewood: VillageFirewoodConfig | None = None
+    communication: VillageCommunicationConfig | None = None
     ai_controlled: bool = False
     daily_life: bool = False
     time_based_turns: bool = False
     expanded_rules: bool = False
+    economy: VillageEconomyConfig | None = None
+    social: VillageSocialConfig | None = None
+    events: VillageEventsConfig | None = None
+    maintenance: VillageMaintenanceConfig | None = None
+    research: VillageResearchConfig | None = None
+    mining: VillageMiningConfig | None = None
+    livestock: VillageLivestockConfig | None = None
     delivery_fee: int = Field(default=0, ge=0)
     meal_price: int = Field(default=0, ge=0)
     spoil_after: dict[str, int] = Field(default_factory=dict)
@@ -451,7 +631,7 @@ class VillageConfig(StrictModel):
 
 
 class VillageMeal(StrictModel):
-    kind: Literal["daily"]
+    kind: Literal["daily", "breakfast"]
     due: int = Field(ge=0)
     status: Literal["pending", "eaten", "missed"] = "pending"
     source: str | None = None
@@ -461,8 +641,16 @@ class VillageCommittedWork(StrictModel):
     location: str
     finishes_at: int = Field(ge=0)
     outputs: dict[str, VillageAmount]
+    ingredients: list[str] = Field(default_factory=list)
     equipment: str | None = None
     kind: Literal["production", "wagon_repair"] = "production"
+
+    @model_serializer(mode="wrap")
+    def serialize_work(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        result = handler(self)
+        if not self.ingredients:
+            result.pop("ingredients", None)
+        return result
 
 
 class VillageLifeState(StrictModel):
@@ -477,6 +665,37 @@ class VillageLifeState(StrictModel):
     tea_day: int = -1
     urgent_project: str | None = None
     urgent_until: int | None = None
+
+
+class VillageBlockedAction(StrictModel):
+    action_id: str
+    arguments: dict[str, Any]
+    blocked_at: int
+    reason_code: str
+    engine_code: str
+    reason: str
+    context_revision: str
+    recheck_on: list[str]
+    attempt_count_since_change: int = 1
+
+
+class VillageIdleWait(StrictModel):
+    start: int
+    planned_end: int
+    reason_code: str = "NO_ELIGIBLE_WORK"
+    interruptible: bool = True
+    wake_on: list[str]
+    next_safety_review: int
+    context_revision: str
+
+
+class VillageFallbackState(StrictModel):
+    blocked: dict[str, VillageBlockedAction] = Field(default_factory=dict)
+    inspections: dict[str, tuple[int, str]] = Field(default_factory=dict)
+    wait: VillageIdleWait | None = None
+    active_inspection_until: int | None = None
+    active_inspection_location: str | None = None
+    decision: dict[str, Any] | None = None
 
 
 class VillagePersonState(StrictModel):
@@ -499,9 +718,22 @@ class VillagePersonState(StrictModel):
     stock_report: dict[str, dict[str, int]] = Field(default_factory=dict)
     stock_report_at: int | None = None
     fertilized_harvests: int = Field(default=0, ge=0)
+    current_action: str | None = None
+    fallback: VillageFallbackState = Field(default_factory=VillageFallbackState)
 
 
 class VillageStockLot(StrictModel):
+    ingredients: list[str] = Field(default_factory=list)
+    source_resource: str | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_lot(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        result = handler(self)
+        if not self.ingredients:
+            result.pop("ingredients", None)
+        if self.source_resource is None:
+            result.pop("source_resource", None)
+        return result
     quantity: int = Field(gt=0)
     produced_at: int = Field(ge=0)
     expires_at: int | None = None
@@ -515,6 +747,8 @@ class VillageShipment(StrictModel):
     destination: str
     price: int = Field(gt=0)
     lots: list[VillageStockLot] = Field(default_factory=list)
+    order_id: str | None = None
+    owned_transfer: bool = False
 
 
 class VillageWagon(StrictModel):
@@ -548,6 +782,14 @@ class VillageEvent(StrictModel):
     target: str
     result: str
     witnesses: list[str]
+    details: dict[str, Any] | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_event(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        result = handler(self)
+        if self.details is None:
+            result.pop("details", None)
+        return result
 
 
 class VillageDeadline(StrictModel):
@@ -562,7 +804,113 @@ class VillageStockSnapshot(StrictModel):
     coins: dict[str, int]
 
 
+class VillageActivityView(StrictModel):
+    actor: str
+    label: str
+    location: str
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+    status: str
+
+
+class VillageVisitorView(StrictModel):
+    id: str
+    name: str
+    location: str
+    arrival: int = Field(ge=0)
+    departure: int | None = Field(default=None, ge=0)
+    status: str
+    activities: list[VillageActivityView] = Field(default_factory=list)
+
+
+class VillageOrderView(StrictModel):
+    id: str
+    buyer: str
+    seller: str
+    product: str
+    quantity: int = Field(ge=0)
+    delivered: int = Field(ge=0)
+    status: str
+    deadline: int = Field(ge=0)
+
+
+class VillageProductView(StrictModel):
+    location: str
+    product: str
+    quantity: int = Field(ge=0)
+    usable: int = Field(ge=0)
+    expiring: int = Field(ge=0)
+    reserve: int = Field(ge=0)
+
+
+class VillageAccountView(StrictModel):
+    owner: str
+    sales: int = Field(ge=0)
+    purchases: int = Field(ge=0)
+    fees: int
+    subsidies: int
+    net_cash: int
+    inventory_value: int = Field(ge=0)
+
+
+class VillageProjectView(StrictModel):
+    id: str
+    owner: str
+    title: str
+    progress: int = Field(ge=0)
+    required: int = Field(ge=0)
+    status: str
+
+
+class VillageQuestView(StrictModel):
+    id: str
+    actor: str
+    title: str
+    progress: int = Field(ge=0)
+    required: int = Field(ge=0)
+    status: str
+
+
+class VillageIncidentView(StrictModel):
+    id: str
+    title: str
+    location: str
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+    status: str
+
+
+class VillageTimeUse(StrictModel):
+    since: int = Field(ge=0)
+    sleep: int = Field(default=0, ge=0)
+    work: int = Field(default=0, ge=0)
+    travel: int = Field(default=0, ge=0)
+    wait: int = Field(default=0, ge=0)
+    leisure: int = Field(default=0, ge=0)
+    idle: int = Field(default=0, ge=0)
+    successful_actions: int = Field(default=0, ge=0)
+
+
+class VillageDashboard(StrictModel):
+    firewood: VillageFirewoodView | None = None
+    communication: CommunicationView | None = None
+    orders: list[VillageOrderView] = Field(default_factory=list)
+    products: list[VillageProductView] = Field(default_factory=list)
+    accounts: list[VillageAccountView] = Field(default_factory=list)
+    activities: list[VillageActivityView] = Field(default_factory=list)
+    projects: list[VillageProjectView] = Field(default_factory=list)
+    quests: list[VillageQuestView] = Field(default_factory=list)
+    visitors: list[VillageVisitorView] = Field(default_factory=list)
+    incidents: list[VillageIncidentView] = Field(default_factory=list)
+    maintenance: list[VillageMaintenanceView] = Field(default_factory=list)
+    research: list[VillageResearchView] = Field(default_factory=list)
+    time_use: dict[str, VillageTimeUse] = Field(default_factory=dict)
+    day_policy: VillageDayPolicy | None = None
+
+
 class VillageState(StrictModel):
+    firewood: VillageFirewoodState | None = None
+    communication: VillageCommunicationState | None = None
     minute: int
     residents: dict[str, VillagePersonState]
     stocks: dict[str, dict[str, int]]
@@ -590,6 +938,17 @@ class VillageState(StrictModel):
     horse_leader: str | None = None
     horse_fed_day: int = -1
     trader_day: int = -1
+    economy: VillageEconomyState | None = None
+    social: VillageSocialState | None = None
+    incidents: VillageEventsState | None = None
+    maintenance: VillageMaintenanceState | None = None
+    research: VillageResearchState | None = None
+    mining: VillageMiningState | None = None
+    livestock: VillageLivestockState | None = None
+    day_policy: VillageDayPolicy | None = None
+    configuration_requests: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    dashboard: VillageDashboard | None = None
+    time_use: dict[str, VillageTimeUse] = Field(default_factory=dict)
 
 
 class Scenario(StrictModel):
@@ -671,6 +1030,8 @@ class Scenario(StrictModel):
                      "village_release_horse", "village_hitch", "village_unhitch",
                      "village_start_timber_route", "village_stop_timber_route",
                      "village_urgent_work", "village_share_route"}
+        from npc_sim import village_economy, village_social, village_events, village_research, village_mining, village_livestock, village_communication
+        core_ids |= village_economy.VERBS | village_social.VERBS | village_events.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | {"village_wait_event"}
         if len(recovery_ids) != len(set(recovery_ids)) or set(recovery_ids) & core_ids:
             raise ValueError("Recovery action IDs must be unique and not conflict with core world verbs")
         if set(self.recipe_actions) & (core_ids | set(recovery_ids)):
@@ -957,6 +1318,7 @@ class WorldState(StrictModel):
     secondary_goals: dict[str, SecondaryGoal] = Field(default_factory=dict)
     skill_uses: dict[str, str] = Field(default_factory=dict)
     requests: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    request_history_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
     admin_requests: list[str] = Field(default_factory=list)
     clock: SimulationClock | None = None
     batches: dict[str, BreadBatch] = Field(default_factory=dict)
@@ -1010,6 +1372,41 @@ class StartRequest(StrictModel):
 class ReopenRequest(StrictModel):
     run_id: str = Field(min_length=1)
     until_midnight: bool = False
+
+
+class RunModeRequest(StrictModel):
+    run_id: str = Field(min_length=1)
+    run_until_complete: bool = Field(strict=True)
+
+
+class EpisodeSaveRequest(StrictModel):
+    run_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    name: str = Field(min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def nonblank_name(self) -> "EpisodeSaveRequest":
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError("Give the save point a name.")
+        return self
+
+
+class EpisodeLoadRequest(StrictModel):
+    save_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    current_run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+
+class EpisodeSave(StrictModel):
+    schema_version: Literal["1.0"] = "1.0"
+    id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    name: str = Field(min_length=1, max_length=120)
+    saved_at: str
+    resumable: bool
+    run: dict[str, Any]
+    memory: dict[str, Any]
+    scenario: Scenario
+    world: WorldState
+    events: list[dict[str, Any]]
 
 
 class BudgetExtension(StrictModel):

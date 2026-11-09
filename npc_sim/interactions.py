@@ -142,7 +142,7 @@ def apply_edit(world: "World", request_id: str, expected_revision: str, plan: Wo
     with world._lock:
         identity = f"operator:{request_id}"
         request = {"revision": expected_revision, "plan": plan.model_dump(mode="json")}
-        previous = world.state.requests.get(identity)
+        previous = world.get_request(identity)
         if previous:
             if previous["request"] != request:
                 raise ValueError("An intervention ID cannot be reused for a different change.")
@@ -165,9 +165,7 @@ def apply_edit(world: "World", request_id: str, expected_revision: str, plan: Wo
             secondary_goals.refresh(world)
             result = {"revision": world.revision(), "added_ids": list(plan.additions),
                       "added_goal_ids": list(plan.secondary_goals)}
-            world.state.requests[identity] = {"request": request, "result": result}
-            world.save()
-            return result
+            return world._record(identity, request, result)
         except (OSError, ValueError):
             world.state = before
             raise
@@ -193,7 +191,7 @@ async def prepare(controller: "Controller", run_id: str, *, allow_ended: bool = 
 async def model(controller: "Controller", *, followup: bool = False) -> str:
     if controller.run is None:
         raise ValueError("No current adventure.")
-    if not followup and controller.run["model_calls"] >= controller.budgets.max_model_calls:
+    if not followup and not controller.run_until_complete and controller.run["model_calls"] >= controller.budgets.max_model_calls:
         raise ValueError("The adventure's model-call budget is exhausted.")
     selected = controller.run["model"] or (controller.config.proxy.model if followup else None)
     if not selected:
@@ -218,7 +216,8 @@ async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> N
     world, run = controller.world, controller.run
     if run is None:
         raise ValueError("No current adventure.")
-    followup = isinstance(request, ChatRequest) and run["status"] in TERMINAL
+    followup = isinstance(request, ChatRequest) and (
+        run["status"] in TERMINAL or run.get("snapshot_questions", False))
     controller.in_flight = True
     active = run["actor_id"]
     try:

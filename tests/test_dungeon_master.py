@@ -42,6 +42,42 @@ class FutilityProxy(TestProxy):
                     evidence_ids=[event["id"] for event in results])]), {}
 
 
+class DailyDefeatProxy(TestProxy):
+    async def review_progress(self, model, messages, correlation_id, timeout):
+        payload = json.loads(messages[1]["content"])
+        return DungeonMasterReview(verdict="defeat", findings=[
+            Finding(reason="An earlier meal was missed and cannot be eaten retroactively.",
+                    evidence_ids=[payload["evidence"][-1]["id"]])]), {}
+
+
+@pytest.mark.asyncio
+async def test_recoverable_living_day_defers_ai_defeat_without_hiding_the_ruling(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.proxy = DailyDefeatProxy(
+        controller.proxy, [("village_wait", {"minutes": 5})] * 12)
+    await controller.start_worker()
+    try:
+        await controller.command("start", {"scenario_id": "millhaven-living"})
+        for _ in range(12):
+            await controller.command("step")
+        assert controller.run["status"] == "paused"
+        assert controller.run["dungeon_master"]["model_calls"] == 1
+        assert controller.run["verification"]["status"] == "active"
+        assert controller.run["verification"]["evidence"]["daily_requirements_recoverable"]
+        reviews = [event["payload"] for event in controller.events.events
+                   if event["kind"] == "dungeon_master_review"]
+        assert reviews[-1]["verdict"] == "defeat"
+        assert any(event["kind"] == "dungeon_master_defeat_deferred"
+                   for event in controller.events.events)
+        ruling = next(event["payload"] for event in reversed(controller.events.events)
+                      if event["kind"] == "dungeon_master_ruling")
+        assert ruling["verdict"] == "continue" and ruling["source"] == "world"
+        assert controller.run["actions"] == 12
+    finally:
+        await controller.shutdown(preserve_paused=True)
+
+
 @pytest.mark.asyncio
 async def test_ai_judgment_stops_repeated_futility_without_leaking_privileged_context(configuration):
     data, config = configuration

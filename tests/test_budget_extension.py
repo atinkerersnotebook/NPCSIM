@@ -1,4 +1,6 @@
 import copy
+import time
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -7,10 +9,116 @@ from pydantic import ValidationError
 import npc_sim.app as application
 from npc_sim.assessment import load_memory
 from npc_sim.controller import Controller
-from npc_sim.models import BudgetExtension
+from npc_sim.models import BudgetExtension, RunModeRequest
 from npc_sim.proxy import Proxy
 from npc_sim.storage import read_json, write_json
 from test_controller import ROOT, SOLUTION, TestProxy, assessment_response, configuration
+
+
+@pytest.mark.parametrize("body", [
+    {}, {"run_id": "run"}, {"run_id": "", "run_until_complete": True},
+    {"run_id": "run", "run_until_complete": "true"},
+    {"run_id": "run", "run_until_complete": 1},
+])
+def test_run_mode_requires_explicit_valid_choice(body):
+    with pytest.raises(ValidationError):
+        RunModeRequest.model_validate(body)
+
+
+@pytest.mark.asyncio
+async def test_run_until_complete_bypasses_all_budgets_and_still_verifies_goal(configuration):
+    data, config = configuration
+    config.world.scenario = "escape-room"
+    config.budgets.max_actions = config.budgets.max_model_calls = 1
+    controller = Controller(ROOT, data, config)
+    controller.proxy = TestProxy(controller.proxy, SOLUTION)
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        run_id = controller.run["id"]
+        before = copy.deepcopy(controller.status())
+        await controller.command("run_mode", {"run_id": run_id, "run_until_complete": True})
+        assert controller.run["status"] == "ready"
+        assert controller.status()["world"] == before["world"]
+        assert controller.budgets.model_dump() == before["run"]["config"]["budgets"]
+        controller.run["elapsed_seconds"] = config.budgets.max_seconds + 10
+        for _ in SOLUTION:
+            await controller.command("step")
+        assert controller.run["status"] == "succeeded"
+        assert controller.run["actions"] == controller.run["model_calls"] == len(SOLUTION)
+        assert controller.run["elapsed_seconds"] > config.budgets.max_seconds
+        assert controller.run["verification"]["status"] == "achieved"
+        assert read_json(controller.events.directory / "run.json")["run_until_complete"] is True
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_run_mode_reopens_budget_exhaustion_and_restores_original_caps(configuration):
+    data, config = configuration
+    config.world.scenario = "escape-room"
+    config.budgets.max_actions = 1
+    controller = Controller(ROOT, data, config)
+    controller.proxy = TestProxy(controller.proxy, SOLUTION[:2])
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        await controller.command("step")
+        assert controller.run["status"] == "budget_exceeded"
+        before = copy.deepcopy(controller.status())
+        await controller.command("run_mode", {"run_id": controller.run["id"], "run_until_complete": True})
+        assert controller.run["status"] == "paused"
+        assert controller.status()["world"] == before["world"]
+        assert controller.run["actions"] == controller.run["model_calls"] == 1
+        await controller.command("step")
+        assert controller.run["actions"] == 2
+        await controller.command("run_mode", {"run_id": controller.run["id"], "run_until_complete": False})
+        await controller.command("step")
+        assert controller.run["status"] == "budget_exceeded"
+        assert controller.run["actions"] == 2
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_unlimited_village_cycle_pauses_at_exact_midnight_and_rearms(configuration):
+    data, config = configuration
+    config.world.scenario = "millhaven-expanded"
+    controller = Controller(ROOT, data, config)
+    proxy = TestProxy(controller.proxy, [])
+    controller.proxy = proxy
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        # Exercise non-default village IDs as well as the original scenario.
+        controller.run["scenario_id"] = "millhaven-living"
+        controller.run["status"] = "paused"
+        observed = copy.deepcopy(controller.observation)
+        observed["village"]["minute"] = 1380
+        controller.observation = observed
+        controller.emit("observation", observed)
+        await controller.command("run_mode", {"run_id": controller.run["id"], "run_until_complete": True})
+        assert controller.run["village_stop_minute"] == 1440
+        controller.run["actions"] = controller.run["model_calls"] = 10000
+        controller.started_clock = time.monotonic() - 100000
+        assert await controller.verify() is False
+        observed["village"]["minute"] = 1440
+        controller.world.call = AsyncMock(return_value={"actor_id": None, "minute": 1440})
+        controller.world.operation = AsyncMock(return_value=observed)
+        await controller.command("step")
+        assert controller.run["status"] == "paused"
+        assert controller.run["village_minute"] == 1440
+        assert controller.run["reason"].startswith("Reached midnight")
+        assert "village_stop_minute" not in controller.run
+        assert controller.run["model_calls"] == 10000
+        assert not proxy.contexts
+        controller.world.call.assert_awaited_once_with("world_next_village_actor", {"stop_at_minute": 1440})
+        controller._arm_cycle_boundary()
+        assert controller.run["village_stop_minute"] == 2880
+        await controller.command("run_mode", {"run_id": controller.run["id"], "run_until_complete": False})
+        assert "village_stop_minute" not in controller.run
+    finally:
+        await controller.shutdown(preserve_paused=True)
 
 
 @pytest.mark.parametrize("extra", [
@@ -266,3 +374,13 @@ def test_budget_extension_api_validates_and_persists_without_model_calls(configu
         assert result["run"]["status"] == "ready"
         assert result["run"]["model_calls"] == result["run"]["actions"] == 0
         assert result["config"] == initial["config"]
+        for body in ({}, {"run_id": run_id, "run_until_complete": "true"}):
+            assert client.post("/api/adventure/run-mode", json=body).status_code == 422
+        assert client.post("/api/adventure/run-mode", json={
+            "run_id": "stale", "run_until_complete": True}).status_code == 409
+        response = client.post("/api/adventure/run-mode", json={
+            "run_id": run_id, "run_until_complete": True})
+        assert response.status_code == 200
+        assert response.json()["run"]["run_until_complete"] is True
+        assert response.json()["world"] == initial["world"]
+        assert response.json()["run"]["status"] == "ready"

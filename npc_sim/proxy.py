@@ -35,6 +35,54 @@ Do not duplicate a teammate's work unnecessarily. For a shared-exit goal, all ag
 In rock-paper-scissors, choose your own move using play_rps on each turn. Try to win;
 never announce your current move via say. Only revealed rounds are public information.
 Roles are not interchangeable. Your body's capabilities and carrying limit are enforced.
+Scheduled village breakfast is optional for daily completion. Try to eat real food,
+but a missed breakfast does not doom the village; its recorded hunger/work effects remain.
+When supplier-order actions are advertised, supply planning is not a remote purchase.
+Find the actual supplier using observed whereabouts or local conversation, travel to
+meet them, and use the advertised ordering action to state the requirements in person.
+Do not assume a supplier is still at their workplace. Ordinary dialogue alone is not
+a funded order. Every upstream buyer must also meet its own supplier to place an order.
+When maintenance.jobs is advertised, do your assigned daily town maintenance at its
+actual site before optional leisure or long idle waits. Protect meals, sleep and
+funded commitments. Unfinished maintenance carries forward; do not invent completion
+or treat routine servicing as a structural repair.
+When research.enabled is advertised, use genuinely free workday time to propose
+and study a new item related to your actual occupational skill. Use only supported
+recipe kinds, real known inputs and actual equipment in the advertised schema.
+Continue an unfinished project across days; trials can fail and need real time
+and materials. Do not claim a discovery until the world verifies it. Discoveries
+unlock advertised making/use actions, not free stock. Teach verified recipes
+face-to-face. Meals, sleep, funded orders, animal care and town maintenance always
+take priority. Check stock buffers and demand before making discovered goods.
+When livestock.enabled is advertised, its keeper cares for actual farm animals:
+carry livestock-bucket from farm to the completed usable well, draw water with
+village_draw_livestock_water, carry it back, then village_care_cow and
+village_care_hens using real surplus hay/grain, tools and time. Protect horse hay,
+funded grain, meals and sleep. Care precedes optional research/leisure.
+village_milk_cow permits one timed session in each 08:00–13:00/13:00–18:00
+window, maximum six milk each; village_collect_eggs permits one daily session,
+maximum one egg per actual hen. Only accepted demand/reserves earn stock.
+Leave at least four actual game hours between the two milking starts.
+Arrange funded milk/egg orders face to face; deliver using standard cargo.
+The innkeeper can village_cook_dairy: one real milk plus one egg and actual
+cooking equipment/time yields two ordinary meals. Preserve bread/fish commitments.
+Food recycling never feeds rotten/mouldy food to animals. Producers can deliberately
+village_make_plant_scraps only from unexpired proven plant-only surplus beyond
+native meals, feed and funded commitments. No fish/milk/eggs or animal meals.
+Scraps last at most 12h and never past the original food's expiry. Twelve hens
+may consume one safe scrap instead of one of three grain; at least two grain
+remain. Spoiled food becomes compost-material at its actual location, never feed.
+Buy/haul scraps and compost-material through real in-person funded orders.
+At farm village_compost uses the actual pile/fork, two units and twenty minutes
+for one compost fertilizer. village_fertilize_compost consumes that real compost;
+it is not animal manure.
+When mining.enabled is advertised, the assigned smith can replenish iron through
+the real mine: travel from the square, use the pick for timed ore extraction,
+carry owned ore back to the forge, procure logs from the forester in person,
+and use the furnace for timed smelting. Mine only for actual iron needs.
+The daily iron trader is an alternative, available noon to 18:00 at the square.
+The smith uses village_buy_iron to place and collect a funded in-person order;
+then physically carries and unloads the iron at the forge to settle payment.
 Skill challenges and routes can require abilities only a teammate has. Inspect local
 skill_challenges, their reasons, and action target_requirements. Arrange handoffs and
 use your own abilities to create routes or access tools for teammates. An installed
@@ -240,6 +288,11 @@ Do not stop for difficulty, a single failed action, missing tools that can still
 an unfinished prerequisite, useful exploration, travel, legitimate timed waits, or undiscovered goals.
 Do not assume an unseen route or tool does not exist. Look for actual repeated failures,
 unchanged conditions across the team, exhausted alternatives or irreversible obstacles.
+Living-village verification can mark daily_requirements_recoverable. While that
+authoritative result remains active, choose continue: breakfast is optional and
+missed meals, food shortages, or unfinished daily chores do not end the cycle.
+Meal checks before today's supper may refer to the previous evening; a historical
+missed meal is not proof that the current or a later village day is impossible.
 Your global view is privileged and must never be copied into an NPC's private memory.
 Return ONLY JSON: {"verdict":"continue" or "defeat",
 "findings":[{"reason":"concise evidence-backed judgment","evidence_ids":["supplied event ID"]}]}.

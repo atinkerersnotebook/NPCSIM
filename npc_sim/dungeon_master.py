@@ -4,7 +4,7 @@ from typing import Any, Literal
 from pydantic import Field, model_validator
 
 from npc_sim.assessment import Finding
-from npc_sim.models import StrictModel
+from npc_sim.models import StrictModel, VillageConfigurationPatch
 from npc_sim.storage import read_json, write_json
 
 
@@ -14,7 +14,7 @@ class DungeonMasterConfig(StrictModel):
     name: str = Field(default="Dungeon Master", min_length=1)
     identity: str = "An independent supervisor and adjudicator, never a competing NPC."
     personality: str = "Fair, observant and decisive. Be patient with genuine exploration, but candid about futile attempts."
-    capabilities: list[Literal["observe_team", "adjudicate_actions", "review_progress", "declare_defeat"]] = Field(
+    capabilities: list[Literal["observe_team", "adjudicate_actions", "review_progress", "declare_defeat", "configure_village"]] = Field(
         default_factory=lambda: ["observe_team", "adjudicate_actions", "review_progress", "declare_defeat"])
     operating_rules: list[str] = Field(default_factory=lambda: [
         "Judge actions using authoritative world results, never imagined skills or outcomes.",
@@ -22,7 +22,8 @@ class DungeonMasterConfig(StrictModel):
         "Declare defeat when evidence supports futility, not merely because the puzzle is difficult.",
     ], min_length=1)
     constraints: list[str] = Field(default_factory=lambda: [
-        "Never grant abilities, change the world, bypass prerequisites or declare success.",
+        "Never grant abilities, bypass prerequisites or declare success. World changes require explicit authority; "
+        "configure_village permits only validated village policies and supported templates.",
         "Never reveal other agents' private observations to an NPC.",
         "Missing tools, exploration, travel and legitimate timed waits are not proof of defeat.",
     ], min_length=1)
@@ -37,6 +38,7 @@ class DungeonMasterConfig(StrictModel):
 class DungeonMasterReview(StrictModel):
     verdict: Literal["continue", "defeat"]
     findings: list[Finding] = Field(min_length=1)
+    village_configuration: VillageConfigurationPatch | None = None
 
 
 def load_config(data: Path) -> DungeonMasterConfig:
@@ -53,3 +55,5 @@ def validate_review(review: DungeonMasterReview, evidence: list[dict[str, Any]],
         raise ValueError("Dungeon Master cited evidence outside the supplied world events")
     if review.verdict == "defeat" and "declare_defeat" not in config.capabilities:
         raise ValueError("Dungeon Master is not configured with declare_defeat authority")
+    if review.village_configuration is not None and "configure_village" not in config.capabilities:
+        raise ValueError("Dungeon Master is not configured with village configuration authority")

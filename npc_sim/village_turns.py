@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from npc_sim import village
+from npc_sim import village, village_extensions
 
 if TYPE_CHECKING:
     from npc_sim.world import World
@@ -14,10 +14,14 @@ def next_actor(world: "World", stop_at_minute: int | None = None) -> str | None:
         world.save()
         return None
     ids = list(config.residents)
+    if stop_at_minute is not None and state.minute >= stop_at_minute:
+        world.save()
+        return None
     if config.expanded_rules and state.free_turn_actor:
         rid = state.free_turn_actor
         person = state.residents[rid]
         if (person.life and not person.life.sleeping and not person.life.work
+                and village_extensions.blocked_until(world, rid) is None
                 and not person.timber_route
                 and not (state.wagon and state.wagon.automatic and state.wagon.driver == rid)):
             world.save()
@@ -36,7 +40,10 @@ def next_actor(world: "World", stop_at_minute: int | None = None) -> str | None:
         for rid in ids:
             person = state.residents[rid]
             life = person.life
-            if life and life.sleeping:
+            activity_until = village_extensions.blocked_until(world, rid)
+            if activity_until is not None and activity_until > state.minute:
+                future.append(activity_until)
+            elif life and life.sleeping:
                 if life.sleep_until is None:
                     raise ValueError("A sleeping villager has no wake time")
                 future.append(life.sleep_until)

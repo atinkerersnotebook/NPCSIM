@@ -120,19 +120,37 @@ def validate_config(scenario: Scenario) -> None:
         reachable = expanded
     if reachable != locations:
         raise ValueError("All village locations must have connected, initially passable routes")
+    from npc_sim import village_economy, village_social, village_events, village_maintenance, village_research, village_mining, village_livestock
+    from npc_sim import village_communication, village_firewood
+    for module in (village_economy, village_social, village_events, village_maintenance, village_research, village_mining, village_livestock, village_communication, village_firewood):
+        module.validate_config(scenario)
+    if config.breakfast and not config.daily_life:
+        raise ValueError("Breakfast requires daily life")
+    if config.demand_led_completion and config.economy is None:
+        raise ValueError("Demand-led completion requires an economy configuration")
 
 
 def initial_state(scenario: Scenario) -> VillageState:
-    from npc_sim import village_life
+    from npc_sim import village_life, village_economy, village_social, village_events, village_maintenance, village_research, village_mining, village_livestock
     config = scenario.village
     if config is None:
         raise ValueError("Missing village configuration")
+    from npc_sim import village_communication, village_firewood
     return VillageState(
+        firewood=village_firewood.initial_state(scenario),
+        communication=village_communication.initial_state(scenario),
         minute=config.start_minute,
+        economy=village_economy.initial_state(scenario),
+        social=village_social.initial_state(scenario),
+        incidents=village_events.initial_state(scenario),
+        maintenance=village_maintenance.initial_state(scenario),
+        research=village_research.initial_state(scenario),
+        mining=village_mining.initial_state(scenario),
+        livestock=village_livestock.initial_state(scenario),
         residents={rid: VillagePersonState(
             beliefs={belief.subject: belief.model_copy(deep=True) for belief in resident.beliefs},
             trust=resident.relationships.copy(), busy_until=resident.busy_until, available_at=config.start_minute,
-            life=village_life.initial_state(resident, config.start_minute) if config.daily_life else None,
+            life=village_life.initial_state(resident, config.start_minute, config) if config.daily_life else None,
             next_work=config.start_minute if config.ai_controlled
             else config.start_minute + (resident.job.interval if resident.job else 30))
             for rid, resident in config.residents.items()},
@@ -214,6 +232,20 @@ def event(world: "World", actor: str, action: str, target: str, result: str,
 
 
 def announce(world: "World", actor: str, action: str, target: str, text: str) -> None:
+    from npc_sim import village_communication
+    if village_communication.enabled(world):
+        if actor in world.state.village.residents:
+            event(world, actor, action, target, text, resident_location(world, actor))
+        else:
+            entity = world.state.entities.get(target)
+            location = target if entity and entity.kind == "location" else entity.location if entity else None
+            if location in world.state.entities and world.state.entities[location].kind == "location":
+                event(world, actor, action, target, text, location)
+            else:
+                world.state.village.events.append(VillageEvent(
+                    minute=world.state.village.minute, actor=actor, action=action,
+                    target=target, result=text, witnesses=[]))
+        return
     _, state = context(world)
     index = event(world, actor, action, target, text, "village-square")
     notice = state.events[index]
@@ -238,7 +270,8 @@ def read_noticeboard(world: "World") -> str:
                          f"{' (road)' if door.village_road else ' (footpath)'}.")
     lines.append("Public bell notices:")
     config, _ = context(world)
-    if config.expanded_rules:
+    from npc_sim import village_communication
+    if config.expanded_rules and not village_communication.enabled(world):
         person.stock_report = {key: value.copy() for key, value in state.stocks.items()}
         person.stock_report_at = state.minute
         lines.append("Current workplace stock:")
@@ -250,6 +283,8 @@ def read_noticeboard(world: "World") -> str:
             lines.append(f"{goal.replace('_', ' ')}: due {clock_time(deadline.due)}; "
                          f"{'completed' if deadline.completed_at is not None else 'overdue' if deadline.overdue else 'pending'}.")
     for notice in state.notices:
+        if village_communication.enabled(world) and world.actor_id not in notice.witnesses:
+            continue
         lines.append(f"Day {notice.minute // 1440 + 1} {notice.minute % 1440 // 60:02}:"
                      f"{notice.minute % 60:02} / {resident_name(world, notice.actor)}: {notice.result}")
         for index, recorded in enumerate(state.events):
@@ -275,7 +310,9 @@ def learn(world: "World", resident: str, subject: str, location: str | None,
     event(world, resident, "learn", subject,
           f"Believes its location is {location or 'unknown'}; source: {source}.")
     config = world.scenario.village
-    if config and config.time_based_turns and source == "observation" and location is not None:
+    from npc_sim import village_communication
+    if (config and config.time_based_turns and source == "observation" and location is not None
+            and not village_communication.enabled(world)):
         crew = ({config.smith, config.helper} if subject in {config.shovel, config.timber, config.rope}
                 else {config.carpenter, config.miller} if subject in {config.repair_part, config.hammer} else set())
         if crew:
@@ -598,6 +635,9 @@ def share_news(world: "World", resident: str) -> None:
 def advance(world: "World", minutes: int) -> None:
     config, state = context(world)
     for _ in range(minutes // 5):
+        if config.ai_controlled:
+            from npc_sim import village_extensions
+            village_extensions.account_time(world, 5)
         state.minute += 5
         if not state.breakdown and state.minute >= config.breakdown_minute:
             state.breakdown = True
@@ -610,7 +650,7 @@ def advance(world: "World", minutes: int) -> None:
                          "The mill drive failed at 14:00. Flour production has stopped. "
                          "Hobb and Mara: meet at the watermill with the replacement beam and hammer.")
         if config.ai_controlled:
-            from npc_sim import village_goods, village_life
+            from npc_sim import village_goods, village_life, village_extensions
             village_goods.advance(world)
             village_life.advance(world)
             if config.time_based_turns:
@@ -620,6 +660,7 @@ def advance(world: "World", minutes: int) -> None:
                 from npc_sim import village_services
                 village_services.advance(world)
                 village_goods.snapshot(world)
+            village_extensions.advance(world)
             continue
         active = [task for task in state.tasks.values() if task.status not in {"completed", "cancelled"}]
         occupied = {task.assignee for task in active}

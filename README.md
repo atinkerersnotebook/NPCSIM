@@ -24,7 +24,20 @@ choose **New adventure**. **Skills & challenge options** retains the NPC-only
 ability policy. Watch the discovered map, characters, continuous story and
 outcome without configuration editors or technical logs.
 
-**Extend call & action budget** in Player or Admin view adds model calls, action
+**Run mode & call/action budget** in Player or Admin view includes **Run until
+complete (ignore budget limits)**. This opt-in setting applies only to the current
+adventure and bypasses action, model-call and active-time caps without changing the
+configured budgets. Model charges can continue without a spending limit. Village
+cycles pause at the next midnight (even if their goal is achieved earlier);
+Continue starts the next daily cycle. Other adventures stop at authoritative goal
+completion. Manual pause/cancel, bounded per-request timeouts, error handling and
+non-progress safeguards remain active. Turning the option off restores the original
+limits against the actual accumulated usage. Changing it does not start play.
+Budget-exhausted saved local adventures can enable it and reopen paused.
+The operator API is `POST /api/adventure/run-mode` with
+`{"run_id":"current-run-id","run_until_complete":true}` (use false to disable).
+
+**Add budget** in Player or Admin view adds model calls, action
 attempts, or active real-time minutes to the current adventure's frozen limits,
 without changing future defaults or resetting its world, clock, cast, or history.
 Use **Add budget**, then **Continue** if the adventure stopped at a budget limit.
@@ -45,6 +58,551 @@ view remains accessible without a login. The service is loopback-only.
 
 Player, World, and Admin views fill the available window width, keeping their
 normal edge padding and responsive layouts rather than a fixed maximum width.
+
+### Live town map
+
+World view displays the supplied Millhaven illustration with named residents and
+present visitors grouped at their authoritative building/location. Select a marker
+for activity details; use the map zoom buttons and scroll to explore. Placement is
+location-level, not precise indoor coordinates or continuous walking. Locations
+not pictured (such as the iron mine) and unverified positions are explicitly listed
+off map. Other, non-village adventures retain their existing World view.
+
+Confirmed successful `say` actions appear as speech bubbles for 18 real-time seconds,
+with a recent spoken-dialogue panel below the map. Requested/rejected actions,
+private questions, memories and model reasoning never become bubbles. Historical
+events populate recent dialogue without replaying on initial load or reconnect.
+Bubbles expire even while paused and stop following a speaker who changes location.
+The map uses a bundled local image; no external mapping service is required.
+
+### Named episode save points
+
+Use **Save episode** in Player or Admin view, enter a name, and save. The controller
+waits for the current turn to finish, pauses, and captures the exact world, frozen
+scenario/cast, private NPC memories, complete transcript, timers, goals, budgets,
+usage counters and next-turn state. Saving does not call a model or reset progress.
+Save points are persisted under `data\saves` and remain unchanged when play continues.
+Episode saves are local runtime data and excluded from Git; copy them separately
+when moving to another machine. A repository clone includes scenario definitions,
+not saved episode progress.
+
+**Load saved episode** opens that saved moment as a separate episode and world
+with new session identities. The original episode/history and named save are never
+overwritten. Active saved episodes load paused; use **Continue** to resume. Completed
+episodes load with their existing result/review for questions, not automatic replay.
+Unconfirmed action boundaries are explicitly questions-only and cannot be resumed.
+Missing/corrupt saves and unsupported external world adapters are rejected.
+
+Loaded NPCs answer privately from their own saved observations and memories.
+Until you resume/step, questions use separate `followup_model_calls`, even if the
+saved decision budget is exhausted. Questions can incur model charges but do not
+advance the clock, consume actions, or alter the saved point. Resuming restores normal
+interaction accounting and retains the actual accumulated adventure budget usage.
+Explicitly saved paused checkpoints reconnect paused after an app restart without
+replaying actions or automatically reviewing them; uncertain crash boundaries retain
+the existing interrupted/reconciliation safeguards.
+
+Operator API: `GET /api/saves`, `POST /api/saves` with `run_id` and `name`, and
+`POST /api/saves/load` with `save_id` and the expected `current_run_id` (null if idle).
+Saving/loading requires the built-in local stdio world and makes no model calls.
+
+### Living Millhaven
+
+The engine supports opt-in supplier orders, demand-limited production,
+breakfast, funded meal pricing/subsidies, reserve and freshness forecasts,
+personal activities, multi-day projects, bands, optional quests, minor events,
+temporary visitors, and bounded merchant imports/exports. Existing scenarios
+and frozen adventures keep their previous behavior.
+
+Generate the configured living variant before starting a backend with the new
+code, then select **Millhaven Living - Work, Friends and Visitors** for a new
+adventure:
+
+```powershell
+.\.venv\Scripts\python.exe -m npc_sim.living_village
+```
+
+The generator creates a separate scenario and never advances or replaces a saved
+adventure. Regeneration requires `--force`. Restarting an already running backend
+is a separate operation; do not restart a valuable paused adventure without
+preserving its recovery state.
+
+To upgrade a legacy village already paused at midnight, run the migration helper
+against the still-running local backend:
+
+```powershell
+.\.venv\Scripts\python.exe -m npc_sim.village_migration
+```
+
+It backs up the raw original files and validates any deterministic overnight
+clock reconciliation against the current observation. It creates named original
+and upgraded saves, then stages a **separate paused copy** for the next backend
+startup. Restart the backend after successful preparation; do not continue the old
+episode during preparation. Runnable NPCs or inconsistent observations abort the
+operation rather than inventing turns. The copy retains goods, money, repairs,
+shipments, private memories, history and budget usage; no models are called.
+New projects/time-use start at the boundary, and one-off visitors/quests target
+the upcoming day rather than replaying yesterday. Existing living episodes cannot
+be reinitialized. The current budget mode is preserved, so unlimited execution
+still requires the explicit **Run until complete** option.
+
+NPC observations advertise only enabled actions and locally available knowledge.
+Living Millhaven also includes a **Town maintenance checklist**. Torvin inspects
+the well fittings and services forge tools; Hobb inspects the mill woodwork and
+services his workshop. Each has two 30-minute jobs, released at 08:00 and due at
+17:00. These are required daily duties rather than optional hobbies.
+
+Workers must travel to the actual site and use real configured equipment and
+supplies. `village_maintain` reserves up to 15 productive minutes per turn, counts
+as work, and protects meals, shared equipment and walking home before bedtime.
+`village_maintenance_pause` retains only earned progress; any materials already
+consumed are not refunded or charged again when work resumes. Routine upkeep
+records completed service, not imaginary production or automatic structural repair.
+
+At midnight, completed jobs recur for the next day. Unfinished jobs carry forward
+with their progress and original requirements, without stacking duplicate jobs or
+preventing the midnight pause. Saves retain the entire checklist and work history.
+Legacy scenarios remain opt-out. The DM/operator can configure the `maintenance`
+section of the existing village-configuration API, including task assignments,
+sites, work duration, daily release/deadline, equipment and material requirements.
+Configuration changes apply to future jobs; existing unfinished jobs retain their
+original definition. Pause active maintenance before changing its configuration.
+
+Living Millhaven also enables **Occupational research and discoveries**. When
+ordinary work, funded orders, meals, horse care and maintenance leave real free
+workday time, NPCs propose new occupation-related recipes instead of long idle
+waits. Examples include a baker's new loaf, a farmer's edible crop variety, or a
+carpenter's repair kit. Proposals are automatically validated against actual
+skills, finite supported effects, known ingredients and real equipment; arbitrary
+code, imaginary resources and unsupported abilities are not executable discoveries.
+
+`village_research` advances study in 15 productive-minute chunks, only during the
+workday and finishing by 17:00. Each 60-minute experiment consumes its real inputs
+once and can fail. Defaults require **240 study minutes and three successful
+trials**. Experience improves trial odds, but success is never a narrative claim.
+Progress, consumed trial materials, failures and discoveries persist across days
+and episode saves. `village_research_pause` keeps only earned study; interrupted
+production/use discards the unfinished batch without refunding materials.
+
+Successful research adds a readable discovery to the world and unlocks
+`village_research_make`: actual inputs, tools and recipe duration produce one real
+stock unit, with no free discovery inventory. Food/crop stock lasts one day and
+can be ordered, physically delivered to the tavern, and prepared with
+`village_research_use` into two meal portions on the real hearth. Crops need at
+least 60 minutes to grow. Tools are consumable repair kits: each restores 25 health
+on a real damaged occupational object; they do not bypass structural mill
+repairs. New materials are usable inputs in subsequent researched recipes.
+Production meets accepted orders or keeps a single demonstration unit rather
+than creating unlimited surplus. Research and discovered production count as work
+and reserve shared equipment.
+
+NPCs learn verified recipes through `village_research_share` in person or by
+reading the actual discovery at its site; private research and remote stock
+quantities are not automatically shared. Knowing a
+recipe does not grant its required production skill. The town/NPC research
+checklists show progress, trial outcomes, blockers and actual unlocked recipes.
+The revision-checked village-configuration API accepts `research` with `enabled`,
+`required_minutes` and `required_successes`. Changes affect new projects, not
+existing requirements; pause active research/batches before configuring it.
+Legacy scenarios and previously saved episodes remain unchanged unless explicitly
+enabled on a restored/current run.
+
+Living Millhaven has two real iron supply routes:
+
+- **Daily imports:** the iron trader brings four units to the square at noon and
+  leaves at 18:00 with unsold stock. With mandatory orders enabled, the smith
+  uses `village_buy_iron` face-to-face to create a funded, accepted consignment
+  and collect actual cargo. Carry it to the forge and unload to pay; ordering
+  never teleports stock. Another carrier may collect an already accepted order,
+  but cannot silently place a purchase on the smith's account. Existing cash,
+  carrying limits and commitments still apply.
+- **Renewable local mine:** a real mine road connects the square to the iron
+  mine, which starts with **zero ore**. The smith uses the actual pick and
+  `village_mine_ore` for a 30-minute extraction, then `village_load_ore`, real
+  travel and unloading to bring the ore to the forge. Owned ore is not an
+  invented purchase: it transfers without goods payments or delivery fees.
+  `village_smelt_iron` consumes **one ore and one log** in the real furnace,
+  taking another 30 minutes to produce one usable iron. Procure fuel from the
+  forester in person. Mining/smelting obey needs, body/tools, shared equipment,
+  hunger/fatigue, meals and bedtime. Interrupted batches create no output and
+  consumed smelting inputs are not refunded. Stock, cargo and in-flight work
+  count toward demand so mining does not create unlimited surplus.
+
+The other primary supplies are already repeatable: Ada grows grain/hay, Finn
+catches fish, Iona gathers herbs, and Rowan fells logs. Manure comes from feeding
+the horse hay. Milling makes flour from grain, forestry makes timber from logs,
+carpentry makes planks from timber, and cooking/tea use their real ingredients.
+Tools and one-off structural quest objects are distinct from bulk raw stock.
+The mine intentionally uses renewable logs rather than introducing an
+unreplenishable coal resource. Previously saved episodes remain unchanged;
+enable `mining` through the revision-checked village configuration API on a
+current/restored run. Its fields are `miner`, `enabled`, `mining_minutes` and
+`smelting_minutes`; pause committed mining/smelting before reconfiguration.
+
+With communication disabled, supply orders must be placed **in person**: buyers find their actual supplier,
+meet them while they are available to talk, and use the ordering action to state
+the requirements. Demand suggestions do not send remote orders. This also applies
+upstream (inn to baker, baker to miller, miller to farmer). The supplier separately
+accepts or rejects the proposed commitment. NPCs see their own buying/selling
+orders; the monitoring dashboard retains the global ledger. Deliveries still
+require real goods, collection and travel.
+
+#### Physical village communication (Phases 1 and 2)
+
+New **Millhaven Living** scenarios enable physical communication by default.
+Existing worlds and named saves remain opt-out; loading one never installs
+fixtures or fabricates retrospective receipts. The shared engine advertises
+`village_notice_post/read/update/reply/close/tell` and
+`village_inbox_leave/read`. Posting, reading and replying cost **five minutes**
+per actor; a real conversational listener also spends five minutes. The
+ordinary free map read remains map-only; it does not remotely read notices.
+
+The existing `noticeboard` at Village Square holds public paper versions.
+Every resident has a fixed `workplace-inbox-<resident>` at their actual workplace.
+Anyone may write a directed note **while at the recipient's box**; only its
+owner can read it there. A supplier replying via an inbox must physically
+visit the requester's box. Notes do not move between boxes, enter inventories,
+or appear remotely: portable letters/couriers are not implemented. Check a box
+explicitly on a normal workplace visit; there is no remote or automatic read.
+Private/restricted notes cannot be posted publicly or relayed.
+
+World notice history, paper placements, independently received snapshots and
+speaker/listener deduplication are separate. A reply is not automatically
+known by its requester. Old paper and memories stay stale until a new
+version is actually published/read or a real event is witnessed. Provenance
+keeps the original author, latest speaker, at most four chain entries and
+eight relay hops; repetition never improves credibility. Up to three relevant
+novel encounter candidates are ranked deterministically. This does not
+automatically speak, send anyone travelling, or share with absent/busy sleepers.
+Global bell broadcasts and live noticeboard stock reports are disabled for
+opted-in worlds. Existing legacy memories are not erased.
+
+Supply acceptance creates a normal funded economy order, never goods or coins.
+New in-person ordering uses the same received-notice/reply path rather than
+leaving a remote-status bypass; one physical conversation proposes one need.
+It checks freshness, deadlines, feasible real supply, prior commitments and
+reserves. Physical loading still protects reserves; production, cargo capacity,
+unloading and payment remain the ordinary engine mechanics. Coordination-linked
+order observations, suggestions, cash commitments and action menus use received
+snapshots rather than leaking unreceived replies. Older pre-installation orders
+retain their original behavior. A verified status can be published with
+`village_notice_update` **without** a `notice` field; it still requires a local
+channel and an exactly compatible personally received version.
+
+Well/mill meetings are versioned appointments proposed by the actual project
+crew at the actual site, with an explicit future `due_at`. The initial proposer
+signs only for themselves; the partner accepts through a real channel, and both
+must personally receive confirmation. Attendance is a personal plan, not
+automatic movement. Work is permitted during the one-hour appointment window
+only with both actual available workers and the original real supplies; each
+worker still contributes their own actions. Changing unaccepted meeting terms
+revokes prior signatures; committed meetings must be explicitly cancelled
+before rescheduling.
+
+To opt an **existing paused** timed AI village into both phases, send
+`POST /api/village/configure` with a fresh observation revision:
+
+```json
+{
+  "run_id": "<connected paused run>",
+  "request_id": "<unique installation ID>",
+  "expected_revision": "<fresh obs-N>",
+  "configuration": {
+    "communication": {
+      "board_id": "noticeboard",
+      "workplace_boxes": true,
+      "max_hops": 8,
+      "cooldown_minutes": 15
+    }
+  }
+}
+```
+
+This adds only the twelve fixed inbox fixtures for `ada`, `bren`, `elsie`,
+`finn`, `garrick`, `hobb`, `iona`, `jory`, `mara`, `nella`, `rowan`, and `torvin`.
+The new `village.communication` contains that owner mapping in `boxes`, the
+configuration above, `next_notice: 1`, and **empty** `notices`, `knowledge`,
+`placements`, `shares`, `cooldowns`, `failed_contacts`, and `failed_replies`. Stocks, positions,
+coins, clocks, schedules, existing funded orders, runs and named saves are not
+reset. Configuration is revision-checked, idempotent by request ID, and
+transactional on fixture collisions. An installed ledger cannot be silently
+reconfigured or removed through this endpoint.
+
+The operator village dashboard shows authoritative notices, commitments,
+appointments and physical box counts. The selected NPC view instead labels
+their own received versions with source, receipt time, confidence and freshness;
+operator truth never enters the compact NPC prompt.
+The read-only World route (`/?view=world`) includes the same shared
+**Operator: noticeboard, commitments & appointments** panel and
+**Physical workplace inboxes** summary, even when enabled with no notices.
+
+Deterministic evidence: `tests/test_village_communication.py` includes a paired
+Day-3-like scripted replay using a **constructed matched fixture** from the
+expanded scenario, starting at **minute 3360 (Day 3 08:00)**, **not** an archived
+Day 3 snapshot. Its initial stocks, positions, schedules, prices and constraints
+match between arms (only empty capability state/fixtures differ).
+Control → treatment: fruitless contact trips **2 → 0**, person-search walking
+**35 → 0 minutes**, all walking **75 → 65 minutes**, blocked actions **2 → 0**,
+world actions **24 → 22**. Both deliver **2 units**, fulfill **1 order**, pay
+**4 goods coins + 1 delivery fee**, bake **2 bread**, and eat **1 meal**, with
+**0 missed meals** at the common cutoff and **670 total conserved coins**.
+There are **zero model calls**. This demonstrates engine feasibility, not
+universal AI behavior improvement or a replay of the original AI day.
+An additional appointment replay runs twice from identical initial state:
+Torvin and Bren start apart, use **12 real `go` actions**, retrieve the existing
+well supplies, and receive confirmation through an actual local conversation.
+Work rejects missing personal confirmation and an absent coworker; six real
+contributions (three each) consume the original timber/rope and complete the
+well by 11:55, including save/restart verification. No travel is automatic,
+no actor positions are assigned during replay, and no model calls are made.
+The separate `test_real_day3_midnight_backup_paired_supply_compatibility_replay`
+is a reusable offline driver for the **actual minute-2880 midnight baseline**.
+It reads only `baseline.json` and adjacent frozen `scenario.json`, hash-checks
+both unchanged, and reconstructs their real actors, entities, inventories,
+stocks/lots, coins, resident life/schedules, reserves and existing contracts.
+Control/treatment initially match completely except empty communication
+state/twelve fixtures; no stock, money, position or policy is made easier.
+Both workers wake normally, physically try the empty tavern at breakfast,
+record their two missed meals, and transport one existing workshop plank to
+the forge: **1 delivered unit, 3 goods coins + 1 fee** in each arm, with a common
+09:40 cutoff and zero model calls. This is a short compatibility/delivery
+script, not a full-day AI replay or evidence of improved meals.
+The driver defaults to
+`data\backups\livestock-3b3f16b2d9cc4d3787062c60bac114c1\baseline.json`;
+set `NPCSIM_DAY3_BASELINE` to another compatible archived baseline path.
+Run `.\.venv\Scripts\python.exe -m pytest -q -s tests\test_village_communication.py -k real_day3_midnight_backup`.
+Without the default archive it explicitly skips; an invalid explicitly supplied
+path fails. It never reads/copies the large `world-state.json` or writes backups.
+The separately archived original partial Day 3 (00:00–17:10) had 999 actions,
+617 movement events and 3,220 resident-minutes travelling; its 97 explicitly
+named-person contact intentions are only a lower-bound intention metric,
+**not** an instrumented fruitless-trip count. These unequal-duration records
+are not a causal comparison, and no new paid AI replay was run.
+Committed leisure and performances reserve actual time; the scheduler does not
+request a model decision every five minutes. Meals, travel home, sleep, and animal
+care take priority. Optional interests and sidequests do not gate village victory.
+World/Admin monitoring includes orders, reserve shortages, cash flows,
+price-valued inventory (not net profit), projects, events, time use, and visitor
+history. Visitor Gantt rows end at actual departure and remain in historical views.
+
+To let the Dungeon Master adjust village policies or add validated event/quest
+templates, add `configure_village` to its capabilities in the Admin configuration
+editor. This authority does not permit arbitrary code, invented stock, teleporting,
+or granting victory. Without that capability, configuration proposals are rejected.
+
+Living Millhaven now includes **one physical cow and twelve adult hens**, not
+extra AI residents. There is no starting milk, egg, feed or water grant.
+Ada carries `livestock-bucket` to the completed, usable well and draws two
+care portions in five minutes, then carries it back to the farm. Daily cow
+care takes 15 minutes and consumes one real hay; hen care takes ten minutes
+and consumes `ceil(hens / 4)` real grain (three for twelve hens). The real
+brush, bucket and housing must be usable, and the actual animals must be
+present. Horse hay, reserves and accepted grain deliveries remain protected;
+feed needs enter Ada's demand-led harvest/hay planning. Only completed care
+of fed animals produces manure, one unit per housing.
+Required feed can finish an indivisible two-unit harvest batch for a one-unit
+care shortfall; this cannot trigger extra batches once demand is covered.
+Native production rounding remains unchanged when livestock is disabled.
+
+Fed, watered, cleaned cows permit one 15-minute milking in each daytime
+window, 08:00–13:00 and 13:00–18:00, at most six milk each. Hens permit one
+ten-minute collection per day, at most one egg each. Output is further bounded
+by at least four game hours between milking starts, preventing boundary-adjacent
+double milking. Production is bounded
+by actual reserves/accepted orders, current usable stock and committed work;
+capacity is not a requirement to create unsold food. Interrupted collections
+earn no output and still use their daily session. Interrupted cleaning retains
+earned work and already consumed feed/water; after midnight unfinished cleaning
+can resume but animals require today's feed/water, with no retroactive yield.
+Meals, bedtime, real travel, bodies, tools and active reservations are enforced.
+Care precedes optional research/leisure; feasible urgent funded grain precedes
+optional milk/egg work.
+
+Milk and eggs each cost two coins; milk lasts 24 game hours and eggs 48.
+The inn's planner suggests modest milk/egg supplies without changing existing
+bread/fish commitments. Elsie must meet Ada, place funded orders, obtain her
+acceptance and arrange actual cargo delivery through standard goods logistics.
+`village_cook_dairy` consumes one delivered milk and one egg at the real hearth
+in 15 minutes to make two ordinary paid meals. No butter/cheese work is added.
+Validated occupational food trials may also use actual milk/eggs.
+
+New Living scenarios install livestock by default. Legacy midnight upgrades
+remain opt-out; add `--livestock` to the migration helper to opt in. For an
+existing paused Living world, the safe configuration request is:
+
+```json
+{
+  "run_id": "<connected paused run>",
+  "request_id": "<unique installation ID>",
+  "expected_revision": "<fresh observed revision>",
+  "configuration": {"livestock": {"enabled": true, "keeper": "ada", "hens": 12}}
+}
+```
+
+Food recycling is enabled with this same optional livestock module. Deliberate
+`village_make_plant_scraps` takes a product and quantity (one to three), consumes
+the actual unexpired **plant-only surplus**, and earns the same number of scrap
+units after five minutes per unit. Provenance rejects fish, milk, eggs, animal
+meals, ambiguous old meals and rotten/mouldy food; current plant-only meal and
+discovery recipes retain real ingredient evidence. Native meals, balanced feed,
+reserves, raw inputs needed for production and accepted orders are protected.
+Scraps expire after at most 720 minutes, never later than the source food.
+For twelve hens, one real usable scrap can replace one of three grain, leaving
+at least two grain; generally substitution is capped at one third of the
+grain ration. It never replaces cow hay.
+
+Actual food spoilage preserves an equal, finite quantity of `compost-material`
+at that physical storage/cargo location, never feed. Reprocessing spoilage cannot
+duplicate it. Both scraps and material use ordinary one-coin, funded, in-person
+orders and real hauling; recycled goods at non-workplace locations can be
+contracted there with a present supplier. At the farm, `village_compost` consumes
+two uncommitted `compost-material` or safe `plant-scraps`, uses the actual
+`compost-pile` and `compost-fork`, and earns one nonperishable compost fertilizer
+after 20 minutes, capped at a two-unit buffer. Interrupted composting earns
+nothing and does not refund inputs. `village_fertilize_compost` consumes one
+actual compost for the existing three-faster-harvest benefit; it is never
+recorded as animal manure. All three recycling resources cost one coin and
+begin with empty stock/lots at every existing stock location.
+
+Post to `/api/village/configure`. This installs only new animals/tools/housing
+and empty milk/egg stock/lot keys at farm, bakery and tavern, plus the three
+empty recycling ledgers at existing stock locations; no resident, stock,
+coin, clock, task, run or named save is reset. The standalone livestock audit
+event does not invent resident memories. Repeated request IDs are idempotent;
+stale revisions and fixture conflicts abort atomically. Pause active work before
+reconfiguration; installed flock counts cannot be changed through this API.
+Fixtures are `farm-cow`, `farm-hen-01` through `farm-hen-12`, `cow-stall`,
+`hen-coop`, `livestock-bucket`, `livestock-brush`, `milking-pail`, `egg-basket`.
+Recycling adds only `compost-pile` and `compost-fork`.
+Care state, water, daily counters and work chunks persist in world/episode saves.
+The village panel shows care status and water; ordinary stock and work monitors
+show milk/eggs and clock-earned livestock work.
+
+Operators can configure a **paused, connected** village using
+`POST /api/village/configure` with `run_id`, a unique `request_id`,
+`expected_revision` from the current observation, and `configuration`. Supported
+configuration sections are `economy`, `social`, `events`, `maintenance`, `research`,
+`mining`, `livestock`, `communication`, `firewood`, and `day_policy`; schemas
+are available in the API's OpenAPI document. Each supplied section replaces that
+section's configuration, rather than silently merging unknown fields. Runtime
+settings persist in the world without changing the frozen scenario. The privileged
+MCP equivalent is `world_configure_village`; it is never advertised as an NPC action.
+Conflicting request reuse and stale revisions are rejected.
+
+### Firewood and shared household fires (opt-in)
+
+Generate a **future** Living Millhaven scenario with
+`python -m npc_sim.living_village --firewood --anti-idle --output data\scenarios\millhaven-firewood.json`.
+This does not regenerate, restart or enable fuel rules in an existing adventure.
+Preserve the current episode before restarting the backend to load Python changes.
+Existing scenarios/saves without `firewood` keep their previous fuel rules.
+
+For an already connected, paused living village, the configuration API above accepts
+this complete `firewood` section (it requires the existing funded economy):
+
+```json
+{
+  "firewood": {
+    "supplier": "rowan", "household_buyer": "iona",
+    "households": {
+      "hearth-1": ["ada", "bren", "elsie", "finn"],
+      "hearth-2": ["garrick", "hobb", "iona", "jory"],
+      "hearth-3": ["mara", "nella", "rowan", "torvin"]
+    },
+    "businesses": ["torvin", "elsie", "jory"],
+    "season": "autumn"
+  }
+}
+```
+
+These are shared-hearth groups at the existing `cottages` home location, not newly
+invented individual houses or family relationships. Every resident belongs to
+exactly one group. Iona works at cottages and buys fuel for its communal physical
+woodpile from her existing purse; no money or starter firewood is granted.
+Business owners fund their own workplace fuel. Requests use real quoted prices
+(default one coin per firewood), conservative existing delivery-fee commitments,
+supplier acceptance and actual foot/wagon cargo, travel, unloading and payment.
+Fuel planning requests only the affordable part of a shortage; empty purses do not
+silently create credit. Buyers must inspect local supplies before using physical
+communication channels; remote stock, unread orders and whereabouts are not shared.
+
+Rowan's `village_split_firewood` consumes **one actual log**, uses his actual axe
+and commits **15 minutes** to produce **four firewood**. These defaults are
+configurable. Log reserves and the logs needed for construction timber remain
+protected. Felling targets account for real pending fuel production, avoiding a
+reserve/replenishment deadlock. Firewood production is capped by accepted orders
+plus one splitting-batch reserve; indivisible batches can leave at most one batch
+minus one unit of additional stock. Committed output counts toward the cap.
+The axe is reserved while splitting; failed batches lose their actual inputs.
+
+Each successful bakery, tavern cooking (bread, fish or dairy), or forge batch
+burns **one firewood**, not one per portion. Smelting consumes ore plus firewood
+**instead of** ore plus logs, never both. Heated research pays fuel when trial
+materials are first consumed and when making/using a heated discovered recipe;
+continuing an already-funded trial does not burn again. Recipe-specified firewood
+counts toward fuel rather than being charged twice. Rejections and replayed requests
+do not burn extra fuel. Missing fuel explicitly blocks hot production.
+
+Between **18:00 and 07:00**, a household with at least one member physically home
+automatically lights/tends its shared hearth from the local pile: one unit gives
+four hours in spring/autumn or two in winter, capped at 07:00. Summer households
+do not heat; business cooking still burns fuel. Unoccupied groups burn nothing.
+Cold homes are visible but impose **no new health penalties**. There is no
+backdated heating debt. `season` is an explicit operator setting, not automatic
+weather/calendar simulation; rate changes affect the next fuel burn.
+
+Local observations expose only physically present fuel stocks/hearths. The World
+observatory additionally shows privileged town-wide household warmth, shortages,
+consumption and responsible buyers. Configurations, warming intervals and fuel
+ledgers persist in ordinary world/episode saves. Runtime configuration preserves
+the frozen scenario, existing goods, money and progress; installed participants
+and household memberships cannot be replaced through a later patch.
+
+### Occupation fallback / anti-idle planning (Phase 1)
+
+This is opt-in. Set `day_policy.anti_idle` to `true` using the paused-world
+configuration API above, **copying all existing day-policy values** because that
+section is replaced, not merged. It requires an AI-controlled, timed daily-life
+village. Alternatively, generate a future Living Millhaven scenario with
+`python -m npc_sim.living_village --anti-idle` (existing output requires `--force`).
+Neither code changes nor regeneration enable or restart a running/frozen adventure.
+Restart the backend with the updated code only after preserving the current episode.
+
+The engine supplies a small eligibility-filtered list of actual occupation actions,
+due funded meals/rest and a five-minute local workplace/tool inspection using the
+existing `village_observe` action. It never creates new chores, goods, maintenance
+benefits, tools, food or automatic travel. Ordinary production still uses the same
+stock, reserve, capability, equipment and cooldown validators at execution time.
+Required maintenance, research restrictions and existing commitments retain their
+existing engine guards. Occupation-specific new task catalogs remain Phase 2.
+
+Per-actor blocked-action records preserve the real rejection, a structured reason,
+arguments and a relevant-context fingerprint. An unchanged retry is explicitly
+rejected as `RETRY_SUPPRESSED`; ordinary world-revision increments do not reopen it.
+Empty-meal retries depend on the meal, food and funding, not unrelated chatter or
+tool observations. **Existing meal rules are unchanged:** an empty/unfunded attempt
+can immediately mark a meal missed, and a later real, paid meal can recover that
+outcome where already supported. This feature does not introduce a new cutoff rule.
+
+Useful inspections are limited until visible conditions change or the configured
+review interval passes. When no eligible alternative exists, `village_wait_event`
+records its reason and wake triggers, preserving all other villagers' independent
+turns. With anti-idle enabled, repeated short idle `village_wait` polling is rejected.
+`idle_review_minutes` defaults to 60 (15–240, multiples of five); waits are also
+bounded by known events and walking/action time before meals and bedtime.
+Local stock/gear changes, real encounters, personally received notices and needs
+can interrupt a wait; hidden remote stock alone cannot. Scheduler ticks do not call
+the model. No guarantee of constant work or extra timber is made.
+
+Planning state persists in world and episode saves. The personal `village.fallback`
+observation contains blocked tasks, candidates, the selected decision and wait state.
+Private structured village events include `TASK_BLOCKED`, `FALLBACK_SELECTED`,
+`FALLBACK_STARTED`, `FALLBACK_COMPLETED`, `WAIT_STARTED`, `WAIT_INTERRUPTED` and
+`TASK_REEVALUATED`. These are engine evidence, not NPC speech.
+Deterministic Rowan Day 3 regression tests are in `tests\test_village_fallback.py`;
+they are not a claim that a paid, nondeterministic historical model replay was run.
+Notice-response planning, travel-loop detection, broader task catalogs and comparison
+dashboards remain later phases.
 
 ### Private questions and live world changes
 
@@ -68,6 +626,15 @@ scroll horizontally. The timeline matches the other gray panels. Use **+** and
 period at the available width. Tick spacing adapts to the zoom level; zooming never
 changes simulation time. It replays saved events when opened or reconnected without
 calling the model or changing the world. The location cards remain below it.
+
+Untimed adventures, including **The Unknown Room**, use the same chart with a
+**turn-based axis** instead of clock times. Each recorded action attempt across
+the cast occupies one turn, including inspections and rejected attempts; Turn 0
+is the initial observation. Action tiles and location bands show discoveries,
+item handling and backtracking; red diamonds mark rejected attempts. Turns are
+not elapsed time or the NPC's needs clock. Only confirmed results enter the
+timeline, and missing history is not reconstructed from the current location.
+Existing adventures work without a scenario upgrade or restart.
 
 Player and Admin views include **Ask an NPC** and **Dungeon Master intervention**:
 
@@ -202,11 +769,16 @@ A local village stopped by an MCP response timeout can also use **Recover
 interrupted day** when all action requests have confirmed results and the saved
 actor still has its free-action turn, or the next actor is already durably
 scheduled but has not acted. Recovery refuses uncertain actions rather
-than replaying them. It preserves the world, history and existing budgets and
+than replaying them. If a dispatched action timed out after its result was saved,
+recovery verifies the exact request, NPC/session, cycle, current revision and
+durable response, then records that original result without executing it again
+or charging another action/model call. Missing or conflicting results are refused.
+It preserves the world, history and existing budgets and
 reopens paused. The same `/api/adventure/reopen` request accepts
 `until_midnight: true` to simulate normally until the next midnight and pause
 there, including when everyone sleeps before then. This does not fast-forward,
-increase budgets or automatically resume; existing budget limits still apply.
+increase budgets or automatically resume; existing budget limits still apply
+unless **Run until complete** is enabled.
 
 The current clock and Gantt endpoint follow the newest recorded village time,
 including a midnight observation newer than the inspection file. The scheduler
@@ -375,6 +947,12 @@ the member names saved with that episode (for example, Avery), not internal acto
 IDs such as `npc-001`. Technical logs and original grading evidence retain their IDs.
 
 The third column presents **An unexpected adventure** as continuous story prose: discovered descriptions, carrying limits, recorded reasons, attempted actions and confirmed results. Archived episodes include the same rewritten narrative. It uses no additional LLM calls and does not invent private thoughts or turn expected outcomes into facts. Narrow screens stack this reading column below the other panels.
+
+**Copy story** works while an adventure is paused, running, or completed. Village
+adventures offer **Story by day**, defaulting to **All days**, in both live and
+archived stories. Choose a recorded day to read and copy only that day's narrative.
+Live copies fetch the complete recorded story, not just the visible technical-log
+page. Other adventures keep their continuous story; clipboard errors are reported.
 
 Cooperative actions use their observed plain-language descriptions in the story,
 not command IDs or JSON arguments. Object IDs are shown as discovered names and
@@ -626,6 +1204,13 @@ the Dungeon Master uses the selected proxy model to review the team's combined
 observations and recent authoritative world events. It may rule **continue**
 or **defeat**, with reasons citing supplied evidence IDs. It must not mistake
 exploration, missing-but-findable tools or legitimate timed waits for futility.
+In Living village cycles, breakfast is optional for completion; missed breakfasts
+retain their ordinary hunger and next-day work effects. Supper, actual supplies,
+and daily work still matter. Recoverable daily-life checks cannot justify an AI
+defeat: the original review is retained, and an explicit world-authority continuation
+ruling records why it was deferred. Authoritative world failures still stop the run.
+An older AI-stopped Living cycle can be reopened only after the saved world confirms
+recoverable daily requirements; no meal history, inventory, stock, or clock is reset.
 An AI defeat ruling is an explicitly labeled judgment, not a proof of
 unsolvability. Missing mandatory team skills are first checked deterministically
 by the world and stop the attempt without a supervisor model call.
@@ -1077,17 +1662,31 @@ CLI controls use the same server/controller:
 
 ## JSON data
 
-All application data is JSON; no database is used.
+Application documents use JSON. Older world action responses use a per-world
+SQLite retry archive (Python's standard library; no database service is needed).
 
 - `data\config.json`: proxy, world transport, and execution budgets.
 - `data\scenarios\*.json`: scenario definitions and body/need settings.
 - `data\worlds\<world-id>\world-state.json`: authoritative entities and actor `self` objects.
+- `data\worlds\<world-id>\world-state.requests.sqlite3`: durable older action/intervention
+  responses, looked up by request ID rather than loaded into every world snapshot.
 - `data\worlds\<world-id>\needs-command.json`: private admin needs command, processed idempotently by the world.
 - `data\runs\<run-id>\`: run, goal, NPC memory, transcript index, event documents, and terminal summary.
 - `data\runs\<run-id>\scenario.json`: frozen scenario for new attempts; completion analysis is included in run/summary JSON.
 - `data\scenario-memory\<scenario-id>.json`: persisted, evidence-linked failure feedback for subsequent attempts.
 
 Events are immutable numbered JSON documents. Replaceable documents use atomic replacement, with short, logged retries for transient Windows file-handle conflicts. Persistent write failures remain explicit errors. The transcript index is rebuilt from events on restart. Interrupted episodes are archived for inspection, not automatically resumed. Use the archive button to inspect previous runs and **Export JSON** for the current full transcript.
+
+The live world checkpoint retains only the newest retry result, committed atomically
+with its world changes. Previously committed results are durably archived before
+being removed from that checkpoint; retries still return the exact original
+response, including after a restart. Legacy inline histories migrate automatically
+without changing village progress. Missing or mismatched archives are explicit
+errors. Pause before backing up the entire world directory, not just its JSON checkpoint.
+Named episode saves remain self-contained JSON, including all retry history, and
+restore into independent worlds. Existing save files are not rewritten.
+Restoring prepares the copied world's retry archive before connecting its MCP
+process, so large histories do not consume the connection's startup timeout.
 
 Never expose the data directory as static web content: it contains hidden world state.
 

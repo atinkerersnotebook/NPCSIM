@@ -50,6 +50,13 @@ def challenge_reason(world: "World", challenge: SkillChallenge) -> str | None:
 
 
 def action_reason(world: "World", action: str, args: dict[str, Any]) -> str | None:
+    if world.state.village is not None and action in {"take", "drop", "give", "place", "plug", "hit"}:
+        from npc_sim import village_livestock, village_firewood
+        tools = {value for value in args.values() if isinstance(value, str)}
+        if village_firewood.equipment_reserved(world, tools):
+            return "Active firewood splitting has reserved the actual axe; finish the batch before altering it."
+        if village_livestock.equipment_reserved(world, tools):
+            return "Active livestock work has reserved the actual equipment; pause it before moving or altering the tools."
     if action == "take":
         return carry_reason(world.actor.body, world.state.entities[args["target"]], len(world.actor.inventory))
     if action == "give":

@@ -2,12 +2,13 @@ import { z } from "zod";
 import {
   stateSchema, eventSchema, eventsSchema, modelsSchema, scenariosSchema, historySchema, historyDetailSchema,
   agentsSchema, agentProfileSchema, skillModeSchema, dungeonMasterConfigSchema, dungeonMasterRulingSchema,
-  completionAnalysisSchema, npcChatSchema, budgetExtensionSchema
+  completionAnalysisSchema, npcChatSchema, budgetExtensionSchema, runModeSchema,
+  episodeSaveRequestSchema, episodeLoadRequestSchema, episodeSavesSchema, episodeSaveResultSchema
 } from "./contracts";
 import type { AgentProfile, CompletionAnalysis, DungeonMasterConfig, SkillMode, State, RunEvent } from "./contracts";
 import { effectiveBody, profileText, slotLabel, validateAssignments } from "./agent-profiles";
 import { evidenceReferences, explainEvidence } from "./evidence";
-import { buildNarrative, buildStory, copyStory, isTeamStory, villageTimeline } from "./story";
+import { buildDayNarrative, buildStory, canCopyStory, copyRecordedStory, copyStory, isTeamStory, storyDays, villageTimeline } from "./story";
 import type { StoryEntry, StoryMembers } from "./story";
 import { actorPerspective, agentPerspectives, discoveredEntities, goalPresentation, inventoryUnitsUsed, locationNetwork, nutritionLabel, teamLocationNetwork } from "./world-view";
 import { batchTiming, clockHelp, clockTime } from "./bakery-view";
@@ -15,6 +16,8 @@ import { villageDashboardMarkup, villageMarkup } from "./village-view";
 import { adventureStatus, budgetSummary, canAskQuestions, canExtendBudget, canReopenAdventure, isAdminView, playerCommandVisible, simulationClock, villageClockText, viewMode, viewNavigation } from "./view-mode";
 import { startWorldMonitor } from "./world-monitor";
 import { conditionText } from "./secondary-goals";
+import { savedEpisodesMarkup } from "./episode-saves";
+import { escape } from "./html";
 import "./style.css";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -51,6 +54,8 @@ app.innerHTML = `
         <button data-command="resume" class="button">↗ ${adminView ? "Resume" : "Continue"}</button>
         <button data-command="reopen" class="button">Continue unfinished day</button>
         <button data-command="reset" class="button subtle">↺ ${adminView ? "Reset" : "Restart"}</button>
+        <button id="save-episode" class="button subtle">Save episode</button>
+        <button id="load-episode" class="button subtle">Load saved episode</button>
       </div>
     </section>
     <section class="panel agent-setup">
@@ -105,8 +110,10 @@ app.innerHTML = `
     </section>
     <section class="metrics" id="metrics"></section>
     <details class="panel budget-panel" id="budget-controls" hidden${focusBudget ? " open" : ""}>
-      <summary>Extend call & action budget</summary>
+      <summary>Run mode & call/action budget</summary>
       <p id="budget-usage" class="muted"></p>
+      <label><input id="run-until-complete" type="checkbox" /> Run until complete (ignore budget limits)</label>
+      <p class="muted">No action, model-call or active-time cap. Model charges can continue without a spending limit. Village cycles pause at the next midnight; other adventures stop at verified completion. Pause, errors and non-progress safeguards still apply. Changing this option does not start play.</p>
       <p class="muted">Add to this adventure only. Calls can incur model charges. Time is real active time, not the village clock. Supervisor and outcome-review calls are counted separately.</p>
       <form id="budget-form">
         <label>Extra model calls<input id="budget-calls" type="number" min="0" step="1" value="100" required /></label>
@@ -170,7 +177,8 @@ app.innerHTML = `
       </div>
       <div class="narrative-column" id="narrative-column">
         <section class="panel narrative-panel">
-          <div class="panel-heading"><div><span class="eyebrow">${adminView ? "06 / THE STORY" : "THE STORY SO FAR"}</span><h2>An unexpected adventure</h2></div><button id="copy-story" class="button subtle" disabled>Copy final story</button></div>
+          <div class="panel-heading"><div><span class="eyebrow">${adminView ? "06 / THE STORY" : "THE STORY SO FAR"}</span><h2>An unexpected adventure</h2></div><button id="copy-story" class="button subtle" disabled>Copy story</button></div>
+          <div id="story-day-tools" hidden><div class="timeline-tools"><label for="story-day">Story by day</label><select id="story-day" aria-label="Story by day"><option value="all">All days</option></select></div></div>
           <p class="narrative-note" id="narrative-note">A continuous account of what the NPC discovers, attempts and explains.</p>
           <div id="narrative" class="narrative-prose" aria-label="Adventure narrative"></div>
         </section>
@@ -180,7 +188,7 @@ app.innerHTML = `
         </section>
         <section class="panel interaction-panel" aria-labelledby="npc-chat-heading">
           <h2 id="npc-chat-heading">Ask an NPC</h2>
-          <p>Private conversation, including after the adventure ends. Only the selected NPC remembers it and answers from its own knowledge. Follow-up questions do not restart the world or change its result.</p>
+          <p>Private conversation, including after the adventure ends or a save point is loaded. Only the selected NPC remembers it and answers from its own knowledge. Follow-up questions do not restart the world or change its result; loaded-copy questions use separate calls until you resume.</p>
           <form id="npc-chat-form">
             <label for="chat-actor">Speak privately with</label>
             <select id="chat-actor"></select>
@@ -209,6 +217,16 @@ app.innerHTML = `
     <footer><span>${adminView ? "WORLD → OBSERVE → DECIDE → ACT → VERIFY" : "Their skills. Their choices. Their story."}</span><span data-admin-only>Python world · MCP actions · TypeScript UI · JSON persistence</span></footer>
   </main>
   <dialog id="history-dialog"><div class="dialog-heading"><h2>Episode archive</h2><button id="close-history" class="button">Close</button></div><div id="history-content"></div></dialog>
+  <dialog id="save-episode-dialog"><div class="dialog-heading"><h2>Save episode</h2><button id="close-save-episode" class="button">Close</button></div>
+    <p>Saving pauses at a safe point and captures the world, NPC memories and history. No model calls are made. The save remains unchanged when you continue playing.</p>
+    <form id="save-episode-form"><label for="episode-save-name">Save name</label><input id="episode-save-name" maxlength="120" required />
+      <button id="confirm-save-episode" class="button primary" type="submit">Save paused episode</button></form>
+    <p id="episode-save-message" role="status"></p>
+  </dialog>
+  <dialog id="load-episode-dialog"><div class="dialog-heading"><h2>Saved episodes</h2><button id="close-load-episode" class="button">Close</button></div>
+    <p>Load the exact saved moment as a separate copy. The original episode and save stay unchanged. Loaded copies never start automatically. Questions can incur model charges; loading does not.</p>
+    <div id="episode-saves-content"></div><p id="episode-load-message" role="status"></p>
+  </dialog>
 `;
 
 let state: State | null = null;
@@ -235,17 +253,15 @@ let assignments: Record<string, string> = {};
 let skillMode: SkillMode = "scenario";
 let dungeonMasterConfig: DungeonMasterConfig | null = null;
 let archivedStory: { text: string }[] = [];
+let archivedDetail: z.infer<typeof historyDetailSchema> | null = null;
+let selectedStoryDay: number | null = null;
+let copyingStory = false;
 const expanded = new Set<string>();
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
   if (!node) throw new Error(`Missing ${id}`);
   return node as T;
-}
-function escape(value: unknown): string {
-  return String(value ?? "").replace(/[&<>"']/g, char => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  }[char] ?? char));
 }
 function pretty(value: unknown): string { return JSON.stringify(value, null, 2); }
 function record(value: unknown): Record<string, unknown> {
@@ -278,6 +294,7 @@ function applyState(next: State): void {
   if (id !== activeRun) {
     activeRun = id;
     selectedActor = "";
+    selectedStoryDay = null;
     selectedMapLocation = "";
     events = [];
     technicalEvents.clear();
@@ -333,11 +350,13 @@ function renderMetrics(): void {
     return;
   }
   const budgets = run?.config ? record(record(run.config).budgets) : state.config.budgets;
+  const actionLimit = run?.run_until_complete ? "No limit" : budgets.max_actions;
+  const callLimit = run?.run_until_complete ? "No limit" : budgets.max_model_calls;
   element("metrics").innerHTML = `
     <div class="metric goal"><span class="eyebrow">${run?.goal.revealed === false ? "UNKNOWN TASK" : "ROOT GOAL"}</span><strong>${escape(run?.goal.objective ?? "Leave the room.")}</strong><span class="muted">${escape(run?.goal.status ?? "Waiting to start")}</span></div>
     <div class="metric"><span class="eyebrow">ATTEMPT STATUS</span><strong class="status ${escape(status)}">${run?.completion_analysis ? "finished" : escape(status.replaceAll("_", " "))}</strong><span class="muted">${run?.completion_analysis ? `Execution: ${escape(status.replaceAll("_", " "))} · Grade: ${escape(run.completion_analysis.verdict ?? run.completion_analysis.status)}` : state.in_flight ? "One cycle in progress" : "Sequential action loop"}</span></div>
-    <div class="metric"><span class="eyebrow">ACTIONS / BUDGET</span><strong>${run?.actions ?? 0}<small> / ${escape(budgets.max_actions)}</small></strong><span class="muted">${run?.model_calls ?? 0} / ${escape(budgets.max_model_calls)} decision/interaction calls${run?.dungeon_master ? ` + ${run.dungeon_master.model_calls} supervisor` : ""}${run?.completion_analysis || run?.previous_review_model_calls ? ` + ${(run.previous_review_model_calls ?? 0) + (run.completion_analysis?.model_calls ?? 0)} review` : ""}</span></div>
-    <div class="metric"><span class="eyebrow">ELAPSED</span><strong>${(run?.elapsed_seconds ?? 0).toFixed(1)}<small>s</small></strong><span class="muted">${escape(budgets.max_seconds)}s episode limit</span></div>`;
+    <div class="metric"><span class="eyebrow">ACTIONS / BUDGET</span><strong>${run?.actions ?? 0}<small> / ${escape(actionLimit)}</small></strong><span class="muted">${run?.model_calls ?? 0} / ${escape(callLimit)} decision/interaction calls${run?.dungeon_master ? ` + ${run.dungeon_master.model_calls} supervisor` : ""}${run?.completion_analysis || run?.previous_review_model_calls ? ` + ${(run.previous_review_model_calls ?? 0) + (run.completion_analysis?.model_calls ?? 0)} review` : ""}</span></div>
+    <div class="metric"><span class="eyebrow">ELAPSED</span><strong>${(run?.elapsed_seconds ?? 0).toFixed(1)}<small>s</small></strong><span class="muted">${run?.run_until_complete ? "No active-time limit" : `${escape(budgets.max_seconds)}s episode limit`}</span></div>`;
 }
 
 function renderAssignments(): void {
@@ -481,7 +500,16 @@ function renderControls(): void {
     focusBudget = false;
   }
   element("budget-usage").textContent = state ? budgetSummary(state) : "";
+  const runMode = element<HTMLInputElement>("run-until-complete");
+  runMode.checked = Boolean(state?.run?.run_until_complete);
+  runMode.disabled = busy || interactionBusy;
   element<HTMLButtonElement>("extend-budget").disabled = busy || interactionBusy;
+  element<HTMLButtonElement>("save-episode").disabled = busy || interactionBusy || !state?.run || !state.world;
+  element<HTMLButtonElement>("load-episode").disabled = busy || interactionBusy;
+  element<HTMLButtonElement>("confirm-save-episode").disabled = busy || interactionBusy;
+  document.querySelectorAll<HTMLButtonElement>("[data-load-save]").forEach(button => {
+    button.disabled = busy || interactionBusy;
+  });
   if (state?.run?.completion_analysis?.error) notice(state.run.completion_analysis.error);
   else if (state?.run?.reason) notice(state.run.reason);
 }
@@ -974,8 +1002,8 @@ function renderStoryFeed(node: HTMLElement, entries: StoryEntry[], team: boolean
 }
 
 function narrativeMarkup(source: readonly RunEvent[], actorId?: string, analysis?: CompletionAnalysis,
-  members?: StoryMembers): string {
-  const paragraphs = buildNarrative(source, actorId, analysis?.story, members);
+  members?: StoryMembers, day: number | null = null): string {
+  const paragraphs = buildDayNarrative(source, actorId, analysis?.story, members, day);
   return paragraphs.map(paragraph =>
     `<p data-narrative-id="${escape(paragraph.id)}">${escape(paragraph.text)}</p>`).join("");
 }
@@ -998,6 +1026,13 @@ function renderCompletionAnalysis(): void {
 
 function renderNarrative(): void {
   const run = state?.run;
+  const days = storyDays(events);
+  element("story-day-tools").hidden = !days.length;
+  if (selectedStoryDay !== null && !days.includes(selectedStoryDay)) selectedStoryDay = null;
+  const selector = element<HTMLSelectElement>("story-day");
+  const options = storyDayOptions(days);
+  if (selector.innerHTML !== options) selector.innerHTML = options;
+  selector.value = selectedStoryDay === null ? "all" : String(selectedStoryDay);
   if (run && state && state.event_count > 0 && !events.length) {
     element<HTMLButtonElement>("copy-story").disabled = true;
     element("narrative").innerHTML = "<p>Loading the recorded adventure...</p>";
@@ -1005,13 +1040,12 @@ function renderNarrative(): void {
   }
   const actorId = run?.agents ? undefined : selectedActor || run?.actor_id;
   const analysis = run?.completion_analysis;
-  element<HTMLButtonElement>("copy-story").disabled = !run ||
-    ["ready", "running", "paused"].includes(run.status) ||
-    ["pending", "running"].includes(run.completion_analysis?.status ?? "") ||
-    !buildNarrative(events, actorId, analysis?.story, run?.agent_profiles).length;
+  element<HTMLButtonElement>("copy-story").disabled = copyingStory || !canCopyStory(run,
+    buildDayNarrative(events, actorId, analysis?.story, run?.agent_profiles, selectedStoryDay));
   const node = element("narrative");
-  const html = narrativeMarkup(events, actorId, analysis, run?.agent_profiles) ||
-    "<p>The story will unfold here as the NPC discovers the world.</p>";
+  const html = narrativeMarkup(events, actorId, analysis, run?.agent_profiles, selectedStoryDay) ||
+    (selectedStoryDay === null ? "<p>The story will unfold here as the NPC discovers the world.</p>" :
+      "<p>No adventure narrative is recorded for this day yet.</p>");
   if (node.innerHTML === html) return;
   const hasStory = node.querySelector("[data-narrative-id]") !== null;
   const atEnd = node.scrollHeight - node.scrollTop - node.clientHeight < 36;
@@ -1020,19 +1054,41 @@ function renderNarrative(): void {
   node.scrollTop = hasStory ? (atEnd ? node.scrollHeight : scroll) : 0;
 }
 
-async function copyFinalStory(paragraphs: readonly { text: string }[]): Promise<void> {
+function storyDayOptions(days: readonly number[]): string {
+  return '<option value="all">All days</option>' +
+    days.map(day => `<option value="${day}">Day ${day}</option>`).join("");
+}
+
+element("story-day").addEventListener("change", () => {
+  const value = element<HTMLSelectElement>("story-day").value;
+  selectedStoryDay = value === "all" ? null : Number(value);
+  renderNarrative();
+  element("narrative").scrollTop = 0;
+});
+
+async function copyAdventureStory(copy: () => Promise<void>): Promise<void> {
   try {
-    await copyStory(paragraphs, navigator.clipboard);
-    notice("Final story copied to the clipboard.");
+    await copy();
+    notice("Story copied to the clipboard.");
   } catch (error) {
-    notice(`Could not copy the final story: ${errorMessage(error)}`);
+    notice(`Could not copy the story: ${errorMessage(error)}`);
   }
 }
 
 element("copy-story").addEventListener("click", () => {
   if (!state?.run || element<HTMLButtonElement>("copy-story").disabled) return;
-  void copyFinalStory(buildNarrative(events, state.run.agents ? undefined : selectedActor || state.run.actor_id,
-    state.run.completion_analysis?.story, state.run.agent_profiles));
+  const run = state.run;
+  const actor = run.agents ? undefined : selectedActor || run.actor_id;
+  const day = selectedStoryDay;
+  copyingStory = true;
+  renderNarrative();
+  void copyAdventureStory(() => copyRecordedStory(
+    async () => eventsSchema.parse(await api("/events?compact=true")),
+    run.id, navigator.clipboard, actor, run.completion_analysis?.story, run.agent_profiles, day
+  )).finally(() => {
+    copyingStory = false;
+    renderNarrative();
+  });
 });
 
 function renderTimeline(updateStory = true): void {
@@ -1113,6 +1169,28 @@ element("budget-form").addEventListener("submit", event => {
         add_model_calls: element<HTMLInputElement>("budget-calls").valueAsNumber,
         add_actions: element<HTMLInputElement>("budget-actions").valueAsNumber,
         add_seconds: element<HTMLInputElement>("budget-minutes").valueAsNumber * 60
+      });
+      element("run-until-complete").addEventListener("change", event => {
+        if (!(event.target instanceof HTMLInputElement) || !state?.run || busy || interactionBusy) return;
+        const request = runModeSchema.parse({run_id: state.run.id, run_until_complete: event.target.checked});
+        if (request.run_until_complete && !confirm("Ignore all adventure budgets? Model charges can continue without a spending limit until the cycle ends or you pause.")) {
+          renderControls();
+          return;
+        }
+        busy = true;
+        renderControls();
+        void (async () => {
+          try {
+            applyState(stateSchema.parse(await api("/adventure/run-mode", "POST", request)));
+            element("budget-message").textContent = request.run_until_complete ?
+              (state?.run?.status === "running" ? "Run until complete enabled. The adventure is still running." :
+                "Run until complete enabled. Press Play or Continue when ready.") : "Budget limits restored.";
+          } catch (error) {
+            const message = errorMessage(error);
+            element("budget-message").textContent = message;
+            notice(message);
+          } finally { busy = false; renderControls(); }
+        })();
       });
       applyState(stateSchema.parse(await api("/budget/extend", "POST", request)));
       element("budget-message").textContent = state?.run?.status === "running" ?
@@ -1302,24 +1380,110 @@ element("history-button").addEventListener("click", () => {
 element("history-content").addEventListener("click", event => {
   if (!(event.target instanceof Element)) return;
   if (event.target.closest("[data-copy-archive]")) {
-    void copyFinalStory(archivedStory);
+    void copyAdventureStory(() => copyStory(archivedStory, navigator.clipboard));
     return;
   }
   const button = event.target.closest<HTMLButtonElement>("[data-run-id]");
   if (!button?.dataset.runId) return;
   void api(`/history/${button.dataset.runId}`).then(payload => {
     const detail = historyDetailSchema.parse(payload);
+    archivedDetail = detail;
     const narrativeActor = detail.run.agents ? undefined : detail.run.actor_id;
     const members = detail.run.agent_profiles;
-    archivedStory = buildNarrative(detail.events, narrativeActor, detail.run.completion_analysis?.story, members);
-    const final = !["ready", "running", "paused"].includes(detail.run.status) &&
-      !["pending", "running"].includes(detail.run.completion_analysis?.status ?? "") && archivedStory.length > 0;
+    archivedStory = buildDayNarrative(detail.events, narrativeActor, detail.run.completion_analysis?.story, members);
+    const days = storyDays(detail.events);
+    const daySelector = days.length ? `<div class="timeline-tools"><label for="archive-story-day">Story by day</label><select id="archive-story-day" aria-label="Archived story by day">${storyDayOptions(days)}</select></div>` : "";
     const actorStories = Object.keys(detail.run.agents ?? { [detail.run.actor_id]: {} }).map(actorId =>
       `<h3>${escape(members?.[actorId]?.name ?? slotLabel(actorId))}'s story</h3><div class="story-feed">${storyMarkup(buildStory(detail.events, actorId, members), isTeamStory(detail.events))}</div>`).join("");
-    element("history-content").innerHTML = `<p class="muted">Archived episode — does not change the live world.</p><h3>Completion review</h3>${completionMarkup(detail.run.completion_analysis, detail.events)}<h3>Dungeon Master rulings</h3>${dungeonMasterMarkup(detail.events)}<h3>The adventure${detail.run.agents ? " / whole team" : ""}</h3><button class="button subtle" data-copy-archive ${final ? "" : "disabled"}>Copy final story</button><div class="narrative-prose">${narrativeMarkup(detail.events, narrativeActor, detail.run.completion_analysis, members)}</div>${actorStories}<details class="inspector"><summary>Full technical JSON</summary><h4>Evidence explained</h4>${evidenceMarkup(evidenceReferences(detail), detail.events, detail.run.completion_analysis?.story)}<pre>${escape(pretty(detail))}</pre></details>`;
+    element("history-content").innerHTML = `<p class="muted">Archived episode — does not change the live world.</p><h3>Completion review</h3>${completionMarkup(detail.run.completion_analysis, detail.events)}<h3>Dungeon Master rulings</h3>${dungeonMasterMarkup(detail.events)}<h3>The adventure${detail.run.agents ? " / whole team" : ""}</h3><button class="button subtle" data-copy-archive ${canCopyStory(detail.run, archivedStory) ? "" : "disabled"}>Copy story</button>${daySelector}<div id="archive-narrative" class="narrative-prose">${narrativeMarkup(detail.events, narrativeActor, detail.run.completion_analysis, members)}</div>${actorStories}<details class="inspector"><summary>Full technical JSON</summary><h4>Evidence explained</h4>${evidenceMarkup(evidenceReferences(detail), detail.events, detail.run.completion_analysis?.story)}<pre>${escape(pretty(detail))}</pre></details>`;
   }).catch(error => { element("history-content").textContent = errorMessage(error); });
 });
+element("history-content").addEventListener("change", event => {
+  if (!(event.target instanceof HTMLSelectElement) || event.target.id !== "archive-story-day" || !archivedDetail) return;
+  const detail = archivedDetail;
+  const day = event.target.value === "all" ? null : Number(event.target.value);
+  const actor = detail.run.agents ? undefined : detail.run.actor_id;
+  archivedStory = buildDayNarrative(detail.events, actor, detail.run.completion_analysis?.story,
+    detail.run.agent_profiles, day);
+  element("archive-narrative").innerHTML = narrativeMarkup(detail.events, actor,
+    detail.run.completion_analysis, detail.run.agent_profiles, day) ||
+    "<p>No adventure narrative is recorded for this day yet.</p>";
+  const button = element("history-content").querySelector<HTMLButtonElement>("[data-copy-archive]");
+  if (button) button.disabled = !canCopyStory(detail.run, archivedStory);
+});
 element("close-history").addEventListener("click", () => element<HTMLDialogElement>("history-dialog").close());
+
+element("save-episode").addEventListener("click", () => {
+  if (!state?.run || busy || interactionBusy) return;
+  element<HTMLInputElement>("episode-save-name").value = state.run.title.slice(0, 120);
+  element("episode-save-message").textContent = "";
+  element<HTMLDialogElement>("save-episode-dialog").showModal();
+});
+element("close-save-episode").addEventListener("click", () => {
+  element<HTMLDialogElement>("save-episode-dialog").close();
+});
+element("save-episode-form").addEventListener("submit", event => {
+  event.preventDefault();
+  if (!state?.run || busy || interactionBusy) return;
+  const runId = state.run.id;
+  busy = true;
+  renderControls();
+  element("episode-save-message").textContent = "Saving after the current turn reaches a safe point...";
+  void (async () => {
+    try {
+      const request = episodeSaveRequestSchema.parse({
+        run_id: runId, name: element<HTMLInputElement>("episode-save-name").value
+      });
+      const result = episodeSaveResultSchema.parse(await api("/saves", "POST", request));
+      applyState(result.state);
+      element("episode-save-message").textContent = `Saved "${result.save.name}". The episode is paused.`;
+    } catch (error) {
+      const message = errorMessage(error);
+      element("episode-save-message").textContent = message;
+      notice(message);
+    } finally { busy = false; renderControls(); }
+  })();
+});
+element("load-episode").addEventListener("click", () => {
+  if (busy || interactionBusy) return;
+  element<HTMLDialogElement>("load-episode-dialog").showModal();
+  element("episode-load-message").textContent = "";
+  element("episode-saves-content").textContent = "Loading save points...";
+  void api("/saves").then(payload => {
+    element("episode-saves-content").innerHTML = savedEpisodesMarkup(episodeSavesSchema.parse(payload).saves);
+    renderControls();
+  }).catch(error => { element("episode-saves-content").textContent = errorMessage(error); });
+});
+element("close-load-episode").addEventListener("click", () => {
+  element<HTMLDialogElement>("load-episode-dialog").close();
+});
+element("episode-saves-content").addEventListener("click", event => {
+  if (!(event.target instanceof Element) || busy || interactionBusy) return;
+  const button = event.target.closest<HTMLButtonElement>("[data-load-save]");
+  if (!button?.dataset.loadSave) return;
+  if (state?.run && !confirm("Pause the current episode and open a separate copy of this save point? Existing history and the save will be preserved.")) return;
+  const request = episodeLoadRequestSchema.parse({
+    save_id: button.dataset.loadSave, current_run_id: state?.run?.id ?? null
+  });
+  busy = true;
+  renderControls();
+  element("episode-load-message").textContent = "Restoring the saved world and NPC memories...";
+  void (async () => {
+    try {
+      applyState(stateSchema.parse(await api("/saves/load", "POST", request)));
+      const history = eventsSchema.parse(await api("/events?compact=true"));
+      if (history.run_id === activeRun) events = history.events;
+      renderTimeline();
+      renderNarrative();
+      element<HTMLDialogElement>("load-episode-dialog").close();
+      notice("Saved copy loaded. Ask the NPCs questions, or press Continue if the episode is resumable.");
+    } catch (error) {
+      const message = errorMessage(error);
+      element("episode-load-message").textContent = message;
+      notice(message);
+    } finally { busy = false; renderControls(); }
+  })();
+});
 
 async function initialize(): Promise<void> {
   try {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildNarrative, buildStory, copyStory, villageTimeline } from "../src/story.ts";
+import { buildDayNarrative, buildNarrative, buildStory, canCopyStory, copyRecordedStory, copyStory, storyDays, villageTimeline } from "../src/story.ts";
 import type { RunEvent } from "../src/contracts.ts";
 import { observationSchema } from "../src/contracts.ts";
 
@@ -94,10 +94,97 @@ test("copying the final story preserves reviewed prose and paragraph breaks only
 });
 
 test("clipboard failures remain explicit rather than pretending the story was copied", async () => {
-  await assert.rejects(copyStory([], undefined), /no final story/);
+  await assert.rejects(copyStory([], undefined), /no story/);
   await assert.rejects(copyStory([{text:"Story"}], undefined), /unavailable/);
   await assert.rejects(copyStory([{text:"Story"}], {writeText: async () => {throw Error("Permission denied");}}),
     /Permission denied/);
+});
+
+test("story days use actual village minutes, not wall clock dates or missing calendar days", () => {
+  const events = [
+    {...event(1, "observation", observation([])), village_minute: 1439},
+    {...event(2, "action_request", {request_id: "look", action_id: "look", arguments: {}}),
+      village_minute: 1440},
+    {...event(3, "finished", {status: "succeeded"}), village_minute: 4320}
+  ];
+  assert.deepEqual(storyDays([...events].reverse()), [1, 2, 4]);
+  assert.deepEqual(buildDayNarrative(events, undefined, undefined, {}, 1).map(p => p.id), ["run:1"]);
+  assert.deepEqual(buildDayNarrative(events, undefined, undefined, {}, 2).map(p => p.id), ["run:2"]);
+  assert.deepEqual(buildDayNarrative(events, undefined, undefined, {}, 3), []);
+  assert.deepEqual(buildDayNarrative(events), buildNarrative(events));
+  assert.match(buildDayNarrative(events, undefined, undefined, {}, 2)[0].text, /Day 2 00:00/);
+});
+
+test("midnight results are not merged into the previous day's attempted action", () => {
+  const events = [
+    event(1, "observation", observation([])),
+    {...event(2, "action_request", {request_id: "wait", action_id: "village_wait",
+      arguments: {minutes: 1}}), village_minute: 1439},
+    {...event(3, "action_result", {request_id: "wait", outcome: "APPLIED",
+      explanation: "You finish waiting.", observation: observation([])}), village_minute: 1440},
+    event(4, "finished", {status: "succeeded"})
+  ];
+  const day1 = buildDayNarrative(events, undefined, undefined, {}, 1);
+  const day2 = buildDayNarrative(events, undefined, undefined, {}, 2);
+  assert.deepEqual(day1.map(p => p.id), ["run:1", "run:2"]);
+  assert.deepEqual(day2.map(p => p.id), ["run:3", "run:4"]);
+  assert.doesNotMatch(day1.map(p => p.text).join(" "), /finish waiting|achieved/);
+  assert.match(day2[0].text, /Day 2 00:00.*finish waiting/);
+});
+
+test("day filtering preserves reviewed names, event order and excludes technical events", () => {
+  const events = [
+    {...event(1, "observation", {...observation([]), role: "A scout."}, "npc-001"), village_minute: 1439},
+    {...event(2, "proxy_request", {message: "TECHNICAL_ONLY"}, "npc-001"), village_minute: 1440},
+    {...event(3, "observation", {...observation([]), role: "A builder."}, "npc-002"), village_minute: 1440}
+  ];
+  const reviewed = [{id: "run:3", text: "npc-002: I look around."},
+    {id: "run:1", text: "npc-001: I read the note."}];
+  const members = {"npc-001": {name: "Avery"}, "npc-002": {name: "Robin"}};
+  const original = JSON.stringify({events, reviewed});
+  assert.deepEqual(buildDayNarrative(events, undefined, reviewed, members).map(p => p.id), ["run:1", "run:3"]);
+  const day2 = buildDayNarrative(events, undefined, reviewed, members, 2);
+  assert.equal(day2.length, 1);
+  assert.match(day2[0].text, /Robin looks around/);
+  assert.doesNotMatch(JSON.stringify(buildDayNarrative(events, undefined, undefined, members, 2)), /TECHNICAL_ONLY/);
+  assert.equal(JSON.stringify({events, reviewed}), original);
+});
+
+test("nonvillage stories remain unchanged and copy is available while paused or running", () => {
+  const events = [event(1, "observation", observation([]))];
+  const paragraphs = buildNarrative(events);
+  assert.deepEqual(storyDays(events), []);
+  assert.deepEqual(buildDayNarrative(events), paragraphs);
+  assert.deepEqual(buildDayNarrative(events, undefined, undefined, {}, 2), paragraphs);
+  for (const status of ["ready", "paused", "running", "succeeded", "cancelled"]) {
+    assert.equal(canCopyStory({status}, paragraphs), true);
+    assert.equal(canCopyStory({status}, []), false);
+  }
+  assert.equal(canCopyStory(null, paragraphs), false);
+});
+
+test("copying fetches the full recorded story beyond 100 events and respects the selected day", async () => {
+  const events = [
+    {...event(1, "observation", observation([])), village_minute: 480},
+    ...Array.from({length: 110}, (_, i) =>
+      ({...event(i + 2, "proxy_request", {message: "TECHNICAL_ONLY"}), village_minute: 480})),
+    {...event(112, "finished", {status: "succeeded"}), village_minute: 1440}
+  ];
+  let loads = 0;
+  let copied = "";
+  const load = async () => { loads++; return {run_id: "run", events}; };
+  const clipboard = {writeText: async (text: string) => { copied = text; }};
+  await copyRecordedStory(load, "run", clipboard);
+  assert.equal(loads, 1);
+  assert.match(copied, /A room[\s\S]*achieved my goal/);
+  assert.doesNotMatch(copied, /TECHNICAL_ONLY/);
+  await copyRecordedStory(load, "run", clipboard, undefined, undefined, {}, 2);
+  assert.match(copied, /Day 2 00:00.*achieved my goal/);
+  assert.doesNotMatch(copied, /A room/);
+  await assert.rejects(copyRecordedStory(load, "other-run", clipboard), /adventure changed/);
+  await assert.rejects(copyRecordedStory(load, "run", {writeText: async () => {
+    throw Error("Permission denied");
+  }}), /Permission denied/);
 });
 
 function observation(ids = ["door", "box", "rock"], location = "room") {

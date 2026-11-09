@@ -71,7 +71,14 @@ def main() -> None:
             "village_scheduler": "world_next_village_actor"
             if world.scenario.village and world.scenario.village.time_based_turns else None,
             "village_full_rules": bool(world.scenario.village and world.scenario.village.expanded_rules),
+            "village_configuration": "world_configure_village" if world.scenario.village else None,
         }
+
+    @server.tool()
+    def world_configure_village(request_id: str, expected_revision: str, configuration: dict[str, Any]) -> dict[str, Any]:
+        """Privileged DM/operator configuration of validated village policies and templates; never an NPC action."""
+        from npc_sim import village_extensions
+        return village_extensions.configure(world, request_id, expected_revision, configuration)
 
     @server.tool()
     def world_observe() -> dict[str, Any]:

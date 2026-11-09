@@ -66,11 +66,22 @@ export function canReopenAdventure(run: State["run"], hasWorld: boolean): boolea
   return Boolean(hasWorld && run?.goal.type === "village_restored" && (
     (run.status === "succeeded" && run.completion_analysis?.status === "completed"
       && run.completion_analysis.verdict === "fail") ||
-    (run.status === "error" && run.reason.startsWith("Timed out while waiting for response to ClientRequest."))));
+    (run.status === "blocked"
+      && run.reason.startsWith(`${run.dungeon_master?.config.name ?? "Dungeon Master"} rules that the team must admit defeat.`)
+      && run.verification?.status === "active"
+      && run.verification.evidence?.completion_scope === "full_village_day"
+      && run.verification.evidence.daily_requirements_recoverable === true) ||
+    (run.status === "error" && (run.reason.startsWith("Timed out while waiting for response to ClientRequest.")
+      || run.reason === "TimeoutError"))));
 }
 
 export function budgetSummary(state: State): string {
   const budgets = state.run?.config?.budgets ?? state.config.budgets;
+  if (state.run?.run_until_complete) {
+    return `${state.run.actions} actions · ${state.run.model_calls} calls · ` +
+      `${(state.run.elapsed_seconds / 60).toFixed(1)} active minutes · No budget limits` +
+      (state.world?.village ? " · Cycle ends at midnight" : " · Until verified completion");
+  }
   return `${state.run?.actions ?? 0} / ${budgets.max_actions} actions · ` +
     `${state.run?.model_calls ?? 0} / ${budgets.max_model_calls} calls · ` +
     `${((state.run?.elapsed_seconds ?? 0) / 60).toFixed(1)} / ${(budgets.max_seconds / 60).toFixed(1)} active minutes`;
@@ -83,7 +94,7 @@ export function playerCommandVisible(command: string | undefined, status: string
     case "run": return status === "ready";
     case "pause": return status === "running";
     case "resume": return status === "paused";
-    case "reopen": return status === "succeeded" || status === "error";
+    case "reopen": return status === "succeeded" || status === "error" || status === "blocked";
     default: return false;
   }
 }

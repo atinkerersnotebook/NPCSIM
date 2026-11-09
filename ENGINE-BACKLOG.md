@@ -1,10 +1,13 @@
 # Engine Change Backlog
 
-This list records proposed engine changes. Unchecked items are not implemented.
+This list records implemented, opt-in engine changes. The existing paused
+adventure and legacy scenarios are unchanged. The living-village generator
+creates a separate configured scenario; backend activation and starting a new
+adventure are separate operations.
 
 ## Demand-driven supplier orders
 
-- [ ] Add an order system so businesses request supplies based on demand instead
+- [x] Add an order system so businesses request supplies based on demand instead
   of accepting continuous, unsolicited production.
 
 ### First use case: the Millhaven inn
@@ -28,13 +31,17 @@ Elsie plans upcoming meal service and places orders with:
 - Track order proposal, supplier acceptance or rejection, delivery progress,
   fulfillment, cancellation, and failure explicitly.
 - Let accepted orders guide supplier production and carrier delivery planning.
+- [x] Require the buyer to find and meet the actual supplier, then state the order
+  requirements through the in-person ordering action. Demand planning must not
+  create remote orders, including upstream ingredient purchases.
 - Prevent duplicate commitments and deliveries, including after retries or
   recovery; track remaining quantities for partial fulfillment.
 - Check affordability, including delivery fees, before committing purchases.
 - Pay for accepted delivered quantities exactly once; surface insufficient
   funds, stale goods, shortages, and missed deadlines explicitly.
 - Support consolidated shipments without losing individual order accounting.
-- Expose orders and their status in NPC observations and the monitoring UI.
+- Expose the NPC's own buying/selling orders in observations and all orders in
+  privileged monitoring.
 - Preserve real production, travel, stock movement, perishability, meals,
   sleep, and animal-care rules.
 
@@ -45,246 +52,285 @@ Elsie plans upcoming meal service and places orders with:
 - Repeated planning or retried delivery cannot duplicate an order or payment.
 - Partial, late, rejected, or cancelled deliveries have visible outcomes.
 - Suppliers can stop production once accepted demand and reserve targets are met.
+- Remote or sleeping-supplier order attempts create no orders or financial
+  commitments; a successful in-person request records the spoken requirements.
 
 ## Demand-aware production and reserve targets
 
-- [ ] Limit production to accepted orders, forecast consumption, and a small
+- [x] Limit production to accepted orders, forecast consumption, and a small
   maintenance or stock buffer.
-- [ ] Apply targets to bread, meals, tea, planks, and wagon parts, rather than
+- [x] Apply targets to bread, meals, tea, planks, and wagon parts, rather than
   requiring continuous production whenever a cooldown ends.
-- [ ] Include usable inventory and committed production when calculating unmet
+- [x] Include usable inventory and committed production when calculating unmet
   demand, so concurrent producers cannot independently overfill the same target.
-- [ ] Allow producers to pause or perform other supported work when demand is met.
+- [x] Allow producers to pause or perform other supported work when demand is met.
 
 ## Breakfast and meal planning
 
-- [ ] Add configurable breakfast after waking alongside the existing supper.
-- [ ] Track each meal's due time, consumption, ingredients, and payment separately.
-- [ ] Plan portions against the expected diners and chosen recipes; breakfast
+- [x] Add configurable breakfast after waking alongside the existing supper.
+- [x] Track each meal's due time, consumption, ingredients, and payment separately.
+- [x] Plan portions against the expected diners and chosen recipes; breakfast
   should not simply be added on top of already excessive production.
-- [ ] Preserve existing single-meal scenarios unless they opt into new schedules.
+- [x] Preserve existing single-meal scenarios unless they opt into new schedules.
 
 ## Sustainable meal pricing
 
-- [ ] Align actual meal charges with recipe costs, delivery costs, and intended
+- [x] Align actual meal charges with recipe costs, delivery costs, and intended
   margin; distinguish service charges from tradable product prices.
-- [ ] Support explicitly funded subsidies if meals should remain below cost,
+- [x] Support explicitly funded subsidies if meals should remain below cost,
   rather than silently draining the innkeeper's account.
-- [ ] Surface unaffordable purchases and meals without hiding unpaid costs.
-- [ ] Decide prices or subsidy policy before implementation; the suggested
+- [x] Surface unaffordable purchases and meals without hiding unpaid costs.
+- [x] Decide prices or subsidy policy before implementation; the suggested
   two-coin bread-based meal is an example, not a fixed engine rule.
 
 ## Just-in-time cooking and freshness
 
-- [ ] Schedule cooking near meal service instead of accumulating meals all day.
-- [ ] Prefer the earliest-expiring usable ingredients and portions.
-- [ ] Forecast what will expire before the next planned use, and expose that
+- [x] Schedule cooking near meal service instead of accumulating meals all day.
+- [x] Prefer the earliest-expiring usable ingredients and portions.
+- [x] Forecast what will expire before the next planned use, and expose that
   quantity separately from usable stock.
-- [ ] Reduce or stop production when existing fresh stock covers service.
-- [ ] Keep spoilage real and recorded; do not extend shelf lives to disguise
+- [x] Reduce or stop production when existing fresh stock covers service.
+- [x] Keep spoilage real and recorded; do not extend shelf lives to disguise
   overproduction.
 
 ## Consolidated deliveries and end-of-day cargo
 
-- [ ] Group confirmed, compatible orders into capacity-aware delivery runs.
-- [ ] Avoid redundant small trips and expose their travel and delivery-fee costs.
-- [ ] Require confirmed demand and affordability before loading goods.
-- [ ] Resolve remaining cargo by delivery, return, or explicit overnight storage
+- [x] Group confirmed, compatible orders into capacity-aware delivery runs.
+- [x] Avoid redundant small trips and expose their travel and delivery-fee costs.
+- [x] Require confirmed demand and affordability before loading goods.
+- [x] Resolve remaining cargo by delivery, return, or explicit overnight storage
   with ownership and freshness preserved; stopping a route is not fulfillment.
-- [ ] Preserve actual travel, unloading, and animal-care requirements.
+- [x] Preserve actual travel, unloading, and animal-care requirements.
 
 ## Raw-material replenishment
 
-- [ ] Define minimum reserves and replenishment triggers for grain, flour, iron,
+- [x] Define minimum reserves and replenishment triggers for grain, flour, iron,
   logs, hay, and other recipe inputs.
-- [ ] Protect needed raw materials from conversion into unnecessary finished
+- [x] Protect needed raw materials from conversion into unnecessary finished
   stock, especially spare wagon parts and planks.
-- [ ] Plan harvesting, processing, procurement, and manure use around the next
+- [x] Plan harvesting, processing, procurement, and manure use around the next
   day's needs.
-- [ ] Respect renewable-resource rules, availability, lead times, and payments;
+- [x] Respect renewable-resource rules, availability, lead times, and payments;
   never replenish resources by silently creating stock.
 
 ## Service schedules and useful off-peak time
 
-- [ ] Give the innkeeper explicit planning, preparation, and serving windows.
-- [ ] Use off-peak time for supported coordination and stock management, or
+- [x] Give the innkeeper explicit planning, preparation, and serving windows.
+- [x] Use off-peak time for supported coordination and stock management, or
   legitimate rest, rather than forcing additional cooking.
-- [ ] Add any new secondary work as explicit capabilities with real outcomes;
+- [x] Add any new secondary work as explicit capabilities with real outcomes;
   do not count narrative-only cleaning or customer service as completed work.
-- [ ] Preserve personal meals, bedtimes, and time at home when assigning work.
+- [x] Preserve personal meals, bedtimes, and time at home when assigning work.
 
 ## Event-driven waiting and fewer model calls
 
-- [ ] Skip unnecessary model decisions while an actor awaits a known cooldown,
+- [x] Skip unnecessary model decisions while an actor awaits a known cooldown,
   delivery, or scheduled service.
-- [ ] Make actors eligible again at relevant events, including meal deadlines,
+- [x] Make actors eligible again at relevant events, including meal deadlines,
   bedtime, supply arrivals, and changed commitments.
-- [ ] Avoid repeated short wait loops and redundant reads or announcements when
+- [x] Avoid repeated short wait loops and redundant reads or announcements when
   no actionable information has changed.
-- [ ] Preserve meaningful decisions, urgent interruptions, recovery safety, and
+- [x] Preserve meaningful decisions, urgent interruptions, recovery safety, and
   chronological action history; do not jump past required activities.
 
 ## Demand-led completion and daily care
 
-- [ ] Ensure hay replenishment and animal readiness are scheduled and verified
+- [x] Ensure hay replenishment and animal readiness are scheduled and verified
   alongside meals, homecoming, sleep, and safe route shutdown.
-- [ ] Review mandatory tea use: make it a meaningful need or an explicit
+- [x] Review mandatory tea use: make it a meaningful need or an explicit
   scenario objective, rather than forcing consumption solely to clear a flag.
-- [ ] Review production goals against actual demand and reserve needs so success
+- [x] Review production goals against actual demand and reserve needs so success
   does not reward unnecessary output.
-- [ ] Keep intentional completion-rule changes explicit and scenario-controlled.
+- [x] Keep intentional completion-rule changes explicit and scenario-controlled.
 
 ## Economy and efficiency reporting
 
-- [ ] Show produced, consumed, delivered, spoiled, and remaining quantities by
+- [x] Show produced, consumed, delivered, spoiled, and remaining quantities by
   product and business, including cargo and upcoming expiry.
-- [ ] Report gross sales, purchases, delivery fees, subsidies, net cash change,
+- [x] Report gross sales, purchases, delivery fees, subsidies, net cash change,
   and inventory value separately; define valuation before reporting profit.
-- [ ] Distinguish requested wait time, production cooldowns, travel, actual work,
+- [x] Distinguish requested wait time, production cooldowns, travel, actual work,
   rest, and sleep instead of labeling every wait as wasted time.
-- [ ] Show pending orders, reserve shortages, projected meal coverage, and
+- [x] Show pending orders, reserve shortages, projected meal coverage, and
   overproduction warnings.
-- [ ] Track model calls spent on repetitive waiting and coordination to measure
+- [x] Track model calls spent on repetitive waiting and coordination to measure
   the benefit of event-driven scheduling.
 
 ## Personal interests, relationships, and evening leisure
 
-- [ ] Give each villager distinct interests, starting with one solo interest and
+- [x] Give each villager distinct interests, starting with one solo interest and
   one social interest rather than identical evening routines.
-- [ ] Support time-consuming solo activities such as reading, gardening, and
+- [x] Support time-consuming solo activities such as reading, gardening, and
   crafting, and social activities such as visiting, games, storytelling, and
   shared tea.
-- [ ] Track preferred companions and relationship changes from actual shared
+- [x] Track preferred companions and relationship changes from actual shared
   activities, not unsupported narrative claims.
-- [ ] Support small personal projects and skill development across days.
-- [ ] Choose leisure according to interests, available time, companions, fatigue,
+- [x] Support small personal projects and skill development across days.
+- [x] Choose leisure according to interests, available time, companions, fatigue,
   resources, and affordability; legitimate rest remains a valid choice.
-- [ ] Represent activities explicitly in observations, history, and the Gantt,
+- [x] Represent activities explicitly in observations, history, and the Gantt,
   with duration, location, participants, and any real resource consumption.
-- [ ] Schedule completion and meaningful interruptions without repeated model
+- [x] Schedule completion and meaningful interruptions without repeated model
   calls during an unchanged activity.
-- [ ] Allow evening outings while preserving real travel home by each person's
+- [x] Allow evening outings while preserving real travel home by each person's
   bedtime, adequate sleep, meals, and animal care.
-- [ ] Make new leisure behavior scenario-controlled; hobbies are optional, not
+- [x] Make new leisure behavior scenario-controlled; hobbies are optional, not
   production quotas or mandatory completion conditions.
 
 ### Proposed personal project: Iona's herbal book
 
-- [ ] Give Iona, the herbalist, a multi-day project to write a book about local
+- [x] Give Iona, the herbalist, a multi-day project to write a book about local
   plants, their identification, and Millhaven's herbal traditions.
-- [ ] Let her use free time for field observations, organizing notes, drafting,
+- [x] Let her use free time for field observations, organizing notes, drafting,
   and revising, while preserving supply commitments, meals, and sleep.
-- [ ] Persist completed observations, notes, and chapter progress across days;
+- [x] Persist completed observations, notes, and chapter progress across days;
   repeated activity must not duplicate progress.
-- [ ] Connect research to actual exploration and encounters, and allow her to
+- [x] Connect research to actual exploration and encounters, and allow her to
   discuss her work with interested villagers.
-- [ ] Show writing sessions and project milestones in observations, the story,
+- [x] Show writing sessions and project milestones in observations, the story,
   and the Gantt instead of treating writing as generic waiting.
-- [ ] Keep the project optional and gradual; do not require a finished book each
+- [x] Keep the project optional and gradual; do not require a finished book each
   day or treat fictional herbal lore as real-world medical advice.
 
 ## Evening band at the inn
 
-- [ ] Allow interested villagers to form a small band and arrange evening
+- [x] Allow interested villagers to form a small band and arrange evening
   performances at the inn, with Elsie coordinating the venue.
-- [ ] Define willing members, musical roles, skills, and available instruments;
+- [x] Define willing members, musical roles, skills, and available instruments;
   leave the cast and instrument choices open until scenario design.
-- [ ] Model rehearsals and performances as coordinated activities with explicit
+- [x] Model rehearsals and performances as coordinated activities with explicit
   commitments, shared start and end times, and physical attendance.
-- [ ] Check member availability and instrument access before confirming a show;
+- [x] Check member availability and instrument access before confirming a show;
   surface cancellations or missing participants rather than inventing a
   completed performance.
-- [ ] Let other villagers choose to attend according to interests and
+- [x] Let other villagers choose to attend according to interests and
   relationships; do not make attendance compulsory.
-- [ ] Coordinate music with supper service so performers and listeners can eat,
+- [x] Coordinate music with supper service so performers and listeners can eat,
   and finish early enough for everyone to travel home before bedtime.
-- [ ] Record actual participation and any defined enjoyment, relationship, or
+- [x] Record actual participation and any defined enjoyment, relationship, or
   skill outcomes; attendance must not automatically consume food or tea.
-- [ ] Make any performer fees or tips explicit, funded transactions if included;
+- [x] Make any performer fees or tips explicit, funded transactions if included;
   do not assume the cash-strapped inn can pay for entertainment.
-- [ ] Show rehearsals, performances, and attendance in the story and Gantt.
+- [x] Show rehearsals, performances, and attendance in the story and Gantt.
 
 ## Minor village events and DM configuration
 
-- [ ] Add small, recoverable disruptions and opportunities that create real
+- [x] Add small, recoverable disruptions and opportunities that create real
   tasks, delays, orders, or discoveries rather than narration-only outcomes.
-- [ ] Start with passing travellers, brief weather changes, minor equipment
+- [x] Start with passing travellers, brief weather changes, minor equipment
   repairs, and personal discoveries.
-- [ ] Extend the catalogue with safely escaped animals, disappointing fishing,
+- [x] Extend the catalogue with safely escaped animals, disappointing fishing,
   seasonal harvest opportunities, visiting merchants, misplaced tools,
   birthdays, band-member unavailability, and requests for neighbourly help.
-- [ ] Use a suggested default of zero to two minor events per day, usually
+- [x] Use a suggested default of zero to two minor events per day, usually
   affecting one to three villagers for 15-60 game minutes; quiet days are valid.
-- [ ] Expose events through local observations and actual communication rather
+- [x] Expose events through local observations and actual communication rather
   than giving every NPC immediate knowledge.
-- [ ] Let affected villagers adapt plans, ask for help, substitute supplies, or
+- [x] Let affected villagers adapt plans, ask for help, substitute supplies, or
   decline optional requests.
-- [ ] Prevent event stacking from making required meals, animal care, safe
+- [x] Prevent event stacking from making required meals, animal care, safe
   homecoming, and adequate sleep impossible.
-- [ ] Persist event selection, activation, progress, and resolution so retries,
+- [x] Persist event selection, activation, progress, and resolution so retries,
   recovery, and resuming do not duplicate events or their effects.
-- [ ] Show affected actors, schedule changes, and outcomes in observations,
+- [x] Show affected actors, schedule changes, and outcomes in observations,
   the story, and the Gantt.
 
 ### DM controls and additional event types
 
-- [ ] Let the DM enable or disable event types and configure frequency, daily
+- [x] Let the DM enable or disable event types and configure frequency, daily
   limits, intensity, duration, eligible time windows, affected locations and
   residents, and cooldowns between events.
-- [ ] Allow the DM to raise event limits when appropriate, while keeping
+- [x] Allow the DM to raise event limits when appropriate, while keeping
   feasibility safeguards and making configuration changes explicit.
-- [ ] Support scheduled or condition-triggered events alongside random events,
+- [x] Support scheduled or condition-triggered events alongside random events,
   with reproducible random selection for testing and replay.
-- [ ] Let the DM define additional event templates with prerequisites,
+- [x] Let the DM define additional event templates with prerequisites,
   discoverability, bounded effects, available responses, resolution conditions,
   and expiry or cancellation behavior.
-- [ ] Validate custom templates against supported engine actions and state
+- [x] Validate custom templates against supported engine actions and state
   changes; reject unsupported effects explicitly instead of inventing outcomes
   or executing arbitrary code.
-- [ ] Require stock and money changes to follow explicit accounting rules, and
+- [x] Require stock and money changes to follow explicit accounting rules, and
   new visitors or resources to have recorded sources.
-- [ ] Make event configuration and changes inspectable, and preserve existing
+- [x] Make event configuration and changes inspectable, and preserve existing
   scenarios unless they opt into the event system.
 
 ## Temporary visitors and timeline presence
 
-- [ ] Give visiting travellers and merchants named identities and a Visitor
+- [x] Give visiting travellers and merchants named identities and a Visitor
   label, distinct from permanent residents.
-- [ ] Add a temporary Gantt row showing actual arrival, departure, travel,
+- [x] Add a temporary Gantt row showing actual arrival, departure, travel,
   trading, meals, visits, resident interactions, and overnight stays.
-- [ ] Retain departed visitors in historical timeline views while removing them
+- [x] Retain departed visitors in historical timeline views while removing them
   from the current people-in-town list only after actual departure.
-- [ ] Keep overnight guests present until they leave, and record lodging
+- [x] Keep overnight guests present until they leave, and record lodging
   commitments and any payments explicitly.
-- [ ] Apply appropriate visitor needs without automatically assigning resident
+- [x] Apply appropriate visitor needs without automatically assigning resident
   homecoming or village-work completion requirements.
-- [ ] Persist visitor identity and presence across recovery so an event retry
+- [x] Persist visitor identity and presence across recovery so an event retry
   cannot create duplicate people or erase their history.
 
 ## Travelling merchants and surplus exports
 
-- [ ] Let merchants buy genuine surplus from producers and offer scarce imports,
+- [x] Let merchants buy genuine surplus from producers and offer scarce imports,
   with product interests defined per merchant rather than universal purchasing.
-- [ ] Give each merchant finite funds, cargo capacity, available stock, offered
+- [x] Give each merchant finite funds, cargo capacity, available stock, offered
   prices, and an arrival and departure schedule.
-- [ ] Let producers accept or reject offers; protect local consumption, accepted
+- [x] Let producers accept or reject offers; protect local consumption, accepted
   orders, and reserve targets before treating stock as exportable surplus.
-- [ ] Require enough remaining shelf life for the intended journey and resale;
+- [x] Require enough remaining shelf life for the intended journey and resale;
   nearly expired meals must not become automatically saleable exports.
-- [ ] Complete transactions through actual goods transfer, loading, and funded
+- [x] Complete transactions through actual goods transfer, loading, and funded
   payment before departure, without duplicating payments after retries.
-- [ ] Handle unmet trade commitments explicitly when time, stock, capacity, or
+- [x] Handle unmet trade commitments explicitly when time, stock, capacity, or
   funds run out; do not silently mark them fulfilled.
-- [ ] Allow scenario-defined merchants to buy goods such as spare planks, wagon
+- [x] Allow scenario-defined merchants to buy goods such as spare planks, wagon
   parts, tea, or fresh bread, and bring inputs such as iron or grain.
-- [ ] Keep merchant demand occasional and bounded so export opportunities do
+- [x] Keep merchant demand occasional and bounded so export opportunities do
   not become guaranteed sales that reward continuous overproduction.
-- [ ] Expose offers, trades, cargo, and departure deadlines to relevant NPCs and
+- [x] Expose offers, trades, cargo, and departure deadlines to relevant NPCs and
   monitoring views; include export income and import costs in economy reports.
-- [ ] Let the DM configure merchant visits and trade profiles through the event
+- [x] Let the DM configure merchant visits and trade profiles through the event
   system, with explicit sources for incoming goods and funds.
 
-## Suggested implementation order
+## Optional NPC sidequests
+
+- [x] Connect optional sidequests to personal interests, relationships, visitors,
+  and village events rather than adding mandatory daily work.
+- [x] Record each quest's giver or origin, eligible participants, objectives,
+  prerequisites, progress, any deadline, and explicit rewards.
+- [x] Let NPCs accept, decline, defer, or abandon quests according to interests,
+  relationships, available time, fatigue, resources, and existing commitments.
+- [x] Track offered, accepted, deferred, completed, abandoned, expired, and failed
+  outcomes explicitly; support multi-day progress without blocking ordinary
+  village completion.
+- [x] Verify progress and completion through actual supported actions and world
+  state, not dialogue claims; reuse personal-project and event progress where
+  relevant instead of counting the same achievement twice.
+- [x] Support rewards such as relationship changes, knowledge, skill progress,
+  items, or funded payments, with explicit accounting and eligibility rules.
+- [x] Persist progress and grant rewards exactly once across retries and
+  recovery.
+- [x] Protect meals, accepted work and delivery commitments, animal care, travel
+  home, and adequate sleep when planning quest activities.
+- [x] Expose quest offers, choices, progress, and outcomes in relevant NPC
+  observations and monitoring views; show actual quest activities in the Gantt.
+- [x] Let the DM configure or introduce quests with validated objectives,
+  supported actions, bounded effects, and achievable rewards.
+
+### Proposed Millhaven examples
+
+- Iona documents an unusual plant for her herbal book.
+- Jory develops a special bread recipe for the band's first performance.
+- Torvin repairs a traveller's instrument before departure.
+- Finn scouts a new fishing spot and shares his findings.
+- Elsie arranges an evening gathering with musicians and refreshments.
+
+The living variant includes these examples with their required capabilities and
+fixtures. Completion still requires verified actions, never automatic narrative
+success.
+
+## Implemented feature groups
 
 1. Supplier orders and demand-aware production.
 2. Breakfast planning, meal economics, and just-in-time cooking.
@@ -294,6 +340,15 @@ Elsie plans upcoming meal service and places orders with:
 6. Personal interests and social activities, followed by the evening band.
 7. Minor village events and DM-configurable event templates.
 8. Temporary visitor timelines and travelling-merchant trade.
+9. Optional NPC sidequests linked to interests, events, and visitors.
 
-All items remain planned, not implemented. Breakfast and meal-pricing changes
-are separate from supplier ordering. This backlog does not change the saved run.
+All feature groups are implemented behind explicit scenario/runtime configuration.
+Breakfast and meal-pricing policies remain separate from supplier ordering.
+Prices, subsidies, event frequency, interests, band membership, and quest
+templates remain configurable design choices, not universal engine defaults.
+This implementation does not migrate, reset, resume, or advance the saved run.
+
+Validation covers engine behavior, the real MCP configuration tool, existing
+village/DM/API regressions, visitor and activity timeline rendering, and the
+TypeScript production build. See README for generating the living variant and
+granting the DM configuration authority.

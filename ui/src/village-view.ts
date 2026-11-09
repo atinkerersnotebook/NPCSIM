@@ -1,4 +1,4 @@
-import type { RunEvent, State, VillageLife, VillageObservation } from "./contracts";
+import type { RunEvent, State, VillageLife, VillageObservation, VillageResearchView, VillageCommunication } from "./contracts";
 import { villageClockText } from "./view-mode.ts";
 
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
@@ -9,23 +9,127 @@ const stock = (values: Record<string, number>) => Object.entries(values)
   .map(([resource, amount]) => `<span class="fact-chip">${label(resource)}: ${amount}</span>`).join("")
   || '<span class="muted">None</span>';
 
-function lifeMarkup(life: VillageLife, minute: number): string {
+export function firewoodMarkup(firewood: NonNullable<VillageObservation["firewood"]>, operator = false): string {
+  if (!firewood.enabled) return "";
+  return `<section class="village-panel" aria-label="${operator ? "Operator firewood and household heating" : "Local firewood and household heating"}">
+    <h3>${operator ? "Town" : "Local"} firewood &amp; household fires / ${label(firewood.season)}</h3>
+    <p class="muted">${operator ? "Privileged world view; not shared NPC knowledge." : "Only fuel stocks and hearths physically here."}
+      Cold homes have no health penalties. Ovens, cooking and forge work require actual fuel.</p>
+    <p>Supplier: ${escape(firewood.supplier)} / 1 log → ${firewood.firewood_per_log} firewood /
+      ${firewood.split_minutes} minutes of committed splitting with the real axe.</p>
+    ${firewood.sites.map(site => `<p>${escape(site.location)}: ${site.stock} firewood /
+      target ${site.reserve} / ${site.consumed} consumed /
+      funded by ${escape(site.buyer)}${site.stock === 0 && site.reserve > 0 ? " / FUEL SHORTAGE" : ""}</p>`).join("")}
+    ${firewood.households.map(hearth => `<article class="village-card"><strong>${escape(hearth.id)}</strong>
+      <span class="tag ${hearth.status === "warm" ? "green" : hearth.status === "cold" ? "amber" : ""}">${label(hearth.status)}</span>
+      <p>${hearth.members.map(escape).join(", ")} / ${hearth.occupied ? "Occupied" : "Unoccupied"}
+        ${hearth.status === "warm" ? ` / warm until day ${Math.floor(hearth.warm_until / 1440) + 1} ${time(hearth.warm_until)}` : ""}</p>
+    </article>`).join("")}
+    <details><summary>Fuel and delivery rules</summary><p>${escape(firewood.policy)}</p></details>
+  </section>`;
+}
+
+export function communicationMarkup(view: VillageCommunication, operator = false): string {
+  const at = (minute: number) => `day ${Math.floor(minute / 1440) + 1} ${time(minute)}`;
+  return `<section class="village-panel communication-panel" aria-label="${operator ? "Operator noticeboard" : "Personally learned notices"}">
+    <h3>${operator ? "Operator: noticeboard, commitments & appointments" : "Your learned notices, commitments & appointments"}</h3>
+    <p class="muted">${operator ? "Privileged world view. This is not shared NPC knowledge." :
+      "Personally received snapshots only. Absence of a reply is not rejection; old versions may be stale."}</p>
+    ${view.notices.map(notice => `<article class="communication-notice">
+      <h4>${escape(notice.subject)} / ${label(notice.status)} / version ${notice.version}</h4>
+      <p>${escape(notice.author)} → ${notice.recipients.map(escape).join(", ") || "Public"}${notice.private ? " / Private" : ""}</p>
+      <p>${escape(notice.description)}</p>
+      <p>${notice.quantity !== null ? `${notice.quantity} units / ` : ""}${notice.destination ? `${escape(notice.destination)} / ` : ""}
+        ${notice.due_at !== null ? `due ${at(notice.due_at)} / ` : ""}updated ${at(notice.updated_at)}</p>
+      ${notice.unit_price !== null ? `<p>Quoted price: ${notice.unit_price} coins per unit /
+        delivery fee ${notice.delivery_fee ?? 0} coins.</p>` : ""}
+      <p>Source: ${escape(notice.source)}${notice.learned_at !== null ? ` / received ${at(notice.learned_at)}` : ""}
+        ${notice.last_verified_at !== null ? ` / last directly verified ${at(notice.last_verified_at)}` : ""}
+        ${notice.confidence ? ` / ${escape(notice.confidence)} / ${notice.hops} relay hops` : ""}.
+        ${escape(notice.freshness)}</p>
+      ${notice.source_chain.length ? `<p>Provenance: ${notice.source_chain.map(escape).join(" → ")}</p>` : ""}
+      ${notice.response ? `<p>Reply: ${escape(notice.response)}</p>` : ""}
+      ${notice.commitment ? `<p><b>Commitment:</b> ${escape(notice.commitment.supplier)} → ${escape(notice.commitment.buyer)} /
+        ${label(notice.commitment.status ?? "unknown")} / ${notice.commitment.delivered} units unloaded /
+        ${notice.commitment.paid} coins paid. Acceptance alone transfers nothing.</p>` : ""}
+      ${notice.appointment ? `<p><b>Appointment:</b> ${notice.appointment.members.map(escape).join(" &amp; ")} /
+        ${escape(notice.appointment.place)} / ${at(notice.appointment.due_at)}–${time(notice.appointment.end_at)} /
+        ${label(notice.appointment.status)} / confirmed by ${notice.appointment.accepted.map(escape).join(", ")}.
+        Each worker must actually attend with supplies.</p>` : ""}
+    </article>`).join("") || `<p class="muted">${operator ? "No notices posted yet." : "No notices received yet."}</p>`}
+    <details><summary>Physical workplace inboxes</summary>
+      ${view.boxes.map(box => `<p>${escape(box.owner)} / ${escape(box.place)} /
+        ${operator ? `${box.notes ?? 0} physical notes` : box.here ? box.can_read ? "Here; yours to read" : "Here; owner-only reading" : "Visit in person to read"}.
+        No remote delivery.</p>`).join("") || "<p>No boxes configured.</p>"}
+    </details>
+  </section>`;
+}
+
+function researchTableMarkup(projects: VillageResearchView[], name: (id: string) => string): string {
+  return `<div class="maintenance-list research-list"><table><thead><tr>
+    <th>Project</th><th>Researcher</th><th>Site</th><th>Research minutes</th>
+    <th>Trials</th><th>Status</th><th>Recipe & use</th></tr></thead><tbody>
+    ${projects.map(project => `<tr>
+      <td><strong>${escape(project.title)}</strong><p>${escape(project.description)}</p></td>
+      <td>${name(project.owner)}</td><td>${name(project.location)}</td>
+      <td>${project.worked_minutes}/${project.required_minutes} min</td>
+      <td>${project.successes}/${project.attempts} successful/total trials /
+        ${project.required_successes} successes required</td>
+      <td>${label(project.status)}${project.blocker ? ` / ${escape(project.blocker)}` : ""}
+        ${project.discovered_at !== null ? `<p>Discovered day ${Math.floor(project.discovered_at / 1440) + 1}
+          ${time(project.discovered_at)}</p>` : ""}</td>
+      <td><b>${project.status === "discovered" ? "Unlocked recipe" : "Proposed recipe (not unlocked)"}:</b>
+        ${Object.entries(project.inputs).map(([item, quantity]) => `${quantity} ${label(item)}`).join(", ") || "No inputs"}
+        → 1 ${label(project.product)} / ${project.duration} min
+        <p>Equipment: ${project.equipment.map(name).join(", ") || "None"}</p>
+        <p>${project.kind === "food" || project.kind === "crop" ? "Use: 2 meal portions" :
+          project.kind === "tool" ? "Use: repairs actual damaged objects" : "Use: ingredient for further recipes"}</p>
+      </td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function lifeMarkup(life: VillageLife, minute: number, breakfast = false): string {
   const at = (value: number) => `day ${Math.floor(value / 1440) + 1} ${time(value)}`;
   const meals = Object.values(life.meals).filter(meal =>
     Math.floor(meal.due / 1440) === Math.floor(minute / 1440) || meal.status === "pending");
   const day = Math.floor(minute / 1440);
   const tired = life.fatigue_days?.includes(day) && life.tea_day !== day;
-  const hunger = life.meals[`${day - 1}:daily`]?.status === "missed";
+  const hunger = Object.values(life.meals).some(meal =>
+    Math.floor(meal.due / 1440) === day - 1 && meal.status === "missed");
   const factor = (hunger ? 2 : 1) * (tired ? 2 : 1);
   return `<div class="village-daily-life">
     <p><b>Rest:</b> ${life.sleeping && life.sleep_until !== null ? `Sleeping until ${at(life.sleep_until)}` : `Awake since ${at(life.last_woke)}`}</p>
-    <p><b>Daily meal:</b> 19:00 at the tavern / <b>Hunger:</b> ${life.hungry ? "Hungry" : "Not hungry"} / missed meals: ${life.missed_meals}</p>
+    <p>${breakfast || Object.values(life.meals).some(meal => meal.kind === "breakfast")
+      ? "<b>Meals:</b> Breakfast and 19:00 supper at the tavern" : "<b>Daily meal:</b> 19:00 at the tavern"} /
+      <b>Hunger:</b> ${life.hungry ? "Hungry" : "Not hungry"} / missed meals: ${life.missed_meals}</p>
     <p><b>Work cooldown:</b> ${factor === 1 ? "Normal" : `${factor}x (${[hunger ? "missed yesterday's meal" : "", tired ? "tiredness" : ""].filter(Boolean).join(" + ")})`}</p>
     ${life.urgent_project && life.urgent_until !== null && life.urgent_until !== undefined && minute < life.urgent_until ?
       `<p><b>Explicit bedtime override:</b> ${label(life.urgent_project)} until ${at(life.urgent_until)}</p>` : ""}
-    ${meals.map(meal => `<p>${label(meal.kind)}: ${escape(meal.status)}${meal.source ? ` / ${escape(meal.source)}` : ""}</p>`).join("")}
+    ${meals.map(meal => `<p>${label(meal.kind)}: ${escape(meal.status)} / due ${at(meal.due)}${meal.source ? ` / ${escape(meal.source)}` : ""}</p>`).join("")}
     ${life.work ? `<p><b>Committed batch:</b> Must finish at ${at(life.work.finishes_at)} before leaving, eating or sleeping.</p>` : ""}
   </div>`;
+}
+
+function livestockDetailsMarkup(livestock: NonNullable<VillageObservation["livestock"]>,
+  minute: number, stocks: Record<string, number> = {}): string {
+  const animals: [string, typeof livestock.cow][] = [["Cow", livestock.cow], ["Hens", livestock.hens]];
+  const products = Object.fromEntries(Object.entries(stocks).filter(([resource]) =>
+    ["milk", "eggs", "plant-scraps", "compost-material", "compost"].includes(resource)));
+  return `<p>${escape(livestock.policy)}</p>
+    <p>Keeper: ${escape(livestock.keeper)}</p>
+    ${animals.map(([name, care]) => {
+      const today = care.day === Math.floor(minute / 1440);
+      return `<p>${name}: fed ${today && care.fed ? "yes" : "due"} /
+        watered ${today && care.watered ? "yes" : "due"} / clean ${today && care.cleaned ? "yes" : "due"}
+        / ${today ? care.progress : 0} carried work min</p>`;
+    }).join("")}
+    <p>Bucket water: ${livestock.bucket_water} care portions /
+      milk sessions: ${escape(livestock.cow.milk_sessions.join(", ") || "none")} /
+      eggs collected: ${livestock.hens.eggs}</p>
+    <h4>Food recycling</h4>
+    <p>Safe fresh plant-scraps can supplement chicken grain, never cow hay.
+      Spoiled food becomes compost-material, never animal feed. Use real tools and timed
+      composting at the farm; compost fertilizer is not animal manure.</p>
+    ${Object.keys(products).length ? `<p>Farm food and recycling stocks: ${stock(products)}</p>` : ""}`;
 }
 
 export function villageMarkup(village: VillageObservation): string {
@@ -33,7 +137,24 @@ export function villageMarkup(village: VillageObservation): string {
     <div class="network-heading"><span class="eyebrow">MILLHAVEN / DAY ${village.day}</span>
       <strong>${escape(village.time)}</strong><span>${village.coins} coins</span></div>
     <p class="muted">${escape(village.policy)}</p>
-    ${village.personal?.life ? lifeMarkup(village.personal.life, village.minute) : ""}
+    ${village.communication ? communicationMarkup(village.communication) : ""}
+    ${village.personal?.life ? lifeMarkup(village.personal.life, village.minute, village.personal.life.breakfast) : ""}
+    ${village.livestock?.enabled ? `<details><summary>Farm livestock / 1 cow + ${village.livestock.hen_count} hens</summary>
+      ${livestockDetailsMarkup(village.livestock, village.minute)}
+    </details>` : ""}
+    ${village.maintenance?.enabled ? `<details><summary>Your known town maintenance</summary>
+      <p>${escape(village.maintenance.policy)}</p>
+      ${village.maintenance.jobs.map(job => `<p>${escape(job.title)} / ${escape(job.assignee)} /
+        ${label(job.location)} / ${job.worked_minutes}/${job.required_minutes} work min /
+        ${escape(job.status)}${job.blocker ? ` / ${escape(job.blocker)}` : ""}</p>`).join("")
+        || '<p class="muted">No maintenance assigned or observed here.</p>'}
+    </details>` : ""}
+    ${village.research?.enabled ? `<details><summary>Your known research projects & discoveries</summary>
+      <p>${escape(village.research.policy)}</p>
+      ${village.research.projects.length ? researchTableMarkup(village.research.projects,
+        id => escape(village.residents.find(person => person.id === id)?.name ?? id.replaceAll("-", " ")))
+        : '<p class="muted">No research projects assigned or observed here.</p>'}
+    </details>` : ""}
     ${village.notices?.length ? `<details><summary>Public bell notices</summary>
       ${village.notices.map(entry => `<p>${time(entry.minute)} / ${label(entry.actor)} / ${escape(villageClockText(entry.result))}</p>`).join("")}</details>` : ""}
     ${village.personal?.routes?.length ? `<details><summary>Shortest known routes (verify conditions along the way)</summary>
@@ -49,6 +170,7 @@ export function villageMarkup(village: VillageObservation): string {
         <span class="tag">${escape(person.occupation)}</span><p>${escape(villageClockText(person.activity))}</p></article>`).join("")
       || '<p class="muted">Nobody nearby. Explore a workplace or meet the villagers at the tavern in the evening.</p>'}</div>
     <h3>Local resource stock</h3><div>${stock(village.stocks)}</div>
+    ${village.firewood ? firewoodMarkup(village.firewood) : ""}
     <details><summary>${village.personal ? "Your shipment cargo" : "Your purchased resources"}</summary>${stock(village.resource_inventory)}</details>
     ${village.personal ? `<details><summary>Your private knowledge & schedule</summary>
       <p>${escape(village.personal.personality)}</p>
@@ -111,7 +233,8 @@ export function villageDashboardMarkup(state: State, events: RunEvent[]): string
       ${active ? '<span class="tag green">Current turn</span>' : ""}
       <p><b>Location:</b> ${named(actor.location_id)}</p>
       <p><b>Activity:</b> ${escape(villageClockText(person.activity))}</p>
-      ${person.life ? lifeMarkup(person.life, village.minute) : ""}
+      ${person.life ? lifeMarkup(person.life, village.minute,
+        village.day_policy?.breakfast ?? village.dashboard?.day_policy?.breakfast) : ""}
       <p><b>Carrying:</b> ${actor.inventory.map(named).join(", ") || "Empty hands"}</p>
       <p><b>Cargo:</b> ${stock(person.cargo)} / <b>Coins:</b> ${village.coins[id]}</p>
       ${person.timber_route ? "<p>Automatic timber foot route active</p>" : ""}
@@ -185,6 +308,7 @@ export function villageDashboardMarkup(state: State, events: RunEvent[]): string
           deadline.overdue ? "Overdue; recovery allowed" : "Pending"}</p>`).join("")}</section>` : ""}
     ${village.notices.length ? `<details><summary>Public noticeboard & bell</summary>
       ${village.notices.map(entry => `<p>${time(entry.minute)} / ${named(entry.actor)} / ${escape(villageClockText(entry.result))}</p>`).join("")}</details>` : ""}
+    ${villageSystemsMarkup(state, events, state.observation?.village?.research?.enabled)}
     <div class="village-roster">${cards}</div>
     <details><summary>Village stock & event ledger</summary>
       ${Object.entries(village.stocks).map(([location, values]) => `<p><b>${named(location)}:</b> ${stock(values)}</p>`).join("")}
@@ -201,4 +325,107 @@ export function villageDashboardMarkup(state: State, events: RunEvent[]): string
           ${lots.flatMap(lot => lot.expires_at === null ? [] : [`${lot.quantity} units expire day
             ${Math.floor(lot.expires_at / 1440) + 1} ${time(lot.expires_at)}`]).join("; ")}</p>`).join("")).join("")}
     </details>` : ""}`;
+}
+
+export function villageSystemsMarkup(state: State, events: readonly RunEvent[] = [], researchEnabled = false): string {
+  const dashboard = state.world?.village?.dashboard;
+  const firewoodPanel = dashboard?.firewood ? firewoodMarkup(dashboard.firewood, true) : "";
+  const livestock = state.observation?.village?.livestock ?? state.run?.observation?.village?.livestock;
+  const livestockPanel = livestock?.enabled ? `<section class="village-panel" aria-label="Farm livestock and food recycling">
+    <h3>Farm livestock / 1 cow + ${livestock.hen_count} hens</h3>
+    ${livestockDetailsMarkup(livestock, state.world?.village?.minute
+      ?? state.observation?.village?.minute ?? state.run?.observation?.village?.minute ?? 0,
+      state.world?.village?.stocks.farm)}
+  </section>` : "";
+  if (!dashboard) return livestockPanel;
+  const name = (id: string) => escape(state.run?.agent_profiles?.[id]?.name
+    ?? state.world?.entities[id]?.name ?? id.replaceAll("-", " "));
+  const at = (minute: number) => `day ${Math.floor(minute / 1440) + 1} ${time(minute)}`;
+  const day = Math.floor((state.world?.village?.minute ?? 0) / 1440) + 1;
+  const maintenance = dashboard.maintenance ?? [];
+  const current = maintenance.filter(job => job.day === day || job.status !== "completed"
+    || job.completed_at !== null && job.completed_at !== undefined
+      && Math.floor(job.completed_at / 1440) + 1 === day);
+  const maintenanceRow = (job: typeof maintenance[number]) => `<tr>
+    <td>${escape(job.title)}${job.day < day ? ` <small>(carried from day ${job.day})</small>` : ""}</td>
+    <td>${name(job.assignee)}</td><td>${name(job.location)}</td>
+    <td>${job.worked_minutes}/${job.required_minutes} min</td>
+    <td>${at(job.due_at)}</td><td>${escape(job.status)}${job.blocker ? ` / ${escape(job.blocker)}` : ""}</td>
+    <td>${Object.entries(job.supplies).map(([item, quantity]) => `${quantity} ${label(item)}`).join(", ")
+      || "No consumables"}</td></tr>`;
+  const calls = new Map<string, { pending: number; wait: number; read: number; coordination: number }>();
+  for (const event of events) {
+    if (event.run_id !== state.run?.id) continue;
+    const count = calls.get(event.actor_id) ?? { pending: 0, wait: 0, read: 0, coordination: 0 };
+    if (event.kind === "proxy_request") count.pending += 1;
+    if (event.kind === "action_request" && event.payload && typeof event.payload === "object"
+      && "action_id" in event.payload && typeof event.payload.action_id === "string") {
+      const action = event.payload.action_id;
+      if (["village_wait", "village_wait_event"].includes(action)) count.wait += count.pending;
+      else if (["read", "look"].includes(action)) count.read += count.pending;
+      else if (["say", "village_ask", "village_tell", "village_share_route", "village_meeting"].includes(action)) {
+        count.coordination += count.pending;
+      }
+      count.pending = 0;
+    }
+    calls.set(event.actor_id, count);
+  }
+  return `${firewoodPanel}${livestockPanel}${dashboard.communication?.enabled ? communicationMarkup(dashboard.communication, true) : ""}
+    <section class="village-panel" aria-label="Village economy and activities">
+    ${maintenance.length ? `<h3>Town maintenance checklist</h3>
+      <p class="muted">Required daily upkeep. Unfinished jobs carry forward at midnight without duplicating
+        the backlog. Meals, sleep and funded commitments still take precedence.</p>
+      <div class="maintenance-list"><table><thead><tr><th>Job</th><th>Assigned to</th><th>Site</th>
+        <th>Work</th><th>Due</th><th>Status</th><th>Materials</th></tr></thead>
+        <tbody>${current.map(maintenanceRow).join("")}</tbody></table></div>
+      <details><summary>Completed maintenance history</summary>
+        <div class="maintenance-list"><table><tbody>${maintenance.filter(job =>
+          job.status === "completed" && !current.includes(job)).slice(-32).map(maintenanceRow).join("")}
+        </tbody></table></div>
+      </details>` : ""}
+    ${researchEnabled || dashboard.research?.length ? `<h3>Town research & discoveries</h3>
+      ${dashboard.research?.length ? researchTableMarkup(dashboard.research, name) :
+        '<p class="muted">Occupational research is enabled. No research projects proposed or discoveries yet.</p>'}` : ""}
+    <h3>Orders and reserves</h3>
+    ${dashboard.orders.map(order => `<p>${name(order.buyer)} orders ${order.quantity} ${label(order.product)}
+      from ${name(order.seller)} / ${order.delivered} delivered / ${escape(order.status)} /
+      due ${at(order.deadline)}</p>`).join("") || '<p class="muted">No orders.</p>'}
+    <details><summary>Usable stock and reserve warnings</summary>
+      ${dashboard.products.map(product => `<p>${name(product.location)} / ${label(product.product)}:
+        ${product.quantity} total, ${product.usable} usable, ${product.expiring} expiring /
+        reserve ${product.reserve}${product.usable < product.reserve ? " / SHORTAGE" : ""}</p>`).join("")}
+    </details>
+    <details><summary>Business accounts (not net profit)</summary>
+      <p class="muted">Inventory is valued at configured prices, not guaranteed sale proceeds.</p>
+      ${dashboard.accounts.map(account => `<p>${name(account.owner)}: sales ${account.sales},
+        purchases ${account.purchases}, fees ${account.fees}, subsidies ${account.subsidies},
+        net cash ${account.net_cash}, inventory value ${account.inventory_value}</p>`).join("")}
+    </details>
+    <h3>Personal projects and optional quests</h3>
+    ${dashboard.projects.map(project => `<p>${name(project.owner)} / ${escape(project.title)}:
+      ${project.progress}/${project.required} / ${escape(project.status)}</p>`).join("")}
+    ${dashboard.quests.map(quest => `<p>${name(quest.actor)} / ${escape(quest.title)}:
+      ${quest.progress}/${quest.required} / ${escape(quest.status)}</p>`).join("")}
+    <details><summary>Activities and village events</summary>
+      ${dashboard.activities.slice(-24).map(activity => `<p>${at(activity.start)} /
+        ${name(activity.actor)} / ${escape(activity.label)} / ${escape(activity.status)}</p>`).join("")}
+      ${dashboard.incidents.slice(-12).map(incident => `<p>${at(incident.start)} /
+        ${escape(incident.title)} / ${name(incident.location)} / ${escape(incident.status)}</p>`).join("")}
+    </details>
+    ${dashboard.visitors.length ? `<details><summary>Visitor history</summary>
+      ${dashboard.visitors.map(visitor => `<p>${escape(visitor.name)} / Visitor / ${escape(visitor.status)} /
+        arrived ${at(visitor.arrival)}${visitor.departure === null ? "" : ` / departed ${at(visitor.departure)}`}</p>`).join("")}
+    </details>` : ""}
+    <details><summary>Time use and model-call efficiency</summary>
+      <p class="muted">Waits and production cooldowns are not automatically wasted time.
+        Total recorded run model calls: ${state.run?.model_calls ?? 0}.</p>
+      ${Object.entries(dashboard.time_use).map(([actor, usage]) => `<p>${name(actor)} /
+        measured since ${at(usage.since)}: work ${usage.work} min, travel ${usage.travel} min,
+        requested wait ${usage.wait} min, leisure ${usage.leisure} min, idle ${usage.idle} min,
+        sleep ${usage.sleep} min / ${usage.successful_actions} successful actions</p>`).join("")}
+      ${[...calls].filter(([, count]) => count.wait + count.read + count.coordination > 0)
+        .map(([actor, count]) => `<p>${name(actor)} / model calls linked to actions:
+          waiting ${count.wait}, reading/looking ${count.read}, coordination ${count.coordination}</p>`).join("")}
+    </details>
+  </section>`;
 }

@@ -516,6 +516,44 @@ service evidence; absence from the prose is not proof of failure. Use the most
 recent evening after the scenario's starting day, including after midnight, so a
 later complete day can recover from a missed earlier meal.
 
+### Opt-in living-village systems
+
+Existing village scenarios default to their original meal, production and
+completion rules. A separate generated living scenario enables:
+
+- Supplier orders with acceptance, partial fulfillment, cancellation, deadlines,
+  freshness requirements, affordability commitments and exactly-once payments.
+  Order creation requires an in-person requirements conversation with the actual
+  available supplier at the buyer's location; neither demand planning nor ordinary
+  dialogue creates a remote commitment. Upstream input orders follow the same rule.
+  NPC order observations are limited to their own buying/selling commitments;
+  privileged monitoring retains all orders.
+- Demand-limited production including committed batches, protected raw-material
+  reserves, consolidated real deliveries and explicit cargo returns.
+- Breakfast after waking and supper at 19:00, independently tracked and charged.
+  Subsidies must name a real finite funder; stock is consumed only for funded meals.
+- Persistent interests, timed leisure, relationships, personal projects, shared
+  band rehearsals/performances and optional evidence-verified sidequests.
+- Bounded deterministic village events and named temporary visitors with real
+  presence, finite merchant money/capacity and protected, fresh surplus exports.
+- Typed monitoring projections for orders, inventory, accounts, projects, quests,
+  events, activity durations, time use and historical visitor Gantt rows.
+
+Activities occupy time without repeated model decisions and remain interruptible
+for essential commitments. Events are locally discovered; configuration does not
+grant all residents private or unwitnessed knowledge. Optional leisure, quests
+and visitor departures do not become resident victory conditions. Scenario policy
+can replace forced resource-production checkboxes with verified reserve readiness
+and can make tea/manure use optional; homecoming, sleep and animal care remain.
+
+Privileged `world_configure_village` and `POST /api/village/configure` validate
+configuration sections, reject stale revisions and conflicting request IDs, and
+persist effective settings without rewriting a frozen scenario. The operator API
+requires a paused connected adventure and matching run ID. A DM progress review
+may propose configuration only with explicit `configure_village` capability.
+Templates are restricted to supported effects and evidence conditions, never
+arbitrary executable code or narrative-only success.
+
 `POST /api/adventure/reopen` accepts the current `run_id`. Only a succeeded village
 attempt with a completed failing review and a fresh authoritative
 `full_village_day` verification still marked active may reopen. Reconnect only
@@ -597,7 +635,18 @@ data\
 - A world transition committed before the simulator records its outcome is reconciled using the stored request ID/result, not by executing a new mutation.
 - Validate documents against versioned schemas when loading. Missing required files, corrupt JSON, and unsupported versions produce explicit errors, not silent defaults or automatic resets.
 - Configuration defaults may initialize a new data directory explicitly. Reset in the single-actor demo creates a new run/session and preserves previous run files. In shared-world mode, starting a new actor run does not reset the shared world or other actors.
-- Persist checkpoints after each completed cycle. On process restart, expose prior runs for inspection and mark incomplete episodes as interrupted pending reconciliation; automatic crash-resume is outside MVP.
+- Persist checkpoints after each completed cycle. On process restart, expose prior runs for inspection and mark uncertain incomplete episodes as interrupted pending reconciliation. Explicitly saved safe paused checkpoints may reconnect paused; automatic crash-resume remains outside MVP.
+- Provide named episode save points containing the frozen scenario/cast, world,
+  every NPC's private memory/observation, complete transcript, usage counters,
+  active commitments and scheduler state. Serialize at a paused safe boundary
+  without model calls. Loading creates a distinct episode/world/session copy,
+  remaps transcript evidence identities consistently, and preserves the original
+  history and immutable save point. Saved active episodes load paused; completed
+  or uncertain-action saves are questions-only without automatic replay/regrading.
+  Loaded-copy questions use private saved knowledge and separately counted
+  follow-up calls until simulation resumes; never reset budgets or advance time.
+  Reject unsupported adapters, missing/corrupt data and stale load requests;
+  failed restoration must preserve/reconnect the original world.
 - Keep hidden world files accessible only to trusted backend/admin components. Do not serve the data directory as static web content.
 
 ## 10. World Replacement

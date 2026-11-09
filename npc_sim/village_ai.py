@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any
 
-from npc_sim import handling, village, village_goods, village_life, village_services, village_wagon
-from npc_sim.models import VillageCommittedWork
+from npc_sim import handling, village, village_goods, village_life, village_services, village_wagon, village_extensions, village_communication
+from npc_sim.models import VillageCommittedWork, VillageJob
 
 if TYPE_CHECKING:
     from npc_sim.world import World
@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 VERBS = {"village_wait", "village_ask", "village_tell", "village_observe", "village_work",
          "village_load", "village_deliver", "village_project", "village_patrol", "village_eat", "village_sleep",
-         "village_meeting", "village_cook_fish", "village_share_route"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS)
+         "village_meeting", "village_cook_fish", "village_share_route", "village_split_firewood"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS
 
 
 def observation(world: "World") -> dict[str, Any]:
@@ -27,6 +27,7 @@ def observation(world: "World") -> dict[str, Any]:
                                     and rid in notice.witnesses for notice in state.notices):
             public_deadlines[key] = deadline.model_dump()
     return {"village": {
+        **village_extensions.observation(world),
         "minute": state.minute, "day": state.minute // 1440 + 1,
         "time": f"{state.minute % 1440 // 60:02}:{state.minute % 60:02}",
         "residents": [{"id": other, "name": village.resident_name(world, other),
@@ -97,7 +98,10 @@ def observation(world: "World") -> dict[str, Any]:
                      "Bren may collect well timber and rope while Torvin retrieves the shovel. Hobb must also deliver "
                      "one real plank unit for the mill repair. Use manure for faster harvests, tea for tiredness, "
                      "grow hay and gather herbs to replenish inputs. The noon trader supplies paid iron. "
-                     "Read the board for stocks, project progress and deadlines. Fees go to the actual carrier. "
+                     + ("Read physically posted versions, not global stock/project reports. "
+                        if village_communication.enabled(world)
+                        else "Read the board for stocks, project progress and deadlines. ")
+                     + "Fees go to the actual carrier. "
                      "Each partner must explicitly choose village_urgent_work to override bedtime until 02:00. "
                      "Hunger and tiredness slowdowns stack; tea relieves tiredness but never replaces sleep."
                      if config.expanded_rules else ""),
@@ -121,7 +125,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
     add("village_wait", "Wait without controlling any other villager.",
         {"minutes": {"type": "integer", "minimum": 5, "maximum": village_life.wait_limit(world), "multipleOf": 5}})
     if config.daily_life:
-        add("village_eat", "Eat your one daily meal at the 19:00 tavern gathering, using real local food.", {})
+        add("village_eat", "Eat a due configured meal at the tavern using real local food.", {})
         add("village_sleep", "Sleep at your own home when rest is due; wake after your full scheduled rest.", {})
     if nearby:
         target = {"type": "string", "enum": nearby}
@@ -152,7 +156,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
             meetings.append("dig_well")
         if rid in {config.carpenter, config.miller}:
             meetings.append("repair_mill")
-        if meetings:
+        if meetings and not village_communication.enabled(world):
             add("village_meeting", "Agree the project's actual work-site rendezvous through a public bell message.",
                 {"project": {"type": "string", "enum": meetings}})
             if config.expanded_rules:
@@ -177,6 +181,8 @@ def actions(world: "World") -> list[dict[str, Any]]:
                 add(aid, f"Gather or grow two real {resource} at your workplace, respecting normal work cooldowns.", {})
         if "farming" in resident.skills:
             add("village_fertilize", "Use one manure at the farm to halve the next three grain-harvest cooldowns.", {})
+            if state.livestock and state.livestock.config.enabled:
+                add("village_fertilize_compost", "Use one actual compost fertilizer (not manure) for three faster grain harvests.", {})
         if "forestry" in resident.skills:
             add("village_start_timber_route", "Accept the automatic foot-only timber route from woodlot to workshop.", {})
             add("village_stop_timber_route", "Stop the timber route, retaining real cargo.", {})
@@ -205,7 +211,56 @@ def actions(world: "World") -> list[dict[str, Any]]:
         add("village_project", "Contribute five work minutes with your partner and actual tools/materials present. "
             "A project requires six contributions, including at least two from each partner.",
             {"project": {"type": "string", "enum": projects}})
+    result.extend(village_extensions.actions(world))
     return result
+
+
+def production_job(world: "World", action: str) -> VillageJob | None:
+    if action == "village_split_firewood":
+        from npc_sim import village_firewood
+        return village_firewood.production_job(world)
+    config, _ = village.context(world)
+    resident = config.residents[world.actor_id]
+    job = resident.job
+    if action == "village_cook_fish" and job and "hospitality" in resident.skills:
+        job = job.model_copy(update={"inputs": {"fish": 1}})
+    if action in village_services.JOBS and job:
+        _, resource, equipment = village_services.JOBS[action]
+        job = job.model_copy(update={"inputs": {}, "outputs": {resource: 2}, "equipment": equipment,
+                                     "interruptible": True, "duration": 5, "batch_size": 1})
+    return job
+
+
+def production_ready(world: "World", action: str) -> tuple[str, str] | None:
+    config, state = village.context(world)
+    resident, person = config.residents[world.actor_id], state.residents[world.actor_id]
+    job = production_job(world, action)
+    if action in village_services.JOBS and village_services.JOBS[action][0] not in resident.skills:
+        return "CAPABILITY_REQUIRED", "This gathering job requires your actual occupation."
+    if job is None or world.actor.location_id != job.location:
+        return "WRONG_WORKPLACE", "Go to your own workplace first."
+    if any(skill not in world.actor.body.capabilities for skill in resident.skills):
+        return "CAPABILITY_REQUIRED", "Your assigned body lacks your occupation's skills."
+    if job.equipment:
+        blocked = handling.use_reason(world, [job.equipment])
+        if blocked:
+            return "BODY_HANDLING_REQUIRED", blocked
+    if not config.daily_life and not 360 <= state.minute % 1440 < 1140:
+        return "OUTSIDE_WORK_HOURS", "Ordinary production runs from 06:00 to 19:00."
+    if state.minute < person.next_work:
+        return "WORK_COOLDOWN", f"Your next batch is ready at {village.clock_time(person.next_work)}."
+    if job.equipment and world.state.entities[job.equipment].broken:
+        return "EQUIPMENT_BROKEN", "The equipment needs a physical repair."
+    if config.expanded_rules and world.actor_id == config.helper and world.state.entities["work-horse"].location != job.location:
+        return "HORSE_NOT_HERE", "The working horse must actually be at the stable to be fed."
+    stock = state.stocks.get(job.location, {})
+    if any(stock.get(resource, 0) < amount for resource, amount in job.inputs.items()):
+        return "STOCK_SHORTAGE", "Your workplace lacks the required input stock."
+    if state.economy is not None:
+        from npc_sim import village_economy
+        if village_economy.production_batch_limit(world, action) <= 0:
+            return "DEMAND_MET", "Usable stock and committed production already cover demand."
+    return None
 
 
 def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, str, None]:
@@ -224,6 +279,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     def contribute() -> None:
         state.role_contributions[rid] = state.role_contributions.get(rid, 0) + 1
 
+    if action in village_extensions.VERBS:
+        return village_extensions.apply(world, action, args)
     if action == "village_wait":
         if person.life and person.life.sleeping:
             if person.life.sleep_until is None:
@@ -240,6 +297,12 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             return reject("OUT_OF_REACH", "Speak to a different nearby villager.")
         if state.residents[target].life and state.residents[target].life.sleeping:
             return reject("RESIDENT_ASLEEP", "That resident is sleeping; share the route after they wake.")
+        if village_communication.enabled(world):
+            try:
+                village_communication._ready(world, rid)
+                village_communication._ready(world, target)
+            except ValueError as error:
+                return reject("RESIDENT_BUSY", str(error))
         path = village.route(world, world.actor.location_id, destination, known_routes=person.known_routes)
         if path is None:
             return reject("UNKNOWN_ROUTE", "You do not know a complete route to that place.")
@@ -250,6 +313,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             if door not in state.residents[target].known_routes:
                 state.residents[target].known_routes.append(door)
             current = next_location
+        if village_communication.enabled(world):
+            state.residents[target].available_at = state.minute + 5
         return done("ROUTE_SHARED", f"Told {village.resident_name(world, target)} the known route to "
                     f"{world.state.entities[destination].name}.")
     if action == "village_observe":
@@ -266,11 +331,19 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         other = state.residents[target]
         if other.life and other.life.sleeping:
             return reject("RESIDENT_ASLEEP", "That resident is sleeping; do not interrupt their rest.")
+        if village_communication.enabled(world):
+            try:
+                village_communication._ready(world, rid)
+                village_communication._ready(world, target)
+            except ValueError as error:
+                return reject("RESIDENT_BUSY", str(error))
         if action == "village_tell":
             belief = person.beliefs.get(args["subject"])
             if belief is None:
                 return reject("UNKNOWN_SUBJECT", "You can only share a belief you actually hold.")
             village.learn(world, target, belief.subject, belief.location, f"testimony:{rid}", 0.5)
+            if village_communication.enabled(world):
+                other.available_at = state.minute + 5
             return done("BELIEF_REPORTED", f"Shared a personal belief with {village.resident_name(world, target)}.", target)
         if args["topic"] == "shovel":
             belief = other.beliefs.get(config.shovel)
@@ -289,6 +362,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                         "breakdown", "discovery", "tool_collected", "meeting", "wagon_ready", "wagon_paused",
                         "project_completed", "deadline_completed", "deadline_overdue", "trader_arrived"}]
             text = " ".join(dict.fromkeys(news[-3:])) or "I have no important news I can confirm."
+        if village_communication.enabled(world):
+            other.available_at = state.minute + 5
         return done("VILLAGER_ANSWERED", f'{village.resident_name(world, target)} says: "{text}"', target)
     if "manipulate" not in world.actor.body.capabilities:
         return reject("CAPABILITY_REQUIRED", "This work requires manipulation.")
@@ -297,6 +372,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     if action in village_services.VERBS:
         return village_services.apply(world, action, args)
     if action == "village_meeting":
+        if village_communication.enabled(world):
+            return reject("APPOINTMENT_REQUIRED", "Use a physical meeting notice and explicit appointment acceptance.")
         project = args["project"]
         crew = [config.smith, config.helper] if project == "dig_well" else [config.carpenter, config.miller]
         site = config.well_site if project == "dig_well" else config.mill
@@ -310,37 +387,25 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                  f"{village.resident_name(world, rid)} proposed this meeting; the other partner should confirm.")
         village.announce(world, rid, "meeting", project, text)
         return done("MEETING_AGREED" if agreed else "MEETING_PROPOSED", text)
+    if action == "village_project" and village_communication.enabled(world):
+        blocked = village_communication.project_blocker(world, args["project"])
+        if blocked:
+            return reject("APPOINTMENT_REQUIRED", blocked)
     if action in village_life.PRODUCTION:
-        job = resident.job
-        if action == "village_cook_fish" and job and "hospitality" in resident.skills:
-            job = job.model_copy(update={"inputs": {"fish": 1}})
-        if action in village_services.JOBS and job:
-            skill, resource, equipment = village_services.JOBS[action]
-            if skill not in resident.skills:
-                return reject("CAPABILITY_REQUIRED", "This gathering job requires your actual occupation.")
-            job = job.model_copy(update={"inputs": {}, "outputs": {resource: 2}, "equipment": equipment,
-                                         "interruptible": True, "duration": 5, "batch_size": 1})
-        if job is None or world.actor.location_id != job.location:
-            return reject("WRONG_WORKPLACE", "Go to your own workplace first.")
-        if any(skill not in world.actor.body.capabilities for skill in resident.skills):
-            return reject("CAPABILITY_REQUIRED", "Your assigned body lacks your occupation's skills.")
-        if job.equipment:
-            blocked = handling.use_reason(world, [job.equipment])
-            if blocked:
-                return reject("BODY_HANDLING_REQUIRED", blocked)
-        if not config.daily_life and not 360 <= state.minute % 1440 < 1140:
-            return reject("OUTSIDE_WORK_HOURS", "Ordinary production runs from 06:00 to 19:00.")
-        if state.minute < person.next_work:
-            return reject("WORK_COOLDOWN", f"Your next batch is ready at {village.clock_time(person.next_work)}.")
-        if job.equipment and world.state.entities[job.equipment].broken:
-            return reject("EQUIPMENT_BROKEN", "The equipment needs a physical repair.")
+        blocked = production_ready(world, action)
+        if blocked:
+            return reject(*blocked)
+        job = production_job(world, action)
+        if job is None:
+            raise ValueError("Validated production has no job")
         stock = state.stocks.setdefault(job.location, {})
-        if config.expanded_rules and rid == config.helper and world.state.entities["work-horse"].location != job.location:
-            return reject("HORSE_NOT_HERE", "The working horse must actually be at the stable to be fed.")
-        if any(stock.get(resource, 0) < amount for resource, amount in job.inputs.items()):
-            return reject("STOCK_SHORTAGE", "Your workplace lacks the required input stock.")
         batches = min(job.batch_size, min((stock.get(resource, 0) // amount
                                            for resource, amount in job.inputs.items()), default=1))
+        if state.economy is not None:
+            from npc_sim import village_economy
+            batches = min(batches, village_economy.production_batch_limit(world, action))
+            if batches <= 0:
+                return reject("DEMAND_MET", "Usable stock and committed production already cover demand.")
         inputs = {resource: amount * batches for resource, amount in job.inputs.items()}
         outputs = {resource: amount * batches for resource, amount in job.outputs.items()}
         for resource, amount in inputs.items():
@@ -357,11 +422,11 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                 raise ValueError("Committed work requires persistent daily-life state")
             person.life.work = VillageCommittedWork(
                 location=job.location, finishes_at=state.minute + job.duration,
-                outputs=outputs, equipment=job.equipment)
+                outputs=outputs, equipment=job.equipment, ingredients=list(job.inputs))
             return done("BATCH_STARTED", f"Started a non-interruptible batch, finishing at "
                         f"{village.clock_time(person.life.work.finishes_at)}; consumed {inputs}.")
         for resource, amount in outputs.items():
-            village_goods.put(world, job.location, resource, amount)
+            village_goods.put(world, job.location, resource, amount, ingredients=list(job.inputs))
         contribute()
         return done("WORK_COMPLETED", f"Consumed {inputs}; produced {outputs}.")
     if action in {"village_load", "village_deliver"}:
@@ -523,13 +588,19 @@ def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
                     world.state.entities["work-horse"].location = world.actor.location_id
         if action == "village_project":
             minutes *= village_life.cooldown_factor(world, world.actor_id)
+        if action == "village_wait_event":
+            minutes = max(5, person.available_at - state.minute)
         person.available_at = state.minute + minutes
+        until = village_extensions.blocked_until(world, world.actor_id)
+        if until is not None:
+            person.available_at = max(person.available_at, until)
         if person.life and person.life.sleeping and person.life.sleep_until is not None:
             person.available_at = person.life.sleep_until
         if person.life and person.life.work:
             person.available_at = person.life.work.finishes_at
     else:
         village.advance(world, minutes)
+    village_extensions.record_action(world, action, args)
     return minutes
 
 
@@ -553,7 +624,8 @@ def evaluate_goal(world: "World") -> dict[str, Any]:
             for rid, resident in config.residents.items()
         }
         meal_checks = {
-            rid: bool(person.life and (meal := person.life.meals.get(f"{meal_day}:daily"))
+            rid: bool(person.life
+                      and (meal := person.life.meals.get(f"{meal_day}:daily")) is not None
                       and meal.status == "eaten")
             for rid, person in state.residents.items()
         }
@@ -566,7 +638,16 @@ def evaluate_goal(world: "World") -> dict[str, Any]:
                                for person in state.residents.values()),
         )
         evidence.update(completion_scope="full_village_day", meal_day=meal_day,
-                        residents_home=home_checks, residents_fed=meal_checks)
+                        residents_home=home_checks, residents_fed=meal_checks,
+                        daily_requirements_recoverable=village_extensions.policy(world).demand_led_completion)
+        if state.livestock and state.livestock.config.enabled and 0 <= state.livestock.started_day <= meal_day:
+            care = {operation: any(chunk.operation == operation and chunk.status == "completed"
+                                   and chunk.start // 1440 == meal_day for chunk in state.livestock.chunks)
+                    for operation in ["cow", "hens"]}
+            checks["livestock_daily_care"] = all(care.values())
+            from npc_sim import village_livestock
+            checks["livestock_home"] = village_livestock._animals(world, "cow") and village_livestock._animals(world, "hens")
+            evidence["livestock_care"] = care
     if config.expanded_rules and config.daily_life:
         actions = {event.action for event in state.events}
         horse_home = world.scenario.entities["work-horse"].location
@@ -584,6 +665,22 @@ def evaluate_goal(world: "World") -> dict[str, Any]:
             tea_used=any(person.life is not None and person.life.tea_day >= config.start_minute // 1440
                          for person in state.residents.values()),
         )
+        if not village_extensions.policy(world).require_tea_use:
+            checks.pop("tea_used")
+        if not village_extensions.policy(world).require_manure_use:
+            checks.pop("manure_used")
+        if state.economy is not None and village_extensions.policy(world).demand_led_completion:
+            village_extensions.refresh(world)
+            if state.dashboard is None:
+                raise ValueError("Demand-led completion requires a current economy dashboard")
+            reserves = [product for product in state.dashboard.products if product.reserve > 0
+                        and config.spoil_after.get(product.product, 4320) >= 4320]
+            for key in ("hay_replenished", "herbs_replenished", "logs_replenished"):
+                checks.pop(key)
+            checks["resource_reserves_ready"] = bool(reserves) and all(
+                product.usable >= product.reserve for product in reserves)
+            evidence["reserve_shortages"] = [
+                product.model_dump() for product in reserves if product.usable < product.reserve]
         evidence["animals_home"] = {"work-horse": {
             "location": world.state.entities["work-horse"].location, "home": horse_home,
             "hitched": state.wagon.hitched if state.wagon else None, "leader": state.horse_leader,

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "test": "node --test tests\\story.test.ts tests\\world-view.test.ts tests\\bakery-view.test.ts tests\\agent-profiles.test.ts tests\\evidence.test.ts tests\\view-mode.test.ts tests\\village-view.test.ts",
+    "test": "node --test tests\\story.test.ts tests\\world-view.test.ts tests\\bakery-view.test.ts tests\\agent-profiles.test.ts tests\\evidence.test.ts tests\\view-mode.test.ts tests\\village-view.test.ts tests\\town-map.test.ts",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

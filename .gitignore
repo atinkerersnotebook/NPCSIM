@@ -5,4 +5,5 @@ __pycache__/
 .pytest_cache/
 data/runs/
 data/worlds/
+data/saves/
 *.tmp
