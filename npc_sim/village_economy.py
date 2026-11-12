@@ -17,7 +17,9 @@ if TYPE_CHECKING:
 VERBS = {"village_plan_supplies", "village_propose_order", "village_accept_order",
          "village_reject_order", "village_defer_order", "village_cancel_order",
          "village_return_cargo"}
-ACTIVE = {"proposed", "accepted", "deferred"}
+ACTIVE = {"proposed", "accepted", "accepted_planned", "in_production", "ready_to_collect",
+          "in_transit", "blocked", "deferred"}
+COMMITTED = {"accepted", "accepted_planned", "in_production", "ready_to_collect", "in_transit"}
 
 
 def example_config(scenario: Any) -> dict[str, Any]:
@@ -247,9 +249,12 @@ def protected_quantity(world: "World", location: str, product: str) -> int:
     state = _state(world)
     if config(world) is None or state is None:
         return 0
-    return policy_reserve(world, location, product) + sum(
+    transfers = (sum(max(0, item.quantity - item.loaded) for item in state_parent.transfers.values()
+                     if item.status == "authorized" and item.source_site == location and item.good == product)
+                 if (state_parent := world.state.village.communication) else 0)
+    return policy_reserve(world, location, product) + transfers + sum(
         order.loadable for order in state.orders.values()
-        if order.status == "accepted" and order.source == location and order.product == product)
+        if order.status in COMMITTED and order.source == location and order.product == product)
 
 
 def policy_reserve(world: "World", location: str, product: str) -> int:
@@ -268,7 +273,10 @@ def _allocated_stock(world: "World", location: str, product: str,
     else:
         buckets = [{"quantity": state.stocks.get(location, {}).get(product, 0),
                     "available_at": state.minute, "expires_at": None, "confirmed": False}]
-    reserve = policy_reserve(world, location, product)
+    transfers = (sum(max(0, item.quantity - item.loaded) for item in state.communication.transfers.values()
+                     if item.status == "authorized" and item.source_site == location and item.good == product)
+                 if state.communication else 0)
+    reserve = policy_reserve(world, location, product) + transfers
     for bucket in sorted(buckets, key=lambda item: (
             item["expires_at"] if item["expires_at"] is not None else float("inf")), reverse=True):
         held = min(reserve, bucket["quantity"])
@@ -285,7 +293,7 @@ def _allocated_stock(world: "World", location: str, product: str,
                  and person.life.work.location == location and product in person.life.work.outputs]
     if economy:
         orders = (order for order in economy.orders.values()
-                  if order.status == "accepted" and order.id != excluding
+                  if order.status in COMMITTED and order.id != excluding
                   and order.source == location and order.product == product)
         for order in sorted(orders, key=lambda item: (item.required_fresh_until, item.deadline, item.id)):
             cutoff = max(state.minute, order.required_fresh_until)
@@ -342,8 +350,140 @@ def order_feasibility(world: "World", order: VillageSupplierOrder) -> tuple[bool
                    "after real production is scheduled.")
 
 
+def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[str, int], str]:
+    """Return reserved input quantities and capacity only when a real slot can meet the due time."""
+    base, state = village.context(world)
+    resident = base.residents[order.supplier]
+    from npc_sim import village_life, village_research, village_services
+    capacity = village_services.foot_capacity(world, order.supplier)
+    approach = village.route(world, village.resident_location(world, order.supplier), order.source)
+    delivery = village.route(world, order.source, order.destination)
+    if capacity < 1 or approach is None or delivery is None:
+        return {}, "No real carrying capacity or delivery route"
+    trips = ceil(order.loadable / capacity)
+    transport = len(approach) * 5 + trips * (len(delivery) * 5 + 10) + (trips - 1) * len(delivery) * 5
+    stock = available_for_order(world, order.source, order.product, order.required_fresh_until,
+                                excluding=order.id)
+    missing = max(0, order.loadable - stock)
+    if missing:
+        reserve_deficit = max(0, policy_reserve(world, order.source, order.product)
+                              - usable_stock(world, order.source, order.product, state.minute))
+        missing += reserve_deficit
+    if not missing:
+        return {}, ""
+    shelf = village_research.shelf_life(world, order.product)
+    deadline = order.deadline - transport
+    latest_start = deadline
+    earliest = max(state.minute, state.residents[order.supplier].next_work)
+    if shelf:
+        earliest = max(earliest, order.required_fresh_until - shelf + 1)
+    closing = state.minute // 1440 * 1440 + min(
+        village_life.production_closing_minute(world, order.supplier), resident.bed_minute)
+    pending = [other for other in state.economy.orders.values() if other.id != order.id
+               and other.status in COMMITTED and other.supplier == order.supplier
+               and other.production_plan and other.loadable]
+    job = resident.job
+    from npc_sim import village_firewood
+    if order.product == "firewood" and village_firewood.enabled(world):
+        dynamic = village_firewood.production_job(world)
+        if dynamic and order.supplier == state.firewood.config.supplier:
+            job = dynamic
+    if job and order.product in job.outputs and order.source == resident.work:
+        if job.equipment and (world.state.entities[job.equipment].broken or world.state.entities[job.equipment].hidden):
+            return {}, "Production equipment is unavailable"
+        if job.equipment and (world.state.entities[job.equipment].location != job.location
+                              and job.equipment not in world.state.actors[order.supplier].inventory):
+            return {}, "Production equipment cannot be reached at the workplace"
+        if order.product == "firewood" and world.actor_id == order.supplier and village_firewood.production_potential(world, deadline) < missing:
+            return {}, "Insufficient timed felling and splitting capacity before delivery"
+        batches = ceil(missing / job.outputs[order.product])
+        interval = max(5, job.interval, job.duration) * village_life.cooldown_factor(world, order.supplier)
+        earliest = max(earliest, max((other.production_plan.get("finish", 0) for other in pending), default=0))
+        finish = earliest + batches * interval
+        if finish > min(latest_start, closing):
+            return {}, "No free production slot before the deadline and closing time"
+        inputs = {}
+        gather_needed = 0
+        for product, amount in job.inputs.items():
+            required = batches * amount
+            reserved = sum(other.production_plan.get(f"input:{product}", 0) for other in pending
+                           if other.source == order.source)
+            available_input = available_for_order(world, order.source, product, finish) - reserved
+            if available_input < required and product == "logs" and order.product == "firewood":
+                gathering = resident.job.interval * village_life.cooldown_factor(world, order.supplier)
+                needed_logs = required - max(0, available_input)
+                gather_needed += needed_logs
+                extra_time = ceil(needed_logs / 2) * gathering
+                finish += extra_time
+                if finish > min(latest_start, closing):
+                    return {}, "Insufficient time to fell logs and split fuel before delivery"
+            elif available_input < required:
+                return {}, f"Insufficient uncommitted {product} inputs above reserves"
+            inputs[f"input:{product}"] = required
+        return {"finish": finish, "output": batches * job.outputs[order.product],
+                "gather:logs": gather_needed, **inputs}, ""
+    from npc_sim import village_firewood
+    if (order.product == "firewood" and village_firewood.enabled(world)
+            and order.supplier == state.firewood.config.supplier
+            and order.source == resident.work):
+        fuel_job = village_firewood.production_job(world)
+        axe = world.state.entities.get(village_firewood.AXE)
+        if (fuel_job is None or axe is None or axe.broken or axe.hidden
+                or (axe.location != order.source and village_firewood.AXE not in world.actor.inventory)):
+            return {}, "The real wood axe and fuel production site are unavailable"
+        outstanding = sum(other.production_plan.get("output", 0) for other in pending)
+        capacity = village_firewood.capacity_available(world, order.source)
+        if capacity is not None and missing + outstanding > capacity:
+            return {}, "Fuel storage cannot hold the committed production"
+        start = max(earliest, max((other.production_plan.get("finish", 0) for other in pending), default=0))
+        for finish in range(start + 5, min(latest_start, closing) + 1, 5):
+            if village_firewood.production_potential(world, finish) >= missing + outstanding:
+                logs = available_for_order(world, order.source, "logs", finish)
+                reserved = sum(other.production_plan.get("input:logs", 0) for other in pending)
+                batches = ceil(missing / fuel_job.outputs["firewood"])
+                return {"finish": finish, "output": missing,
+                        "input:logs": min(batches, max(0, logs - reserved))}, ""
+        return {}, "No feasible felling and splitting capacity before the delivery deadline"
+    livestock = state.livestock
+    if (livestock and livestock.config.enabled and order.supplier == livestock.config.keeper
+            and order.source == "farm" and order.product in {"milk", "eggs"}):
+        from npc_sim import village_livestock
+        care = livestock.cow if order.product == "milk" else livestock.hens
+        operation = "milk" if order.product == "milk" else "eggs"
+        tool_id = village_livestock.PAIL if operation == "milk" else village_livestock.BASKET
+        tool = world.state.entities.get(tool_id)
+        day = state.minute // 1440
+        if (care.day != day or not (care.fed and care.watered and care.cleaned)
+                or not village_livestock._animals(world, operation)
+                or tool is None or tool.hidden or tool.broken
+                or (tool.location != "farm" and tool_id not in world.state.actors[order.supplier].inventory)):
+            return {}, "Animal care, real animals and collection equipment are required"
+        reserved_output = sum(other.production_plan.get("output", 0) for other in pending
+                              if other.product == order.product)
+        if missing + reserved_output > (6 if operation == "milk" else livestock.config.hens):
+            return {}, "Animal collection capacity is insufficient"
+        duration = (15 if operation == "milk" else 10) * village_life.cooldown_factor(world, order.supplier)
+        for session, start, end in (("morning", day * 1440 + 480, day * 1440 + 780),
+                                    ("afternoon", day * 1440 + 780, day * 1440 + 1080)):
+            at = max(earliest, start)
+            previous = next((chunk for chunk in reversed(livestock.chunks) if chunk.operation == "milk"
+                             and chunk.start // 1440 == day), None)
+            if previous and operation == "milk":
+                at = max(at, previous.start + 240)
+            if ((operation == "milk" and session in care.milk_sessions)
+                    or (operation == "eggs" and care.eggs)
+                    or any(other.production_plan.get("session") == (1 if session == "morning" else 2)
+                           for other in pending)):
+                continue
+            if at + duration <= min(end, latest_start, closing):
+                return {"finish": at + duration, "output": missing,
+                        "session": 1 if session == "morning" else 2}, ""
+        return {}, "No free animal collection session before the deadline"
+    return {}, "Supplier has no feasible production recipe for this product"
+
+
 def loadable_for_order(world: "World", order: VillageSupplierOrder) -> int:
-    if order.status != "accepted" or world.state.village.minute > order.deadline:
+    if order.status not in COMMITTED or world.state.village.minute > order.deadline:
         return 0
     return min(order.loadable, available_for_order(
         world, order.source, order.product, order.required_fresh_until, excluding=order.id))
@@ -358,7 +498,7 @@ def load_blocker(world: "World", source: str, destination: str,
     for product, amount in goods.items():
         remaining = amount
         for order in sorted(economy.orders.values(), key=lambda item: (item.deadline, item.id)):
-            if (order.status != "accepted" or order.source != source or order.destination != destination
+            if (order.status not in COMMITTED or order.source != source or order.destination != destination
                     or order.product != product or order.loadable <= 0):
                 continue
             from npc_sim import village_communication
@@ -442,7 +582,7 @@ def _supply_buckets(world: "World", location: str, product: str,
             if order.status in ACTIVE and order.destination == location and order.product == product:
                 buckets.append({"quantity": order.remaining, "available_at": order.deadline,
                                 "expires_at": order.required_fresh_until + 1,
-                                "confirmed": order.status == "accepted"})
+                                "confirmed": order.status in COMMITTED})
     return buckets
 
 
@@ -534,7 +674,7 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
     job = base.residents[buyer].job
     if job and job.inputs and buyer != policy.innkeeper and economy:
         accepted = [order for order in (_personal_orders(world) if personal else economy.orders.values())
-                    if order.status == "accepted" and order.supplier == buyer and order.loadable]
+                    if order.status in COMMITTED and order.supplier == buyer and order.loadable]
         if accepted:
             batches = max((ceil(max(0, sum(order.loadable for order in accepted if order.product == product)
                                     - usable_stock(world, destination, product,
@@ -746,7 +886,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         if blocked:
             return "REJECTED", blocked[0], blocked[1], None
     if action == "village_accept_order":
-        if order.status == "accepted":
+        if order.status in COMMITTED:
             return "APPLIED", "ORDER_ALREADY_ACCEPTED", "Acceptance is already recorded.", None
         if order.status not in {"proposed", "deferred"}:
             return "REJECTED", "ORDER_CLOSED", "The order is already closed.", None
@@ -760,10 +900,15 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             return "REJECTED", "INSUFFICIENT_COINS", "Buyer cannot fund goods and delivery fees.", None
         feasible, reason = order_feasibility(world, order)
         if not feasible:
-            order.status, order.reason = "deferred", "SUPPLY_NOT_READY"
-            village.event(world, rid, "order_deferred", order.id, reason)
-            return "REJECTED", "SUPPLY_NOT_READY", f"{order.id} not firmly accepted: {reason}", None
-        order.status, order.reason = "accepted", None
+            plan, planned_reason = production_plan(world, order)
+            if plan:
+                order.status, order.reason, order.production_plan = "accepted_planned", None, plan
+            else:
+                order.status, order.reason = "deferred", "SUPPLY_NOT_READY"
+                village.event(world, rid, "order_deferred", order.id, f"{reason} {planned_reason}")
+                return "REJECTED", "SUPPLY_NOT_READY", f"{order.id} not firmly accepted: {reason} {planned_reason}", None
+        else:
+            order.status, order.reason = "accepted", None
     elif action == "village_defer_order":
         until = args.get("until")
         if (order.status not in {"proposed", "deferred"} or isinstance(until, bool)
@@ -773,7 +918,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     else:
         if order.status not in ACTIVE:
             return "REJECTED", "ORDER_CLOSED", "The order is already closed.", None
-        if action == "village_reject_order" and order.status == "accepted":
+        if action == "village_reject_order" and order.status in COMMITTED:
             return "REJECTED", "ORDER_COMMITTED", "An accepted order must be cancelled by its buyer.", None
         order.status = "cancelled" if action == "village_cancel_order" else "rejected"
         order.reason = str(args.get("reason", order.status))
@@ -787,7 +932,7 @@ def advance(world: "World") -> None:
         return
     for order in economy.orders.values():
         if order.status in ACTIVE and world.state.village.minute > order.deadline:
-            order.status, order.reason = "failed", "MISSED_DEADLINE"
+            order.status, order.reason, order.production_plan = "failed", "MISSED_DEADLINE", {}
             from npc_sim import village_communication
             if village_communication.enabled(world) and order.coordination_notice_id:
                 village_communication.sync_order(world, order, "notice_expired", order.destination)
@@ -795,6 +940,20 @@ def advance(world: "World") -> None:
                 village.event(world, order.buyer, "order_failed", order.id,
                               f"Delivery deadline missed; {order.remaining} {order.product} outstanding.",
                               order.destination)
+        elif order.status in {"accepted_planned", "in_production"}:
+            if loadable_for_order(world, order) >= order.loadable:
+                order.status, order.production_plan = "ready_to_collect", {}
+            elif (order.production_plan.get("finish", 0) < world.state.village.minute
+                  and not any(person.life and person.life.work and person.life.work.location == order.source
+                              and order.product in person.life.work.outputs
+                              for person in world.state.village.residents.values())):
+                order.status, order.reason, order.production_plan = "blocked", "Planned production did not complete", {}
+                from npc_sim import village_communication
+                village_communication.sync_order(world, order, "commitment_blocked", order.source)
+            elif any(person.life and person.life.work and person.life.work.location == order.source
+                     and order.product in person.life.work.outputs
+                     for person in world.state.village.residents.values()):
+                order.status = "in_production"
 
 
 def _return_cargo(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]:
@@ -851,7 +1010,7 @@ def production_targets(world: "World", location: str, *, personal: bool = False)
     if firewood_source:
         targets["firewood"] = max(targets["firewood"], village_firewood.source_reserve(world))
     for order in _personal_orders(world) if personal else economy.orders.values():
-        if order.status == "accepted" and order.source == location:
+        if order.status in COMMITTED and order.source == location:
             targets[order.product] = targets.get(order.product, 0) + order.loadable
     if firewood_source:
         targets["logs"] = village_firewood.log_target(world, location, targets)
@@ -923,7 +1082,7 @@ def production_batch_limit(world: "World", action: str, *, personal: bool = Fals
                         if person.life and person.life.work and person.life.work.location == location)
         short = max(0, targets[product] - stock - committed)
         orders = sorted((order for order in (_personal_orders(world) if personal else economy.orders.values())
-                         if order.status == "accepted" and order.source == location
+                         if order.status in COMMITTED and order.source == location
                          and order.product == product and order.loadable),
                         key=lambda order: order.required_fresh_until) if economy else []
         if orders and product != "meals":
@@ -966,7 +1125,7 @@ def production_blocker(world: "World", action: str, *, personal: bool = False) -
         return "DEMAND_MET", "Fresh stock and committed production cover accepted demand and reserve targets."
     reserves = policy.reserve_targets.get(location, {})
     economy = _state(world)
-    accepted = any(order.status == "accepted" and order.source == location and order.product in outputs
+    accepted = any(order.status in COMMITTED and order.source == location and order.product in outputs
                    and order.loadable > 0 for order in (_personal_orders(world) if personal else economy.orders.values())) if economy else False
     for product, amount in inputs.items():
         if (product in reserves and not accepted and usable_stock(world, location, product,
@@ -975,7 +1134,7 @@ def production_blocker(world: "World", action: str, *, personal: bool = False) -
     if economy:
         for product in outputs:
             shelf = world.scenario.village.spoil_after.get(product)
-            orders = [order for order in (_personal_orders(world) if personal else economy.orders.values()) if order.status == "accepted"
+            orders = [order for order in (_personal_orders(world) if personal else economy.orders.values()) if order.status in COMMITTED
                       and order.source == location and order.product == product and order.loadable]
             if shelf and orders and all(
                     world.state.village.minute + world.scenario.village.residents[world.actor_id].job.duration
@@ -996,7 +1155,7 @@ def delivery_runs(world: "World", carrier: str | None = None) -> list[dict[str, 
     location = village.resident_location(world, carrier)
     runs: dict[str, dict[str, Any]] = {}
     for order in sorted(economy.orders.values(), key=lambda order: (order.deadline, order.id)):
-        if order.status != "accepted" or order.source != location or order.loadable <= 0:
+        if order.status not in COMMITTED or order.source != location or order.loadable <= 0:
             continue
         run = runs.setdefault(order.destination, {"destination": order.destination,
                               "goods": {}, "orders": {}, "capacity": max(0, capacity),

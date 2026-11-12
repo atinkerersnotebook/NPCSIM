@@ -14,6 +14,11 @@ def put(world: "World", location: str, resource: str, quantity: int,
     movement = kind or ("delivered" if lots is not None else "produced")
     if quantity <= 0:
         raise ValueError("Stock additions must be positive")
+    if resource == "firewood":
+        from npc_sim import village_firewood
+        available = village_firewood.capacity_available(world, location)
+        if available is not None and quantity > available:
+            raise ValueError("FIREWOOD_STORAGE_FULL: destination fuel stock exceeds configured capacity")
     if config.expanded_rules:
         if lots is None:
             from npc_sim import village_research
@@ -73,12 +78,18 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
             and world.state.entities["iron-trader"].location == source):
         sellers = ["iron-trader"]
     if state.livestock and state.economy and set(goods) <= {"plant-scraps", "compost-material", "compost"}:
-        orders = [order for order in state.economy.orders.values() if order.status == "accepted"
+        orders = [order for order in state.economy.orders.values() if order.status in village_economy.COMMITTED
                   and order.source == source and order.destination == destination and order.product in goods]
         if orders:
             sellers = sorted({order.supplier for order in orders})
             buyers = sorted({order.buyer for order in orders})
-    if source == destination or len(sellers) != 1 or len(buyers) != 1:
+    from npc_sim import village_communication
+    transfer = next((item for item in state.communication.transfers.values()
+                     if item.status == "authorized" and item.source_site == source
+                     and item.destination_site == destination and goods == {item.good: item.quantity - item.loaded}
+                     and carrier in item.allowed_carriers and item.material_owner == carrier
+                     and state.minute <= item.due_time), None) if village_communication.enabled(world) else None
+    if transfer is None and (source == destination or len(sellers) != 1 or len(buyers) != 1):
         return "Choose different workplaces with identifiable buyers and sellers."
     from npc_sim import village_research
     if not goods or any(amount <= 0 or resource not in village_research.prices(world) for resource, amount in goods.items()):
@@ -88,15 +99,26 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
     stock = state.stocks.get(source, {})
     if any(stock.get(resource, 0) < amount for resource, amount in goods.items()):
         return "There is not enough real source stock; nothing was loaded."
+    if "firewood" in goods:
+        from npc_sim import village_firewood
+        available = village_firewood.capacity_available(world, destination)
+        inbound = sum(item.quantity for item in shipments if item.resource == "firewood"
+                      and item.destination == destination)
+        if available is not None and goods["firewood"] + inbound > available:
+            return "FIREWOOD_STORAGE_FULL: destination fuel stock exceeds configured capacity."
     economy = getattr(state, "economy", None)
     from npc_sim import village_communication
     policy = village_economy.config(world)
     planned = []
-    if policy and economy:
+    if transfer is not None:
+        if stock.get(transfer.good, 0) - transfer.quantity < village_economy.policy_reserve(world, source, transfer.good):
+            return "RAW_MATERIAL_RESERVE: protected workshop stock cannot be released for this repair."
+        planned = [(transfer.good, transfer.quantity, None)]
+    elif policy and economy:
         for resource, amount in goods.items():
             remaining = amount
             for order in sorted(economy.orders.values(), key=lambda order: (order.deadline, order.id)):
-                if (order.status != "accepted" or order.source != source or order.destination != destination
+                if (order.status not in village_economy.COMMITTED or order.source != source or order.destination != destination
                         or order.product != resource or order.loadable <= 0):
                     continue
                 if not village_communication.can_use_order(world, order):
@@ -147,18 +169,27 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
         contract = next((route for route in config.deliveries if route.source == source
                          and route.destination == destination and route.resource == resource), None)
         values = dict(
-            resource=resource, quantity=amount, seller=order.supplier if order else contract.seller if contract else sellers[0],
-            buyer=order.buyer if order else contract.buyer if contract else buyers[0], destination=destination,
+            resource=resource, quantity=amount,
+            seller=carrier if transfer else order.supplier if order else contract.seller if contract else sellers[0],
+            buyer=carrier if transfer else order.buyer if order else contract.buyer if contract else buyers[0],
+            destination=destination,
             price=order.price if order else contract.price if contract else village_economy.unit_price(world, resource),
             lots=take(world, source, resource, amount,
                       required_fresh_until=order.required_fresh_until if order else None,
                       kind="loaded", order_id=order.id if order else None))
+        if transfer:
+            values["owned_transfer"] = True
+            transfer.loaded += amount
+            transfer.status = "in_transit"
         if order:
             values["order_id"] = order.id
             order.in_transit += amount
         shipments.append(VillageShipment(**values))
         if order:
             village_communication.sync_order(world, order, "commitment_in_progress", source)
+    if "firewood" in goods:
+        from npc_sim import village_firewood
+        village_firewood.sync_delivery_plans(world, carrier)
     return None
 
 
@@ -168,20 +199,34 @@ def unload(world: "World", carrier: str, shipments: list[VillageShipment]) -> st
     deliveries = [item for item in shipments if item.destination == location]
     if not deliveries:
         return "No cargo is intended for this destination."
+    from npc_sim import village_firewood
+    available = village_firewood.capacity_available(world, location)
+    if available is not None and sum(item.quantity for item in deliveries
+                                     if item.resource == "firewood") > available:
+        return "FIREWOOD_STORAGE_FULL: destination fuel stock exceeds configured capacity."
     payments: dict[str, int] = {}
     economy = getattr(state, "economy", None)
     orders = []
     for item in deliveries:
         if item.owned_transfer:
-            if (state.mining is None or item.resource != "iron-ore" or item.order_id is not None
-                    or item.buyer != item.seller or item.buyer != carrier or carrier != state.mining.config.miner
-                    or item.destination != config.residents[config.smith].work):
-                return "OWNED_CARGO_MISMATCH: owned ore must belong to the assigned miner and be delivered to the forge."
+            from npc_sim import village_communication
+            repair = next((entry for entry in state.communication.transfers.values()
+                           if entry.status == "in_transit" and entry.good == item.resource
+                           and entry.destination_site == location and entry.material_owner == carrier
+                           and carrier in entry.allowed_carriers and entry.loaded - entry.delivered >= item.quantity),
+                          None) if village_communication.enabled(world) else None
+            ore = (state.mining is not None and item.resource == "iron-ore" and item.order_id is None
+                   and item.buyer == item.seller == carrier and carrier == state.mining.config.miner
+                   and item.destination == config.residents[config.smith].work)
+            if not (ore or repair and item.order_id is None and item.buyer == item.seller == carrier):
+                return "OWNED_CARGO_MISMATCH: owned material needs its approved physical transfer."
+            if repair and state.minute > repair.due_time:
+                return "TRANSFER_EXPIRED: the repair material authorization expired before unloading."
         order = economy.orders.get(getattr(item, "order_id", None)) if economy else None
         if getattr(item, "order_id", None) and order is None:
             return "UNKNOWN_ORDER: the shipment has no matching order."
         if order:
-            if order.status != "accepted" or state.minute > order.deadline:
+            if order.status not in village_economy.COMMITTED or state.minute > order.deadline:
                 return "ORDER_CLOSED: delivery is cancelled, failed, fulfilled or late; return its unpaid cargo."
             if (item.resource != order.product or item.buyer != order.buyer or item.seller != order.supplier
                     or item.destination != order.destination or item.price != order.price):
@@ -216,6 +261,13 @@ def unload(world: "World", carrier: str, shipments: list[VillageShipment]) -> st
         order = economy.orders.get(order_id) if economy else None
         put(world, location, item.resource, item.quantity, item.lots if config.expanded_rules else None,
             kind="delivered", order_id=order_id)
+        if item.owned_transfer and item.resource == "planks" and state.communication:
+            transfer = next(entry for entry in state.communication.transfers.values()
+                            if entry.status == "in_transit" and entry.material_owner == carrier
+                            and entry.good == item.resource and entry.destination_site == location)
+            transfer.delivered += item.quantity
+            if transfer.delivered == transfer.quantity:
+                transfer.status = "delivered"
         if order:
             order.in_transit -= item.quantity
             order.delivered_quantity += item.quantity
@@ -246,6 +298,9 @@ def unload(world: "World", carrier: str, shipments: list[VillageShipment]) -> st
                            and (not current.terms.private or rid in {
                                current.author, current.responder, *current.terms.recipients})])
     shipments[:] = [item for item in shipments if item.destination != location]
+    if any(item.resource == "firewood" for item in deliveries):
+        from npc_sim import village_firewood
+        village_firewood.sync_delivery_plans(world, carrier, destination=location)
     state.role_contributions[carrier] = state.role_contributions.get(carrier, 0) + 1
     village.event(world, carrier, "delivery_payment", location,
                   f"Buyer paid for the goods and {fee} coin delivery fee to {village.resident_name(world, carrier)}.",

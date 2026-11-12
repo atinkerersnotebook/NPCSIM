@@ -14,6 +14,7 @@ from npc_sim.village_communication_models import (
     NoticeVersion, PostNotice, ReadInbox, ReadNotices, ReplyNotice, TellNotice,
     UpdateNotice, VillageCommunicationConfig, VillageCommunicationState,
     SupplyIntent, MeetingIntent, RespondIntent, UpdateIntent, CheckMessagesIntent, ShareIntent,
+    TransferAuthorization,
 )
 
 if TYPE_CHECKING:
@@ -306,80 +307,6 @@ def _create_order(world: "World", notice: NoticeVersion) -> dict[str, Any]:
         raise ValueError("Only the named supplier can accept")
     _validate_terms(world, terms, notice.author)
     source = base.residents[supplier].work
-    approach = village.route(world, world.actor.location_id, source)
-    delivery = village.route(world, source, terms.destination)
-    if approach is None or delivery is None:
-        raise ValueError("There is no physical route for this supply")
-    from npc_sim import village_services
-    capacity = village_services.foot_capacity(world, supplier)
-    if capacity < 1:
-        raise ValueError("The supplier needs real free carrying capacity before accepting a delivery")
-    trips = (terms.quantity + capacity - 1) // capacity
-    transport_minutes = len(approach) * 5 + trips * (len(delivery) * 5 + 10) + (
-        trips - 1) * len(delivery) * 5
-    if village_state.minute + transport_minutes > terms.due_at:
-        raise ValueError("The deadline leaves no time for real collection, travel and unloading")
-    job = base.residents[supplier].job
-    produces = (job is not None and terms.subject in job.outputs) or (
-        village_economy.config(world).suppliers.get(terms.subject) == supplier)
-    stock = village_economy.usable_stock(world, source, terms.subject, terms.required_fresh_until)
-    protected = village_economy.protected_quantity(world, source, terms.subject)
-    potential = 0
-    from npc_sim import village_life
-    work_end = min(terms.due_at - transport_minutes,
-                   village_state.minute // 1440 * 1440 + village_life.production_closing_minute(world, supplier),
-                   village_state.minute // 1440 * 1440 + base.residents[supplier].bed_minute)
-    if produces and job and terms.subject in job.outputs:
-        from npc_sim import village_life, village_research
-        interval = max(5, job.interval, job.duration) * village_life.cooldown_factor(world, supplier)
-        start = max(village_state.minute, village_state.residents[supplier].next_work)
-        batches = max(0, (work_end - start) // interval)
-        for resource, amount in job.inputs.items():
-            available = village_economy.usable_stock(world, source, resource, terms.due_at)
-            reserved = village_economy.protected_quantity(world, source, resource)
-            batches = min(batches, max(0, available - reserved) // amount)
-        if job.equipment and world.state.entities[job.equipment].broken:
-            batches = 0
-        shelf = village_research.shelf_life(world, terms.subject)
-        if shelf is not None and work_end + shelf <= terms.required_fresh_until:
-            batches = 0
-        potential = batches * job.outputs[terms.subject]
-    from npc_sim import village_firewood
-    if terms.subject == "firewood" and village_firewood.enabled(world):
-        potential = max(potential, village_firewood.production_potential(world, work_end))
-    from npc_sim import village_services, village_life
-    gathering = next(((skill, tool) for skill, product, tool in village_services.JOBS.values()
-                      if product == terms.subject), None)
-    if gathering and gathering[0] in base.residents[supplier].skills:
-        tool = world.state.entities.get(gathering[1]) if gathering[1] else None
-        if gathering[1] is None or (tool is not None and not tool.broken and not tool.hidden):
-            interval = max(5, job.interval if job else 30) * village_life.cooldown_factor(world, supplier)
-            potential = max(potential, max(0, work_end - village_state.minute) // interval * 2)
-    livestock = village_state.livestock
-    if (livestock and livestock.config.enabled and supplier == livestock.config.keeper
-            and terms.subject in {"milk", "eggs"}):
-        from npc_sim import village_livestock
-        operation = "milk" if terms.subject == "milk" else "eggs"
-        care = livestock.cow if operation == "milk" else livestock.hens
-        duration = (15 if operation == "milk" else 10) * village_life.cooldown_factor(world, supplier)
-        clock = village_state.minute % 1440
-        session = "morning" if clock < 780 else "afternoon"
-        tool = world.state.entities.get(village_livestock.PAIL if operation == "milk" else village_livestock.BASKET)
-        prior = next((chunk for chunk in reversed(livestock.chunks) if chunk.operation == "milk"
-                      and chunk.start // 1440 == village_state.minute // 1440), None)
-        if (care.day == village_state.minute // 1440 and care.fed and care.watered and care.cleaned
-                and village_livestock._animals(world, operation)
-                and tool is not None and not tool.hidden and not tool.broken
-                and 480 <= clock and clock + duration <= (780 if session == "morning" and operation == "milk" else 1080)
-                and village_state.minute + duration <= work_end
-                and (operation != "milk" or (session not in care.milk_sessions
-                                             and (prior is None or village_state.minute >= prior.start + 240)))
-                and (operation != "eggs" or not care.eggs)):
-            potential = max(potential, 6 if operation == "milk" else livestock.config.hens)
-    if stock + potential - protected < terms.quantity:
-        raise ValueError("Uncommitted fresh stock cannot cover this supply without violating reserves")
-    # Production commitments can use a real supplier's capacity, not conjured inventory.
-    # Stock-only commitments must leave every configured reserve and prior promise intact.
     if any(order.buyer == notice.author and order.supplier == supplier
            and order.product == terms.subject and order.destination == terms.destination
            and order.status in village_economy.ACTIVE for order in state.orders.values()):
@@ -390,7 +317,19 @@ def _create_order(world: "World", notice: NoticeVersion) -> dict[str, Any]:
         product=terms.subject, quantity=terms.quantity,
         price=terms.unit_price, delivery_fee=terms.delivery_fee, deadline=terms.due_at,
         required_fresh_until=terms.required_fresh_until, created_at=village_state.minute,
-        status="accepted", coordination_notice_id=notice.id)
+        coordination_notice_id=notice.id)
+    stock = village_economy.available_for_order(world, source, order.product,
+                                                 order.required_fresh_until)
+    if stock >= order.quantity:
+        feasible, reason = village_economy.order_feasibility(world, order)
+        if not feasible:
+            raise ValueError(reason)
+        order.status = "accepted"
+    else:
+        plan, reason = village_economy.production_plan(world, order)
+        if not plan:
+            raise ValueError(f"Production plan declined: {reason}")
+        order.status, order.production_plan = "accepted_planned", plan
     state.orders[order.id] = order
     state.next_order += 1
     return {"linked_order_id": order.id, "order_snapshot": order.model_dump(mode="json")}
@@ -798,7 +737,45 @@ def can_use_order(world: "World", order: Any) -> bool:
     if not enabled(world) or not order.coordination_notice_id:
         return True
     knowledge = _state(world).knowledge.get(world.actor_id, {}).get(order.coordination_notice_id)
-    return bool(knowledge and knowledge.snapshot.order_snapshot.get("status") == "accepted")
+    return bool(knowledge and knowledge.snapshot.order_snapshot.get("status") in village_economy.COMMITTED)
+
+
+def authorize_repair_transfer(world: "World", job_id: str, *, due_time: int | None = None) -> TransferAuthorization:
+    """Authorize real workshop planks for an active mill repair, without a sale."""
+    base, state = village.context(world)
+    if not enabled(world) or job_id != "repair_mill" or state.repaired:
+        raise ValueError("An active approved mill repair is required")
+    crew, site = _project(world, job_id)
+    if world.actor_id not in crew or world.actor_id != base.carpenter:
+        raise ValueError("Only the repair's material owner may release a plank")
+    if not state.breakdown:
+        raise ValueError("The mill is not awaiting repair")
+    source = base.residents[base.carpenter].work
+    if village.route(world, source, site) is None:
+        raise ValueError("No physical route to the repair site")
+    key = f"repair:{job_id}:{source}:{site}:planks"
+    existing = _state(world).transfers.get(key)
+    if existing and existing.status not in {"finished", "cancelled"}:
+        return existing
+    available = village_economy.available_for_order(world, source, "planks", state.minute)
+    if available < 1:
+        raise ValueError("RAW_MATERIAL_RESERVE: no uncommitted workshop plank above protected reserves; procure or produce one")
+    authorization = TransferAuthorization(
+        job_id=job_id, source_site=source, destination_site=site, good="planks", quantity=1,
+        allowed_carriers=[base.carpenter], material_owner=base.carpenter,
+        stock_reservation_id=key, due_time=due_time or state.minute + 240)
+    _state(world).transfers[key] = authorization
+    village.event(world, world.actor_id, "transfer_authorized", key,
+                  "Reserved one real workshop plank for the approved mill repair", source)
+    return authorization
+
+
+def finish_repair_transfers(world: "World") -> None:
+    if not enabled(world) or not world.state.village.repaired:
+        return
+    for transfer in _state(world).transfers.values():
+        if transfer.job_id == "repair_mill" and transfer.status == "delivered":
+            transfer.status = "finished"
 
 
 def project_blocker(world: "World", project: str) -> str | None:
@@ -845,7 +822,7 @@ def sync_order(world: "World", order: Any, event: str, location: str) -> None:
               "cancelled" if order.status == "cancelled" else
               "expired" if order.status == "failed" else
               "rejected" if order.status == "rejected" else
-              "in_progress" if order.in_transit or order.delivered_quantity else "accepted")
+              "in_progress" if order.in_transit or order.delivered_quantity or order.status == "in_production" else "accepted")
     if order.status == "fulfilled":
         delivered = _new_version(world, notice, status="delivered", order_snapshot=order.model_dump(mode="json"))
         notice = delivered
@@ -869,6 +846,8 @@ def advance(world: "World") -> None:
         if notice.status in TERMINAL:
             continue
         if notice.appointment:
+            if village_state.repaired:
+                finish_repair_transfers(world)
             completed = village_state.well_dug if notice.terms.project == "dig_well" else village_state.repaired
             if completed:
                 value = _new_version(world, notice, status="completed", appointment=notice.appointment.model_copy(

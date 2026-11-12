@@ -79,6 +79,22 @@ class NoticeKnowledge(CommunicationModel):
     last_verified_at: Number | None = None
 
 
+class TransferAuthorization(CommunicationModel):
+    job_id: Text
+    source_site: Text
+    destination_site: Text
+    good: Text
+    quantity: Positive
+    allowed_carriers: list[Text]
+    material_owner: Text
+    stock_reservation_id: Text
+    due_time: Number
+    status: Literal["authorized", "in_transit", "delivered", "finished", "blocked", "cancelled"] = "authorized"
+    loaded: Number = 0
+    delivered: Number = 0
+    reason: str | None = None
+
+
 class VillageCommunicationState(CommunicationModel):
     config: VillageCommunicationConfig
     notices: dict[str, list[NoticeVersion]] = Field(default_factory=dict)
@@ -90,6 +106,7 @@ class VillageCommunicationState(CommunicationModel):
     failed_contacts: dict[str, str] = Field(default_factory=dict)
     failed_replies: dict[str, str] = Field(default_factory=dict)
     next_notice: Positive = 1
+    transfers: dict[str, TransferAuthorization] = Field(default_factory=dict)
 
 
 class Channel(CommunicationModel):

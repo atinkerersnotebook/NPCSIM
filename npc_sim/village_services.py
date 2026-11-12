@@ -44,6 +44,13 @@ def foot_load(world: "World", rid: str, goods: dict[str, int], destination: str)
     _, state = village.context(world)
     person = state.residents[rid]
     reason = village_economy.load_blocker(world, village.resident_location(world, rid), destination, goods)
+    if reason is None and destination == "watermill" and goods == {"planks": 1}:
+        from npc_sim import village_communication
+        if village_communication.enabled(world):
+            try:
+                village_communication.authorize_repair_transfer(world, "repair_mill")
+            except ValueError as exc:
+                reason = str(exc)
     if reason is None:
         reason = village_goods.load(world, rid, goods, destination, person.shipments, foot_capacity(world, rid))
     if reason is None:

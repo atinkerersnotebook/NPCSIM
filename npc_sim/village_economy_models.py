@@ -84,8 +84,10 @@ class VillageSupplierOrder(EconomyModel):
     deadline: Minute
     required_fresh_until: Minute
     created_at: Minute
-    status: Literal["proposed", "accepted", "deferred", "rejected", "fulfilled",
-                    "cancelled", "failed"] = "proposed"
+    status: Literal["proposed", "accepted", "accepted_planned", "in_production",
+                    "ready_to_collect", "in_transit", "blocked", "expired", "declined",
+                    "deferred", "rejected", "fulfilled", "cancelled", "failed"] = "proposed"
+    production_plan: dict[str, int] = Field(default_factory=dict)
     delivered_quantity: Quantity = 0
     in_transit: Quantity = 0
     returned_quantity: Quantity = 0

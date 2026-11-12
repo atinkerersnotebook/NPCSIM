@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from npc_sim import village, village_ai, village_extensions, village_life, village_economy
 from npc_sim.models import (VillageBlockedAction, VillageEvent, VillageIdleWait,
-                            VillageLocationTransition, VillageSupplierSearch, VillageSupplyNeed)
+                            VillageLocationTransition, VillageRouteGoal, VillageSupplierSearch, VillageSupplyNeed)
 
 if TYPE_CHECKING:
     from npc_sim.world import World
@@ -57,6 +57,8 @@ def _context_values(world: "World") -> dict[str, Any]:
         "beliefs": {key: belief.model_dump(exclude={"learned_at"}) for key, belief in person.beliefs.items()},
         "known_notices": {key: memory.snapshot.model_dump() for key, memory in known.items()},
         "supply_needs": {key: need.model_dump() for key, need in person.fallback.supply_needs.items()},
+        "route_goal": person.fallback.route_goal.model_dump(exclude={"attempted_edges", "last_progress_at", "retry_after"})
+        if person.fallback.route_goal else None,
         "supplier_searches": repeated_supplier_searches(world),
         "next_work_ready": state.minute >= person.next_work,
         "day": state.minute // 1440,
@@ -156,9 +158,77 @@ def _supplier_evidence(world: "World", need: VillageSupplyNeed) -> str:
     })
 
 
+def _route_evidence(world: "World") -> str:
+    _, state = village.context(world)
+    person = state.residents[world.actor_id]
+    known = state.communication.knowledge.get(world.actor_id, {}) if state.communication else {}
+    return _digest({
+        "inventory": world.actor.inventory, "cargo": person.cargo,
+        "messages": world.actor.messages,
+        "notices": {key: memory.snapshot.model_dump() for key, memory in known.items()},
+        "needs": {key: need.model_dump(include={"status", "quantity_needed", "last_material_change"})
+                  for key, need in person.fallback.supply_needs.items()},
+    })
+
+
+def plan_optional_route(world: "World", goal_id: str, target: str, reason: str) -> None:
+    """Record an explicitly optional meeting or information-search destination."""
+    _, state = village.context(world)
+    fallback = state.residents[world.actor_id].fallback
+    if fallback.route_goal and fallback.route_goal.goal_id == goal_id:
+        return
+    fallback.route_goal = VillageRouteGoal(
+        goal_id=goal_id, target_location=target, reason=reason,
+        evidence_timestamp=state.minute, last_known_target_location=target,
+        last_progress_at=state.minute, blocked_reason="", retry_after=state.minute,
+        wake_on=WAKE_ON.copy(), evidence=_route_evidence(world))
+
+
+def route_blocker(world: "World", args: dict[str, Any]) -> tuple[str, str] | None:
+    _, state = village.context(world)
+    goal = state.residents[world.actor_id].fallback.route_goal
+    door = world.state.entities.get(args.get("target"))
+    if goal is None or door is None or door.kind != "door":
+        return None
+    current = world.actor.location_id
+    destination = door.destination if door.location == current else door.location if door.destination == current else None
+    if destination is None:
+        return None
+    if _route_evidence(world) != goal.evidence:
+        return None
+    known = state.residents[world.actor_id].known_routes
+    path = village.route(world, current, goal.target_location, known_routes=known)
+    if path and destination == path[0] and goal.blocked_reason:
+        return "ROUTE_GOAL_DEFERRED", "This optional search has no new personal evidence; wait for an encounter or appointment."
+    if path and destination == path[0] and f"{destination}->{current}" in goal.attempted_edges:
+        return "ROUTE_GOAL_DEFERRED", "Repeated travel for this optional search has no new personal evidence."
+    return None
+
+
 def record_location_transition(world: "World", origin: str, destination: str) -> None:
     config, state = village.context(world)
     fallback = state.residents[world.actor_id].fallback
+    goal = fallback.route_goal
+    if goal and _route_evidence(world) != goal.evidence:
+        goal.blocked_reason = ""
+        goal.attempted_edges.clear()
+        goal.evidence = _route_evidence(world)
+        goal.evidence_timestamp = state.minute
+        goal.retry_after = state.minute
+    if goal and not goal.blocked_reason:
+        edge = f"{origin}->{destination}"
+        reverse = f"{destination}->{origin}"
+        if reverse in goal.attempted_edges and _route_evidence(world) == goal.evidence:
+            goal.blocked_reason = "Repeated optional route without a new observation or useful interaction."
+            goal.retry_after = state.minute + village_extensions.policy(world).idle_review_minutes
+            _emit(world, "ROUTE_GOAL_DEFERRED", goal.goal_id, goal.blocked_reason,
+                  attempted_edges=goal.attempted_edges.copy())
+        goal.attempted_edges.append(edge)
+        goal.attempted_edges = goal.attempted_edges[-12:]
+        if destination == goal.target_location:
+            goal.last_progress_at = state.minute
+            goal.blocked_reason = "Optional destination visited; defer further searches until new evidence."
+            goal.retry_after = state.minute + village_extensions.policy(world).idle_review_minutes
     fallback.recent_locations.append(VillageLocationTransition(
         origin=origin, destination=destination, minute=state.minute))
     del fallback.recent_locations[:-12]
@@ -270,6 +340,17 @@ def candidates(world: "World") -> list[dict[str, Any]]:
             if _meal_funded(world) and action_blocker(world, "village_eat", {}, check_wait=False) is None:
                 choices.append({"task_id": "need:meal", "action_id": "village_eat", "arguments": {},
                                 "priority": "P1", "reason": "A due meal has actual local food; payment is validated on eating."})
+    if state.maintenance is not None:
+        from npc_sim import village_maintenance
+        for job in village_maintenance.observation(world)["maintenance"]["jobs"]:
+            if (job["assignee"] == world.actor_id and job["location"] == world.actor.location_id
+                    and job["status"] in {"pending", "overdue"} and not job["blocker"]
+                    and state.minute + 15 <= next_review(world)):
+                args = {"job": job["id"]}
+                if action_blocker(world, "village_maintain", args, check_wait=False) is None:
+                    choices.append({"task_id": f"maintenance:{job['id']}", "action_id": "village_maintain",
+                                    "arguments": args, "priority": "P2",
+                                    "reason": "Assigned local maintenance is ready before the next obligation."})
     for action in village_ai.actions(world):
         action_id = action["id"]
         if action_id not in village_life.PRODUCTION:
@@ -358,7 +439,8 @@ def record_result(world: "World", action: str, args: dict[str, Any],
             cached.attempt_count_since_change += 1
         return True
     if (outcome == "REJECTED" and code not in {
-            "ACTOR_BUSY", "ASLEEP", "INSPECTION_UNCHANGED", "ELIGIBLE_TASK_PENDING", "EVENT_WAIT_REQUIRED"}
+            "ACTOR_BUSY", "ASLEEP", "INSPECTION_UNCHANGED", "ELIGIBLE_TASK_PENDING", "EVENT_WAIT_REQUIRED",
+            "ROUTE_GOAL_DEFERRED"}
             or action == "village_eat" and code == "MEAL_MISSED"):
         reason_code = REASONS.get(code, "OTHER")
         if action == "village_eat" and code == "MEAL_MISSED" and not _meal_funded(world):
@@ -438,6 +520,7 @@ def observation(world: "World") -> dict[str, Any]:
                           for item in fallback.blocked.values()],
         "supply_needs": [need.model_dump() for need in fallback.supply_needs.values()],
         "recent_locations": [step.model_dump() for step in fallback.recent_locations],
+        "route_goal": fallback.route_goal.model_dump() if fallback.route_goal else None,
         "repeated_supplier_searches": repeated_supplier_searches(world),
         "eligible_candidates": candidates(world),
         "next_known_event": next_review(world),

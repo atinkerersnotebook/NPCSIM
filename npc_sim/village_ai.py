@@ -9,7 +9,8 @@ if TYPE_CHECKING:
 
 VERBS = {"village_wait", "village_ask", "village_tell", "village_observe", "village_work",
          "village_load", "village_deliver", "village_project", "village_patrol", "village_eat", "village_sleep",
-         "village_meeting", "village_cook_fish", "village_share_route", "village_split_firewood"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS
+         "village_meeting", "village_cook_fish", "village_share_route", "village_split_firewood",
+         "village_execute_fuel_delivery"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS
 
 
 def observation(world: "World") -> dict[str, Any]:
@@ -47,6 +48,7 @@ def observation(world: "World") -> dict[str, Any]:
             "supply_needs": [need.model_dump() for need in person.fallback.supply_needs.values()]
             if person.fallback else [],
             "recent_locations": [step.model_dump() for step in person.fallback.recent_locations],
+            "route_goal": person.fallback.route_goal.model_dump() if person.fallback.route_goal else None,
             "occupation": resident.occupation, "personality": resident.personality,
             "skills": resident.skills, "beliefs": {key: value.model_dump() for key, value in person.beliefs.items()},
             "relationships": person.trust.copy(), "schedule": [entry.model_dump() for entry in resident.schedule],
@@ -178,6 +180,19 @@ def actions(world: "World") -> list[dict[str, Any]]:
             {"route": {"type": "integer", "enum": routes}})
         add("village_deliver", "Deliver your loaded shipment at its destination and settle the actual trade.", {})
     if config.expanded_rules:
+        from npc_sim import village_firewood
+        if village_firewood.enabled(world) and rid == state.firewood.config.supplier:
+            routes = [plan.route_id for plan in state.firewood.delivery_plans
+                      if plan.carrier == rid and plan.status in {"planned", "loaded", "in_progress"}]
+            if not routes:
+                candidate = village_firewood.delivery_plan(world)
+                if candidate is not None:
+                    routes.append(candidate.route_id)
+            if routes:
+                add("village_execute_fuel_delivery", "Explicitly save and advance one grouped fuel route step: "
+                    "load one order, traverse one physical door, or unload and settle one stop. "
+                    "Repeat after your action cooldown; it never runs automatically.",
+                    {"route_id": {"type": "string", "enum": routes}})
         add("village_load_goods", "Carry up to three goods on foot; portable tools use the same real capacity.",
             {"goods": {"type": "object", "minProperties": 1,
                        "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}},
@@ -377,6 +392,9 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         return done("VILLAGER_ANSWERED", f'{village.resident_name(world, target)} says: "{text}"', target)
     if "manipulate" not in world.actor.body.capabilities:
         return reject("CAPABILITY_REQUIRED", "This work requires manipulation.")
+    if action == "village_execute_fuel_delivery":
+        from npc_sim import village_firewood
+        return village_firewood.execute_delivery_step(world, args["route_id"])
     if action in village_wagon.VERBS:
         return village_wagon.apply(world, action, args)
     if action in village_services.VERBS:

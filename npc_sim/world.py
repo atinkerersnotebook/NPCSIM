@@ -509,6 +509,31 @@ class World:
                     action["availability"], action["reason"] = "blocked", blocked[1]
             from npc_sim import village_fallback
             village_fallback.annotate(self, actions)
+            if self.scenario.village.ai_controlled:
+                goal = self.state.village.residents[self.actor_id].fallback.route_goal
+                if goal:
+                    if village_fallback._route_evidence(self) == goal.evidence:
+                        current = self.actor.location_id
+                        path = village.route(self, current, goal.target_location,
+                                             known_routes=self.state.village.residents[self.actor_id].known_routes)
+                        if path:
+                            for action in actions:
+                                if action["id"] == "go":
+                                    for target in action["targets"]:
+                                        door = self.state.entities[target]
+                                        destination = (door.destination if door.location == current else
+                                                       door.location if door.destination == current else None)
+                                        if destination != path[0]:
+                                            continue
+                                        reason = ("This optional search has no new personal evidence; wait for an encounter or appointment."
+                                                  if goal.blocked_reason else
+                                                  "Repeated travel for this optional search has no new personal evidence."
+                                                  if f"{destination}->{current}" in goal.attempted_edges else None)
+                                        if reason:
+                                            action.setdefault("target_requirements", {})[target] = reason
+                                    if (action.get("availability") != "blocked" and action["targets"]
+                                            and len(action.get("target_requirements", {})) == len(action["targets"])):
+                                        action["availability"], action["reason"] = "blocked", next(iter(action["target_requirements"].values()))
         if self.state.clock is not None and self.state.clock.mode == "decision_paused":
             for action in actions:
                 action["simulation_seconds"] = bakery.action_seconds(action["id"])
@@ -823,7 +848,16 @@ class World:
             if blocked:
                 return reject(*blocked)
             if action in village_ai.VERBS:
+                from npc_sim import village_precheck
+                blocked = village_precheck.check(self, action, args)
+                if blocked:
+                    return reject(*blocked)
                 return village_ai.apply(self, action, args)
+        if self.scenario.village and self.scenario.village.ai_controlled:
+            from npc_sim import village_precheck
+            blocked = village_precheck.check(self, action, args)
+            if blocked:
+                return reject(*blocked)
         if action in village.VERBS:
             return village.apply(self, action, args)
         if action == "look":

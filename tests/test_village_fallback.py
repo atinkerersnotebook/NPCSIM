@@ -120,6 +120,21 @@ def test_resolved_breakfast_cutoff_does_not_prevent_legitimate_waiting(tmp_path)
     assert act(world, "village_wait_event")["code"] == "EVENT_WAIT_STARTED"
 
 
+def test_pending_local_maintenance_prevents_an_idle_wait(tmp_path):
+    from test_village_maintenance import make_world as maintenance_world
+
+    world = maintenance_world(tmp_path)
+    world.scenario.village.anti_idle = True
+    state = world.state.village
+    state.stocks["forge"]["iron"] = 0
+    job = next(iter(state.maintenance.jobs))
+    choices = village_fallback.candidates(world)
+    assert any(choice["action_id"] == "village_maintain" and choice["arguments"] == {"job": job}
+               for choice in choices)
+    assert act(world, "village_wait_event")["code"] == "ELIGIBLE_TASK_PENDING"
+    assert act(world, "village_maintain", job=job)["outcome"] == "APPLIED"
+
+
 def test_arriving_early_for_a_meal_allows_waiting_until_the_meal_is_due(tmp_path):
     world = make_world(tmp_path, minute=4015)
     world.actor.location_id = "tavern"

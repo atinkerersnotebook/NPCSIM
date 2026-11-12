@@ -306,11 +306,13 @@ give other residents remote knowledge.
 New in-person ordering uses the same received-notice/reply path rather than
 leaving a remote-status bypass; one physical conversation proposes one need.
 It checks freshness, deadlines, feasible real supply, prior commitments and
-reserves. A firm order requires uncommitted fresh stock or an already scheduled
-batch that can finish before delivery; otherwise acceptance is deferred with a
-stock/production explanation rather than promising speculative output. Physical
-loading uses the same reserve-aware allocation; production, cargo capacity,
-unloading and payment remain the ordinary engine mechanics. Coordination-linked
+reserves. A stock-backed order uses uncommitted fresh goods; a production-backed
+order reserves feasible inputs and a scheduled production slot rather than
+pretending its output already exists. Infeasible supply is countered or declined
+with a reason. Public repair jobs can instead authorize a physical material
+transfer without a commercial purchase, while retaining ownership, reserves and
+carrying checks. Physical loading uses the same reserve-aware allocation;
+production, cargo capacity, unloading and payment remain the ordinary engine mechanics. Coordination-linked
 order observations, suggestions, cash commitments and action menus use received
 snapshots rather than leaking unreceived replies. Older pre-installation orders
 retain their original behavior. A verified status can be published with
@@ -552,6 +554,10 @@ woodpile from her existing purse; no money or starter firewood is granted.
 Business owners fund their own workplace fuel. Requests use real quoted prices
 (default one coin per firewood), conservative existing delivery-fee commitments,
 supplier acceptance and actual foot/wagon cargo, travel, unloading and payment.
+Rowan can explicitly save and advance a feasible grouped fuel route with
+`village_execute_fuel_delivery` (one real load, door traversal, or paid delivery
+per action); the action never starts or advances a route automatically.
+Blocked routes retain cargo for later resumption.
 Fuel planning requests only the affordable part of a shortage; empty purses do not
 silently create credit. Buyers must inspect local supplies before using physical
 communication channels; remote stock, unread orders and whereabouts are not shared.
@@ -642,8 +648,17 @@ Private structured village events include `TASK_BLOCKED`, `FALLBACK_SELECTED`,
 Deterministic Rowan Day 3 regression tests are in `tests\test_village_fallback.py`;
 they are not a claim that a paid, nondeterministic historical model replay was run.
 Need-aware response guidance, intent-level notices and personal repeated-supplier
-visit detection are available; route-purpose metrics, broader task catalogs and
-comparison dashboards remain later phases.
+visit detection are available. An optional meeting/search goal can be recorded with
+`plan_optional_route`; a visit defers repeat trips along the known route until
+personally received evidence changes. The guard does not constrain ordinary travel,
+deliveries, patrols or tool collection. It does not infer a goal from every move or
+suppress a real task simply because a resident once visited its destination.
+A local engine pre-check rejects known invalid patrol, capacity, channel and
+research attempts before time is spent; authoritative execution still validates
+private facts. Per-resident/day time-use reports distinguish work, waiting and
+suspected no-progress reversals. These are diagnostic counters, not a claim that
+all movement is waste. Automatic optional-goal assignment, broader task catalogs
+and matched multi-day replay comparisons remain later phases.
 
 ### Private questions and live world changes
 

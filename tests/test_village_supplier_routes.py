@@ -41,6 +41,21 @@ def test_repeated_supplier_route_tracks_personal_need_and_persists(tmp_path):
     assert not village_fallback.repeated_supplier_searches(jory)
 
 
+def test_optional_search_defers_repeated_travel_until_personal_evidence_changes(tmp_path):
+    world = create_world(tmp_path / "optional-route.json")
+    finn = actor(world, "finn", "village-square")
+    village_fallback.plan_optional_route(finn, "share:river-observation", "tavern", "Share an observation when someone is present")
+    finn = travel(world, "finn", "village-square", "square-tavern")
+    goal = world.state.village.residents["finn"].fallback.route_goal
+    assert goal.blocked_reason
+    finn = travel(world, "finn", "tavern", "square-tavern")
+    ready(world)
+    assert act(finn, "go", target="square-tavern")["code"] == "ROUTE_GOAL_DEFERRED"
+    finn.actor.messages.append({"actor_id": "jory", "message": "I can meet now."})
+    assert act(finn, "go", target="square-tavern")["outcome"] == "APPLIED"
+    assert finn.observe()["village"]["personal"]["route_goal"]["goal_id"] == "share:river-observation"
+
+
 def test_supplier_loop_clears_on_personal_need_change_and_does_not_block_ordinary_travel(tmp_path):
     world = create_world(tmp_path / "route-change.json")
     jory = actor(world, "jory", "village-square")

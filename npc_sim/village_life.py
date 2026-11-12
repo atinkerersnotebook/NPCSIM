@@ -20,7 +20,7 @@ WORK_ACTIONS |= {"village_draw_livestock_water", "village_care_cow", "village_ca
                  "village_make_plant_scraps", "village_compost", "village_fertilize_compost"}
 PRODUCTION = {"village_work", "village_cook_fish", "village_grow_hay", "village_gather_herbs", "village_fell_logs",
               "village_split_firewood"}
-WORK_ACTIONS.add("village_split_firewood")
+WORK_ACTIONS |= {"village_split_firewood", "village_execute_fuel_delivery"}
 
 
 def production_closing_minute(world: "World", rid: str) -> int:

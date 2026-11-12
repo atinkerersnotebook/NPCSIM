@@ -132,6 +132,8 @@ def refresh(world: "World") -> None:
             values.update(monitored)
             values["activities"] = activities
         values["time_use"] = {rid: usage.model_dump() for rid, usage in state.time_use.items()}
+        values["daily_time_use"] = {day: {rid: usage.model_dump() for rid, usage in residents.items()}
+                                    for day, residents in state.daily_time_use.items()}
         values["day_policy"] = policy(world).model_dump(include=set(VillageDayPolicy.model_fields))
         state.dashboard = VillageDashboard.model_validate(values)
 
@@ -142,39 +144,53 @@ def account_time(world: "World", minutes: int) -> None:
     if not modules(world):
         return
     for rid, person in state.residents.items():
-        usage = state.time_use.setdefault(rid, VillageTimeUse(since=state.minute))
+        category = None
         if person.life and person.life.sleeping:
-            usage.sleep += minutes
+            category = "sleep"
         elif person.life and person.life.work:
-            usage.work += minutes
+            category = "work"
         elif state.maintenance is not None and village_maintenance.blocked_until(world, rid) is not None:
-            usage.work += minutes
+            category = "work"
         elif state.research is not None and village_research.blocked_until(world, rid) is not None:
-            usage.work += minutes
+            category = "work"
         elif state.mining is not None and village_mining.blocked_until(world, rid) is not None:
-            usage.work += minutes
+            category = "work"
         elif state.livestock is not None and village_livestock.blocked_until(world, rid) is not None:
-            usage.work += minutes
+            category = "work"
         elif state.wagon and state.wagon.automatic and state.wagon.driver == rid:
             if state.wagon.phase == "travel":
-                usage.travel += minutes
+                category = "travel"
             else:
-                usage.work += minutes
+                category = "work"
         elif person.timber_route:
-            usage.travel += minutes
+            category = "travel"
         elif blocked_until(world, rid) is not None:
-            usage.leisure += minutes
+            category = "leisure"
         elif person.available_at > state.minute:
             if person.current_action == "go":
-                usage.travel += minutes
+                category = "travel"
             elif person.current_action in {"village_wait", "village_wait_event"}:
-                usage.wait += minutes
+                category = "wait"
             elif person.current_action in village_life.WORK_ACTIONS:
-                usage.work += minutes
+                category = "work"
             else:
-                usage.leisure += minutes
+                category = "leisure"
         else:
-            usage.idle += minutes
+            category = "idle"
+
+        cumulative = state.time_use.setdefault(rid, VillageTimeUse(since=state.minute))
+        daily = state.daily_time_use.setdefault(state.minute // 1440, {}).setdefault(
+            rid, VillageTimeUse(since=state.minute // 1440 * 1440))
+        for usage in (cumulative, daily):
+            setattr(usage, category, getattr(usage, category) + minutes)
+            if category == "work":
+                usage.useful_minutes += minutes
+            if category == "travel" and person.current_action == "go":
+                steps = person.fallback.recent_locations
+                if (len(steps) >= 2 and steps[-1].origin == steps[-2].destination
+                        and steps[-1].destination == steps[-2].origin
+                        and cumulative.last_useful_minute < steps[-2].minute):
+                    usage.wasted_travel += minutes
 
 
 def blocked_until(world: "World", rid: str) -> int | None:
@@ -196,6 +212,16 @@ def record_action(world: "World", action: str, args: dict[str, Any]) -> None:
     if modules(world):
         usage = state.time_use.setdefault(world.actor_id, VillageTimeUse(since=state.minute))
         usage.successful_actions += 1
+        daily = state.daily_time_use.setdefault(state.minute // 1440, {}).setdefault(
+            world.actor_id, VillageTimeUse(since=state.minute // 1440 * 1440))
+        daily.successful_actions += 1
+        if action not in {"look", "read", "say", "go", "village_observe", "village_wait",
+                          "village_wait_event", "village_sleep", "village_eat", "village_drink_tea",
+                          "village_check_messages", "village_notice_read", "village_inbox_read"}:
+            usage.useful_actions += 1
+            daily.useful_actions += 1
+            usage.last_useful_minute = state.minute
+            daily.last_useful_minute = state.minute
     if state.social is not None:
         village_social.record_action(world, action, args, "APPLIED")
     if state.research is not None:

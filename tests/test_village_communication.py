@@ -12,13 +12,14 @@ import pytest
 
 from npc_sim import (
     village, village_ai, village_communication as comm, village_economy as economy,
-    village_extensions, village_goods as goods, village_life,
+    village_extensions, village_goods as goods, village_life, village_services,
 )
 from npc_sim.living_village import build_scenario
-from npc_sim.models import Entity, Scenario, VillageCommittedWork, VillageEconomyConfig, WorldState
+from npc_sim.models import Entity, Scenario, VillageCommittedWork, VillageEconomyConfig, VillageStockLot, WorldState
 from npc_sim.prompt_context import observation_context
 from npc_sim.storage import read_json
 from npc_sim.village_communication_models import VillageCommunicationConfig
+from npc_sim.village_economy_models import VillageSupplierOrder
 from npc_sim.world import World
 from test_village_expanded import scenario
 
@@ -199,7 +200,7 @@ def test_immutable_versions_stale_paper_no_rollback_or_unreceived_reply(world):
     assert economy.observation(world)["cash"]["jory"]["committed"] == 0
     assert not any(action["id"] == "village_cancel_order" for action in economy.actions(world))
     read(world)
-    assert economy.observation(world)["orders"][0]["status"] == "accepted"
+    assert economy.observation(world)["orders"][0]["status"] == "accepted_planned"
     assert known(world, "garrick", nid).snapshot.version == 1
 
 
@@ -563,8 +564,74 @@ def test_future_livestock_notice_acceptance_requires_real_care_without_inventing
     before = copy.deepcopy(world.state.village.stocks)
     respond(supplier, nid)
     assert latest(world, nid).status == "accepted"
+    order = next(iter(world.state.village.economy.orders.values()))
+    assert order.status == "accepted_planned"
+    assert order.production_plan["output"] >= 1
     assert world.state.village.stocks == before
     assert world.state.village.stocks["farm"][product] == 0
+
+
+def test_planned_milk_cannot_double_book_a_collection_session(workspace):
+    world = create_world(workspace / "milk.json", value=build_scenario(scenario()))
+    care = world.state.village.livestock.cow
+    care.day, care.fed, care.watered, care.cleaned = 0, True, True, True
+    supplier = actor(world, "ada", "farm")
+    plans = []
+    for index in range(2):
+        order = VillageSupplierOrder(
+            id=f"milk-{index}", request_key=f"milk-{index}", buyer="elsie", supplier="ada",
+            source="farm", destination="tavern", product="milk", quantity=1, price=2,
+            delivery_fee=0, deadline=650, required_fresh_until=700, created_at=480)
+        plan, reason = economy.production_plan(supplier, order)
+        plans.append(plan)
+        if plan:
+            order.status, order.production_plan = "accepted_planned", plan
+            world.state.village.economy.orders[order.id] = order
+    assert plans[0] and not plans[1], plans
+    assert world.state.village.stocks["farm"]["milk"] == 0
+
+
+def test_impossible_flour_plan_never_creates_commitment(world):
+    buyer = actor(world, "jory", "village-square")
+    nid = post(buyer)
+    supplier = actor(world, "mara", "village-square")
+    read(supplier)
+    state = world.state.village
+    grain = state.stocks["watermill"]["grain"]
+    state.economy.config.reserve_targets = {"watermill": {"grain": grain, "flour": state.stocks["watermill"]["flour"]}}
+    result = comm.apply(supplier, "village_notice_reply", {
+        "notice_id": nid, "expected_version": 1, "response": "accept"})
+    assert result[:2] == ("REJECTED", "COMMUNICATION_INVALID"), result
+    assert not state.economy.orders
+    assert latest(world, nid).status != "accepted"
+
+
+def test_mill_repair_plank_is_physical_unpaid_and_protected(workspace):
+    world = create_world(workspace / "repair.json")
+    carpenter = world.scenario.village.carpenter
+    source = world.scenario.village.residents[carpenter].work
+    worker = actor(world, carpenter, source)
+    state = world.state.village
+    state.breakdown = True
+    state.stocks[source]["planks"] = 1
+    state.stock_lots[source]["planks"] = [
+        VillageStockLot(quantity=1, produced_at=state.minute)]
+    reserve = state.economy.config.reserve_targets
+    reserve[source] = {"planks": 1}
+    before_cash = copy.deepcopy(state.coins)
+    assert "RAW_MATERIAL_RESERVE" in village_services.foot_load(worker, carpenter, {"planks": 1}, "watermill")
+    assert not state.communication.transfers and not state.residents[carpenter].shipments
+    reserve[source] = {"planks": 0}
+    assert village_services.foot_load(worker, carpenter, {"planks": 1}, "watermill") is None
+    cargo = state.residents[carpenter].shipments
+    assert len(cargo) == 1 and cargo[0].owned_transfer and cargo[0].quantity == 1
+    assert state.stocks[source]["planks"] == 0
+    assert state.coins == before_cash and not state.economy.orders
+    worker.actor.location_id = "watermill"
+    assert village_services.foot_unload(worker, carpenter) is None
+    assert not cargo and state.stocks["watermill"]["planks"] == 1
+    assert state.coins == before_cash
+    assert next(iter(state.communication.transfers.values())).status == "delivered"
 
 
 def test_delivery_deadline_carrying_capacity_and_frozen_fixture_locations_are_checked(world):

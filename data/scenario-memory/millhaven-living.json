@@ -190,6 +190,38 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "ec293757b3b6420d9115f7f6aee86497",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-11T21:24:55.535766+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: well dug, mill repaired, bread supply resumed, every resident contributed, working wagon, evening reached, everyone fed, everyone home, everyone asleep, animals put away, resource reserves ready.",
+          "evidence_ids": [
+            "ec293757b3b6420d9115f7f6aee86497:2857"
+          ]
+        },
+        {
+          "reason": "The well, mill, bread supply and working wagon were not restored.",
+          "evidence_ids": [
+            "ec293757b3b6420d9115f7f6aee86497:2857"
+          ]
+        },
+        {
+          "reason": "The day ended before supper and rest; residents were not verified fed, home or asleep, and the horse remained hitched at the forge.",
+          "evidence_ids": [
+            "ec293757b3b6420d9115f7f6aee86497:2857"
+          ]
+        },
+        {
+          "reason": "Required reserves were not ready, and cow care remained blocked without well water.",
+          "evidence_ids": [
+            "ec293757b3b6420d9115f7f6aee86497:2857",
+            "ec293757b3b6420d9115f7f6aee86497:1860"
+          ]
+        }
+      ]
     }
   ]
 }

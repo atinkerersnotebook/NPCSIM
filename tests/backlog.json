@@ -1,0 +1,5489 @@
+{
+  "schema_version": "1.0",
+  "world_id": "backlog",
+  "scenario_id": "millhaven-expanded",
+  "exit_location": "village-square",
+  "revision": 12,
+  "entities": {
+    "village-square": {
+      "name": "Village square",
+      "kind": "location",
+      "description": "Millhaven's meeting place, with paths to the workplaces and homes.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "forge": {
+      "name": "Torvin's forge",
+      "kind": "location",
+      "description": "An anvil, an urgent wagon repair and supplies reserved for Elsie's well.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "stable": {
+      "name": "Bren's stable",
+      "kind": "location",
+      "description": "Horses and straw-lined stalls. Bren remembers borrowed tools.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "watermill": {
+      "name": "Mara's watermill",
+      "kind": "location",
+      "description": "Grain becomes flour while the mill drive works. Repairs need Hobb and Mara.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "mill-shed": {
+      "name": "Mill shed",
+      "kind": "location",
+      "description": "A dry shed for sacks and borrowed tools.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm": {
+      "name": "Ada's farm",
+      "kind": "location",
+      "description": "Fields and a grain store; shipments must be carried to the mill.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "general-store": {
+      "name": "Nella's general store",
+      "kind": "location",
+      "description": "The merchant's home base and delivery ledger.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "workshop": {
+      "name": "Hobb's workshop",
+      "kind": "location",
+      "description": "A joiner's bench and prepared mill-repair supplies.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "tavern": {
+      "name": "Elsie's tavern",
+      "kind": "location",
+      "description": "Meals, evening conversation and a gate to the proposed well.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "bakery": {
+      "name": "Jory's bakery",
+      "kind": "location",
+      "description": "An oven that needs real flour to make bread.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "cottages": {
+      "name": "Village cottages",
+      "kind": "location",
+      "description": "Homes and Iona's herbal workshop.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "woods": {
+      "name": "Rowan's woodlot",
+      "kind": "location",
+      "description": "A managed woodlot with a finite stock of logs.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "bridge": {
+      "name": "Stone bridge",
+      "kind": "location",
+      "description": "Garrick's river crossing, leading to the mill, woods and fishing bank.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "riverbank": {
+      "name": "Fishing bank",
+      "kind": "location",
+      "description": "Finn's fishing ground.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "tavern-yard": {
+      "name": "Ground behind the tavern",
+      "kind": "location",
+      "description": "A marked well site; Torvin and Bren need the actual shovel, lining timber and safety rope.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "square-forge": {
+      "name": "Forge lane",
+      "kind": "door",
+      "description": "Square to forge.",
+      "location": "village-square",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "forge",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "square-stable": {
+      "name": "Stable lane",
+      "kind": "door",
+      "description": "Square to stable.",
+      "location": "village-square",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "stable",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "square-tavern": {
+      "name": "Tavern approach",
+      "kind": "door",
+      "description": "Square to tavern.",
+      "location": "village-square",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "tavern",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "square-store": {
+      "name": "Market walk",
+      "kind": "door",
+      "description": "Square to store.",
+      "location": "village-square",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "general-store",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "square-farm": {
+      "name": "Farm track",
+      "kind": "door",
+      "description": "Square to farm.",
+      "location": "village-square",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "farm",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "square-bridge": {
+      "name": "River road",
+      "kind": "door",
+      "description": "Square to bridge.",
+      "location": "village-square",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "bridge",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "bridge-mill": {
+      "name": "Mill approach",
+      "kind": "door",
+      "description": "Bridge to mill.",
+      "location": "bridge",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "watermill",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "mill-shed-path": {
+      "name": "Shed path",
+      "kind": "door",
+      "description": "Mill to shed.",
+      "location": "watermill",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "mill-shed",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": false
+    },
+    "bridge-woods": {
+      "name": "Woodlot trail",
+      "kind": "door",
+      "description": "Bridge to woodlot.",
+      "location": "bridge",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "woods",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": false
+    },
+    "bridge-river": {
+      "name": "Fishing path",
+      "kind": "door",
+      "description": "Bridge to riverbank.",
+      "location": "bridge",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "riverbank",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": false
+    },
+    "square-workshop": {
+      "name": "Joiner's lane",
+      "kind": "door",
+      "description": "Square to workshop.",
+      "location": "village-square",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "workshop",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "square-bakery": {
+      "name": "Baker's walk",
+      "kind": "door",
+      "description": "Square to bakery.",
+      "location": "village-square",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "bakery",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "square-cottages": {
+      "name": "Cottage lane",
+      "kind": "door",
+      "description": "Square to homes.",
+      "location": "village-square",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "cottages",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "tavern-yard-gate": {
+      "name": "Tavern yard gate",
+      "kind": "door",
+      "description": "Tavern to well site.",
+      "location": "tavern",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "tavern-yard",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": false
+    },
+    "stable-shed": {
+      "name": "Millers' shortcut",
+      "kind": "door",
+      "description": "Stable to mill shed.",
+      "location": "stable",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "mill-shed",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": false
+    },
+    "farm-mill": {
+      "name": "Grain road",
+      "kind": "door",
+      "description": "Farm to mill.",
+      "location": "farm",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "watermill",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "mill-bakery": {
+      "name": "Flour lane",
+      "kind": "door",
+      "description": "Mill to bakery.",
+      "location": "watermill",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "bakery",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "bakery-tavern": {
+      "name": "Bread walk",
+      "kind": "door",
+      "description": "Bakery to tavern.",
+      "location": "bakery",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": "tavern",
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "shovel": {
+      "name": "Torvin's shovel",
+      "kind": "item",
+      "description": "A borrowed iron shovel.",
+      "location": "mill-shed",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "well-timber": {
+      "name": "Well lining timber",
+      "kind": "item",
+      "description": "Prepared lining timber reserved for the well crew.",
+      "location": "forge",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "well-rope": {
+      "name": "Well safety rope",
+      "kind": "item",
+      "description": "Safety rope reserved for the well crew.",
+      "location": "forge",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "mill-beam": {
+      "name": "Replacement mill beam",
+      "kind": "item",
+      "description": "Hobb's prepared drive beam.",
+      "location": "workshop",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "joiner-hammer": {
+      "name": "Hobb's hammer",
+      "kind": "item",
+      "description": "A joiner's hammer.",
+      "location": "workshop",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "mill-drive": {
+      "name": "Old mill drive",
+      "kind": "fixture",
+      "description": "An aging mechanism driving the millstones.",
+      "location": "watermill",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "noticeboard": {
+      "name": "Village noticeboard",
+      "kind": "item",
+      "description": "A free village map, public commitments and bell notices.",
+      "location": "village-square",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": "Free village map and current public bell notices. Torvin and Bren: meet at the tavern-yard after collecting the shovel, well-timber and well-rope. Hobb and Mara: meet at the watermill with mill-beam and joiner-hammer when the drive fails. Gather at the tavern at 19:00 for the daily meal.",
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "price-board": {
+      "name": "Store price board",
+      "kind": "item",
+      "description": "Delivery prices.",
+      "location": "general-store",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": "Nella carries grain farm to watermill for 1 coin; flour watermill to bakery for 2 coins; bread bakery to tavern for 3 coins. Buyers pay sellers on delivery. Stock ledgers are separate from portable tools.",
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "anvil": {
+      "name": "Forge anvil",
+      "kind": "fixture",
+      "description": "A smithing anvil.",
+      "location": "forge",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "wagon": {
+      "name": "Wagon under repair",
+      "kind": "fixture",
+      "description": "An urgent morning commitment.",
+      "location": "forge",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "work-horse": {
+      "name": "Working horse",
+      "kind": "fixture",
+      "description": "Bren's real wagon horse; feed, lead, hitch and return it to the stable.",
+      "location": "stable",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "iron-trader": {
+      "name": "Visiting iron trader",
+      "kind": "fixture",
+      "description": "Offers four iron at noon and departs with unsold stock at 18:00.",
+      "location": null,
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "bellows": {
+      "name": "Leather bellows",
+      "kind": "fixture",
+      "description": "Hearth bellows.",
+      "location": "forge",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "tongs": {
+      "name": "Smithing tongs",
+      "kind": "item",
+      "description": "Private smithing tools.",
+      "location": "forge",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "smith-hammer": {
+      "name": "Smithing hammer",
+      "kind": "item",
+      "description": "Torvin's forge hammer.",
+      "location": "forge",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "horseshoe": {
+      "name": "Spare horseshoe",
+      "kind": "item",
+      "description": "A spare horseshoe.",
+      "location": "forge",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "feed-trough": {
+      "name": "Feed trough",
+      "kind": "fixture",
+      "description": "A wooden trough.",
+      "location": "stable",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "saddle": {
+      "name": "Bren's saddle",
+      "kind": "item",
+      "description": "A well-kept saddle.",
+      "location": "stable",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "grooming-brush": {
+      "name": "Grooming brush",
+      "kind": "item",
+      "description": "A horse brush.",
+      "location": "stable",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "stable-bucket": {
+      "name": "Stable bucket",
+      "kind": "item",
+      "description": "A water bucket.",
+      "location": "stable",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "hay-fork": {
+      "name": "Hay fork",
+      "kind": "item",
+      "description": "A hay fork.",
+      "location": "stable",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "grain-scales": {
+      "name": "Grain scales",
+      "kind": "fixture",
+      "description": "Mill delivery scales.",
+      "location": "watermill",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "millstones": {
+      "name": "Millstones",
+      "kind": "fixture",
+      "description": "Heavy grinding stones.",
+      "location": "watermill",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "oil-can": {
+      "name": "Mill oil can",
+      "kind": "item",
+      "description": "Maintenance oil.",
+      "location": "mill-shed",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "rake": {
+      "name": "Mill race rake",
+      "kind": "item",
+      "description": "A rake for the race.",
+      "location": "mill-shed",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "sack-hook": {
+      "name": "Sack hook",
+      "kind": "item",
+      "description": "A sack hook.",
+      "location": "mill-shed",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-cart": {
+      "name": "Farm cart",
+      "kind": "fixture",
+      "description": "A delivery cart.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "sickle": {
+      "name": "Ada's sickle",
+      "kind": "item",
+      "description": "A harvesting tool.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "watering-can": {
+      "name": "Watering can",
+      "kind": "item",
+      "description": "A garden watering can.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "seed-box": {
+      "name": "Seed box",
+      "kind": "container",
+      "description": "An empty seed box.",
+      "location": "farm",
+      "open": true,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "counter": {
+      "name": "Store counter",
+      "kind": "fixture",
+      "description": "Nella's counter.",
+      "location": "general-store",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "market-basket": {
+      "name": "Market basket",
+      "kind": "item",
+      "description": "A spare basket.",
+      "location": "general-store",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "ledger": {
+      "name": "Delivery ledger",
+      "kind": "item",
+      "description": "Public delivery circuit.",
+      "location": "general-store",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": "Route 0: grain farm to watermill. Route 1: flour watermill to bakery. Route 2: bread bakery to tavern. Nella must load, walk and deliver each shipment herself.",
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "workbench": {
+      "name": "Joiner's workbench",
+      "kind": "fixture",
+      "description": "A woodworking bench.",
+      "location": "workshop",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "saw": {
+      "name": "Hobb's saw",
+      "kind": "item",
+      "description": "A carpenter's saw.",
+      "location": "workshop",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "plane": {
+      "name": "Joiner's plane",
+      "kind": "item",
+      "description": "A timber plane.",
+      "location": "workshop",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "chisel": {
+      "name": "Joiner's chisel",
+      "kind": "item",
+      "description": "A honed chisel.",
+      "location": "workshop",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "measuring-rule": {
+      "name": "Measuring rule",
+      "kind": "item",
+      "description": "A wooden rule.",
+      "location": "workshop",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "tavern-hearth": {
+      "name": "Tavern hearth",
+      "kind": "fixture",
+      "description": "A communal hearth.",
+      "location": "tavern",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "serving-tray": {
+      "name": "Serving tray",
+      "kind": "item",
+      "description": "Elsie's tray.",
+      "location": "tavern",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "water-jug": {
+      "name": "Water jug",
+      "kind": "item",
+      "description": "A pump-water jug.",
+      "location": "tavern",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "guest-book": {
+      "name": "Guest book",
+      "kind": "item",
+      "description": "A book by the door.",
+      "location": "tavern",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": "Welcome. Tell Elsie about your own day, not things you could not have witnessed.",
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "oven": {
+      "name": "Bakery oven",
+      "kind": "fixture",
+      "description": "Jory's oven.",
+      "location": "bakery",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "bread-peel": {
+      "name": "Bread peel",
+      "kind": "item",
+      "description": "A baker's peel.",
+      "location": "bakery",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "mixing-bowl": {
+      "name": "Baker's bowl",
+      "kind": "item",
+      "description": "A mixing bowl.",
+      "location": "bakery",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "flour-scoop": {
+      "name": "Flour scoop",
+      "kind": "item",
+      "description": "A flour scoop.",
+      "location": "bakery",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "dough-cloth": {
+      "name": "Dough cloth",
+      "kind": "item",
+      "description": "A clean cloth.",
+      "location": "bakery",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "village-pump": {
+      "name": "Square pump",
+      "kind": "fixture",
+      "description": "The old public pump.",
+      "location": "village-square",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "wood-axe": {
+      "name": "Rowan's axe",
+      "kind": "item",
+      "description": "A woodcutter's axe.",
+      "location": "woods",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "log-sledge": {
+      "name": "Log sledge",
+      "kind": "fixture",
+      "description": "A heavy timber sledge.",
+      "location": "woods",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": null,
+      "max_health": null,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "guard-lantern": {
+      "name": "Bridge lantern",
+      "kind": "item",
+      "description": "Garrick's lantern.",
+      "location": "bridge",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "fishing-rod": {
+      "name": "Finn's rod",
+      "kind": "item",
+      "description": "A fishing rod.",
+      "location": "riverbank",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "fishing-net": {
+      "name": "Fishing net",
+      "kind": "item",
+      "description": "A drying net.",
+      "location": "riverbank",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "herb-pouch": {
+      "name": "Iona's herb pouch",
+      "kind": "item",
+      "description": "A herb pouch.",
+      "location": "cottages",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "mortar": {
+      "name": "Healer's mortar",
+      "kind": "item",
+      "description": "A stone mortar.",
+      "location": "cottages",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    }
+  },
+  "actors": {
+    "torvin": {
+      "actor_id": "torvin",
+      "session_id": "session-torvin",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "A practical, strong blacksmith.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "smithing",
+          "digging"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "bren": {
+      "actor_id": "bren",
+      "session_id": "session-bren",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "A patient stable keeper and experienced digger.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "animal_care",
+          "digging"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "mara": {
+      "actor_id": "mara",
+      "session_id": "session-mara",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "A methodical miller.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "milling"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "elsie": {
+      "actor_id": "elsie",
+      "session_id": "session-elsie",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "A welcoming innkeeper.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "hospitality"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "hobb": {
+      "actor_id": "hobb",
+      "session_id": "session-hobb",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "A careful joiner and mill repairer.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "carpentry"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "jory": {
+      "actor_id": "jory",
+      "session_id": "session-jory",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "A cheerful village baker.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "baking"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "ada": {
+      "actor_id": "ada",
+      "session_id": "session-ada",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "A steady, early-rising farmer.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "farming"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "nella": {
+      "actor_id": "nella",
+      "session_id": "session-nella",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "An exacting merchant driving a six-unit wagon.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "trade"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "rowan": {
+      "actor_id": "rowan",
+      "session_id": "session-rowan",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "A quiet forester.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "forestry"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "garrick": {
+      "actor_id": "garrick",
+      "session_id": "session-garrick",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "A watchful bridge guard.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "patrol"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "iona": {
+      "actor_id": "iona",
+      "session_id": "session-iona",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "A considerate village healer.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "herbalism"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    },
+    "finn": {
+      "actor_id": "finn",
+      "session_id": "session-finn",
+      "location_id": "tavern",
+      "start_location_id": "tavern",
+      "body": {
+        "description": "An easygoing fisher.",
+        "capabilities": [
+          "move",
+          "manipulate",
+          "fishing"
+        ],
+        "capacity": 3,
+        "size": "medium",
+        "grips": [
+          "hand"
+        ],
+        "max_held_items": null
+      },
+      "inventory": [],
+      "needs": {},
+      "inspected": [],
+      "examined": [],
+      "read_entities": [],
+      "visited_locations": [
+        "tavern"
+      ],
+      "action_clock": 0,
+      "messages": [],
+      "discovered_entities": []
+    }
+  },
+  "secondary_goals": {},
+  "skill_uses": {},
+  "admin_requests": [],
+  "clock": null,
+  "batches": {},
+  "ingredient_stock": {},
+  "voyage": null,
+  "rps": null,
+  "tic_tac_toe": null,
+  "erp": null,
+  "bbq": null,
+  "village": {
+    "firewood": null,
+    "communication": null,
+    "minute": 480,
+    "residents": {
+      "torvin": {
+        "beliefs": {
+          "shovel": {
+            "subject": "shovel",
+            "location": "stable",
+            "source": "memory:lent-to-bren",
+            "learned_at": 420,
+            "confidence": 0.8
+          },
+          "well-timber": {
+            "subject": "well-timber",
+            "location": "forge",
+            "source": "observation",
+            "learned_at": 480,
+            "confidence": 1.0
+          },
+          "well-rope": {
+            "subject": "well-rope",
+            "location": "forge",
+            "source": "observation",
+            "learned_at": 480,
+            "confidence": 1.0
+          }
+        },
+        "memories": [],
+        "trust": {
+          "bren": 3,
+          "elsie": 2
+        },
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 510,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 480,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "bren": {
+        "beliefs": {
+          "shovel": {
+            "subject": "shovel",
+            "location": "mill-shed",
+            "source": "observation:returned-after-mill-race-work",
+            "learned_at": 470,
+            "confidence": 1.0
+          }
+        },
+        "memories": [],
+        "trust": {
+          "torvin": 3,
+          "mara": 2
+        },
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 360,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "mara": {
+        "beliefs": {},
+        "memories": [],
+        "trust": {
+          "hobb": 3,
+          "jory": 2
+        },
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 480,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "elsie": {
+        "beliefs": {},
+        "memories": [],
+        "trust": {
+          "torvin": 2,
+          "jory": 3
+        },
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 360,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "hobb": {
+        "beliefs": {
+          "mill-beam": {
+            "subject": "mill-beam",
+            "location": "workshop",
+            "source": "observation",
+            "learned_at": 480,
+            "confidence": 1.0
+          },
+          "joiner-hammer": {
+            "subject": "joiner-hammer",
+            "location": "workshop",
+            "source": "observation",
+            "learned_at": 480,
+            "confidence": 1.0
+          }
+        },
+        "memories": [],
+        "trust": {
+          "mara": 3
+        },
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 480,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "jory": {
+        "beliefs": {},
+        "memories": [],
+        "trust": {
+          "mara": 2,
+          "elsie": 3
+        },
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 360,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "ada": {
+        "beliefs": {},
+        "memories": [],
+        "trust": {},
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 360,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "nella": {
+        "beliefs": {},
+        "memories": [],
+        "trust": {},
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 480,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "rowan": {
+        "beliefs": {},
+        "memories": [],
+        "trust": {},
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 420,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "garrick": {
+        "beliefs": {},
+        "memories": [],
+        "trust": {},
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 480,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "iona": {
+        "beliefs": {},
+        "memories": [],
+        "trust": {},
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 480,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      },
+      "finn": {
+        "beliefs": {},
+        "memories": [],
+        "trust": {},
+        "activity": "Starting the day",
+        "next_work": 480,
+        "busy_until": 0,
+        "cargo": {},
+        "delivery": null,
+        "delivery_cursor": 0,
+        "last_news_day": -1,
+        "life": {
+          "hungry": false,
+          "missed_meals": 0,
+          "meals": {},
+          "sleeping": false,
+          "sleep_until": null,
+          "last_woke": 420,
+          "work": null,
+          "fatigue_days": [],
+          "tea_day": -1,
+          "urgent_project": null,
+          "urgent_until": null
+        },
+        "available_at": 480,
+        "known_routes": [],
+        "shipments": [],
+        "timber_route": false,
+        "route_next_at": 0,
+        "stock_report": {},
+        "stock_report_at": null,
+        "fertilized_harvests": 0,
+        "current_action": null,
+        "fallback": {
+          "route_goal": null,
+          "blocked": {},
+          "supply_needs": {},
+          "recent_locations": [],
+          "supplier_searches": {},
+          "inspections": {},
+          "wait": null,
+          "active_inspection_until": null,
+          "active_inspection_location": null,
+          "decision": null
+        }
+      }
+    },
+    "stocks": {
+      "forge": {
+        "iron": 4,
+        "wagon-parts": 0
+      },
+      "stable": {
+        "hay": 6,
+        "manure": 0
+      },
+      "watermill": {
+        "grain": 6,
+        "flour": 2
+      },
+      "bakery": {
+        "flour": 6,
+        "bread": 4
+      },
+      "farm": {
+        "grain": 6
+      },
+      "tavern": {
+        "bread": 12,
+        "meals": 0
+      },
+      "woods": {
+        "logs": 10,
+        "timber": 0
+      },
+      "workshop": {
+        "timber": 4,
+        "planks": 0
+      },
+      "cottages": {
+        "herbs": 10,
+        "tea": 0
+      },
+      "riverbank": {
+        "fish": 0
+      },
+      "general-store": {
+        "grain": 3,
+        "flour": 2,
+        "bread": 2
+      }
+    },
+    "coins": {
+      "torvin": 40,
+      "bren": 30,
+      "mara": 100,
+      "elsie": 150,
+      "hobb": 40,
+      "jory": 100,
+      "ada": 30,
+      "nella": 80,
+      "rowan": 20,
+      "garrick": 20,
+      "iona": 20,
+      "finn": 20,
+      "visitor": 20,
+      "iron-trader": 0
+    },
+    "tasks": {},
+    "events": [],
+    "breakdown": false,
+    "repaired": false,
+    "well_dug": false,
+    "bread_after_repair": 0,
+    "roster": {
+      "torvin": {
+        "occupation": "blacksmith",
+        "personality": "Practical and proud of promises; urgent wagon repairs come first.",
+        "skills": [
+          "smithing",
+          "digging"
+        ],
+        "home": "cottages",
+        "work": "forge",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "cottages",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 480,
+            "location": "forge",
+            "activity": "Repairing the wagon"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "cottages",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [
+          {
+            "subject": "shovel",
+            "location": "stable",
+            "source": "memory:lent-to-bren",
+            "learned_at": 420,
+            "confidence": 0.8
+          },
+          {
+            "subject": "well-timber",
+            "location": "forge",
+            "source": "observation",
+            "learned_at": 480,
+            "confidence": 1.0
+          },
+          {
+            "subject": "well-rope",
+            "location": "forge",
+            "source": "observation",
+            "learned_at": 480,
+            "confidence": 1.0
+          }
+        ],
+        "relationships": {
+          "bren": 3,
+          "elsie": 2
+        },
+        "busy_until": 510,
+        "job": {
+          "location": "forge",
+          "interval": 60,
+          "inputs": {
+            "iron": 1
+          },
+          "outputs": {
+            "wagon-parts": 1
+          },
+          "equipment": "anvil",
+          "duration": 5,
+          "interruptible": true,
+          "batch_size": 1
+        },
+        "wake_minute": 480,
+        "bed_minute": 1320
+      },
+      "bren": {
+        "occupation": "stable keeper",
+        "personality": "Patient and helpful once the horses are fed.",
+        "skills": [
+          "animal_care",
+          "digging"
+        ],
+        "home": "cottages",
+        "work": "stable",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "cottages",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 360,
+            "location": "stable",
+            "activity": "Tending horses"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "cottages",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [
+          {
+            "subject": "shovel",
+            "location": "mill-shed",
+            "source": "observation:returned-after-mill-race-work",
+            "learned_at": 470,
+            "confidence": 1.0
+          }
+        ],
+        "relationships": {
+          "torvin": 3,
+          "mara": 2
+        },
+        "busy_until": 0,
+        "job": {
+          "location": "stable",
+          "interval": 60,
+          "inputs": {
+            "hay": 1
+          },
+          "outputs": {
+            "manure": 1
+          },
+          "equipment": null,
+          "duration": 5,
+          "interruptible": true,
+          "batch_size": 1
+        },
+        "wake_minute": 360,
+        "bed_minute": 1320
+      },
+      "mara": {
+        "occupation": "miller",
+        "personality": "Methodical and concerned about grain deliveries and the old drive.",
+        "skills": [
+          "milling"
+        ],
+        "home": "cottages",
+        "work": "watermill",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "cottages",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 480,
+            "location": "watermill",
+            "activity": "Grinding grain"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "cottages",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [],
+        "relationships": {
+          "hobb": 3,
+          "jory": 2
+        },
+        "busy_until": 0,
+        "job": {
+          "location": "watermill",
+          "interval": 30,
+          "inputs": {
+            "grain": 1
+          },
+          "outputs": {
+            "flour": 1
+          },
+          "equipment": "mill-drive",
+          "duration": 5,
+          "interruptible": true,
+          "batch_size": 2
+        },
+        "wake_minute": 480,
+        "bed_minute": 1320
+      },
+      "elsie": {
+        "occupation": "innkeeper",
+        "personality": "Welcoming but careful with the tavern budget; dreams of a well.",
+        "skills": [
+          "hospitality"
+        ],
+        "home": "tavern",
+        "work": "tavern",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "tavern",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 360,
+            "location": "tavern",
+            "activity": "Preparing the inn and cooking food"
+          },
+          {
+            "minute": 1380,
+            "location": "tavern",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [],
+        "relationships": {
+          "torvin": 2,
+          "jory": 3
+        },
+        "busy_until": 0,
+        "job": {
+          "location": "tavern",
+          "interval": 60,
+          "inputs": {
+            "bread": 1
+          },
+          "outputs": {
+            "meals": 2
+          },
+          "equipment": "tavern-hearth",
+          "duration": 5,
+          "interruptible": true,
+          "batch_size": 2
+        },
+        "wake_minute": 360,
+        "bed_minute": 1380
+      },
+      "hobb": {
+        "occupation": "carpenter",
+        "personality": "Careful and willing to help Mara, with the right materials.",
+        "skills": [
+          "carpentry"
+        ],
+        "home": "cottages",
+        "work": "workshop",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "cottages",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 480,
+            "location": "workshop",
+            "activity": "Planing timber"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "cottages",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [
+          {
+            "subject": "mill-beam",
+            "location": "workshop",
+            "source": "observation",
+            "learned_at": 480,
+            "confidence": 1.0
+          },
+          {
+            "subject": "joiner-hammer",
+            "location": "workshop",
+            "source": "observation",
+            "learned_at": 480,
+            "confidence": 1.0
+          }
+        ],
+        "relationships": {
+          "mara": 3
+        },
+        "busy_until": 0,
+        "job": {
+          "location": "workshop",
+          "interval": 60,
+          "inputs": {
+            "timber": 1
+          },
+          "outputs": {
+            "planks": 1
+          },
+          "equipment": "workbench",
+          "duration": 5,
+          "interruptible": true,
+          "batch_size": 1
+        },
+        "wake_minute": 480,
+        "bed_minute": 1320
+      },
+      "jory": {
+        "occupation": "baker",
+        "personality": "Cheerful until the flour bin runs empty.",
+        "skills": [
+          "baking"
+        ],
+        "home": "cottages",
+        "work": "bakery",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "cottages",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 360,
+            "location": "bakery",
+            "activity": "Baking bread"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "cottages",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [],
+        "relationships": {
+          "mara": 2,
+          "elsie": 3
+        },
+        "busy_until": 0,
+        "job": {
+          "location": "bakery",
+          "interval": 30,
+          "inputs": {
+            "flour": 1
+          },
+          "outputs": {
+            "bread": 1
+          },
+          "equipment": "oven",
+          "duration": 30,
+          "interruptible": false,
+          "batch_size": 2
+        },
+        "wake_minute": 360,
+        "bed_minute": 1320
+      },
+      "ada": {
+        "occupation": "farmer",
+        "personality": "Steady and early-rising; expects payment for deliveries.",
+        "skills": [
+          "farming"
+        ],
+        "home": "farm",
+        "work": "farm",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "farm",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 360,
+            "location": "farm",
+            "activity": "Harvesting grain"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "farm",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [],
+        "relationships": {},
+        "busy_until": 0,
+        "job": {
+          "location": "farm",
+          "interval": 60,
+          "inputs": {},
+          "outputs": {
+            "grain": 2
+          },
+          "equipment": null,
+          "duration": 5,
+          "interruptible": true,
+          "batch_size": 1
+        },
+        "wake_minute": 360,
+        "bed_minute": 1320
+      },
+      "nella": {
+        "occupation": "merchant",
+        "personality": "Resourceful and exact about stock and payment.",
+        "skills": [
+          "trade"
+        ],
+        "home": "cottages",
+        "work": "general-store",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "cottages",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 480,
+            "location": "general-store",
+            "activity": "Walking the delivery circuit"
+          },
+          {
+            "minute": 1080,
+            "location": "general-store",
+            "activity": "Balancing books"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "cottages",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [],
+        "relationships": {},
+        "busy_until": 0,
+        "job": null,
+        "wake_minute": 480,
+        "bed_minute": 1320
+      },
+      "rowan": {
+        "occupation": "forester",
+        "personality": "Quiet and protective of the managed woodlot.",
+        "skills": [
+          "forestry"
+        ],
+        "home": "cottages",
+        "work": "woods",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "cottages",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 420,
+            "location": "woods",
+            "activity": "Cutting timber"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "cottages",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [],
+        "relationships": {},
+        "busy_until": 0,
+        "job": {
+          "location": "woods",
+          "interval": 60,
+          "inputs": {
+            "logs": 1
+          },
+          "outputs": {
+            "timber": 1
+          },
+          "equipment": "log-sledge",
+          "duration": 5,
+          "interruptible": true,
+          "batch_size": 1
+        },
+        "wake_minute": 420,
+        "bed_minute": 1320
+      },
+      "garrick": {
+        "occupation": "guard",
+        "personality": "Watchful; reports only what he has witnessed.",
+        "skills": [
+          "patrol"
+        ],
+        "home": "cottages",
+        "work": "bridge",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "cottages",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 480,
+            "location": "bridge",
+            "activity": "Watching the bridge"
+          },
+          {
+            "minute": 720,
+            "location": "village-square",
+            "activity": "Patrolling the square"
+          },
+          {
+            "minute": 960,
+            "location": "bridge",
+            "activity": "Watching the bridge"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "cottages",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [],
+        "relationships": {},
+        "busy_until": 0,
+        "job": null,
+        "wake_minute": 480,
+        "bed_minute": 1320
+      },
+      "iona": {
+        "occupation": "healer",
+        "personality": "Considerate and unwilling to invent news she has not heard.",
+        "skills": [
+          "herbalism"
+        ],
+        "home": "cottages",
+        "work": "cottages",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "cottages",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 480,
+            "location": "cottages",
+            "activity": "Preparing herbal tea"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "cottages",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [],
+        "relationships": {},
+        "busy_until": 0,
+        "job": {
+          "location": "cottages",
+          "interval": 60,
+          "inputs": {
+            "herbs": 1
+          },
+          "outputs": {
+            "tea": 1
+          },
+          "equipment": null,
+          "duration": 5,
+          "interruptible": true,
+          "batch_size": 1
+        },
+        "wake_minute": 480,
+        "bed_minute": 1320
+      },
+      "finn": {
+        "occupation": "fisher",
+        "personality": "Easygoing and fond of evening company.",
+        "skills": [
+          "fishing"
+        ],
+        "home": "cottages",
+        "work": "riverbank",
+        "schedule": [
+          {
+            "minute": 0,
+            "location": "cottages",
+            "activity": "Sleeping"
+          },
+          {
+            "minute": 420,
+            "location": "riverbank",
+            "activity": "Fishing"
+          },
+          {
+            "minute": 1140,
+            "location": "tavern",
+            "activity": "Sharing evening news"
+          },
+          {
+            "minute": 1320,
+            "location": "cottages",
+            "activity": "Sleeping"
+          }
+        ],
+        "beliefs": [],
+        "relationships": {},
+        "busy_until": 0,
+        "job": {
+          "location": "riverbank",
+          "interval": 60,
+          "inputs": {},
+          "outputs": {
+            "fish": 1
+          },
+          "equipment": null,
+          "duration": 5,
+          "interruptible": true,
+          "batch_size": 1
+        },
+        "wake_minute": 420,
+        "bed_minute": 1320
+      }
+    },
+    "role_contributions": {},
+    "project_contributions": {},
+    "shovel_recovered": false,
+    "wagon": {
+      "repaired": false,
+      "driver": null,
+      "automatic": false,
+      "loads": [],
+      "route_index": 0,
+      "phase": "travel",
+      "next_event_at": 0,
+      "blocker": null,
+      "hitched": false
+    },
+    "bread_deliveries": 0,
+    "turn_cursor": 0,
+    "last_scheduled_actor": null,
+    "notices": [],
+    "meetings": {},
+    "free_turn_actor": null,
+    "stock_lots": {
+      "forge": {
+        "iron": [
+          {
+            "quantity": 4,
+            "produced_at": 480,
+            "expires_at": null
+          }
+        ],
+        "wagon-parts": []
+      },
+      "stable": {
+        "hay": [
+          {
+            "quantity": 6,
+            "produced_at": 480,
+            "expires_at": 4800
+          }
+        ],
+        "manure": []
+      },
+      "watermill": {
+        "grain": [
+          {
+            "quantity": 6,
+            "produced_at": 480,
+            "expires_at": 4800
+          }
+        ],
+        "flour": [
+          {
+            "quantity": 2,
+            "produced_at": 480,
+            "expires_at": 4800
+          }
+        ]
+      },
+      "bakery": {
+        "flour": [
+          {
+            "quantity": 6,
+            "produced_at": 480,
+            "expires_at": 4800
+          }
+        ],
+        "bread": [
+          {
+            "quantity": 4,
+            "produced_at": 480,
+            "expires_at": 1920
+          }
+        ]
+      },
+      "farm": {
+        "grain": [
+          {
+            "quantity": 6,
+            "produced_at": 480,
+            "expires_at": 4800
+          }
+        ]
+      },
+      "tavern": {
+        "bread": [
+          {
+            "quantity": 12,
+            "produced_at": 480,
+            "expires_at": 1920
+          }
+        ],
+        "meals": []
+      },
+      "woods": {
+        "logs": [
+          {
+            "quantity": 10,
+            "produced_at": 480,
+            "expires_at": null
+          }
+        ],
+        "timber": []
+      },
+      "workshop": {
+        "timber": [
+          {
+            "quantity": 4,
+            "produced_at": 480,
+            "expires_at": null
+          }
+        ],
+        "planks": []
+      },
+      "cottages": {
+        "herbs": [
+          {
+            "quantity": 10,
+            "produced_at": 480,
+            "expires_at": 4800
+          }
+        ],
+        "tea": []
+      },
+      "riverbank": {
+        "fish": []
+      },
+      "general-store": {
+        "grain": [
+          {
+            "quantity": 3,
+            "produced_at": 480,
+            "expires_at": 4800
+          }
+        ],
+        "flour": [
+          {
+            "quantity": 2,
+            "produced_at": 480,
+            "expires_at": 4800
+          }
+        ],
+        "bread": [
+          {
+            "quantity": 2,
+            "produced_at": 480,
+            "expires_at": 1920
+          }
+        ]
+      }
+    },
+    "stock_history": [
+      {
+        "minute": 480,
+        "stocks": {
+          "forge": {
+            "iron": 4,
+            "wagon-parts": 0
+          },
+          "stable": {
+            "hay": 6,
+            "manure": 0
+          },
+          "watermill": {
+            "grain": 6,
+            "flour": 2
+          },
+          "bakery": {
+            "flour": 6,
+            "bread": 4
+          },
+          "farm": {
+            "grain": 6
+          },
+          "tavern": {
+            "bread": 12,
+            "meals": 0
+          },
+          "woods": {
+            "logs": 10,
+            "timber": 0
+          },
+          "workshop": {
+            "timber": 4,
+            "planks": 0
+          },
+          "cottages": {
+            "herbs": 10,
+            "tea": 0
+          },
+          "riverbank": {
+            "fish": 0
+          },
+          "general-store": {
+            "grain": 3,
+            "flour": 2,
+            "bread": 2
+          }
+        },
+        "coins": {
+          "torvin": 40,
+          "bren": 30,
+          "mara": 100,
+          "elsie": 150,
+          "hobb": 40,
+          "jory": 100,
+          "ada": 30,
+          "nella": 80,
+          "rowan": 20,
+          "garrick": 20,
+          "iona": 20,
+          "finn": 20,
+          "visitor": 20,
+          "iron-trader": 0
+        }
+      }
+    ],
+    "deadlines": {
+      "bread_delivery": {
+        "due": 1140,
+        "completed_at": null,
+        "overdue": false
+      }
+    },
+    "horse_leader": null,
+    "horse_fed_day": -1,
+    "trader_day": -1,
+    "economy": null,
+    "social": null,
+    "incidents": null,
+    "maintenance": null,
+    "research": null,
+    "mining": null,
+    "livestock": null,
+    "day_policy": null,
+    "configuration_requests": {},
+    "dashboard": null,
+    "time_use": {},
+    "daily_time_use": {}
+  },
+  "requests": {},
+  "request_history_id": null
+}

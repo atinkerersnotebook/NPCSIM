@@ -530,13 +530,40 @@ class VillageFirewoodConfig(StrictModel):
     households: dict[str, list[str]] = Field(min_length=1)
     businesses: list[str] = Field(min_length=1)
     season: Literal["spring", "summer", "autumn", "winter"] = "autumn"
+    heating_enabled: bool = False
     split_minutes: int = Field(default=15, ge=5, le=60, multiple_of=5, strict=True)
     firewood_per_log: int = Field(default=4, ge=1, le=8, strict=True)
     reserve: int = Field(default=2, ge=1, le=12, strict=True)
+    site_capacities: dict[str, int] = Field(default_factory=dict)
+    reorder_point: int = Field(default=2, ge=0, le=24, strict=True)
+    business_buffer_days: int = Field(default=3, ge=1, le=7, strict=True)
+
+
+class VillageFuelStop(StrictModel):
+    destination: str
+    order_id: str
+    quantity: int = Field(gt=0)
+    delivered_before: int = Field(default=0, ge=0)
+    reason_for_stop: str
+    path: list[str]
+
+
+class VillageFuelDeliveryPlan(StrictModel):
+    route_id: str
+    carrier: str
+    load_plan: dict[str, int]
+    stops: list[VillageFuelStop]
+    expected_departure: int = Field(ge=0)
+    required_arrival: int = Field(ge=0)
+    remaining_inventory: int = Field(ge=0)
+    vehicle_id: str | None = None
+    status: Literal["planned", "loaded", "in_progress", "completed", "cancelled"] = "planned"
+    reason_for_stop: str
 
 
 class VillageFirewoodState(StrictModel):
     config: VillageFirewoodConfig
+    delivery_plans: list[VillageFuelDeliveryPlan] = Field(default_factory=list)
     warm_until: dict[str, int] = Field(default_factory=dict)
     statuses: dict[str, str] = Field(default_factory=dict)
     consumed: dict[str, int] = Field(default_factory=dict)
@@ -548,6 +575,8 @@ class VillageFirewoodSiteView(StrictModel):
     stock: int = Field(ge=0)
     reserve: int = Field(ge=0)
     consumed: int = Field(ge=0)
+    capacity: int = Field(ge=1)
+    status: Literal["normal", "low", "out"]
 
 
 class VillageHearthView(StrictModel):
@@ -718,7 +747,22 @@ class VillageSupplierSearch(StrictModel):
     last_visit: int = 0
 
 
+class VillageRouteGoal(StrictModel):
+    goal_id: str
+    target_location: str
+    reason: str
+    evidence_timestamp: int
+    last_known_target_location: str
+    attempted_edges: list[str] = Field(default_factory=list)
+    last_progress_at: int
+    blocked_reason: str
+    retry_after: int
+    wake_on: list[str] = Field(default_factory=list)
+    evidence: str = ""
+
+
 class VillageFallbackState(StrictModel):
+    route_goal: VillageRouteGoal | None = None
     blocked: dict[str, VillageBlockedAction] = Field(default_factory=dict)
     supply_needs: dict[str, VillageSupplyNeed] = Field(default_factory=dict)
     recent_locations: list[VillageLocationTransition] = Field(default_factory=list)
@@ -921,6 +965,10 @@ class VillageTimeUse(StrictModel):
     leisure: int = Field(default=0, ge=0)
     idle: int = Field(default=0, ge=0)
     successful_actions: int = Field(default=0, ge=0)
+    useful_actions: int = Field(default=0, ge=0)
+    useful_minutes: int = Field(default=0, ge=0)
+    last_useful_minute: int = -1
+    wasted_travel: int = Field(default=0, ge=0)
 
 
 class VillageDashboard(StrictModel):
@@ -937,6 +985,7 @@ class VillageDashboard(StrictModel):
     maintenance: list[VillageMaintenanceView] = Field(default_factory=list)
     research: list[VillageResearchView] = Field(default_factory=list)
     time_use: dict[str, VillageTimeUse] = Field(default_factory=dict)
+    daily_time_use: dict[int, dict[str, VillageTimeUse]] = Field(default_factory=dict)
     day_policy: VillageDayPolicy | None = None
 
 
@@ -981,6 +1030,7 @@ class VillageState(StrictModel):
     configuration_requests: dict[str, dict[str, Any]] = Field(default_factory=dict)
     dashboard: VillageDashboard | None = None
     time_use: dict[str, VillageTimeUse] = Field(default_factory=dict)
+    daily_time_use: dict[int, dict[str, VillageTimeUse]] = Field(default_factory=dict)
 
 
 class Scenario(StrictModel):

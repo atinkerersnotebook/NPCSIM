@@ -61,7 +61,7 @@ def test_t09_protected_grain_cannot_be_firmly_accepted(world):
     entry = order(world, "mara", "ada", "grain", 1, deadline=510, fresh=540)
     result = accept(world, entry)
     assert result[:2] == ("REJECTED", "SUPPLY_NOT_READY")
-    assert entry.status == "deferred" and "0 uncommitted" in result[2]
+    assert entry.status == "deferred" and "production slot" in result[2]
     assert economy.delivery_runs(actor(world, "nella", "farm")) == []
 
 
@@ -81,7 +81,7 @@ def test_t11_bread_shortfall_has_early_explicit_response(world):
     entry = order(world, "elsie", "jory", "bread", 4, deadline=570, fresh=600)
     result = accept(world, entry)
     assert result[:2] == ("REJECTED", "SUPPLY_NOT_READY")
-    assert "Only 1 uncommitted fresh bread" in result[2]
+    assert "production slot" in result[2]
     assert entry.status != "accepted"
 
 
@@ -94,13 +94,14 @@ def schedule_bread(world, quantity):
 
 
 def test_scheduled_bread_is_firm_only_when_physically_loadable(world):
+    add(world, "bakery", "bread", 1)
     add(world, "bakery", "flour", 4)
     entry = order(world, "elsie", "jory", "bread", 4, deadline=1110, fresh=1140)
-    assert accept(world, entry)[:2] == ("REJECTED", "SUPPLY_NOT_READY")
+    assert accept(world, entry)[:2] == ("APPLIED", "ORDER_ACCEPTED_PLANNED")
+    assert entry.production_plan["input:flour"] == 4
     schedule_bread(world, 4)
-    assert accept(world, entry)[:2] == ("APPLIED", "ORDER_ACCEPTED")
     assert economy.loadable_for_order(world, entry) == 0
-    add(world, "bakery", "bread", 5)
+    add(world, "bakery", "bread", 4)
     assert economy.loadable_for_order(world, entry) == 4
 
 
