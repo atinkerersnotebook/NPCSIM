@@ -16,6 +16,20 @@ Set-Location ..
 .\start.ps1
 ```
 
+To also serve the built UI and admin API on a trusted LAN, start with your computer's LAN IPv4 address (for example `192.168.1.143`):
+
+```powershell
+.\start.ps1 -LanHost 192.168.1.143
+```
+
+On Linux, after installing dependencies and building the UI, use:
+
+```bash
+NPCSIM_LAN_HOST=192.168.1.143 .venv/bin/python -m uvicorn npc_sim.app:app --host 0.0.0.0 --port 8000
+```
+
+Open `http://192.168.1.143:8000` from another device on the LAN. Replace the example address with the server's actual LAN IPv4 address; allow inbound TCP port 8000 in the host firewall if needed. LAN mode grants **unauthenticated full admin access**, including controls and private run data, to anyone who can reach the port. Use only on a trusted network; do not forward the port to the internet. Without LAN mode the server remains loopback-only.
+
 Open **http://127.0.0.1:8000** for the simplified **player view**. Choose a scenario
 and your cast, click **New adventure**, then **Play**. Only the relevant
 Play/Pause/Continue controls appear; **Restart** recreates the current adventure
@@ -66,7 +80,8 @@ present visitors grouped at their authoritative building/location. Select a mark
 for activity details; use the map zoom buttons and scroll to explore. Placement is
 location-level, not precise indoor coordinates or continuous walking. Locations
 not pictured (such as the iron mine) and unverified positions are explicitly listed
-off map. Other, non-village adventures retain their existing World view.
+off map. On wider screens the World timeline sits to the right of the town map;
+on narrower screens it stacks below. Other, non-village adventures retain their existing World view.
 
 Confirmed successful `say` actions appear as speech bubbles for 18 real-time seconds,
 with a recent spoken-dialogue panel below the map. Requested/rejected actions,
@@ -278,10 +293,23 @@ Global bell broadcasts and live noticeboard stock reports are disabled for
 opted-in worlds. Existing legacy memories are not erased.
 
 Supply acceptance creates a normal funded economy order, never goods or coins.
+Intent-level `village_request_supply`, `village_respond_to_request`,
+`village_update_request`, `village_check_messages`, `village_share_known_notice`
+and `village_propose_meeting` fill in engine-known notice fields while preserving
+local channel, ownership, and witnessed-conversation requirements. Personally
+posted supply requests persist as private `supply_needs` in the author's fallback
+state; an open request is not a reason to chase its supplier without new local
+evidence. Repeated visits to a supplier for that unresolved personal need raise a
+search-loop signal; locally observed stock or personally learned notice changes
+reset the signal, without blocking ordinary travel or work. These records do not
+give other residents remote knowledge.
 New in-person ordering uses the same received-notice/reply path rather than
 leaving a remote-status bypass; one physical conversation proposes one need.
 It checks freshness, deadlines, feasible real supply, prior commitments and
-reserves. Physical loading still protects reserves; production, cargo capacity,
+reserves. A firm order requires uncommitted fresh stock or an already scheduled
+batch that can finish before delivery; otherwise acceptance is deferred with a
+stock/production explanation rather than promising speculative output. Physical
+loading uses the same reserve-aware allocation; production, cargo capacity,
 unloading and payment remain the ordinary engine mechanics. Coordination-linked
 order observations, suggestions, cash commitments and action menus use received
 snapshots rather than leaking unreceived replies. Older pre-installation orders
@@ -294,8 +322,10 @@ crew at the actual site, with an explicit future `due_at`. The initial proposer
 signs only for themselves; the partner accepts through a real channel, and both
 must personally receive confirmation. Attendance is a personal plan, not
 automatic movement. Work is permitted during the one-hour appointment window
-only with both actual available workers and the original real supplies; each
-worker still contributes their own actions. Changing unaccepted meeting terms
+only with both actual workers at the site and the original real supplies; each
+worker still contributes their own actions. A partner's ongoing project turn
+counts as participation, not as an unrelated availability conflict; travel and
+other commitments still block work. Changing unaccepted meeting terms
 revokes prior signatures; committed meetings must be explicitly cancelled
 before rescheduling.
 
@@ -505,9 +535,9 @@ this complete `firewood` section (it requires the existing funded economy):
   "firewood": {
     "supplier": "rowan", "household_buyer": "iona",
     "households": {
-      "hearth-1": ["ada", "bren", "elsie", "finn"],
-      "hearth-2": ["garrick", "hobb", "iona", "jory"],
-      "hearth-3": ["mara", "nella", "rowan", "torvin"]
+      "hearth-1": ["bren", "finn", "garrick", "hobb"],
+      "hearth-2": ["iona", "jory", "mara", "nella"],
+      "hearth-3": ["rowan", "torvin"]
     },
     "businesses": ["torvin", "elsie", "jory"],
     "season": "autumn"
@@ -516,8 +546,8 @@ this complete `firewood` section (it requires the existing funded economy):
 ```
 
 These are shared-hearth groups at the existing `cottages` home location, not newly
-invented individual houses or family relationships. Every resident belongs to
-exactly one group. Iona works at cottages and buys fuel for its communal physical
+invented individual houses or family relationships. Every cottage resident belongs
+to exactly one group; residents living at the inn or farm do not use cottage hearths. Iona works at cottages and buys fuel for its communal physical
 woodpile from her existing purse; no money or starter firewood is granted.
 Business owners fund their own workplace fuel. Requests use real quoted prices
 (default one coin per firewood), conservative existing delivery-fee commitments,
@@ -579,10 +609,17 @@ existing engine guards. Occupation-specific new task catalogs remain Phase 2.
 Per-actor blocked-action records preserve the real rejection, a structured reason,
 arguments and a relevant-context fingerprint. An unchanged retry is explicitly
 rejected as `RETRY_SUPPRESSED`; ordinary world-revision increments do not reopen it.
+A live meal forecast shows expected diners, real prepared portions, funding,
+shortfall, input demand and a configurable preparation cutoff. When stock is
+scarce, a deterministic resident allocation reserves real portions through the
+meal grace window; a missed diner can still recover when food or funds arrive.
+After grace, an arriving diner may still eat unclaimed, fresh, funded tavern food
+before the inn closes at 22:00; no reservation or extra portion is created.
+The tavern cook prioritizes feasible meal preparation over optional research.
 Empty-meal retries depend on the meal, food and funding, not unrelated chatter or
-tool observations. **Existing meal rules are unchanged:** an empty/unfunded attempt
-can immediately mark a meal missed, and a later real, paid meal can recover that
-outcome where already supported. This feature does not introduce a new cutoff rule.
+tool observations. An empty/unfunded attempt can mark a meal missed, and a
+later real, paid meal can recover that outcome. Meal preparation now has a
+configurable cutoff; the forecast never creates stock or guarantees attendance.
 
 Useful inspections are limited until visible conditions change or the configured
 review interval passes. When no eligible alternative exists, `village_wait_event`
@@ -591,7 +628,10 @@ turns. With anti-idle enabled, repeated short idle `village_wait` polling is rej
 `idle_review_minutes` defaults to 60 (15–240, multiples of five); waits are also
 bounded by known events and walking/action time before meals and bedtime.
 Local stock/gear changes, real encounters, personally received notices and needs
-can interrupt a wait; hidden remote stock alone cannot. Scheduler ticks do not call
+can interrupt a wait; hidden remote stock alone cannot. A resident in an event wait
+can be contacted in person for a conversation or supplier order, but cannot take
+another action until their next turn; sleep, committed work and remote contact remain
+blocked. Scheduler ticks do not call
 the model. No guarantee of constant work or extra timber is made.
 
 Planning state persists in world and episode saves. The personal `village.fallback`
@@ -601,8 +641,9 @@ Private structured village events include `TASK_BLOCKED`, `FALLBACK_SELECTED`,
 `TASK_REEVALUATED`. These are engine evidence, not NPC speech.
 Deterministic Rowan Day 3 regression tests are in `tests\test_village_fallback.py`;
 they are not a claim that a paid, nondeterministic historical model replay was run.
-Notice-response planning, travel-loop detection, broader task catalogs and comparison
-dashboards remain later phases.
+Need-aware response guidance, intent-level notices and personal repeated-supplier
+visit detection are available; route-purpose metrics, broader task catalogs and
+comparison dashboards remain later phases.
 
 ### Private questions and live world changes
 
@@ -800,12 +841,11 @@ plans and memories. **Ask an NPC** addresses any of them, including after the
 current adventure ends.
 
 New expanded adventures begin at **05:00**, one hour before the first wake-up.
-All twelve villagers are asleep at their cottage homes in the cottage row,
-including Elsie. Bren, Jory and Ada wake at 06:00; the others follow their own
-times. Sleeping actors skip model turns. On waking, villagers are directed to
-leave for work using real movement before optional errands.
-They must physically walk to their workplaces;
-Elsie also returns to her cottage to sleep rather than staying above the tavern.
+Ten villagers begin asleep at the cottages; Elsie lives and sleeps at the inn
+(`tavern`), and Ada lives and sleeps at the farm. Bren, Jory and Ada wake at 06:00;
+the others follow their own times. Sleeping actors skip model turns. On waking,
+villagers living away from work walk there before optional errands. Everyone
+returns to their own home to sleep.
 
 The **Village-wide tracking** dashboard in both views shows all twelve residents'
 actual locations, carried tools, shipment cargo, coins, activities, scheduled
@@ -836,14 +876,16 @@ stocks and the event ledger. This is operator knowledge, not shared NPC input.
   Opening stock includes six grain at the mill, six flour and four bread at the
   bakery, and twelve bread at the tavern.
 - `village_eat` consumes **one daily meal at the 19:00 tavern gathering**.
-  A prepared meal, bread, or fish with tea counts; tea alone does not. There is
+  The inn serves meals only while Elsie is awake and physically at the tavern;
+  diners can retry when she returns. A prepared meal, bread, or fish with tea
+  counts; tea alone does not. There is
   no automatic home pantry. An empty-tavern attempt records hunger once without
   forbidding work. Meals still pending at midnight count as missed. Missing a
   meal doubles the following day's work cooldown; eating before midnight cancels
   that day's missed-meal penalty. A later meal never retroactively erases it.
 - `village_sleep` requires physically returning home. Each NPC keeps the existing
   bedtime and first work-start time as their sleep/wake schedule: for example,
-  Bren/Jory/Ada wake at 06:00, Torvin at 08:00, and Elsie sleeps 23:00-07:00.
+  Bren/Jory/Ada wake at 06:00, Torvin at 08:00, and Elsie sleeps 23:00-06:00 so she can prepare the inn and cook food before guests arrive.
   A late bedtime delays actual waking by the full scheduled rest duration.
   Waiting through the night without sleeping does not satisfy rest.
 - Due meals and rest block new work, patrols, deliveries and further construction
@@ -908,8 +950,11 @@ The remaining P2/P3 rules also apply to new expanded adventures:
   with hunger to 4x. Actual tea cancels today's tiredness factor only.
   Well/mill crew members must explicitly choose `village_urgent_work` to
   override bedtime for that project until 02:00, not ordinary production.
-- Production starts after actual waking through **19:30 inclusive**, including
-  inputs arriving in that grace period. Already-started baking still completes.
+- Production starts after actual waking through **19:30 inclusive** at other
+  workplaces, including inputs arriving in that grace period. The inn remains
+  open for supper and tavern production until **22:00** (last action starts
+  before closing); late meals require real food and payment before closing.
+  Elsie remains at her inn home for her 23:00 bedtime. Already-started baking still completes.
   Ada grows two hay, Iona gathers two herbs and Rowan fells two logs per action.
   A trader brings four iron to the square at noon, at three coins each, and
   leaves at 18:00 with unsold stock. Payment occurs on actual forge delivery.

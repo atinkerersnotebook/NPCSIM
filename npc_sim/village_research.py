@@ -227,8 +227,9 @@ def _guard(world: "World", project: ResearchProject, operation: str, end: int) -
         blocker = _downtime(world, actor, end)
         if blocker:
             return blocker
-    elif end > state.minute // 1440 * 1440 + 1170:
-        return "OUTSIDE_WORK_HOURS", "Discovered production/use must finish by the 19:30 closing grace."
+    elif end > state.minute // 1440 * 1440 + village_life.production_closing_minute(world, actor):
+        closing = village_life.production_closing_minute(world, actor)
+        return "OUTSIDE_WORK_HOURS", f"Discovered production/use must finish by {village.clock_time(closing)}."
     home = village.route(world, project.location, resident.home)
     if home is None or end + 5 * len(home) + 5 > state.minute // 1440 * 1440 + resident.bed_minute:
         return "BEDTIME_CONFLICT", "Leave real travel time home and time to sleep."

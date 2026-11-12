@@ -79,6 +79,7 @@ def test_alternative_recipes_fresh_stock_and_incoming_reduce_demand(world):
     requests = {request["product"]: request for request in economy.suggestions(world)}
     assert requests["bread"]["quantity"] == 3
     assert requests["fish"]["quantity"] == 2
+    add(world, "bakery", "bread", 2, expiry=1200)
     order = propose(world, quantity=2)
     accept(world, order)
     requests = {request["product"]: request for request in economy.suggestions(world)}
@@ -114,6 +115,7 @@ def test_planning_is_idempotent_and_persistent(world):
 
 def test_fees_and_existing_commitments_are_affordable_before_acceptance(world):
     world.state.village.coins["elsie"] = 11
+    add(world, "bakery", "bread", 2, expiry=1400)
     first = propose(world, quantity=2)
     accept(world, first)
     actor(world, "finn", world.actor.location_id)
@@ -172,11 +174,11 @@ def test_partial_deliveries_payment_once_and_conserved_cash_and_stock(world):
 
 
 def test_consolidated_orders_keep_accounting_and_charge_one_trip_fee(world):
+    add(world, "bakery", "bread", 3, expiry=1400)
     first = propose(world, quantity=1, request_key="first")
     second = propose(world, quantity=2, request_key="second")
     accept(world, first)
     accept(world, second)
-    add(world, "bakery", "bread", 3, expiry=1400)
     carrier = actor(world, "nella", "bakery")
     loads = carrier.state.village.residents["nella"].shipments
     assert goods.load(carrier, "nella", {"bread": 3}, "tavern", loads, 3) is None
@@ -199,8 +201,10 @@ def test_stale_selection_is_fefo_not_produced_fifo_and_failure_is_atomic(world):
 
 
 def test_stale_order_load_is_rejected_before_moving_stock(world):
+    add(world, "bakery", "bread", 3, expiry=1400)
     order = propose(world)
     accept(world, order)
+    goods.take(world, "bakery", "bread", 3)
     add(world, "bakery", "bread", 3, expiry=1140)
     carrier = actor(world, "nella", "bakery")
     loads = carrier.state.village.residents["nella"].shipments
@@ -210,9 +214,9 @@ def test_stale_order_load_is_rejected_before_moving_stock(world):
 
 
 def test_failed_payment_preserves_cargo_and_order_progress(world):
+    add(world, "bakery", "bread", 3, expiry=1400)
     order = propose(world)
     accept(world, order)
-    add(world, "bakery", "bread", 3, expiry=1400)
     carrier = actor(world, "nella", "bakery")
     loads = carrier.state.village.residents["nella"].shipments
     assert goods.load(carrier, "nella", {"bread": 3}, "tavern", loads, 3) is None
@@ -225,9 +229,9 @@ def test_failed_payment_preserves_cargo_and_order_progress(world):
 
 @pytest.mark.parametrize("cancel", [True, False])
 def test_cancel_or_deadline_failure_requires_real_cargo_return(world, cancel):
+    add(world, "bakery", "bread", 3, expiry=1400)
     order = propose(world)
     accept(world, order)
-    add(world, "bakery", "bread", 3, expiry=1400)
     carrier = actor(world, "nella", "bakery")
     loads = carrier.state.village.residents["nella"].shipments
     assert goods.load(carrier, "nella", {"bread": 3}, "tavern", loads, 3) is None
@@ -247,9 +251,9 @@ def test_cancel_or_deadline_failure_requires_real_cargo_return(world, cancel):
 
 
 def test_cargo_spoilage_releases_outstanding_units_and_records_real_loss(world):
+    add(world, "bakery", "bread", 3, expiry=565)
     order = propose(world, deadline=550, fresh=560)
     accept(world, order)
-    add(world, "bakery", "bread", 3, expiry=565)
     carrier = actor(world, "nella", "bakery")
     loads = carrier.state.village.residents["nella"].shipments
     assert goods.load(carrier, "nella", {"bread": 3}, "tavern", loads, 3) is None
@@ -266,8 +270,10 @@ def test_supplier_target_counts_work_in_progress_and_preserves_raw_material(worl
     supplier = actor(world, "jory")
     add(world, "bakery", "flour", 5)
     assert economy.production_blocker(supplier, "village_work")[0] == "DEMAND_MET"
+    add(world, "bakery", "bread", 3, expiry=1400)
     order = propose(world, quantity=3)
     accept(world, order)
+    goods.take(world, "bakery", "bread", 3)
     supplier.state.village.economy.config.reserve_targets = {"bakery": {"flour": 5}}
     assert economy.production_blocker(supplier, "village_work") is None
     add(world, "bakery", "bread", 2, expiry=1400)
@@ -346,6 +352,7 @@ def test_defer_authority_and_retry_acceptance(world):
     assert economy.apply(supplier, "village_defer_order", {"order_id": order.id, "until": 600})[0] == "APPLIED"
     assert economy.apply(supplier, "village_accept_order", {"order_id": order.id})[1] == "ORDER_DEFERRED"
     world.state.village.minute = 600
+    add(world, "bakery", "bread", 3, expiry=1400, produced=600)
     accept(world, order)
     before = economy.commitments(world, "elsie")
     assert economy.apply(supplier, "village_accept_order", {"order_id": order.id})[1] == "ORDER_ALREADY_ACCEPTED"
@@ -353,12 +360,12 @@ def test_defer_authority_and_retry_acceptance(world):
 
 
 def test_load_allocates_multiple_freshness_deadlines_atomically(world):
+    add(world, "bakery", "bread", 1, expiry=1200)
+    add(world, "bakery", "bread", 1, expiry=1400)
     first = propose(world, quantity=1, deadline=1110, fresh=1140, request_key="early")
     second = propose(world, quantity=1, deadline=1200, fresh=1250, request_key="later")
     accept(world, first)
     accept(world, second)
-    add(world, "bakery", "bread", 1, expiry=1200)
-    add(world, "bakery", "bread", 1, expiry=1400)
     carrier = actor(world, "nella", "bakery")
     loads = carrier.state.village.residents["nella"].shipments
     assert goods.load(carrier, "nella", {"bread": 2}, "tavern", loads, 3) is None
@@ -367,9 +374,9 @@ def test_load_allocates_multiple_freshness_deadlines_atomically(world):
 
 
 def test_capacity_aware_delivery_runs_and_reserve_protection(world):
+    add(world, "bakery", "bread", 5, expiry=1400)
     order = propose(world, quantity=5)
     accept(world, order)
-    add(world, "bakery", "bread", 5, expiry=1400)
     carrier = actor(world, "nella", "bakery")
     runs = economy.delivery_runs(carrier)
     assert runs[0]["goods"] == {"bread": 3}
@@ -381,6 +388,7 @@ def test_two_services_do_not_reuse_incoming_goods_or_expiring_meals(world):
     economy.configure(world, {**economy.config(world).model_dump(), "meal_plans": [
         {"id": "breakfast", "use_minute": 540, "portions": 4, "recipe_portions": {"bread": 4}},
         {"id": "supper", "use_minute": 1140, "portions": 8, "recipe_portions": {"bread": 8}}]})
+    add(world, "bakery", "bread", 2, expiry=1200)
     order = propose(world, quantity=2, deadline=530, fresh=1140)
     accept(world, order)
     requests = economy.suggestions(world)
@@ -396,23 +404,28 @@ def test_supplier_stale_for_service_stock_does_not_suppress_fresh_production(wor
     supplier = actor(world, "jory")
     add(world, "bakery", "bread", 3, expiry=1130)
     add(world, "bakery", "flour", 5)
+    add(world, "bakery", "bread", 3, expiry=1400)
     order = propose(world)
     accept(world, order)
+    goods.take(world, "bakery", "bread", 3, required_fresh_until=1140)
     assert economy.production_blocker(supplier, "village_work") is None
     assert economy.production_batch_limit(supplier, "village_work") == 2
 
 
 def test_accepted_orders_drive_real_upstream_replenishment(world):
     supplier = actor(world, "jory")
+    add(world, "bakery", "flour", 4)
+    add(world, "bakery", "bread", 4, expiry=1400)
     order = propose(world, quantity=4)
     accept(world, order)
     requests = economy.suggestions(supplier)
-    flour = next(request for request in requests if request["product"] == "flour")
-    assert flour["supplier"] == "mara" and flour["quantity"] == 4
+    assert all(request["product"] != "flour" for request in requests)
+    goods.take(world, "bakery", "bread", 4)
+    goods.take(world, "bakery", "flour", 2)
+    flour = next(request for request in economy.suggestions(supplier)
+                 if request["product"] == "flour")
+    assert flour["supplier"] == "mara" and flour["quantity"] == 2
     assert flour["deadline"] < order.deadline
-    add(world, "bakery", "flour", 2)
-    assert next(request for request in economy.suggestions(supplier)
-                if request["product"] == "flour")["quantity"] == 2
 
 
 def test_external_cash_is_ledger_only_and_monitor_shape_is_flat(world):
@@ -447,9 +460,9 @@ def test_already_served_diners_do_not_create_replacement_demand(world):
 
 
 def test_delivery_recovery_preserves_exactly_once_cash_and_remaining_quantity(world):
+    add(world, "bakery", "bread", 2, expiry=1400)
     order = propose(world, quantity=2)
     accept(world, order)
-    add(world, "bakery", "bread", 2, expiry=1400)
     carrier = actor(world, "nella", "bakery")
     shipments = carrier.state.village.residents["nella"].shipments
     assert goods.load(carrier, "nella", {"bread": 2}, "tavern", shipments, 3) is None
@@ -536,6 +549,7 @@ def test_face_to_face_order_is_spoken_locally_and_supplier_can_respond_later(wor
     assert spoken in [world.state.village.events[index]
                       for index in world.state.village.residents["jory"].memories]
     world.actor.location_id = "tavern"
+    add(world, "bakery", "bread", 3, expiry=1400)
     supplier = actor(world, "jory")
     assert supplier.actor.location_id != world.actor.location_id
     assert economy.apply(supplier, "village_accept_order", {"order_id": order.id})[0] == "APPLIED"
@@ -580,9 +594,13 @@ def test_buyer_must_be_awake_and_available_to_speak(world, sleeping):
 
 
 def test_baker_and_miller_upstream_ordering_cannot_bypass_contact(world):
+    add(world, "bakery", "bread", 4, expiry=1400)
+    add(world, "bakery", "flour", 4)
     bread = propose(world, quantity=4)
     accept(world, bread)
     baker = actor(world, "jory")
+    goods.take(world, "bakery", "bread", 4)
+    goods.take(world, "bakery", "flour", 4)
     assert any(request["product"] == "flour" and request["supplier"] == "mara"
                for request in economy.suggestions(baker))
     assert economy.apply(baker, "village_plan_supplies", {})[0] == "APPLIED"
@@ -593,7 +611,9 @@ def test_baker_and_miller_upstream_ordering_cannot_bypass_contact(world):
     assert economy.apply(baker, "village_plan_supplies", {"supplier": "mara"})[0] == "APPLIED"
     flour = next(order for order in baker.state.village.economy.orders.values()
                  if order.buyer == "jory" and order.product == "flour")
+    add(world, "watermill", "flour", flour.quantity)
     accept(world, flour)
+    goods.take(world, "watermill", "flour", flour.quantity)
     miller = actor(world, "mara")
     assert any(request["product"] == "grain" and request["supplier"] == "ada"
                for request in economy.suggestions(miller))

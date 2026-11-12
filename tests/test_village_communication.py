@@ -497,6 +497,37 @@ def test_configuration_fixture_collision_is_transactional(world):
     assert world.state == before
 
 
+def test_local_event_waiter_can_be_contacted_without_freeing_remote_or_busy_residents(world):
+    world.scenario.village.event_driven_waits = True
+    listener = actor(world, "mara", "watermill")
+    speaker = actor(world, "jory", "watermill")
+    state = world.state.village
+    assert listener.act("wait-mara", listener.revision(), "village_wait_event", {})["code"] == "EVENT_WAIT_STARTED"
+    person = state.residents["mara"]
+    assert person.available_at > state.minute
+    assert economy._conversation_blocker(speaker, "mara") is None
+    result = speaker.act("contact-mara", speaker.revision(), "village_notice_post", {
+        "notice": flour(private=True), "channel": "conversation", "listener": "mara"})
+    assert result["code"] == "NOTICE_POSTED", result
+    assert person.available_at == state.minute + 5
+    assert state.communication.knowledge["mara"]
+
+    person.available_at = 1140
+    assert listener.act("busy-mara", listener.revision(), "village_notice_read", {})["code"] == "ACTOR_BUSY"
+    state.residents["jory"].available_at = state.minute
+    listener.actor.location_id = "bakery"
+    assert economy._conversation_blocker(speaker, "mara")[0] == "OUT_OF_REACH"
+    listener.actor.location_id = "watermill"
+    person.life.sleeping = True
+    assert economy._conversation_blocker(speaker, "mara")[0] == "RESIDENT_ASLEEP"
+    person.life.sleeping = False
+    person.life.work = VillageCommittedWork(location="watermill", finishes_at=600, outputs={})
+    assert economy._conversation_blocker(speaker, "mara")[0] == "RESIDENT_BUSY"
+    person.life.work = None
+    person.timber_route = "woods"
+    assert economy._conversation_blocker(speaker, "mara")[0] == "RESIDENT_BUSY"
+
+
 def test_authorized_private_conversation_spends_both_actors_time_and_not_bystanders(world):
     actor(world, "jory", "watermill")
     actor(world, "mara", "watermill")
@@ -727,6 +758,36 @@ def test_appointments_require_personal_confirmation_presence_time_supplies_and_e
     comm.advance(world)
     assert latest(world, nid).status == "completed"
     assert set(world.state.village.project_contributions[project]) == set(crew)
+
+
+@pytest.mark.parametrize("project", ["dig_well", "repair_mill"])
+def test_appointment_partner_can_work_while_other_partner_finishes_project_turn(world, project):
+    lead, partner, nid = meeting(world, project)
+    crew, site = comm._project(world, project)
+    ready(world, 540)
+    lead.actor.location_id = "village-square"
+    read(lead)
+    lead.actor.location_id = partner.actor.location_id = site
+    assert known(world, crew[0], nid).snapshot.appointment.status == "confirmed"
+    for eid in ([world.scenario.village.shovel, world.scenario.village.timber,
+                 world.scenario.village.rope] if project == "dig_well" else
+                [world.scenario.village.repair_part, world.scenario.village.hammer]):
+        world.state.entities[eid].location = site
+        world.state.entities[eid].hidden = False
+    if project == "repair_mill":
+        world.state.village.breakdown = True
+        world.state.village.stocks.setdefault(site, {})["planks"] = 1
+    assert village_ai.apply(lead, "village_project", {"project": project})[0] == "APPLIED"
+    village_ai.after_action(lead, "village_project", {"project": project})
+    assert world.state.village.residents[crew[0]].available_at == 545
+    assert comm.project_blocker(partner, project) is None
+    assert village_ai.apply(partner, "village_project", {"project": project})[0] == "APPLIED"
+    village_ai.after_action(partner, "village_project", {"project": project})
+    assert comm.project_blocker(lead, project) is not None
+    ready(world, 545)
+    world.state.village.residents[crew[1]].current_action = "go"
+    world.state.village.residents[crew[1]].available_at = 550
+    assert "still occupied" in comm.project_blocker(lead, project)
 
 
 def test_appointment_version_change_revokes_old_signature_and_cannot_auto_travel(world):

@@ -13,6 +13,8 @@ VERBS = {"village_wait", "village_ask", "village_tell", "village_observe", "vill
 
 
 def observation(world: "World") -> dict[str, Any]:
+    from npc_sim import village_fallback
+    village_fallback.update_supply_needs(world)
     config, state = village.context(world)
     rid = world.actor_id
     resident, person = config.residents[rid], state.residents[rid]
@@ -42,6 +44,9 @@ def observation(world: "World") -> dict[str, Any]:
                                 or world.state.entities["wagon"].location == world.actor.location_id)
             else None} if config.time_based_turns else {}),
         "personal": {
+            "supply_needs": [need.model_dump() for need in person.fallback.supply_needs.values()]
+            if person.fallback else [],
+            "recent_locations": [step.model_dump() for step in person.fallback.recent_locations],
             "occupation": resident.occupation, "personality": resident.personality,
             "skills": resident.skills, "beliefs": {key: value.model_dump() for key, value in person.beliefs.items()},
             "relationships": person.trust.copy(), "schedule": [entry.model_dump() for entry in resident.schedule],
@@ -79,6 +84,10 @@ def observation(world: "World") -> dict[str, Any]:
                   "Gather the portable supplies at the work site or carry them there. "
                   "village_observe checks local tools; village_ask shares only the target's own knowledge. "
                   "Never quote internal action results, audit notes or belief-source codes as speech. "
+                  "A personally posted open supply need already has a request: keep useful work or rest instead of "
+                  "repeatedly searching for its supplier. Revisit only after new local evidence, a credible meeting, "
+                  "an urgent deadline, or rejection/expiry. Check physical messages when a response is expected, "
+                  "not on every short turn; never infer a remote reply from authoritative records. "
                   "Say I and my for yourself, and you and your for the person addressed. Use their actual occupation. "
                   + (" Prioritize due meals and rest over interruptible work. Eat one daily meal at the 19:00 tavern gathering. "
                      "A prepared meal, bread, or fish with tea counts; tea alone does not. No imaginary home pantry. "
@@ -90,7 +99,8 @@ def observation(world: "World") -> dict[str, Any]:
                      if config.daily_life else "")
                   + (" Free look/read actions do not end your turn: follow them with useful work, travel or a clear wait. "
                      "When nothing useful can be done, prefer a clear village_wait over looking around repeatedly. "
-                     "Ordinary production starts after your own wake time and closes at 19:30, including the closing grace. "
+                     "Ordinary production starts after your own wake time. Other workplaces close at 19:30; "
+                     f"the inn serves until {village.clock_time(village_extensions.policy(world).inn_closing_minute)}. "
                      "Bren: feed the real horse, lead it to the wagon and hitch it in the morning; unhitch at night "
                      "and return it to the stable, released and unhitched. Stop automatic routes before everyone goes home. "
                      "Ada or Jory may drive when Nella is busy or away. Wagons use roads only. "
@@ -555,6 +565,13 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
 def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
     config, state = village.context(world)
     person = state.residents[world.actor_id]
+    if action == "go":
+        from npc_sim import village_fallback
+        door = world.state.entities[args["target"]]
+        destination = world.actor.location_id
+        origin = door.destination if door.location == destination else door.location
+        if origin is not None:
+            village_fallback.record_location_transition(world, origin, destination)
     if (action == "go" and state.wagon and state.wagon.driver == world.actor_id
             and not state.wagon.automatic):
         world.state.entities["wagon"].location = world.actor.location_id

@@ -334,10 +334,14 @@ async def test_proxy_failure_pauses_without_finishing_or_retrying(configuration,
     try:
         await controller.command("start")
         await controller.command("run")
-        async with asyncio.timeout(5):
-            while controller.run["status"] != "paused" or controller.in_flight:
-                await asyncio.sleep(0.01)
+        for _ in range(500):
+            if controller.run["status"] == "paused" and not controller.in_flight:
+                break
+            await asyncio.sleep(0.01)
         assert controller.run["status"] == "paused"
+        assert not controller.in_flight
+        assert not controller.worker.done()
+        await asyncio.wait_for(controller.command("pause"), timeout=2)
         assert controller.run["actions"] == 0
         assert controller.run["model_calls"] == 1
         assert "Adventure paused" in controller.run["reason"]

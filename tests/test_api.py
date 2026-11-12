@@ -179,6 +179,16 @@ def test_admin_origin_and_path_guards(tmp_path, monkeypatch):
         assert client.get("/api/history/not-a-run").status_code == 400
         assert client.post("/api/control/invented", json={}).status_code == 404
         assert client.post("/api/control/start", json={"scenario_id": "../secret"}).status_code == 422
+        assert client.get("/api/health", headers={"Host": "192.168.1.20:8000"}).status_code == 403
+        monkeypatch.setenv("NPCSIM_LAN_HOST", "192.168.1.20")
+        assert client.get("/api/health", headers={"Host": "192.168.1.20:8000"}).status_code == 200
+        assert client.get("/api/health", headers={"Host": "192.168.1.21:8000"}).status_code == 403
+        assert client.post("/api/control/start", json={}, headers={
+            "Host": "192.168.1.20:8000", "Origin": "https://untrusted.example"}).status_code == 403
+        assert client.get("/api/health", headers={
+            "Host": "192.168.1.20:8000", "Origin": "http://192.168.1.20:8000"}).status_code == 200
+        monkeypatch.setenv("NPCSIM_LAN_HOST", "example.com")
+        assert client.get("/api/health", headers={"Host": "192.168.1.20:8000"}).status_code == 403
 
 
 def test_agent_catalog_edit_assignment_and_frozen_episode(tmp_path, monkeypatch):

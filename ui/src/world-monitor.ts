@@ -102,8 +102,10 @@ export function worldMonitorMarkup(
   ${canReopenAdventure(state.run, Boolean(state.world)) ? `<p class="muted">The day is unfinished. <a class="button" href="/">${status === "error" ? "Recover the interrupted day in Player view" : "Continue the unfinished day in Player view"}</a></p>` : ""}
   ${!active && agents.length ? '<p class="muted">Last recorded world state. The adventure is not running.</p>' : ""}
   ${!state.world && agents.length ? '<p class="muted">World snapshot unavailable. Locations below are last observed, not live positions.</p>' : ""}
-  ${townMapMarkup(state, agents, map)}
-  ${worldGanttMarkup(state, events, agents, scale)}
+  <div class="monitor-visuals${state.world?.village ? " with-town-map" : ""}">
+    ${townMapMarkup(state, agents, map)}
+    ${worldGanttMarkup(state, events, agents, scale)}
+  </div>
   ${villageSystemsMarkup(state, [], state.observation?.village?.research?.enabled)}
   <div class="monitor-locations">${[...groups.values()].map(group =>
     `<section class="monitor-location" aria-label="${escape(group[0].location)}">
@@ -150,7 +152,8 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     if (!state) return;
     historyReady ||= seen.size >= state.event_count;
     const old = content.querySelector<HTMLDivElement>(".gantt-scroll");
-    const viewportWidth = old?.clientWidth ?? Math.max(120, content.clientWidth - 130);
+    const viewportWidth = old?.clientWidth ?? Math.max(120,
+      (state.world?.village && content.clientWidth > 1100 ? (content.clientWidth - 18) / 2.15 : content.clientWidth) - 130);
     const now = Date.now();
     const markup = worldMonitorMarkup(state, historyReady ? [...events.values()] : [], { zoom, viewportWidth },
       { zoom: mapZoom, selectedActorId, dialogue, now });

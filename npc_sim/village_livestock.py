@@ -379,7 +379,7 @@ def apply(world, action, args):
             and (not job.equipment or not world.state.entities[job.equipment].broken)
             and any(order.status == "accepted" and order.supplier == actor and order.product in job.outputs
                     and order.loadable and max(town.minute, person.next_work) + job.duration <= order.deadline <= end + job.duration
-                    and village_economy.usable_stock(world, location, order.product, town.minute) < order.loadable
+                    and village_economy.loadable_for_order(world, order) < order.loadable
                     for order in town.economy.orders.values())):
         return "REJECTED", "FUNDED_GRAIN_FIRST" if actor == state.config.keeper else "FUNDED_PRODUCTION_FIRST", "Finish feasible urgent funded production before optional dairy/recycling.", None
     if operation == "water":

@@ -54,23 +54,25 @@ def test_new_day_starts_asleep_at_home_and_waking_villagers_walk_to_work(tmp_pat
     state = world.state.village
     assert state.minute == min(resident.wake_minute for resident in value.village.residents.values()) - 60 == 300
     for rid, actor in actors.items():
-        assert actor.actor.location_id == actor.actor.start_location_id == value.village.residents[rid].home == "cottages"
+        assert actor.actor.location_id == actor.actor.start_location_id == value.village.residents[rid].home
         assert state.residents[rid].life.sleeping
         assert state.residents[rid].life.sleep_until == value.village.residents[rid].wake_minute
+    assert {rid: value.village.residents[rid].home for rid in ("elsie", "ada")} == {"elsie": "tavern", "ada": "farm"}
     stocks = {place: amounts.copy() for place, amounts in state.stocks.items()}
     assert act(actors["bren"], "village_work")["code"] == "ASLEEP"
     assert state.stocks == stocks and state.minute == 300
     assert village_turns.next_actor(world) == "bren"
     assert state.minute == 360
-    assert {rid for rid, person in state.residents.items() if not person.life.sleeping} == {"bren", "jory", "ada"}
-    assert all(actor.actor.location_id == "cottages" for actor in actors.values())
+    assert {rid for rid, person in state.residents.items() if not person.life.sleeping} == {"bren", "jory", "ada", "elsie"}
+    assert all(actor.actor.location_id == value.village.residents[rid].home for rid, actor in actors.items())
     assert act(actors["bren"], "village_work")["code"] == "WRONG_WORKPLACE"
     walk(actors, "bren", "square-cottages", "square-stable")
     do(actors, "bren", "village_work")
     assert actors["bren"].actor.location_id == "stable"
     assert state.minute == 370
     assert state.stocks["stable"]["hay"] == stocks["stable"]["hay"] - value.village.residents["bren"].job.inputs["hay"]
-    assert all(actor.actor.location_id == "cottages" for rid, actor in actors.items() if rid != "bren")
+    assert all(actor.actor.location_id == value.village.residents[rid].home
+               for rid, actor in actors.items() if rid != "bren")
 
 
 @pytest.mark.asyncio
@@ -86,7 +88,8 @@ async def test_controller_waits_for_first_wake_before_requesting_a_decision(conf
         before = controller.status()
         assert before["world"]["village"]["minute"] == 300
         assert len(before["world"]["actors"]) == 12
-        assert all(actor["location_id"] == "cottages" for actor in before["world"]["actors"].values())
+        assert all(actor["location_id"] == scenario().village.residents[rid].home
+                   for rid, actor in before["world"]["actors"].items())
         assert controller.run["model_calls"] == 0 and proxy.contexts == []
         await controller.command("step")
         assert len(proxy.contexts) == 1
@@ -96,7 +99,8 @@ async def test_controller_waits_for_first_wake_before_requesting_a_decision(conf
         assert not observed["village"]["personal"]["life"]["sleeping"]
         after = controller.status()["world"]
         assert after["actors"]["bren"]["location_id"] == "village-square"
-        assert all(actor["location_id"] == "cottages" for rid, actor in after["actors"].items() if rid != "bren")
+        assert all(actor["location_id"] == scenario().village.residents[rid].home
+                   for rid, actor in after["actors"].items() if rid != "bren")
     finally:
         await controller.shutdown()
 

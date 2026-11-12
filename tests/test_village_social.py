@@ -145,6 +145,31 @@ def test_real_duration_skips_calls_and_survives_json_reload(cast):
     assert village_social.monitor(world)["activities"][0]["end"] == 915
 
 
+def test_tavern_leisure_must_finish_by_inn_closing(cast):
+    world = cast["iona"]
+    feed(cast)
+    world.scenario.village.residents["iona"].bed_minute = 1380
+    tick(cast, 1295)
+    assert leisure(cast, "read")[0] == "APPLIED"
+    tick(cast, 1315)
+    assert world.state.village.social.intervals[-1].status == "completed"
+    assert leisure(cast, "read")[1] == "INN_CLOSED"
+    tick(cast, 1320)
+    assert leisure(cast, "read")[1] == "INN_CLOSED"
+
+
+def test_tavern_band_cannot_be_scheduled_past_closing(cast):
+    world = cast["elsie"]
+    place(cast, "elsie", "tavern")
+    tick(cast, 1270)
+    world.state.village.residents["elsie"].life.meals["0:daily"].status = "eaten"
+    world.state.village.residents["elsie"].life.hungry = False
+    config = world.state.village.social.config.bands["inn-band"]
+    config.latest_minute = 1320
+    assert band(cast, start=1300)[0] == "APPLIED"
+    assert band(cast, start=1305)[1] == "INN_CLOSED"
+
+
 def test_meals_bedtime_missing_material_equipment_and_commitments(cast):
     world = cast["iona"]
     world.state.village.stocks["cottages"]["herbs"] = 0

@@ -492,6 +492,7 @@ class VillageDayPolicy(StrictModel):
     breakfast: bool = False
     breakfast_delay: int = Field(default=30, ge=5, le=180, multiple_of=5)
     meal_window: int = Field(default=90, ge=5, le=240, multiple_of=5)
+    inn_closing_minute: int = Field(default=1320, ge=1140, lt=1440, multiple_of=5)
     event_driven_waits: bool = False
     anti_idle: bool = False
     idle_review_minutes: int = Field(default=60, ge=15, le=240, multiple_of=5)
@@ -689,8 +690,39 @@ class VillageIdleWait(StrictModel):
     context_revision: str
 
 
+class VillageSupplyNeed(StrictModel):
+    owner_id: str
+    good: str
+    quantity_needed: int = Field(gt=0)
+    purpose: str
+    destination_id: str
+    supplier_id: str
+    status: Literal["identified", "request-posted", "awaiting-response", "accepted", "conditional",
+                    "delivered", "rejected", "expired", "cancelled", "blocked"] = "identified"
+    notice_id: str | None = None
+    last_material_change: int = 0
+    next_check_after: int = 0
+    blocker: str | None = None
+
+
+class VillageLocationTransition(StrictModel):
+    origin: str
+    destination: str
+    minute: int
+
+
+class VillageSupplierSearch(StrictModel):
+    visits: int = 0
+    evidence: str = ""
+    observed_stock: int = 0
+    last_visit: int = 0
+
+
 class VillageFallbackState(StrictModel):
     blocked: dict[str, VillageBlockedAction] = Field(default_factory=dict)
+    supply_needs: dict[str, VillageSupplyNeed] = Field(default_factory=dict)
+    recent_locations: list[VillageLocationTransition] = Field(default_factory=list)
+    supplier_searches: dict[str, VillageSupplierSearch] = Field(default_factory=dict)
     inspections: dict[str, tuple[int, str]] = Field(default_factory=dict)
     wait: VillageIdleWait | None = None
     active_inspection_until: int | None = None

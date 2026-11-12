@@ -37,8 +37,10 @@ def enabled(world: "World") -> bool:
 def example_config(scenario: Scenario) -> dict[str, Any]:
     base = scenario.village
     supplier = next(rid for rid, resident in base.residents.items() if "forestry" in resident.skills)
-    buyer = next(rid for rid, resident in base.residents.items() if resident.work == resident.home)
-    members = sorted(base.residents)
+    buyer = next(rid for rid, resident in base.residents.items()
+                 if resident.work == resident.home == scenario.start_location)
+    members = sorted(rid for rid, resident in base.residents.items()
+                     if resident.home == base.residents[buyer].home)
     return VillageFirewoodConfig(
         supplier=supplier, household_buyer=buyer,
         households={f"hearth-{index // 4 + 1}": members[index:index + 4]
@@ -64,11 +66,11 @@ def _validate(scenario: Scenario, config: VillageFirewoodConfig) -> None:
     if buyer is None or buyer.work != buyer.home:
         raise ValueError("The cottage custodian must work at the communal household stock location")
     members = [rid for group in config.households.values() for rid in group]
-    if (set(members) != set(base.residents) or len(members) != len(set(members))
+    cottage_residents = {rid for rid, resident in base.residents.items() if resident.home == buyer.home}
+    if (set(members) != cottage_residents or len(members) != len(set(members))
             or any(not group for group in config.households.values())
-            or any(base.residents[rid].home != buyer.home for rid in members)
             or any(not re.fullmatch(r"[a-z0-9][a-z0-9-]*", key) for key in config.households)):
-        raise ValueError("Assign every resident exactly once to a named shared cottage hearth at their real home")
+        raise ValueError("Assign every cottage resident exactly once to a named shared cottage hearth")
     if len(config.businesses) != len(set(config.businesses)) or any(
             rid not in base.residents or base.residents[rid].job is None for rid in config.businesses):
         raise ValueError("Fuel consumers must be unique real resident businesses")

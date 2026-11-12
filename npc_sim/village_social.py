@@ -290,6 +290,11 @@ def _guard(world, rid, location, end, *, existing=None, require_present=True):
     now, life = state.minute, person.life
     if require_present and village.resident_location(world, rid) != location:
         return "NOT_PRESENT", "Walk to the configured activity location; remote participation is not supported."
+    if location == "tavern":
+        from npc_sim import village_extensions
+        closing = now // 1440 * 1440 + village_extensions.policy(world).inn_closing_minute
+        if end > closing or (now >= closing and existing is None):
+            return "INN_CLOSED", f"The inn closes at {village.clock_time(closing)}; finish tavern activities before closing."
     if life is None or life.sleeping or village_life.rest_due(resident, life, now):
         return "REST_DUE", "Meals and actual sleep take precedence over optional leisure."
     if village_life.meal_due(life, now) or life.hungry:
@@ -876,6 +881,11 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             return reject("BAD_PLAN", "Choose rehearsal/performance and an absolute five-minute start time.")
         if start < state.minute + config.action_allowance or not band.earliest_minute <= start % 1440 <= band.latest_minute:
             return reject("BAD_START", "The start must be future and inside the configured evening window.")
+        if band.venue == "tavern":
+            from npc_sim import village_extensions
+            closing = start // 1440 * 1440 + village_extensions.policy(world).inn_closing_minute
+            if start + band.duration > closing:
+                return reject("INN_CLOSED", f"The inn closes at {village.clock_time(closing)}; finish the band session before closing.")
         if any(plan.band == args["band"] and plan.status in {"invited", "active"} for plan in social.band_plans.values()):
             return reject("DUPLICATE_PLAN", "This band already has a pending or active commitment.")
         if any(plan.band == args["band"] and plan.mode == args["mode"]

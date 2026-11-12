@@ -189,6 +189,11 @@ def test_in_person_funded_delivery_cooking_consumption_and_finite_coins(tmp_path
     world = make_world(tmp_path)
     care(world)
     state = world.state.village
+    reserves(world, milk=1, eggs=1)
+    perform(world, "village_milk_cow", minutes=15)
+    perform(world, "village_collect_eggs", minutes=10)
+    assert state.stocks["farm"]["milk"] == state.stocks["farm"]["eggs"] == 1
+    reserves(world, milk=0, eggs=0)
     inn = world.bind("elsie", "session-elsie")
     inn.actor.location_id = "farm"
     before = copy.deepcopy(state.coins)
@@ -197,9 +202,6 @@ def test_in_person_funded_delivery_cooking_consumption_and_finite_coins(tmp_path
                 deadline=1100, required_fresh_until=1140)
         order = list(state.economy.orders.values())[-1]
         perform(world, "village_accept_order", order_id=order.id)
-    perform(world, "village_milk_cow", minutes=15)
-    perform(world, "village_collect_eggs", minutes=10)
-    assert state.stocks["farm"]["milk"] == state.stocks["farm"]["eggs"] == 1
     courier = world.bind("nella", "session-nella")
     courier.actor.location_id = "farm"
     perform(courier, "village_load_goods", goods={"milk": 1, "eggs": 1}, destination="tavern")
@@ -370,7 +372,7 @@ def test_funded_grain_deadline_precedes_optional_dairy_without_stealing_feed(tmp
     care(world)
     reserves(world)
     state = world.state.village
-    village_goods.take(world, "farm", "grain", 5)
+    village_goods.put(world, "farm", "grain", 1)
     miller_id = world.scenario.village.miller
     miller = world.bind(miller_id, f"session-{miller_id}")
     miller.actor.location_id = "farm"
@@ -378,20 +380,21 @@ def test_funded_grain_deadline_precedes_optional_dairy_without_stealing_feed(tmp
             deadline=state.minute + 30, required_fresh_until=state.minute + 60)
     order = list(state.economy.orders.values())[-1]
     perform(world, "village_accept_order", order_id=order.id)
+    village_goods.take(world, "farm", "grain", 2)
     state.residents["ada"].next_work = state.minute + 5
     assert act(world, "village_milk_cow")["code"] == "FUNDED_GRAIN_FIRST"
-    assert state.stocks["farm"]["grain"] == 0 and state.stocks["farm"]["milk"] == 0
+    assert state.stocks["farm"]["grain"] == 4 and state.stocks["farm"]["milk"] == 0
     village.advance(world, 5)
     perform(world, "village_work")
-    assert state.stocks["farm"]["grain"] == 2
+    assert state.stocks["farm"]["grain"] == 6
     courier = world.bind("nella", "session-nella")
     courier.actor.location_id = "farm"
     perform(courier, "village_load_goods", goods={"grain": 2}, destination="watermill")
     perform(courier, "go", target="farm-mill")
     perform(courier, "village_unload_goods")
-    assert order.status == "fulfilled" and state.stocks["farm"]["grain"] == 0
+    assert order.status == "fulfilled" and state.stocks["farm"]["grain"] == 4
     perform(world, "village_milk_cow", minutes=15)
-    assert state.stocks["farm"]["grain"] == 0 and state.stocks["farm"]["milk"] == 6
+    assert state.stocks["farm"]["grain"] == 4 and state.stocks["farm"]["milk"] == 6
 
 
 def test_earned_unfinished_cleaning_carries_but_new_day_needs_new_feed_and_water(tmp_path):

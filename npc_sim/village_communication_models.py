@@ -1,6 +1,6 @@
 """Opt-in physical communication and independently received snapshots."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -133,6 +133,43 @@ class TellNotice(CommunicationModel):
 class CloseNotice(ChangeNotice):
     reason: Text
     status: Literal["cancelled", "superseded"] = "cancelled"
+
+
+class SupplyIntent(CommunicationModel):
+    good: Text
+    quantity: Positive
+    purpose: Text
+    deadline: Number
+    required_fresh_until: Number
+    preferred_supplier_id: Text
+    destination_id: Text | None = None
+
+
+class MeetingIntent(CommunicationModel):
+    project_id: Literal["dig_well", "repair_mill"]
+    start: Number
+    end: Number | None = None
+    purpose: Text
+
+
+class RespondIntent(CommunicationModel):
+    request_id: Text
+    response: Literal["accept", "reject", "propose"]
+    reason: Text | None = None
+
+
+class UpdateIntent(CommunicationModel):
+    request_id: Text
+    changes: dict[str, Any]
+
+
+class CheckMessagesIntent(CommunicationModel):
+    channel: Literal["board", "inbox"] = "board"
+
+
+class ShareIntent(CommunicationModel):
+    listener_id: Text
+    notice_id: Text
 
 
 class CommitmentView(CommunicationModel):

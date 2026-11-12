@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any
 
-from npc_sim import village, village_goods, village_life
+from npc_sim import village, village_economy, village_goods, village_life
 from npc_sim.models import VillageCommittedWork, VillageShipment
 
 if TYPE_CHECKING:
@@ -20,7 +20,9 @@ def load(world: "World", goods: dict[str, int], destination: str) -> str | None:
     if config.expanded_rules:
         if wagon.driver is None:
             raise ValueError("A goods load has no active wagon driver")
-        return village_goods.load(world, wagon.driver, goods, destination, wagon.loads, 6)
+        blocked = village_economy.load_blocker(world, village.resident_location(world, wagon.driver),
+                                               destination, goods)
+        return blocked if blocked else village_goods.load(world, wagon.driver, goods, destination, wagon.loads, 6)
     source = village.resident_location(world, config.courier)
     sellers = [rid for rid, resident in config.residents.items() if resident.work == source]
     buyers = [rid for rid, resident in config.residents.items() if resident.work == destination]

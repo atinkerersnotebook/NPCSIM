@@ -70,6 +70,7 @@ test("World view renders each resident once on the map without changing state or
   const before = JSON.stringify(state);
   const markup = worldMonitorMarkup(state);
   assert.equal((markup.match(/data-map-actor=/g) ?? []).length, 12);
+  assert.ok(markup.includes('class="monitor-visuals with-town-map"'));
   assert.ok(markup.indexOf('aria-label="Live Millhaven town map"') < markup.indexOf('class="world-gantt"'));
   assert.ok(markup.includes("not exact indoor positions"));
   assert.ok(markup.includes('data-map-zoom="fit"'));

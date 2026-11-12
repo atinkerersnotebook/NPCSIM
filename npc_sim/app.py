@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+from ipaddress import ip_address
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -39,10 +40,17 @@ app = FastAPI(title="NPCSIM Admin", lifespan=lifespan)
 
 
 @app.middleware("http")
-async def local_admin_only(request: Request, call_next: Any):
+async def trusted_admin_host(request: Request, call_next: Any):
     host = request.headers.get("host", "").split(":")[0]
-    if host not in {"127.0.0.1", "localhost", "testserver"}:
-        return JSONResponse({"detail": "Admin API is loopback-only."}, status_code=403)
+    allowed_hosts = {"127.0.0.1", "localhost", "testserver"}
+    lan_host = os.environ.get("NPCSIM_LAN_HOST", "")
+    try:
+        if lan_host and ip_address(lan_host).version == 4:
+            allowed_hosts.add(lan_host)
+    except ValueError:
+        pass
+    if host not in allowed_hosts:
+        return JSONResponse({"detail": "Admin API is restricted to configured hosts."}, status_code=403)
     origin = request.headers.get("origin")
     if origin and origin not in {"http://" + request.headers.get("host", ""),
                                  "http://127.0.0.1:5173", "http://localhost:5173"}:

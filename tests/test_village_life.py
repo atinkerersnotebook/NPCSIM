@@ -2,7 +2,9 @@ import pytest
 
 from npc_sim import village, village_life, village_turns
 from npc_sim.world import World
-from test_village_expanded import scenario
+from npc_sim.storage import read_json
+from npc_sim.models import Scenario
+from test_village_expanded import ROOT, scenario
 from test_world import act
 
 
@@ -132,6 +134,45 @@ def test_sleep_requires_home_full_rest_and_cannot_be_skipped(cast):
     assert not life(cast, "torvin").sleeping
     assert act(world, "village_sleep")["code"] == "REST_NOT_DUE"
     assert act(cast["bren"], "village_work")["code"] == "REST_DUE"
+
+
+@pytest.mark.parametrize("scenario_id", ["millhaven-expanded", "millhaven-living"])
+def test_elsie_wakes_at_six_to_prepare_her_inn(tmp_path, scenario_id):
+    value = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / f"{scenario_id}.json"))
+    resident = value.village.residents["elsie"]
+    assert resident.home == resident.work == "tavern"
+    assert resident.wake_minute == 360
+    assert resident.schedule[1].minute == 360
+    assert "prepar" in resident.schedule[1].activity.lower()
+    assert "food" in resident.schedule[1].activity.lower()
+    world = World(value, tmp_path / "elsie.json", "elsie", "elsie", "session-elsie")
+    assert world.state.village.residents["elsie"].life.sleep_until == 360
+    village.advance(world, 60)
+    assert not world.state.village.residents["elsie"].life.sleeping
+    assert world.state.village.residents["elsie"].life.last_woke == 360
+
+
+@pytest.mark.parametrize("rid,home", [("elsie", "tavern"), ("ada", "farm")])
+def test_residents_sleep_at_their_workplace_homes(cast, rid, home):
+    world = cast[rid]
+    assert world.scenario.village.residents[rid].home == home
+    advance_to(cast, world.scenario.village.residents[rid].bed_minute)
+    if rid == "ada":
+        for destination in village.route(world, world.actor.location_id, "tavern"):
+            door = next(eid for eid, entity in world.state.entities.items()
+                        if entity.kind == "door" and {entity.location, entity.destination}
+                        == {world.actor.location_id, destination})
+            do(cast, rid, "go", target=door)
+        advance_to(cast, world.state.village.residents[rid].available_at)
+        assert act(world, "village_sleep")["code"] == "NOT_AT_HOME"
+        for destination in village.route(world, world.actor.location_id, home):
+            door = next(eid for eid, entity in world.state.entities.items()
+                        if entity.kind == "door" and {entity.location, entity.destination}
+                        == {world.actor.location_id, destination})
+            do(cast, rid, "go", target=door)
+    do(cast, rid, "village_sleep")
+    assert world.actor.location_id == home
+    assert life(cast, rid).sleeping
 
 
 def test_two_unit_baking_is_committed_idempotent_and_survives_reload(cast):

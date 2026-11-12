@@ -13,6 +13,7 @@ from npc_sim.village_communication_models import (
     Appointment, Channel, ChangeNotice, CloseNotice, NoticeKnowledge, NoticeTerms,
     NoticeVersion, PostNotice, ReadInbox, ReadNotices, ReplyNotice, TellNotice,
     UpdateNotice, VillageCommunicationConfig, VillageCommunicationState,
+    SupplyIntent, MeetingIntent, RespondIntent, UpdateIntent, CheckMessagesIntent, ShareIntent,
 )
 
 if TYPE_CHECKING:
@@ -20,12 +21,15 @@ if TYPE_CHECKING:
 
 VERBS = {"village_notice_post", "village_notice_read", "village_notice_update",
          "village_notice_reply", "village_notice_close", "village_notice_tell",
-         "village_inbox_read", "village_inbox_leave"}
+         "village_inbox_read", "village_inbox_leave", "village_request_supply",
+         "village_propose_meeting", "village_respond_to_request", "village_update_request",
+         "village_check_messages", "village_share_known_notice"}
 TERMINAL = {"completed", "rejected", "cancelled", "expired", "superseded"}
 GUIDANCE = (
     "Knowledge is a received snapshot, not current world truth. Check the physical square board "
     "while passing, or your own workplace box on return; writing/reading requires being there. "
-    "Use one notice per unmet need, then continue useful work while awaiting replies. "
+    "Use village_request_supply or village_propose_meeting for new needs; the engine resolves "
+    "prices, recipients and physical channels. Use one notice per unmet need, then continue useful work while awaiting replies. "
     "A board or physical inbox reply can commit funded supply without chasing the buyer. "
     "Acceptance is not delivery: use real production, cargo, unloading and payment. "
     "Share at most the listed relevant candidates with an awake available person actually here; "
@@ -115,7 +119,7 @@ def _ready(world: "World", actor: str) -> None:
     if (village_state.residents[actor].timber_route
             or (village_state.wagon and village_state.wagon.automatic and village_state.wagon.driver == actor)):
         raise ValueError("A resident travelling or working an automatic route is unavailable to talk")
-    blocked = village_economy._speaker_blocker(world, actor)
+    blocked = village_economy._speaker_blocker(world, actor, contact_waiter=actor != world.actor_id)
     if blocked:
         raise ValueError(blocked[1])
     from npc_sim import village_extensions
@@ -196,7 +200,8 @@ def _validate_terms(world: "World", terms: NoticeTerms, author: str) -> None:
             raise ValueError("A project appointment needs a project and due time")
         crew, site = _project(world, terms.project)
         if author not in crew or set(terms.recipients) != set(crew) - {author} or terms.destination != site:
-            raise ValueError("The actual project crew must propose its actual work-site appointment")
+            raise ValueError(f"Project appointments require destination={site} and recipients "
+                             f"containing only the other crew member; description text does not set the destination")
     elif terms.project is not None:
         raise ValueError("Only a meeting may name a cooperative project")
 
@@ -320,7 +325,9 @@ def _create_order(world: "World", notice: NoticeVersion) -> dict[str, Any]:
     stock = village_economy.usable_stock(world, source, terms.subject, terms.required_fresh_until)
     protected = village_economy.protected_quantity(world, source, terms.subject)
     potential = 0
-    work_end = min(terms.due_at - transport_minutes, village_state.minute // 1440 * 1440 + 1170,
+    from npc_sim import village_life
+    work_end = min(terms.due_at - transport_minutes,
+                   village_state.minute // 1440 * 1440 + village_life.production_closing_minute(world, supplier),
                    village_state.minute // 1440 * 1440 + base.residents[supplier].bed_minute)
     if produces and job and terms.subject in job.outputs:
         from npc_sim import village_life, village_research
@@ -389,6 +396,145 @@ def _create_order(world: "World", notice: NoticeVersion) -> dict[str, Any]:
     return {"linked_order_id": order.id, "order_snapshot": order.model_dump(mode="json")}
 
 
+INTENTS = {
+    "village_request_supply": SupplyIntent,
+    "village_propose_meeting": MeetingIntent,
+    "village_respond_to_request": RespondIntent,
+    "village_update_request": UpdateIntent,
+    "village_check_messages": CheckMessagesIntent,
+    "village_share_known_notice": ShareIntent,
+}
+
+
+class ChannelUnavailable(ValueError):
+    pass
+
+
+def _intent_channel(world: "World", terms: NoticeTerms, *, author: str | None = None) -> dict[str, str]:
+    state = _state(world)
+    location = world.actor.location_id
+    recipients = [author] if author else terms.recipients
+    for listener in recipients:
+        if listener in village.local_residents(world, location) and listener != world.actor_id:
+            try:
+                _local_listener(world, listener)
+            except ValueError:
+                continue
+            return {"channel": "conversation", "listener": listener}
+    for box, owner in state.boxes.items():
+        entity = world.state.entities.get(box)
+        if owner in recipients and entity and entity.location == location and not entity.hidden and not entity.broken:
+            if "manipulate" not in world.actor.body.capabilities:
+                raise ValueError("Writing a physical note requires actual manipulation capability")
+            return {"channel": "inbox", "inbox_id": box}
+    board = world.state.entities.get(state.config.board_id)
+    if not terms.private and board and board.location == location and not board.hidden and not board.broken:
+        if "manipulate" not in world.actor.body.capabilities:
+            raise ValueError("Writing a physical note requires actual manipulation capability")
+        return {"channel": "board"}
+    options = [(box, world.state.entities[box].location) for box, owner in state.boxes.items()
+               if owner in recipients and box in world.state.entities]
+    if not terms.private and board:
+        options.append((state.config.board_id, board.location))
+    routes = [(fixture, destination, village.route(world, location, destination))
+              for fixture, destination in options]
+    raise ChannelUnavailable("channel_unavailable: use a real encounter or travel to " +
+                             ", ".join(f"{fixture} at {destination} via {route}"
+                                       for fixture, destination, route in routes))
+
+
+def _intent_request(world: "World", action: str, request: Any) -> tuple[str, str]:
+    state, actor = _state(world), world.actor_id
+    if action == "village_check_messages":
+        if request.channel == "inbox":
+            box = next((key for key, owner in state.boxes.items() if owner == actor), None)
+            if box is None:
+                raise ChannelUnavailable("channel_unavailable: this resident has no workplace inbox")
+            fixture = box
+            low_action, args = "village_inbox_read", {"inbox_id": box}
+        else:
+            fixture = state.config.board_id
+            low_action, args = "village_notice_read", {}
+        entity = world.state.entities.get(fixture)
+        if entity is None or entity.hidden or entity.broken or entity.location != world.actor.location_id:
+            raise ChannelUnavailable(f"channel_unavailable: travel to {fixture} at "
+                                     f"{entity.location if entity else 'village-square'}")
+        if not any((memory is None or memory.snapshot.version < version
+                    or memory.confidence != "direct")
+                   for nid, version in state.placements.get(fixture, {}).items()
+                   if (not state.notices[nid][version - 1].terms.private or
+                       actor in {state.notices[nid][version - 1].author,
+                                 *state.notices[nid][version - 1].terms.recipients})
+                   for memory in [state.knowledge.get(actor, {}).get(nid)]):
+            raise ValueError("No new accessible paper versions; continue useful work before checking again")
+        return _apply(world, low_action, (ReadInbox if request.channel == "inbox" else ReadNotices).model_validate(args))
+    if action == "village_share_known_notice":
+        memory = state.knowledge.get(actor, {}).get(request.notice_id)
+        if memory is None:
+            raise ValueError("Share only personally received notices")
+        return _apply(world, "village_notice_tell", TellNotice(
+            listener=request.listener_id, notice_id=request.notice_id, known_version=memory.snapshot.version))
+    if action in {"village_request_supply", "village_propose_meeting"}:
+        if action == "village_request_supply":
+            terms = NoticeTerms(type="supply_request", subject=request.good, description=request.purpose,
+                                recipients=[request.preferred_supplier_id], quantity=request.quantity,
+                                destination=request.destination_id or world.scenario.village.residents[actor].work,
+                                due_at=request.deadline, required_fresh_until=request.required_fresh_until)
+            terms = _priced_terms(world, terms)
+        else:
+            crew, site = _project(world, request.project_id)
+            terms = NoticeTerms(type="meeting", subject=request.project_id, description=request.purpose,
+                                recipients=[rid for rid in crew if rid != actor], project=request.project_id,
+                                destination=site, due_at=request.start)
+            if request.end is not None and request.end != request.start + 60:
+                raise ValueError("Appointments last 60 minutes; choose a start with that end")
+        _validate_terms(world, terms, actor)
+        previous = next((history[-1] for history in state.notices.values()
+                         if history[-1].author == actor and history[-1].terms == terms
+                         and history[-1].status not in TERMINAL), None)
+        if previous:
+            return "NOTICE_UNCHANGED", f"Existing request {previous.id} version {previous.version}; no duplicate posted."
+        if any(history[-1].author == actor and history[-1].status not in TERMINAL
+               and _need_key(actor, history[-1].terms) == _need_key(actor, terms)
+               for history in state.notices.values()):
+            raise ValueError("An open need already exists; update it instead of posting another")
+        channel = _intent_channel(world, terms)
+        return _apply(world, "village_notice_post", PostNotice(notice=terms, **channel))
+    knowledge = state.knowledge.get(actor, {}).get(request.request_id)
+    if knowledge is None:
+        raise ValueError("A personally received request is required; check through a physical channel")
+    notice = knowledge.snapshot
+    channel = _intent_channel(world, notice.terms, author=notice.author if action == "village_respond_to_request" else None)
+    if action == "village_respond_to_request":
+        current = state.notices[notice.id][-1]
+        if (current.version >= notice.version and actor != current.author
+                and actor in current.terms.recipients and current.responder == actor
+                and current.response == (request.reason or request.response)
+                and current.status == {"accept": "accepted", "reject": "rejected", "propose": "seen"}[request.response]
+                and current.terms == notice.terms):
+            return "REPLY_UNCHANGED", f"Reply already recorded for {notice.id}; no second commitment."
+        return _apply(world, "village_notice_reply", ReplyNotice(
+            notice_id=notice.id, expected_version=notice.version,
+            response=request.response, reason=request.reason, **channel))
+    if actor != notice.author:
+        raise ValueError("Only the request author may revise its terms")
+    if not request.changes:
+        return "NOTICE_UNCHANGED", "No changes requested."
+    allowed = {"subject", "description", "quantity", "destination", "due_at", "expires_at",
+               "required_fresh_until", "priority", "private"}
+    if not set(request.changes) <= allowed:
+        raise ValueError("Revise business terms only; the engine owns recipients, prices and technical fields")
+    changes = {**notice.terms.model_dump(), **request.changes}
+    if notice.terms.type == "supply_request":
+        changes["unit_price"] = village_economy.unit_price(world, changes["subject"])
+        changes["delivery_fee"] = village_economy.delivery_fee(world)
+    terms = NoticeTerms.model_validate(changes)
+    if terms == notice.terms:
+        return "NOTICE_UNCHANGED", f"Request {notice.id} already has these terms."
+    return _apply(world, "village_notice_update", UpdateNotice(
+        notice_id=notice.id, expected_version=notice.version, notice=terms, **channel))
+
+
 def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, str, None]:
     if not enabled(world):
         return "REJECTED", "COMMUNICATION_DISABLED", "Physical communication is not enabled.", None
@@ -399,14 +545,19 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         "village_notice_close": CloseNotice, "village_notice_tell": TellNotice,
     }
     try:
-        request = models[action].model_validate(args)
+        request = (INTENTS[action] if action in INTENTS else models[action]).model_validate(args)
         _ready(world, world.actor_id)
-        if (action not in {"village_notice_read", "village_inbox_read", "village_notice_tell"}
-                and request.channel != "conversation"
-                and "manipulate" not in world.actor.body.capabilities):
-            raise ValueError("Writing a physical note requires actual manipulation capability")
-        result = _apply(world, action, request)
+        if action in INTENTS:
+            result = _intent_request(world, action, request)
+        else:
+            if (action not in {"village_notice_read", "village_inbox_read", "village_notice_tell"}
+                    and request.channel != "conversation"
+                    and "manipulate" not in world.actor.body.capabilities):
+                raise ValueError("Writing a physical note requires actual manipulation capability")
+            result = _apply(world, action, request)
         return "APPLIED", result[0], result[1], None
+    except ChannelUnavailable as error:
+        return "REJECTED", "CHANNEL_UNAVAILABLE", str(error), None
     except (ValueError, ValidationError) as error:
         return "REJECTED", "COMMUNICATION_INVALID", str(error), None
 
@@ -670,7 +821,9 @@ def project_blocker(world: "World", project: str) -> str | None:
             person = world.state.village.residents[member]
             if person.life and (person.life.sleeping or person.life.work):
                 return "An actual worker is sleeping or tending a batch"
-            if person.available_at > minute or person.busy_until > minute:
+            if (person.busy_until > minute or
+                    (person.available_at > minute and not (
+                        member != world.actor_id and person.current_action == "village_project"))):
                 return "An actual worker has not finished arriving or is still occupied"
             from npc_sim import village_extensions
             if village_extensions.blocked_until(world, member) is not None:
@@ -824,7 +977,7 @@ def monitor(world: "World") -> dict[str, Any]:
 def actions(world: "World") -> list[dict[str, Any]]:
     result = []
     descriptions = {
-        "village_notice_post": (PostNotice, "Post one need at the local board, box, or real conversation; then do useful work."),
+        "village_notice_post": (PostNotice, "Post one need at the local board, box, or real conversation; then do useful work. For a project meeting, include project, future due_at, destination equal to the actual work site, and recipients containing only the other crew member; the description alone does not set the destination."),
         "village_notice_read": (ReadNotices, "Read up to twelve paper versions at the local square board (five minutes)."),
         "village_notice_update": (UpdateNotice, "Publish received verified status, or author changes uncommitted terms, at a real channel."),
         "village_notice_reply": (ReplyNotice, "Reply through a physical channel. Acceptance validates funding; never delivers goods."),
@@ -832,6 +985,12 @@ def actions(world: "World") -> list[dict[str, Any]]:
         "village_notice_tell": (TellNotice, "Tell one listed relevant new candidate to an actually present available listener."),
         "village_inbox_read": (ReadInbox, "Read only your owned physical workplace box while actually there."),
         "village_inbox_leave": (PostNotice, "Write a directed request at its actual recipient's box (channel inbox); no teleporting."),
+        "village_request_supply": (SupplyIntent, "Request priced supply with a real supplier, purpose, quantity, deadline and freshness. The engine resolves your workplace and price; post only at a physical channel."),
+        "village_propose_meeting": (MeetingIntent, "Propose a project appointment; the engine resolves the work site and partner."),
+        "village_respond_to_request": (RespondIntent, "Respond to a personally known request using a physical channel; the engine resolves the version and author's box."),
+        "village_update_request": (UpdateIntent, "Revise your personally known uncommitted request at a physical channel; provide changed business terms only."),
+        "village_check_messages": (CheckMessagesIntent, "Read changed paper at the square board or your workplace inbox while there; unchanged checks are rejected."),
+        "village_share_known_notice": (ShareIntent, "Share personally received relevant new notice news with a resident actually here."),
     }
     for verb, (model, text) in descriptions.items():
         result.append({"id": verb, "description": text, "targets": [],

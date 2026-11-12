@@ -219,7 +219,7 @@ class Controller:
                     item = await asyncio.wait_for(self.queue.get(), timeout=0.05)
                 else:
                     item = await self.queue.get()
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 await self.cycle()
                 continue
             name, arguments, future = item

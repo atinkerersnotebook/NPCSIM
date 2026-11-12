@@ -97,6 +97,21 @@ def test_unfunded_food_is_not_an_eligible_meal_and_funding_changes_reopen_the_ch
     assert act(world, "village_eat")["code"] == "MEAL_EATEN"
 
 
+def test_innkeeper_arrival_reopens_blocked_meal(tmp_path):
+    world = make_world(tmp_path, minute=3330, breakfast=True)
+    world.actor.location_id = "tavern"
+    village_goods.put(world, "tavern", "bread", 1)
+    world.state.actors["elsie"].location_id = "cottages"
+    assert not any(choice["action_id"] == "village_eat" for choice in village_fallback.candidates(world))
+    assert act(world, "village_eat")["code"] == "INN_NOT_OPEN"
+    village.advance(world, 5)
+    assert act(world, "village_eat")["code"] == "RETRY_SUPPRESSED"
+    world.state.actors["elsie"].location_id = "tavern"
+    assert any(choice["action_id"] == "village_eat" for choice in village_fallback.candidates(world))
+    assert act(world, "village_eat")["code"] == "MEAL_MISSED"
+    assert any(block.engine_code == "MEAL_MISSED" for block in world.state.village.residents["rowan"].fallback.blocked.values())
+
+
 def test_resolved_breakfast_cutoff_does_not_prevent_legitimate_waiting(tmp_path):
     world = make_world(tmp_path, minute=3330, breakfast=True)
     world.actor.location_id = "tavern"

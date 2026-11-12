@@ -23,6 +23,14 @@ PRODUCTION = {"village_work", "village_cook_fish", "village_grow_hay", "village_
 WORK_ACTIONS.add("village_split_firewood")
 
 
+def production_closing_minute(world: "World", rid: str) -> int:
+    config, _ = village.context(world)
+    if config.residents[rid].work == "tavern":
+        from npc_sim import village_extensions
+        return village_extensions.policy(world).inn_closing_minute
+    return 1170
+
+
 def initial_state(resident: VillageResident, minute: int, policy: VillageDayPolicy | None = None) -> VillageLifeState:
     wake = minute // 1440 * 1440 + resident.wake_minute
     before_wake = minute < wake
@@ -45,6 +53,71 @@ def add_meals(life: VillageLifeState, resident: VillageResident, minute: int,
         if minute >= due and key not in life.meals:
             life.meals[key] = VillageMeal(kind="breakfast", due=due)
             life.hungry = True
+
+
+def meal_plan(world: "World", kind: str = "daily", day: int | None = None) -> dict[str, Any]:
+    """A live, stock-backed village meal forecast; no portions are created by planning."""
+    config, state = village.context(world)
+    from npc_sim import village_extensions, village_economy
+    policy = village_extensions.policy(world)
+    day = state.minute // 1440 if day is None else day
+    diners = sorted(rid for rid in config.residents if state.residents[rid].life is not None)
+    if kind == "breakfast" and not policy.breakfast:
+        diners = []
+    due = (day * 1440 + 1140 if kind == "daily" else None)
+    times = {rid: (due if due is not None else day * 1440 + config.residents[rid].wake_minute
+                   + policy.breakfast_delay) for rid in diners}
+    grace = policy.meal_window
+    stock = state.stocks.get("tavern", {})
+    available = sum(max(0, stock.get(item, 0)) for item in ("meals", "bread")) + min(
+        max(0, stock.get("fish", 0)), max(0, stock.get("tea", 0)))
+    eaten = [rid for rid in diners if (meal := state.residents[rid].life.meals.get(f"{day}:{kind}"))
+             and meal.status == "eaten"]
+    unfunded = []
+    for rid in diners:
+        if state.economy is not None:
+            if not village_economy.meal_affordable(world, rid):
+                unfunded.append(rid)
+        elif config.expanded_rules and state.coins.get(rid, 0) < config.meal_price:
+            unfunded.append(rid)
+    eligible = [rid for rid in diners if rid not in eaten and rid not in unfunded
+                and state.minute <= times[rid] + grace]
+    if kind == "breakfast" and state.minute >= min(times.values(), default=state.minute + 1):
+        eligible.sort(key=lambda rid: (not (state.residents[rid].life.meals.get(f"{day}:{kind}")
+                                            and state.residents[rid].life.meals[f"{day}:{kind}"].status == "missed"
+                                            and village.resident_location(world, rid) == "tavern"), rid))
+    allocation = [rid for rid in diners if rid in eaten] + eligible
+    reserved = allocation[len(eaten):len(eaten) + available]
+    cutoff = config.goal_deadlines.get("meal_preparation_cutoff", 1110)
+    cutoff += day * 1440
+    cook = next((resident.job for resident in config.residents.values()
+                 if resident.work == "tavern" and resident.job and "meals" in resident.job.outputs), None)
+    inputs_needed = {}
+    if cook and due is not None and state.minute < cutoff:
+        batches = (max(0, len(diners) - len(eaten) - available) + cook.outputs["meals"] - 1) // cook.outputs["meals"]
+        for item, amount in cook.inputs.items():
+            inputs_needed[item] = max(0, amount * batches - state.stocks.get(cook.location, {}).get(item, 0))
+    return {"day": day, "kind": kind, "due": due, "cutoff": cutoff if due is not None else None,
+            "grace_until": (due + grace if due is not None else None), "expected": len(diners),
+            "diners": diners, "prepared": available, "reserved": reserved, "consumed": len(eaten),
+            "unfunded": unfunded, "at_risk": [rid for rid in reserved if rid in unfunded],
+            "shortfall": max(0, len(diners) - len(eaten) - available), "inputs_needed": inputs_needed}
+
+
+def inn_open(world: "World") -> bool:
+    config, state = village.context(world)
+    innkeeper = next((rid for rid, resident in config.residents.items()
+                      if resident.work == "tavern" and "hospitality" in resident.skills), None)
+    return (innkeeper is None or
+            (not state.residents[innkeeper].life.sleeping
+             and village.resident_location(world, innkeeper) == "tavern"))
+
+
+def meal_allocation(world: "World", rid: str, meal: VillageMeal) -> bool:
+    config, _ = village.context(world)
+    if not (config.expanded_rules and config.time_based_turns):
+        return True
+    return rid in meal_plan(world, meal.kind, meal.due // 1440)["reserved"]
 
 
 def cooldown_factor(world: "World", rid: str) -> int:
@@ -115,6 +188,17 @@ def action_blocker(world: "World", action: str, rid: str | None = None, *,
         blocked = village_mining.action_blocker(world, action, rid)
         if blocked:
             return blocked
+    if (action.startswith("village_research") and config.residents[rid].work == "tavern"
+            and state.minute < state.minute // 1440 * 1440 + 1140):
+        plan = meal_plan(world)
+        cook = config.residents[rid].job
+        if (plan["shortfall"] and cook and "meals" in cook.outputs
+                and all(state.stocks.get(cook.location, {}).get(item, 0) >= amount
+                        for item, amount in cook.inputs.items())
+                and state.minute + cook.duration <= plan["cutoff"]):
+            return "MEAL_PREPARATION_PRIORITY", (
+                f"Prepare real food before optional research: {plan['shortfall']} supper portions short, "
+                f"cutoff {village.clock_time(plan['cutoff'])}.")
     if state.research is not None:
         from npc_sim import village_research
         blocked = village_research.action_blocker(world, action, rid)
@@ -167,9 +251,13 @@ def action_blocker(world: "World", action: str, rid: str | None = None, *,
                     times.append(day + config.residents[rid].wake_minute + village_extensions.policy(world).breakfast_delay)
                 if any(state.minute < due < state.minute + job.duration for due in times):
                     return "COMMITMENT_DUE", "This batch would delay a scheduled meal or bedtime; prepare earlier."
-        if config.expanded_rules and action in PRODUCTION and not (
-                config.residents[rid].wake_minute <= state.minute % 1440 <= 1170):
-            return "OUTSIDE_WORK_HOURS", "Production starts only after waking and no later than the 19:30 closing grace."
+        closing = production_closing_minute(world, rid)
+        last_start = closing - 5 if config.residents[rid].work == "tavern" else closing
+        if (config.expanded_rules and action in PRODUCTION
+                and not config.residents[rid].wake_minute <= state.minute % 1440 <= last_start):
+            return "OUTSIDE_WORK_HOURS", (
+                f"Production starts only after waking and no later than {village.clock_time(closing)}."
+            )
     from npc_sim import village_firewood
     return village_firewood.action_blocker(world, action, personal=personal)
 
@@ -186,7 +274,9 @@ def personal(world: "World") -> dict[str, Any]:
                      "cooldown_factor": cooldown_factor(world, world.actor_id),
                      "wake_minute": resident.wake_minute, "bed_minute": resident.bed_minute,
                      "home": resident.home, "tavern": "tavern",
-                     "breakfast": day_policy.breakfast, "breakfast_delay": day_policy.breakfast_delay}}
+                     "breakfast": day_policy.breakfast, "breakfast_delay": day_policy.breakfast_delay,
+                     "meal_plan": meal_plan(world),
+                     "breakfast_plan": meal_plan(world, "breakfast") if day_policy.breakfast else None}}
 
 
 def apply(world: "World", action: str) -> tuple[str, str, str, None]:
@@ -223,7 +313,25 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
         return reject("NO_MEAL_DUE", "No configured meal is due; supper is at 19:00.")
     if world.actor.location_id != "tavern":
         return reject("TRY_TAVERN", "Walk to the tavern for the daily meal; no remote food consumption.")
+    from npc_sim import village_extensions
+    if meal.kind == "daily" and state.minute % 1440 >= village_extensions.policy(world).inn_closing_minute:
+        return reject("INN_CLOSED", "The inn has closed for the night; supper must be eaten before closing.")
+    if not inn_open(world):
+        return reject("INN_NOT_OPEN", "The innkeeper must be awake and at the inn before meals can be served.")
     stock = state.stocks.setdefault("tavern", {})
+    if (meal.status != "missed" and rid in meal_plan(world, meal.kind, meal.due // 1440)["unfunded"]):
+        if config.expanded_rules and state.economy is None:
+            miss_meal(world, rid, meal)
+            return done("MEAL_MISSED", f"Cannot pay {config.meal_price} coin for the meal; going hungry without consuming food.")
+        miss_meal(world, rid, meal)
+        return done("MEAL_MISSED", "The meal or its configured subsidy is not funded; no food was consumed.")
+    from npc_sim import village_extensions
+    in_grace = state.minute <= meal.due + village_extensions.policy(world).meal_window
+    if in_grace and not meal_allocation(world, rid, meal):
+        if meal.status == "missed":
+            return reject("MEAL_UNALLOCATED", "No portion is allocated to this diner yet.")
+        miss_meal(world, rid, meal)
+        return done("MEAL_MISSED", "No portion is allocated to this diner; real food is reserved for the fair queue.")
     if config.expanded_rules and state.economy is None and state.coins[rid] < config.meal_price:
         if meal.status == "missed":
             return reject("MEAL_UNAFFORDABLE", "You still cannot afford the tavern meal.")

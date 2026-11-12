@@ -243,7 +243,8 @@ def test_daytime_and_unoccupied_homes_do_not_burn_and_cold_has_no_health_penalty
     before = copy.deepcopy(world.state.actors["hobb"].needs)
     village.advance(world, 10)
     assert world.state.actors["hobb"].needs == before
-    assert fuel.monitor(world)["firewood"]["households"][1]["status"] == "cold"
+    assert next(row for row in fuel.monitor(world)["firewood"]["households"]
+                if "hobb" in row["members"])["status"] == "cold"
     events = [event for event in world.state.village.events if event.action == "household_cold"]
     assert len(events) == 1
     assert "iona" not in events[0].witnesses

@@ -43,7 +43,9 @@ def known_routes(world: "World", rid: str) -> list[dict[str, Any]]:
 def foot_load(world: "World", rid: str, goods: dict[str, int], destination: str) -> str | None:
     _, state = village.context(world)
     person = state.residents[rid]
-    reason = village_goods.load(world, rid, goods, destination, person.shipments, foot_capacity(world, rid))
+    reason = village_economy.load_blocker(world, village.resident_location(world, rid), destination, goods)
+    if reason is None:
+        reason = village_goods.load(world, rid, goods, destination, person.shipments, foot_capacity(world, rid))
     if reason is None:
         village_goods.sync_cargo(world, rid)
     return reason
