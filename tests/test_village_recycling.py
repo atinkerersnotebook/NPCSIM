@@ -3,8 +3,10 @@ import copy
 import pytest
 
 from npc_sim import village, village_economy, village_goods, village_livestock, village_recycling
+from npc_sim.living_village import build_scenario
 from npc_sim.models import VillageStockLot
 from npc_sim.world import World
+from test_village_expanded import scenario
 from test_village_livestock import make_world, perform, water
 from test_world import act
 
@@ -217,3 +219,34 @@ def test_legacy_stock_lots_and_committed_batches_keep_exact_serialized_shape():
     assert VillageStockLot.model_validate(raw).model_dump() == raw
     work = {"location": "bakery", "finishes_at": 700, "outputs": {"bread": 2}, "equipment": None, "kind": "production"}
     assert VillageCommittedWork.model_validate(work).model_dump() == work
+
+
+def test_living_shelf_lives_apply_to_new_lots_and_survive_delivery(tmp_path):
+    value = build_scenario(scenario(), purposeful_downtime=True)
+    expected = {
+        "meals": 360, "fish": 720, "milk": 1440, "bread": 2880,
+        "eggs": 10080, "preserved-fish": 7200, "herbs": 4320,
+        "tea": 129600, "flour": 43200, "grain": 129600, "hay": 86400,
+        "plant-scraps": 1440, "compost-material": 4320,
+        "compost": 129600, "manure": 43200,
+    }
+    assert {product: value.village.spoil_after[product] for product in expected} == expected
+    assert "preserved-fish" not in build_scenario(scenario()).village.spoil_after
+    world = World(value, tmp_path / "shelf-life.json", "shelf-life", "ada", "session-ada")
+    state = world.state.village
+    for product, duration in expected.items():
+        village_goods.put(world, "farm", product, 1)
+        assert state.stock_lots["farm"][product][-1].expires_at == state.minute + duration
+    for product in ("logs", "timber", "planks", "firewood", "furniture", "tackle", "iron-ore", "iron", "wagon-parts"):
+        village_goods.put(world, "farm", product, 1)
+        assert state.stock_lots["farm"][product][-1].expires_at is None
+
+    bread = village_goods.take(world, "farm", "bread", 1, kind="loaded")
+    village.advance(world, 300)
+    village_goods.put(world, "tavern", "bread", 1, bread, kind="delivered")
+    assert state.stock_lots["tavern"]["bread"][0].expires_at == bread[0].produced_at + 2880
+    world.save()
+    loaded = World(value, world.path, "shelf-life", "ada", "session-ada")
+    assert loaded.state.village.stock_lots["tavern"]["bread"][0].expires_at == bread[0].expires_at
+    village.advance(loaded, bread[0].expires_at - loaded.state.village.minute)
+    assert loaded.state.village.stocks["tavern"]["bread"] == 0

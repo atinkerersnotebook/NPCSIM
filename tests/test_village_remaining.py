@@ -296,7 +296,7 @@ def test_noon_iron_is_paid_on_delivery_and_unsold_stock_leaves(cast):
 
 
 def test_paid_meal_no_money_no_food_consumed_and_late_payment_recovers(cast):
-    advance_to(cast, 1140)
+    advance_to(cast, 1170)
     world = cast["elsie"]
     state = world.state.village
     state.coins["elsie"] = 0
@@ -526,10 +526,15 @@ def test_full_village_physical_supply_projects_meals_horse_return_and_sleep(cast
     assert len(state.role_contributions) == 12
     advance_to(cast, 1140)
     coins_before = state.coins.copy()
-    for rid in cast:
+    for rid in (rid for rid in cast if rid != "elsie"):
         go_to(cast, rid, "tavern")
         do(cast, rid, "village_eat")
         assert state.residents[rid].life.meals["0:daily"].status == "eaten"
+    if state.minute < 1170:
+        advance_to(cast, 1170)
+    go_to(cast, "elsie", "tavern")
+    do(cast, "elsie", "village_eat")
+    assert state.residents["elsie"].life.meals["0:daily"].status == "eaten"
     assert sum(state.coins.values()) == sum(coins_before.values())
     assert state.coins["elsie"] == coins_before["elsie"] + 11
     go_to(cast, "bren", world.state.entities["work-horse"].location)

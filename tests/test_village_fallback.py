@@ -2,9 +2,11 @@ import copy
 
 import pytest
 
-from npc_sim import village, village_economy, village_extensions, village_fallback, village_goods, village_life, village_turns
+from npc_sim import (village, village_communication, village_economy, village_extensions,
+                     village_fallback, village_goods, village_life, village_social, village_turns)
 from npc_sim.contracts import observation
-from npc_sim.models import VillageDayPolicy, VillageEconomyConfig
+from npc_sim.living_village import build_scenario
+from npc_sim.models import Scenario, VillageDayPolicy, VillageEconomyConfig
 from npc_sim.village_communication_models import NoticeTerms, NoticeVersion
 from npc_sim.world import World
 from test_village_expanded import scenario
@@ -47,6 +49,97 @@ def inspect_then_wait(world):
     result = act(world, "village_wait_event")
     assert result["code"] == "EVENT_WAIT_STARTED", result
     return world.state.village.residents["rowan"].fallback.wait
+
+
+def test_finn_preservation_requires_funded_physical_log_and_uncommitted_fish(tmp_path):
+    base = scenario()
+    base.village.start_minute = 600
+    value = build_scenario(base, purposeful_downtime=True)
+    for agent in value.agents:
+        agent.start_location = value.village.residents[agent.id].work
+    world = World(value, tmp_path / "smoking.json", "smoking", "finn", "session-finn")
+    finn = world
+    rowan = world.bind("rowan", "session-rowan")
+    state = world.state.village
+    for rid in ("finn", "rowan"):
+        state.residents[rid].life.last_woke = 420
+    assert state.stocks["riverbank"]["logs"] == 0
+    assert not [item for item in village_fallback.candidates(finn)
+                if item["task_id"] == "preservation:smoke-fish"]
+    assert village_economy.production_targets(finn, "riverbank")["fish"] == 0
+    assert [item["task_id"] for item in village_fallback.candidates(finn)
+            if item["task_id"].startswith("preservation:")] == ["preservation:post-log-request"]
+
+    # Follow real doors to Rowan's physical inbox; posting does not notify him.
+    while finn.actor.location_id != "woods":
+        step = next(item for item in village_fallback.candidates(finn)
+                    if item["task_id"] == "preservation:post-log-request")
+        result = act(finn, step["action_id"], **step["arguments"])
+        assert result["outcome"] == "APPLIED", result
+        village.advance(finn, 5)
+    request = next(item for item in village_fallback.candidates(finn)
+                   if item["task_id"] == "preservation:request-log")
+    assert act(finn, request["action_id"], **request["arguments"])["outcome"] == "APPLIED"
+    assert state.economy.orders == {}
+    if not state.communication.knowledge.get("rowan"):
+        assert state.communication.placements["workplace-inbox-rowan"]
+    village.advance(finn, 5)
+    if not state.communication.knowledge.get("rowan"):
+        assert act(rowan, "village_check_messages", channel="inbox")["outcome"] == "APPLIED"
+    village.advance(finn, 5)
+    accepted = next(item for item in village_fallback.candidates(rowan)
+                    if item["task_id"] == "preservation:accept-log")
+    assert act(rowan, accepted["action_id"], **accepted["arguments"])["outcome"] == "APPLIED"
+    order = next(iter(state.economy.orders.values()))
+    assert (order.product, order.buyer, order.supplier, order.destination) == (
+        "logs", "finn", "rowan", "riverbank")
+
+    village.advance(finn, 5)
+    load = next(item for item in village_fallback.candidates(rowan)
+                if item["task_id"] == "preservation:load-log")
+    before_coins = state.coins.copy()
+    before_woods = state.stocks["woods"]["logs"]
+    assert act(rowan, load["action_id"], **load["arguments"])["outcome"] == "APPLIED"
+    assert state.stocks["woods"]["logs"] == before_woods - 1
+    assert state.stocks["riverbank"]["logs"] == 0
+    assert state.coins == before_coins
+    while rowan.actor.location_id != "riverbank":
+        village.advance(finn, max(5, state.residents["rowan"].available_at - state.minute))
+        step = next(item for item in village_fallback.candidates(rowan)
+                    if item["task_id"] == "preservation:deliver-log")
+        assert act(rowan, step["action_id"], **step["arguments"])["outcome"] == "APPLIED"
+    village.advance(finn, max(5, state.residents["rowan"].available_at - state.minute))
+    unload = next(item for item in village_fallback.candidates(rowan)
+                  if item["task_id"] == "preservation:unload-log")
+    assert act(rowan, unload["action_id"], **unload["arguments"])["outcome"] == "APPLIED"
+    assert order.status == "fulfilled" and state.stocks["riverbank"]["logs"] == 1
+    assert state.coins["finn"] == before_coins["finn"] - order.price - order.delivery_fee
+    assert state.coins["rowan"] == before_coins["rowan"] + order.price + order.delivery_fee
+    assert not [item for item in village_fallback.candidates(finn)
+                if item["task_id"] == "preservation:request-log"]
+
+    # Fish remain real and protected until outstanding food commitments are met.
+    assert village_economy.production_targets(finn, "riverbank")["fish"] >= 2
+    finn.actor.location_id = "riverbank"
+    village_goods.put(finn, "riverbank", "fish", 2)
+    state.residents["finn"].life.meals["0:breakfast"].status = "eaten"
+    state.residents["finn"].life.hungry = False
+    state.residents["finn"].available_at = state.minute
+    assert [item for item in village_fallback.candidates(finn)
+            if item["task_id"] == "preservation:smoke-fish"], (
+                state.minute, village_social.observation(finn)["social"]["activities"]["fish-smoking"]["reason"],
+                village_fallback.candidates(finn))
+    start = act(finn, "village_leisure", activity="fish-smoking", companions=[])
+    assert start["outcome"] == "APPLIED", start
+    assert state.stocks["riverbank"]["fish"] == 0 and state.stocks["riverbank"]["logs"] == 0
+    village.advance(finn, 45)
+    assert state.stocks["riverbank"]["preserved-fish"] == 1
+    paid = len(state.economy.payments)
+    assert act(rowan, "village_unload_goods")["outcome"] == "REJECTED"
+    assert len(state.economy.payments) == paid
+    finn.save()
+    restored = World(value, finn.path, "smoking", "finn", "session-finn")
+    assert restored.state.village.stocks["riverbank"]["preserved-fish"] == 1
 
 
 def test_early_supper_is_an_eligible_action_and_sleep_follows_at_home(tmp_path):

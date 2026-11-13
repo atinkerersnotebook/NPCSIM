@@ -224,7 +224,7 @@ def state_for(world: "World", rid: str) -> VillageLifeState | None:
 
 
 def action_blocker(world: "World", action: str, rid: str | None = None, *,
-                   personal: bool = False) -> tuple[str, str] | None:
+                   personal: bool = False, args: dict[str, Any] | None = None) -> tuple[str, str] | None:
     rid = rid or world.actor_id
     life = state_for(world, rid)
     if life is None:
@@ -254,7 +254,7 @@ def action_blocker(world: "World", action: str, rid: str | None = None, *,
                 f"cutoff {village.clock_time(plan['cutoff'])}.")
     if state.research is not None:
         from npc_sim import village_research
-        blocked = village_research.action_blocker(world, action, rid)
+        blocked = village_research.action_blocker(world, action, rid, args)
         if blocked:
             return blocked
     if state.maintenance is not None:

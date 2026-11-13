@@ -64,6 +64,15 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
         scheduled = config.start_minute // 1440 * 1440 + merchant.window_start
         config.events = VillageEventsConfig.model_validate(
             village_events.offer_optional_goods(config.events.model_dump(), scheduled_at=scheduled))
+    config.spoil_after.update({
+        "meals": 360, "fish": 720, "milk": 1440, "bread": 2880,
+        "eggs": 10080, "herbs": 4320,
+        "tea": 129600, "flour": 43200, "grain": 129600, "hay": 86400,
+        "plant-scraps": 1440, "compost-material": 4320,
+        "compost": 129600, "manure": 43200,
+    })
+    if "preserved-fish" in config.prices:
+        config.spoil_after["preserved-fish"] = 7200
     scenario.objective = (
         "Restore the well, mill and working wagon using the real crew, tools and supplies. "
         "Meet accepted orders and maintain configured reserves without unnecessary production. "

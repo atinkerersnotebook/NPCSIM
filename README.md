@@ -154,6 +154,17 @@ adventure. Regeneration requires `--force`. Restarting an already running backen
 is a separate operation; do not restart a valuable paused adventure without
 preserving its recovery state.
 
+Living Millhaven's stock lots expire from production/collection (initial stock
+from world creation), not from delivery. Cooked meals last 6 hours; fresh fish
+12 hours; milk and plant scraps 24 hours; bread 48 hours; fresh herbs and compost
+material 3 days; smoked fish 5 days; eggs 7 days; flour and manure 30 days; hay
+60 days; grain, dried tea and finished compost 90 days. Logs, timber, planks,
+firewood, furniture, tackle, iron ore, iron and wagon parts have no automatic
+expiry. These are scenario gameplay defaults for ordinary storage, not real-world
+food-safety advice. Existing saved lots retain their recorded expiry and frozen
+scenarios retain their previous rules; the generator applies these periods only
+to newly generated Living Millhaven scenarios.
+
 To upgrade a legacy village already paused at midnight, run the migration helper
 against the still-running local backend:
 

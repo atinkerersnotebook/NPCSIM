@@ -352,3 +352,91 @@ Validation covers engine behavior, the real MCP configuration tool, existing
 village/DM/API regressions, visitor and activity timeline rendering, and the
 TypeScript production build. See README for generating the living variant and
 granting the DM configuration authority.
+
+## Generation 8 reliability release gates (open)
+
+These are outstanding *verification and any resulting corrections*, not a claim
+that each behavior is broken. The Generation 8 developer specification is in
+`NPCSIM_Generation_8_Reliability_and_Village_Operations_Developer_Spec.md`.
+Confirm root causes from reproducible state snapshots and tests before changing
+engine rules. Preserve local NPC knowledge, physical movement and ownership,
+funded transactions, one-time initial stock, and existing successful repairs,
+deliveries, maintenance, and home sleep. Do not add professions, goods, or free
+daily replenishment to meet the targets.
+
+### P0: Day-one outcomes and engine correctness
+
+- [ ] Save a reproducible Generation 7 starting-state/seed fixture and capture
+  time-stamped inventory, orders, meal reservations, crew sessions, cargo, and
+  action diagnostics at each reported failure. Compare the same state and model
+  settings where possible; do not infer a root cause from narrative logs.
+- [ ] Verify 12/12 breakfast and 12/12 supper with real food, money, freshness,
+  fuel, labor, and cooking capacity. Forecast ready versus cookable portions and
+  uncovered diners early enough to act; count each ingredient or incoming order
+  once. Allow a final valid batch to finish before service, distinguish a true
+  shortage from a cooking-window or fair-allocation defect, and report exact
+  blockers without creating food. Cover MEAL-01 through MEAL-06.
+- [ ] Verify well, mill, and wagon completion. Accepted crew appointments must
+  start promptly once consenting workers, supplies, and tools are at the site;
+  expired notices must be supersedable, and one partner's contribution must not
+  make the other falsely busy. Preserve physical consent and actual breakdown
+  timing. Cover CREW-01 through CREW-06.
+- [ ] Verify the complete funded two-milk chain: accepted order, cow care,
+  collection into farm stock, reservation, load after capacity is freed, real
+  transport, tavern unload, and exactly-once payment. Keep on-hand, reserved,
+  in-transit, delivered, and spoiled quantities distinct; expose an actionable
+  blocker or renegotiation when a deadline becomes impossible. Cover MILK-01
+  through MILK-06.
+- [ ] Exercise duplicate and overlapping scheduler wake events, cancellation,
+  action retries, and save/reload boundaries. No exceptions, duplicate
+  settlements, negative inventory, or lost work; classify blocked, failed,
+  no-op, waiting, leisure, and successful actions separately. Cover SCHED-01
+  through SCHED-03 with useful action/state diagnostics.
+
+### P1: Logistics and actionable planning
+
+- [ ] Verify `village_execute_fuel_delivery` follows the same persisted walking
+  route and cargo validators as ordinary `go`, including loaded routes, valid
+  replans, late delivery, and two trips totaling three real firewood units.
+  Preserve cargo and payment accounting on failure. Cover FUEL-01 through
+  FUEL-05.
+- [ ] Verify wagon readiness exposes repair, horse care/hitching, driver, real
+  accepted and loadable pickups, capacity, and return time. No-cargo days must
+  not repeatedly start a fictitious circuit; at least one farm-to-mill shipment
+  must load, travel, unload, settle once, and end with the horse returned and
+  released. Cover WAGON-01 through WAGON-04.
+- [ ] Verify intent-level supply and crew communication resolves legal physical
+  posting/reply locations, versions, deadline revisions, and expired successors
+  without revealing unread notices or forcing technical-field guesses. Cover
+  COMM-01 through COMM-05.
+- [ ] Verify short legal waits near commitments, event-driven wakes on personally
+  accessible changes, and bounded review without repeated five-minute no-op
+  loops or unsafe leisure suggestions. Cover WAIT-01 through WAIT-05.
+- [ ] Verify day-keyed cow, hen, horse, milk, water, and maintenance status across
+  midnight and restart. Care consumes real inputs once per day; collection and
+  funded demand remain separate. Cover CARE-01 through CARE-05.
+- [ ] Verify map, `village_plan_walk`, and advertised `go` targets share one
+  authoritative path graph; stable public site IDs and names must not vary by
+  observer. Persist routes, wagon position, and carried cargo. Cover PATH-01
+  through PATH-05.
+
+### Release evidence and seven-day economy
+
+- [ ] Run seven *active, consecutive* days without resetting stocks or pending
+  work. Record each site's daily opening, produced, received, consumed, shipped,
+  spoiled, and closing quantities; reconcile every adjustment to an event and
+  every shipment to an owner and funded settlement. Reservations do not change
+  on-hand stock. The existing clock-advance/persistence test alone does not
+  establish replenishment, lead times, meal coverage, or stockout behavior.
+  Cover ECON-01 through ECON-04.
+- [ ] Add low-stock, late delivery, delayed crew, cancelled sale, missing input,
+  and expired-shipment cases (and cold or adverse weather only when configured).
+  Permit honest scarcity but fail on undocumented creation, stranded cargo,
+  double payment, or state mismatch. Cover ECON-05.
+- [ ] Produce a before/after Day 1 report for meals, repairs, three firewood,
+  two milk, actual wagon shipments, movement, channel errors, waits, animal
+  care, and 12/12 home sleep. Produce a seven-day report of inventory, unmet
+  demand, replenishment lead times, fuel, shipments, payments, and stockouts.
+  Include the saved fixture, rerun command, acceptance-test results, confirmed
+  root causes, and prioritized remaining issues. Do not mark the release done
+  solely because unit tests pass or one unconstrained NPC run differs.

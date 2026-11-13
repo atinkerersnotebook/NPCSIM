@@ -292,9 +292,7 @@ def advance(world):
                 if quantity:
                     village_goods.put(world, "farm", product, quantity)
             elif chunk.operation == "cook":
-                village_goods.put(world, "tavern", "meals", 2, [
-                    VillageStockLot(quantity=2, produced_at=town.minute, expires_at=town.minute + 1440,
-                                    ingredients=["milk", "eggs"])])
+                village_goods.put(world, "tavern", "meals", 2, ingredients=["milk", "eggs"])
             elif chunk.operation == "scraps":
                 if chunk.output_expires_at is not None and chunk.output_expires_at <= town.minute:
                     village_goods.put(world, chunk.location, village_recycling.MATERIAL, chunk.quantity, [
@@ -447,8 +445,11 @@ def apply(world, action, args):
                 or available - quantity < village_recycling.protected(world, location, source_product)):
             return "REJECTED", "UNSAFE_OR_COMMITTED_SCRAPS", "Use only actual unexpired, proven plant-only surplus beyond food/feed/orders; rotten or animal food is never feed.", None
         taken = village_goods.take(world, location, source_product, quantity, required_fresh_until=end)
-        expiry = min((lot.expires_at for lot in taken if lot.expires_at is not None), default=end + 720)
-        expires_at = min(end + 720, expiry)
+        from npc_sim import village_research
+        scrap_life = village_research.shelf_life(world, village_recycling.SCRAPS)
+        expiry = min((lot.expires_at for lot in taken if lot.expires_at is not None),
+                     default=end + scrap_life)
+        expires_at = min(end + scrap_life, expiry)
         ingredients = sorted({item for lot in taken for item in (lot.ingredients or [source_product])})
     elif operation == "compost":
         source_product = args["material"]

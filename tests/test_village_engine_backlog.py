@@ -83,12 +83,20 @@ def test_supplier_order_requires_travel_to_actual_person_and_records_requirement
     assert not state.economy.orders and state.coins == coins
 
     # Visiting the supplier's shop is insufficient when the person is elsewhere.
-    assert act(world, "go", target="bakery-tavern")["outcome"] == "APPLIED"
+    assert act(world, "village_plan_walk", destination="bakery", purpose="Meet the baker")["code"] == "ROUTE_PLANNED"
+    planned = state.residents["elsie"].walking_plan
+    while planned and world.actor.location_id != "bakery":
+        assert act(world, "go", target=planned.doors[planned.next_step])["outcome"] == "APPLIED"
+        village.advance(world, max(5, state.residents["elsie"].available_at - state.minute))
     village.advance(world, state.residents["elsie"].available_at - state.minute)
     assert world.actor.location_id == "bakery"
     assert act(world, "village_propose_order", **request)["outcome"] == "REJECTED"
     assert not state.economy.orders
-    assert act(world, "go", target="mill-bakery")["outcome"] == "APPLIED"
+    assert act(world, "village_plan_walk", destination="watermill", purpose="Meet the baker")["code"] == "ROUTE_PLANNED"
+    planned = state.residents["elsie"].walking_plan
+    while planned and world.actor.location_id != "watermill":
+        assert act(world, "go", target=planned.doors[planned.next_step])["outcome"] == "APPLIED"
+        village.advance(world, max(5, state.residents["elsie"].available_at - state.minute))
     village.advance(world, state.residents["elsie"].available_at - state.minute)
     assert world.actor.location_id == cast["jory"].actor.location_id == "watermill"
 

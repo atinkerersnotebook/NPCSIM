@@ -865,7 +865,7 @@ class World:
             blocked = village_fallback.action_blocker(self, action, args)
             if blocked:
                 return reject(*blocked)
-            blocked = village_life.action_blocker(self, action)
+            blocked = village_life.action_blocker(self, action, args=args)
             if blocked:
                 return reject(*blocked)
             from npc_sim import village_firewood

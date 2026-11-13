@@ -88,6 +88,9 @@ def prices(world: "World") -> dict[str, int]:
 
 
 def shelf_life(world: "World", product: str) -> int | None:
+    configured = village.context(world)[0].spoil_after.get(product)
+    if configured is not None:
+        return configured
     if village.context(world)[1].livestock:
         from npc_sim import village_livestock
         if product in village_livestock.SHELF:
@@ -95,7 +98,7 @@ def shelf_life(world: "World", product: str) -> int | None:
     project = discoveries(world).get(product)
     if project:
         return 1440 if project.proposal.kind in {"food", "crop"} else None
-    return village.context(world)[0].spoil_after.get(product)
+    return None
 
 
 def blocked_until(world: "World", actor: str) -> int | None:
@@ -486,7 +489,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     return "APPLIED", "RESEARCH_STARTED" if operation == "research" else "DISCOVERY_WORK_STARTED", "Real timed work started; outputs appear only after completion.", None
 
 
-def action_blocker(world: "World", action: str, actor: str) -> tuple[str, str] | None:
+def action_blocker(world: "World", action: str, actor: str,
+                   args: dict[str, Any] | None = None) -> tuple[str, str] | None:
     base, state = village.context(world)
     until = blocked_until(world, actor)
     if until and action not in FREE_ACTIONS:
@@ -495,6 +499,14 @@ def action_blocker(world: "World", action: str, actor: str) -> tuple[str, str] |
     if action in village_life.PRODUCTION and job and job.equipment and equipment_reserved(world, {job.equipment}):
         return "EQUIPMENT_RESEARCH", "The actual production equipment is reserved by occupational research."
     if action in {"village_wait_event", "village_leisure", "village_social_invite", "village_quest"} and _state(world).config.enabled:
+        if action == "village_leisure" and actor == "finn" and args and args.get("activity") == "fish-smoking":
+            from npc_sim import village_extensions, village_economy, village_social
+            social = state.social
+            if (village_extensions.policy(world).purposeful_downtime and social
+                    and "fish-smoking" in social.config.activities
+                    and village_economy.usable_stock(world, "riverbank", "preserved-fish", state.minute) == 0
+                    and village_social.observation(world)["social"]["activities"]["fish-smoking"]["available"]):
+                return None
         unfinished = False
         for project in _state(world).projects.values():
             if project.owner == actor and project.discovered_at is None:

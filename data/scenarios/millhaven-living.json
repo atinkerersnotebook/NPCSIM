@@ -7163,18 +7163,21 @@
     "delivery_fee": 1,
     "meal_price": 2,
     "spoil_after": {
-      "meals": 720,
+      "meals": 360,
       "fish": 720,
-      "bread": 1440,
-      "grain": 4320,
-      "flour": 4320,
-      "hay": 4320,
+      "bread": 2880,
+      "grain": 129600,
+      "flour": 43200,
+      "hay": 86400,
       "herbs": 4320,
-      "tea": 4320,
+      "tea": 129600,
       "milk": 1440,
-      "eggs": 2880,
-      "plant-scraps": 720,
-      "preserved-fish": 2880
+      "eggs": 10080,
+      "plant-scraps": 1440,
+      "preserved-fish": 7200,
+      "compost-material": 4320,
+      "compost": 129600,
+      "manure": 43200
     },
     "goal_deadlines": {
       "bread_delivery": 1140

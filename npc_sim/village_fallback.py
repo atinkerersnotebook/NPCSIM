@@ -355,6 +355,16 @@ def _travel_choice(world: "World", destination: str, task: str, reason: str,
     _, state = village.context(world)
     if world.actor.location_id == destination:
         return None
+    from npc_sim import village_walking
+    if village_walking.enabled(world):
+        plan = state.residents[world.actor_id].walking_plan
+        if plan and plan.destination == destination and plan.next_step < len(plan.doors):
+            door = plan.doors[plan.next_step]
+            if village_walking.check_step(world, {"target": door}) is None:
+                return {"task_id": task, "action_id": "go", "arguments": {"target": door},
+                        "destination": destination, "priority": priority, "reason": reason}
+        if plan or village_walking.check_plan(world, destination) is not None:
+            return None
     known = state.residents[world.actor_id].known_routes
     path = village.route(world, world.actor.location_id, destination,
                          known_routes=known if known else None)
@@ -363,6 +373,10 @@ def _travel_choice(world: "World", destination: str, task: str, reason: str,
     limits = _obligation_limits(world)
     if limits and state.minute + 5 * len(path) + 10 > min(limits):
         return None
+    if village_walking.enabled(world):
+        return {"task_id": task, "action_id": "village_plan_walk",
+                "arguments": {"destination": destination, "purpose": reason},
+                "destination": destination, "priority": priority, "reason": reason}
     door = next((eid for eid, entity in world.state.entities.items()
                  if entity.kind == "door" and {entity.location, entity.destination}
                  == {world.actor.location_id, path[0]} and not entity.hidden
@@ -426,6 +440,110 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
         choices.append({"task_id": "incident:relay", "action_id": "say",
                         "arguments": {"message": "I saw the mill drive fail at the watermill. Please meet me there with the beam and hammer."},
                         "priority": "P1", "reason": "Relay a personally witnessed failure to the carpenter physically present."})
+
+    if state.social and "fish-smoking" in state.social.config.activities:
+        if world.actor_id == "finn":
+            needs = [item for item in village_economy.suggestions(world, personal=True)
+                     if item["product"] == "logs" and item["request_key"].endswith(":fish-smoking:finn:logs")]
+            if needs:
+                need = needs[0]
+                request = {"good": "logs", "quantity": need["quantity"],
+                           "purpose": "One log for smoking uncommitted fresh fish at my riverbank smoker",
+                           "deadline": need["deadline"], "required_fresh_until": need["required_fresh_until"],
+                           "preferred_supplier_id": "rowan"}
+                communication = state.communication
+                open_notice = any(memory.snapshot.author == world.actor_id
+                                  and memory.snapshot.terms.type == "supply_request"
+                                  and memory.snapshot.terms.subject == "logs"
+                                  and memory.snapshot.status not in {"completed", "rejected", "cancelled", "expired", "superseded"}
+                                  for memory in communication.knowledge.get(world.actor_id, {}).values()) if communication else False
+                if open_notice and location == config.residents["finn"].work and _unread_paper(
+                        world, next(box for box, owner in communication.boxes.items() if owner == "finn")):
+                    choices.append({"task_id": "preservation:check-reply", "action_id": "village_check_messages",
+                                    "arguments": {"channel": "inbox"}, "priority": "P4",
+                                    "reason": "Read a changed physical reply before considering another smoker-log request."})
+                if not open_notice and communication:
+                    from npc_sim import village_communication
+                    try:
+                        terms = village_communication.NoticeTerms(
+                            type="supply_request", subject="logs", description=request["purpose"],
+                            recipients=["rowan"], quantity=need["quantity"],
+                            destination=config.residents[world.actor_id].work,
+                            due_at=request["deadline"], required_fresh_until=request["required_fresh_until"])
+                        channel = village_communication._intent_channel(world, terms)
+                    except village_communication.ChannelUnavailable:
+                        channel = None
+                    if channel:
+                        choices.append({"task_id": "preservation:request-log", "action_id": "village_request_supply",
+                                        "arguments": request, "priority": "P4",
+                                        "reason": "Fund one real log for optional fish preservation through a physical channel."})
+                    elif state.minute % 1440 < 780:
+                        box = next((box for box, owner in communication.boxes.items() if owner == "rowan"), None)
+                        target = world.state.entities[box].location if box else None
+                        choice = _travel_choice(world, target, "preservation:post-log-request",
+                                                "Reach Rowan's physical inbox to request a funded smoker log.", "P4") if target else None
+                        if choice:
+                            choices.append(choice)
+            if not needs and state.stocks.get(config.residents["finn"].work, {}).get("logs", 0) >= 1:
+                from npc_sim import village_social
+                activity = village_social.observation(world).get("social", {}).get("activities", {}).get("fish-smoking")
+                if activity and activity["available"] and location == activity["location"]:
+                    choices.append({"task_id": "preservation:smoke-fish", "action_id": "village_leisure",
+                                    "arguments": {"activity": "fish-smoking", "companions": []}, "priority": "P4",
+                                    "reason": "Use only uncommitted fresh fish and the paid, physically delivered smoker log."})
+        elif world.actor_id == "rowan":
+            from npc_sim import village_services
+            known = state.communication.knowledge.get("rowan", {}) if state.communication else {}
+            requests = [memory.snapshot for memory in known.values()
+                        if memory.snapshot.author == "finn" and memory.snapshot.terms.type == "supply_request"
+                        and memory.snapshot.terms.subject == "logs"
+                        and memory.snapshot.status == "posted" and memory.confidence == "direct"]
+            if requests:
+                notice = max(requests, key=lambda item: item.terms.due_at)
+                from npc_sim import village_communication
+                try:
+                    channel = village_communication._intent_channel(world, notice.terms, author="finn")
+                except village_communication.ChannelUnavailable:
+                    channel = None
+                if channel:
+                    choices.append({"task_id": "preservation:accept-log", "action_id": "village_respond_to_request",
+                                    "arguments": {"request_id": notice.id, "response": "accept"}, "priority": "P3",
+                                    "reason": "Accept Finn's personally read, funded log request through a physical channel."})
+                else:
+                    box = next((box for box, owner in state.communication.boxes.items() if owner == "finn"), None)
+                    target = world.state.entities[box].location if box else None
+                    choice = _travel_choice(world, target, "preservation:reply-log",
+                                            "Reach Finn's physical inbox to accept his personally read log request.", "P4") if target else None
+                    if choice:
+                        choices.append(choice)
+            orders = [order for order in village_economy._personal_orders(world)
+                      if order.supplier == "rowan" and order.buyer == "finn"
+                      and order.product == "logs" and order.status in village_economy.COMMITTED
+                      and order.coordination_notice_id in known]
+            if orders:
+                order = min(orders, key=lambda item: item.deadline)
+                cargo = person.shipments
+                if any(item.order_id == order.id for item in cargo):
+                    if location == order.destination:
+                        choices.append({"task_id": "preservation:unload-log", "action_id": "village_unload_goods",
+                                        "arguments": {}, "priority": "P3",
+                                        "reason": "Unload the real ordered log and settle its funded delivery."})
+                    else:
+                        choice = _travel_choice(world, order.destination, "preservation:deliver-log",
+                                                "Carry the accepted log shipment to Finn's riverbank smoker.", "P3")
+                        if choice:
+                            choices.append(choice)
+                elif location == order.source and village_economy.loadable_for_order(world, order) > 0:
+                    amount = min(order.loadable, village_services.foot_capacity(world, "rowan"))
+                    if amount > 0:
+                        choices.append({"task_id": "preservation:load-log", "action_id": "village_load_goods",
+                                        "arguments": {"goods": {"logs": amount}, "destination": order.destination},
+                                        "priority": "P3", "reason": "Load one funded, accepted and unreserved log."})
+                elif location != order.source:
+                    choice = _travel_choice(world, order.source, "preservation:collect-log",
+                                            "Return to the known source of Finn's accepted log order.", "P3")
+                    if choice:
+                        choices.append(choice)
 
     if state.social is not None and not choices:
         from npc_sim import village_social

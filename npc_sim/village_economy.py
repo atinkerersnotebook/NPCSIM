@@ -934,6 +934,18 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
     requests.extend(village_livestock.requests(world, buyer))
     from npc_sim import village_firewood
     requests.extend(village_firewood.requests(world, buyer))
+    from npc_sim import village_extensions
+    if (buyer == "finn" and (not personal or world.actor_id == buyer)
+            and village_extensions.policy(world).purposeful_downtime
+            and state.social and "fish-smoking" in state.social.config.activities
+            and state.residents[buyer].life is not None
+            and not state.residents[buyer].life.sleeping
+            and state.minute % 1440 < 900
+            and usable_stock(world, destination, "preserved-fish", state.minute) == 0):
+        cost = unit_price(world, "logs") + delivery_fee(world)
+        if state.coins[buyer] - commitments(world, buyer) >= cost:
+            requests.append((f"{state.minute // 1440}:fish-smoking", state.minute // 1440 * 1440 + 1020,
+                             {"logs": 1}))
     result = []
     supplies: dict[str, list[dict[str, Any]]] = {}
     existing: dict[str, list[dict[str, Any]]] = {}
@@ -1257,6 +1269,7 @@ def production_targets(world: "World", location: str, *, personal: bool = False)
     policy, economy = config(world), _state(world)
     if policy is None or economy is None:
         return {}
+    base, state = world.scenario.village, world.state.village
     from npc_sim import village_research
     targets = {product: 0 for product in village_research.prices(world)}
     targets.update(policy.production_targets.get(location, {}))
@@ -1270,13 +1283,20 @@ def production_targets(world: "World", location: str, *, personal: bool = False)
     for order in _personal_orders(world) if personal else economy.orders.values():
         if (order.status in COMMITTED or _food_policy(world) and order.status == "blocked") and order.source == location:
             targets[order.product] = targets.get(order.product, 0) + order.loadable
+    if (_food_policy(world) and location == "riverbank" and "fish-smoking" in
+            (state.social.config.activities if state.social else {})
+            and state.stocks.get(location, {}).get("logs", 0) >= 1
+            and state.minute % 1440 < 990
+            and state.residents["finn"].life is not None
+            and not state.residents["finn"].life.sleeping
+            and usable_stock(world, location, "preserved-fish", state.minute) == 0):
+        targets["fish"] = targets.get("fish", 0) + 2
     if firewood_source:
         targets["logs"] = village_firewood.log_target(world, location, targets)
     from npc_sim import village_livestock
     if location == "farm":
         for product, amount in village_livestock.feed_needs(world).items():
             targets[product] = targets.get(product, 0) + amount
-    base, state = world.scenario.village, world.state.village
     if location == base.residents[base.helper].work and state.horse_fed_day < state.minute // 1440:
         # Feeding the real working horse remains a daily need, not an order
         # for an unwanted manure byproduct.
