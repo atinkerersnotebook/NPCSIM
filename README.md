@@ -30,13 +30,15 @@ NPCSIM_LAN_HOST=192.168.1.143 .venv/bin/python -m uvicorn npc_sim.app:app --host
 
 ### Opt-in automatic repair supervisor (Linux)
 
-Stop any existing server on port 8000, then launch the supervisor instead of uvicorn:
+Install [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli), then run `~/.local/bin/copilot` (or `copilot` if it is on `PATH`) and enter `/login` in a terminal to authenticate it independently of VS Code. Alternatively, configure a user-owned fine-grained token with **Copilot Requests** permission through the CLI's supported environment variables; never save tokens in this repository. Confirm unattended authentication with `~/.local/bin/copilot -p "Reply OK" --silent` before replacing a server. CLI access and authentication are not provided by NPCSIM.
+
+At a safe checkpoint, stop the existing server on port 8000, then launch the supervisor instead of uvicorn:
 
 ```bash
-.venv/bin/python -m npc_sim.self_heal --repair-command '["/absolute/path/to/repair-agent", "--non-interactive"]'
+.venv/bin/python -m npc_sim.self_heal --repair-command '[".venv/bin/python","-m","npc_sim.repair_agent"]'
 ```
 
-The configured executable must read a repair task from standard input, make local source/test edits, and exit with status 0; it is **not** installed or configured by NPCSIM. The supervisor tests the edited code before restarting the server. It attempts an automatic resumable save every five minutes (only when the world supports saves), tries the built-in verified adventure reopen, then the latest valid save for that run, and finally resets and runs a new episode. It never silently rolls back a failed repair, and it refuses to invoke the agent when `npc_sim/` or `tests/` already has uncommitted changes. A repair agent with write access can change code and run commands: only use a trusted executable in an appropriately isolated environment. The supervisor runs on loopback only; its server log is stored under the selected data directory. Existing running episodes may still be marked interrupted on an unclean server exit unless they were saved at a safe checkpoint; a reset loses progress. Pass `--test-command '[".venv/bin/python","-m","pytest","-q","tests"]'` to override the default full-suite validation command. Stop with Ctrl+C; the supervisor shuts down its server.
+The bundled adapter reads the repair task from standard input and passes it to Copilot CLI's noninteractive `--prompt` mode, with only source/test edit tools approved. The CLI must be installed as `copilot` on `PATH` or at `~/.local/bin/copilot`; alternatively set `NPCSIM_COPILOT_CLI` to its absolute executable path. Other shell commands and path/URL access are not automatically approved; a repair that requires them will stop for inspection rather than silently granting broader permissions. The configured executable must edit local source/tests and exit with status 0. The supervisor tests the edited code before restarting the server. It attempts an automatic resumable save every five minutes (only when the world supports saves), tries the built-in verified adventure reopen, then the latest valid save for that run, and finally resets and runs a new episode. It never silently rolls back a failed repair, and it refuses to invoke the agent when `npc_sim/` or `tests/` already has uncommitted changes. A repair agent with write access can change code and run commands: only use a trusted executable in an appropriately isolated environment. The supervisor defaults to loopback; to preserve existing LAN access, set `NPCSIM_LAN_HOST` to the server's LAN IPv4 address and pass `--host 0.0.0.0` to the supervisor. Its server log is stored under the selected data directory. Existing running episodes may still be marked interrupted on an unclean server exit unless they were saved at a safe checkpoint; a reset loses progress. Pass `--test-command '[".venv/bin/python","-m","pytest","-q","tests"]'` to override the default full-suite validation command. Stop with Ctrl+C; the supervisor shuts down its server.
 
 Open `http://192.168.1.143:8000` from another device on the LAN. Replace the example address with the server's actual LAN IPv4 address; allow inbound TCP port 8000 in the host firewall if needed. LAN mode grants **unauthenticated full admin access**, including controls and private run data, to anyone who can reach the port. Use only on a trusted network; do not forward the port to the internet. Without LAN mode the server remains loopback-only.
 
@@ -650,9 +652,13 @@ later real, paid meal can recover that outcome. Meal preparation now has a
 configurable cutoff; the forecast never creates stock or guarantees attendance.
 
 Useful inspections are limited until visible conditions change or the configured
-review interval passes. When no eligible alternative exists, `village_wait_event`
-records its reason and wake triggers, preserving all other villagers' independent
-turns. With anti-idle enabled, repeated short idle `village_wait` polling is rejected.
+review interval passes. With anti-idle enabled, an idle resident away from their
+main workplace returns there by a real, traversable walk before waiting, provided
+there is time before meal and rest commitments. Existing committed routes are
+respected; an early diner may remain at the tavern for breakfast. Once at work,
+or when no safe route is available, `village_wait_event` records its reason and
+wake triggers, preserving all other villagers' independent turns. With anti-idle
+enabled, repeated short idle `village_wait` polling is rejected.
 `idle_review_minutes` defaults to 60 (15–240, multiples of five); waits are also
 bounded by known events and walking/action time before meals and bedtime.
 Local stock/gear changes, real encounters, personally received notices and needs

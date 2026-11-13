@@ -514,6 +514,35 @@ def candidates(world: "World") -> list[dict[str, Any]]:
     if purposeful(world):
         choices.extend(_purposeful_choices(world))
         choices.sort(key=lambda choice: choice["priority"])
+    policy = village_extensions.policy(world)
+    breakfast_due = (state.minute // 1440 * 1440 + resident.wake_minute + policy.breakfast_delay)
+    breakfast = life.meals.get(f"{state.minute // 1440}:breakfast")
+    awaiting_breakfast = (policy.breakfast and world.actor.location_id == "tavern"
+                          and state.minute < breakfast_due + policy.meal_window
+                          and (breakfast is None or breakfast.status == "pending"))
+    if (not choices and world.actor.location_id != resident.work and not awaiting_breakfast
+            and not village_life.rest_due(resident, life, state.minute)
+            and state.minute % 1440 < village_life.production_closing_minute(world, world.actor_id)):
+        from npc_sim import village_walking
+        if village_walking.enabled(world):
+            plan = person.walking_plan
+            if plan and plan.destination == resident.work and plan.next_step < len(plan.doors):
+                if village_walking.check_step(world, {"target": plan.doors[plan.next_step]}) is None:
+                    choices.append({"task_id": "return:workplace", "action_id": "go",
+                                    "arguments": {"target": plan.doors[plan.next_step]}, "priority": "P4",
+                                    "reason": "Return to your main workplace rather than wait elsewhere."})
+            elif village_walking.check_plan(world, resident.work) is None:
+                path = village_walking._path(world, resident.work)
+                limits = _obligation_limits(world)
+                if path and (not limits or state.minute + 5 * len(path[0]) + 10 <= min(limits)):
+                    choices.append({"task_id": "return:workplace", "action_id": "village_plan_walk",
+                                    "arguments": {"destination": resident.work, "purpose": "Return to my workplace while idle"},
+                                    "priority": "P4", "reason": "Return to your main workplace rather than wait elsewhere."})
+        else:
+            route = _travel_choice(world, resident.work, "return:workplace",
+                                   "Return to your main workplace rather than wait elsewhere.", "P4")
+            if route:
+                choices.append(route)
     if not choices and _inspection_ready(world):
         choices.append({"task_id": f"fallback:{world.actor_id}:inspect:{resident.work}",
                         "action_id": "village_observe", "arguments": {}, "priority": "P5",

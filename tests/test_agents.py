@@ -363,10 +363,16 @@ async def test_profiles_are_frozen_private_and_reset_keeps_assignments(data):
         write_json(data / "agents" / "badger.json", changed.model_dump(mode="json"))
         await controller.command("step")
         await controller.command("step")
-        assert fake.contexts[0]["memory"]["agent_profile"]["personality"] == frozen
-        assert fake.contexts[0]["memory"]["agent_profile"]["documents"]["SOUL.md"] == frozen_soul
-        assert fake.contexts[1]["memory"]["agent_profile"]["name"] == "Raven"
-        assert "Badger" not in json.dumps(fake.contexts[1]["memory"]["agent_profile"])
+        assert "agent_profile" not in fake.contexts[0]["memory"]
+        assert "agent_profile" not in fake.contexts[1]["memory"]
+        scout_profile = json.loads(fake.real_proxy.persona_instructions(
+            controller.agents["scout"]["memory"]).rsplit("\n", 1)[-1])
+        locksmith_profile = json.loads(fake.real_proxy.persona_instructions(
+            controller.agents["locksmith"]["memory"]).rsplit("\n", 1)[-1])
+        assert scout_profile["personality"] == frozen
+        assert scout_profile["documents"]["SOUL.md"] == frozen_soul
+        assert locksmith_profile["name"] == "Raven"
+        assert "Badger" not in json.dumps(locksmith_profile)
         assert read_json(controller.events.directory / "run.json")["agent_profiles"]["scout"]["personality"] == frozen
         with pytest.raises(ValueError, match="Unknown agent profile"):
             await controller.command("start", {"agent_assignments": {"npc-001": "unknown"}})

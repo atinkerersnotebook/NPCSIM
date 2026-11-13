@@ -11,8 +11,10 @@ from test_village_expanded import scenario
 from test_world import act
 
 
-def make_world(tmp_path, *, minute=3480, breakfast=False, enabled=True):
+def make_world(tmp_path, *, minute=3480, breakfast=False, enabled=True, living=False):
     value = scenario()
+    if living:
+        value.id = "millhaven-living"
     value.village.start_minute = minute
     value.village.anti_idle = enabled
     value.village.event_driven_waits = True
@@ -118,7 +120,8 @@ def test_resolved_breakfast_cutoff_does_not_prevent_legitimate_waiting(tmp_path)
     world.actor.location_id = "tavern"
     assert act(world, "village_eat")["code"] == "MEAL_MISSED"
     village.advance(world, 90)
-    assert act(world, "village_wait_event")["code"] == "EVENT_WAIT_STARTED"
+    assert act(world, "village_wait_event")["code"] == "ELIGIBLE_TASK_PENDING"
+    assert any(choice["task_id"] == "return:workplace" for choice in village_fallback.candidates(world))
 
 
 def test_event_wait_intent_skips_optional_leisure_and_stops_before_breakfast(tmp_path):
@@ -145,6 +148,39 @@ def test_pending_local_maintenance_prevents_an_idle_wait(tmp_path):
                for choice in choices)
     assert act(world, "village_wait_event")["code"] == "ELIGIBLE_TASK_PENDING"
     assert act(world, "village_maintain", job=job)["outcome"] == "APPLIED"
+
+
+def test_idle_elsie_returns_to_tavern_before_waiting(tmp_path):
+    world = make_world(tmp_path, minute=390, living=True)
+    elsie = world.bind("elsie", "session-elsie")
+    elsie.actor.location_id = "village-square"
+    person = elsie.state.village.residents["elsie"]
+
+    choice = next(choice for choice in village_fallback.candidates(elsie)
+                  if choice["task_id"] == "return:workplace")
+    assert choice["action_id"] == "village_plan_walk"
+    assert choice["arguments"]["destination"] == "tavern"
+    assert act(elsie, "village_wait_event")["code"] == "ELIGIBLE_TASK_PENDING"
+    assert act(elsie, "village_plan_walk", **choice["arguments"])["code"] == "ROUTE_PLANNED"
+    village.advance(elsie, 5)
+
+    step = next(choice for choice in village_fallback.candidates(elsie)
+                if choice["task_id"] == "return:workplace")
+    assert step["action_id"] == "go"
+    assert act(elsie, "village_wait_event")["code"] == "ELIGIBLE_TASK_PENDING"
+    assert act(elsie, "go", **step["arguments"])["outcome"] == "APPLIED"
+    village.advance(elsie, 5)
+    assert elsie.actor.location_id == "tavern"
+    assert person.walking_plan is None
+    assert not any(choice["task_id"] == "return:workplace" for choice in village_fallback.candidates(elsie))
+
+
+def test_idle_return_does_not_override_another_committed_route(tmp_path):
+    world = make_world(tmp_path, minute=540, living=True)
+    world.actor.location_id = "village-square"
+    assert act(world, "village_plan_walk", destination="tavern", purpose="Visit the tavern")["code"] == "ROUTE_PLANNED"
+    village.advance(world, 5)
+    assert not any(choice["task_id"] == "return:workplace" for choice in village_fallback.candidates(world))
 
 
 def test_arriving_early_for_a_meal_allows_waiting_until_the_meal_is_due(tmp_path):

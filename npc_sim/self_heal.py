@@ -42,7 +42,7 @@ class Supervisor:
         request = Request(self.base + path, data=body,
                           headers={"Content-Type": "application/json"} if body is not None else {},
                           method="POST" if body is not None else "GET")
-        with urlopen(request, timeout=5) as response:
+        with urlopen(request, timeout=420 if path == "/api/saves" else 5) as response:
             return json.load(response)
 
     def ready(self) -> bool:
@@ -58,7 +58,9 @@ class Supervisor:
             if probe.connect_ex(("127.0.0.1", self.port)) == 0:
                 raise FileExistsError("Another process already owns the configured port; stop it before supervising")
         pending = self.latest_run()
-        self._started_run = pending["id"] if pending and pending.get("status") == "running" else None
+        self._started_run = pending["id"] if pending and (pending.get("status") == "running" or
+                                                        (pending.get("status") == "paused" and
+                                                         pending.get("safe_checkpoint"))) else None
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._log_stream = self.log_path.open("a", encoding="utf-8")
         self.server = subprocess.Popen(self.server_command, cwd=self.root,
@@ -241,6 +243,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Supervise NPCSIM with an opt-in external code-repair agent")
     parser.add_argument("--data", type=Path, default=Path(os.environ.get("NPCSIM_DATA", ROOT / "data")))
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--host", default="127.0.0.1", help="Server bind address; use 0.0.0.0 only on a trusted LAN")
     parser.add_argument("--interval", type=float, default=3)
     parser.add_argument("--repair-command", type=json.loads, required=True,
                         help='JSON argv array for an agent that reads its task on stdin and edits local source')
@@ -256,7 +259,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     supervisor = Supervisor(root=ROOT, data=args.data.resolve(),
                             server_command=[sys.executable, "-m", "uvicorn", "npc_sim.app:app",
-                                            "--host", "127.0.0.1", "--port", str(args.port)],
+                                            "--host", args.host, "--port", str(args.port)],
                             repair_command=args.repair_command, test_command=args.test_command,
                             port=args.port, interval=args.interval)
     try:

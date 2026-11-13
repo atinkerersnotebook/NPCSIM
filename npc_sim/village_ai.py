@@ -77,6 +77,7 @@ def observation(world: "World") -> dict[str, Any]:
                   + "Schedules are commitments, never automatic movement. Looking and reading are free. "
                   + ("The earliest available villager acts next; work and travel reserve only that person's time. "
                      "Sleeping, committed baking and the accepted standing wagon route skip AI turns. "
+                     "When idle away from your workplace, return there before waiting if a safe route fits before your next obligation. "
                      "Use village_wait when idle; it reserves your time without delaying other villagers. "
                      "Read the free map on the square's noticeboard for every village connection. "
                      if config.time_based_turns else "Each applied action advances the shared clock five minutes. ")

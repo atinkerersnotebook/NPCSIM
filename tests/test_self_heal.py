@@ -1,5 +1,5 @@
 import json
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from npc_sim.self_heal import Supervisor
 
@@ -32,6 +32,30 @@ def test_recover_uses_latest_valid_save(tmp_path):
         guard.recover()
     assert guard.request.call_args_list[2].args == (
         "/api/saves/load", {"save_id": "checkpoint", "current_run_id": "episode"})
+
+
+def test_start_tracks_existing_safe_paused_run(tmp_path):
+    guard = supervisor(tmp_path)
+    guard.latest_run = Mock(return_value={"id": "episode", "status": "paused", "safe_checkpoint": True})
+    guard.ready = Mock(return_value=True)
+    with patch("npc_sim.self_heal.socket.socket") as sock, patch("npc_sim.self_heal.subprocess.Popen") as popen:
+        sock.return_value.__enter__.return_value.connect_ex.return_value = 1
+        popen.return_value.poll.return_value = None
+        guard.start()
+    assert guard._started_run == "episode"
+    guard.stop()
+
+
+def test_checkpoint_request_allows_slow_safe_boundary(tmp_path):
+    guard = supervisor(tmp_path)
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    with patch("npc_sim.self_heal.urlopen", return_value=response) as urlopen, patch(
+        "npc_sim.self_heal.json.load", return_value={"save": {"resumable": True}}
+    ):
+        guard.request("/api/saves", {"run_id": "episode"})
+    assert urlopen.call_args.kwargs["timeout"] == 420
 
 
 def test_checkpoint_pauses_and_resumes_only_resumable(tmp_path):
