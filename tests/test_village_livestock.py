@@ -225,6 +225,43 @@ def test_in_person_funded_delivery_cooking_consumption_and_finite_coins(tmp_path
     assert state.stocks["tavern"]["meals"] == meals_before + 1
 
 
+def test_funded_milk_order_can_commit_before_real_daily_care(tmp_path):
+    world = make_world(tmp_path)
+    state = world.state.village
+    state.well_dug = True
+    inn = world.bind("elsie", "session-elsie")
+    inn.actor.location_id = "farm"
+
+    perform(inn, "village_propose_order", supplier="ada", product="milk", quantity=2,
+            deadline=800, required_fresh_until=840)
+    order = next(iter(state.economy.orders.values()))
+    accepted = perform(world, "village_accept_order", order_id=order.id)
+    assert accepted["code"] == "ORDER_ACCEPTED_PLANNED"
+    assert order.production_plan["requires_care"] == 1
+
+    water(world)
+    perform(world, "village_care_cow", minutes=15)
+    perform(world, "village_milk_cow", minutes=15)
+    assert state.stocks["farm"]["milk"] == 2
+    assert village_economy.loadable_for_order(world, order) == 2
+
+    courier = world.bind("nella", "session-nella")
+    courier.actor.location_id = "farm"
+    balances = state.coins.copy()
+    perform(courier, "village_load_goods", goods={"milk": 2}, destination="tavern")
+    assert state.stocks["farm"]["milk"] == 0
+    courier.actor.location_id = "tavern"
+    perform(courier, "village_unload_goods")
+    assert order.status == "fulfilled" and order.delivered_quantity == 2
+    assert state.stocks["tavern"]["milk"] == 2
+    assert state.coins["elsie"] == balances["elsie"] - 5
+    assert state.coins["ada"] == balances["ada"] + 4
+    assert state.coins["nella"] == balances["nella"] + 1
+    assert act(courier, "village_unload_goods")["outcome"] == "REJECTED"
+    assert state.coins["ada"] == balances["ada"] + 4
+    assert state.coins["nella"] == balances["nella"] + 1
+
+
 def test_real_bucket_and_water_source_interruption_cannot_create_water(tmp_path):
     world = make_world(tmp_path)
     perform(world, "take", target=village_livestock.BUCKET)

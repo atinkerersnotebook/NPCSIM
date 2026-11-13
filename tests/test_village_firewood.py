@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from npc_sim import (
     village, village_ai, village_communication as comm, village_economy as economy,
     village_extensions, village_fallback, village_firewood as fuel, village_goods as goods,
-    village_livestock, village_mining, village_research,
+    village_livestock, village_mining, village_research, village_walking,
 )
 from npc_sim.living_village import build_scenario
 from npc_sim.models import Scenario, VillageEconomyConfig, VillageFirewoodConfig
@@ -733,6 +733,33 @@ def test_loaded_fuel_route_reroutes_after_an_edge_closes_without_reloading(tmp_p
         assert result["outcome"] == "APPLIED", result
     assert plan.status == "completed"
     assert all(world.state.village.economy.orders[stop.order_id].delivered_quantity == 1 for stop in plan.stops)
+
+
+def test_loaded_fuel_route_reconciles_conflicting_planned_walk(tmp_path):
+    world = make_world(tmp_path)
+    plan = _fund_grouped_route(world)
+    for _ in plan.stops:
+        assert act(world, "village_execute_fuel_delivery", route_id=plan.route_id)["code"] == "FUEL_ROUTE_LOADED"
+        village.advance(world, 5)
+    world.scenario.id = "millhaven-living"
+    world.scenario.village.time_based_turns = True
+    person = world.state.village.residents["rowan"]
+    person.known_routes = [eid for eid, entity in world.state.entities.items() if entity.kind == "door"]
+    assert village_walking.plan(world, {"destination": "bakery", "purpose": "Visit bakery"})[1] == "ROUTE_PLANNED"
+    assert person.walking_plan is not None
+    result = act(world, "village_execute_fuel_delivery", route_id=plan.route_id)
+    assert result["code"] == "FUEL_ROUTE_TRAVEL", result
+    for _ in range(32):
+        if plan.status == "completed":
+            break
+        village.advance(world, 5)
+        result = act(world, "village_execute_fuel_delivery", route_id=plan.route_id)
+        assert result["outcome"] == "APPLIED", result
+    assert plan.status == "completed"
+    assert person.walking_plan is None
+    assert not person.shipments
+    assert all(world.state.village.economy.orders[stop.order_id].delivered_quantity == stop.quantity
+               for stop in plan.stops)
 
 
 def test_fuel_delivery_retry_does_not_duplicate_unload_or_payment(tmp_path):

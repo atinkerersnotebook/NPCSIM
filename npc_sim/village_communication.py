@@ -13,7 +13,7 @@ from npc_sim.village_communication_models import (
     Appointment, Channel, ChangeNotice, CloseNotice, NoticeKnowledge, NoticeTerms,
     NoticeVersion, PostNotice, ReadInbox, ReadNotices, ReplyNotice, TellNotice,
     UpdateNotice, VillageCommunicationConfig, VillageCommunicationState,
-    SupplyIntent, MeetingIntent, RespondIntent, UpdateIntent, CheckMessagesIntent, ShareIntent,
+    SupplyIntent, MeetingIntent, CrewIntent, RespondIntent, UpdateIntent, CheckMessagesIntent, ShareIntent,
     TransferAuthorization,
 )
 
@@ -350,7 +350,7 @@ def _create_order(world: "World", notice: NoticeVersion) -> dict[str, Any]:
 INTENTS = {
     "village_request_supply": SupplyIntent,
     "village_propose_meeting": MeetingIntent,
-    "village_schedule_crew": MeetingIntent,
+    "village_schedule_crew": CrewIntent,
     "village_respond_to_request": RespondIntent,
     "village_update_request": UpdateIntent,
     "village_check_messages": CheckMessagesIntent,
@@ -441,12 +441,29 @@ def _intent_request(world: "World", action: str, request: Any) -> tuple[str, str
                                 due_at=request.deadline, required_fresh_until=request.required_fresh_until)
             terms = _priced_terms(world, terms)
         else:
-            crew, site = _project(world, request.project_id)
-            terms = NoticeTerms(type="meeting", subject=request.project_id, description=request.purpose,
-                                recipients=[rid for rid in crew if rid != actor], project=request.project_id,
-                                destination=site, due_at=request.start)
-            if request.end is not None and request.end != request.start + 60:
-                raise ValueError("Appointments last 60 minutes; choose a start with that end")
+            project = request.project_id if action == "village_propose_meeting" else request.project or request.project_id
+            if project is None:
+                raise ValueError("Choose a real crew project")
+            crew, site = _project(world, project)
+            if action == "village_schedule_crew":
+                if request.participant_ids is not None and (len(request.participant_ids) != len(crew)
+                        or set(request.participant_ids) != set(crew)):
+                    raise ValueError(f"This project needs the actual crew {crew}; gather those residents")
+                start = request.earliest_start if request.earliest_start is not None else request.start
+                if start is None:
+                    raise ValueError("Provide earliest_start; choose a future 60-minute work window")
+                if request.end is not None and request.end <= start:
+                    raise ValueError("The crew end must follow the requested start; omit end for a 60-minute window")
+                if request.end is not None and request.end != start + 60:
+                    raise ValueError(f"A crew window lasts 60 minutes; use end={start + 60} or omit end")
+                start = max(start, world.state.village.minute + 5)
+            else:
+                start = request.start
+                if request.end is not None and request.end != start + 60:
+                    raise ValueError(f"A crew window lasts 60 minutes; use end={start + 60} or omit end")
+            terms = NoticeTerms(type="meeting", subject=project, description=request.purpose,
+                                recipients=[rid for rid in crew if rid != actor], project=project,
+                                destination=site, due_at=start)
         _validate_terms(world, terms, actor)
         previous = next((history[-1] for history in state.notices.values()
                          if history[-1].author == actor and history[-1].terms == terms
@@ -611,7 +628,7 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
                     if _need_key(versions[-1].author, versions[-1].terms) == _need_key(actor, terms)]
         if any(notice.status not in TERMINAL for notice in previous):
             raise ValueError("Update the existing equivalent open need instead of posting a duplicate")
-        if any(notice.terms == terms for notice in previous):
+        if terms.type != "meeting" and any(notice.terms == terms for notice in previous):
             raise ValueError("No material change since the prior failed/closed request")
         if minute < state.cooldowns.get(f"post:{actor}", 0):
             raise ValueError("Post/check activity has a cooldown; continue useful work")
@@ -622,11 +639,15 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
             if any(versions[-1].appointment and versions[-1].terms.project == terms.project
                    and versions[-1].status not in TERMINAL for versions in state.notices.values()):
                 raise ValueError("This project already has an open appointment")
+            if (session := world.state.village.crew_sessions.get(terms.project)) is not None and session.status == "active":
+                raise ValueError("A crew is already actively working this project; finish that session first")
             appointment = Appointment(
                 id=f"appointment-{nid}", version=1, project=terms.project, members=members,
                 accepted=[actor], place=site, due_at=terms.due_at, end_at=terms.due_at + 60)
+        predecessor = next((old for old in reversed(previous) if old.status in TERMINAL), None)
         notice = NoticeVersion(id=nid, version=1, author=actor, terms=terms,
-                               created_at=minute, updated_at=minute, appointment=appointment)
+                               created_at=minute, updated_at=minute, appointment=appointment,
+                               supersedes_notice_id=predecessor.id if appointment and predecessor else None)
         state.notices[nid] = [notice]
         state.next_notice += 1
         state.cooldowns[f"post:{actor}"] = minute + state.config.cooldown_minutes
@@ -874,22 +895,44 @@ def project_blocker(world: "World", project: str) -> str | None:
                     and session.appointment_id == plan.id)
         if minute > plan.end_at and not (active or reserved):
             continue
+        gathered = all(village.resident_location(world, member) == plan.place
+                       and not (world.state.village.residents[member].life
+                                and world.state.village.residents[member].life.sleeping)
+                       for member in plan.members)
+        confirmed_witness = next((member for member in plan.members
+                                  if (memory := state.knowledge.get(member, {}).get(
+                                      plan.id.removeprefix("appointment-"))) is not None
+                                  and memory.snapshot.appointment is not None
+                                  and memory.snapshot.appointment.version == plan.version
+                                  and memory.snapshot.appointment.status == "confirmed"), None)
         for member in plan.members:
-            memories = state.knowledge.get(member, {}).values()
-            if not any(k.snapshot.appointment and k.snapshot.appointment.id == plan.id
-                       and k.snapshot.appointment.version == plan.version
-                       and k.snapshot.appointment.status == "confirmed" for k in memories):
-                return "Both workers must personally receive the confirmed appointment"
+            memory = state.knowledge.get(member, {}).get(plan.id.removeprefix("appointment-"))
+            if not (memory and memory.snapshot.appointment
+                    and memory.snapshot.appointment.version == plan.version
+                    and memory.snapshot.appointment.status == "confirmed"):
+                if (not gathered or not confirmed_witness or not memory
+                        or not memory.snapshot.appointment
+                        or memory.snapshot.appointment.id != plan.id
+                        or member not in plan.accepted):
+                    return "Both workers must personally receive the confirmed appointment or gather with their accepting partner"
+                notice = state.notices[plan.id.removeprefix("appointment-")][-1]
+                _receive(world, member, notice, "conversation", confirmed_witness)
+                _emit(world, "appointment_confirmed", notice, listeners=[member, confirmed_witness],
+                      text="Both consenting crew members confirmed their accepted appointment together at the site.")
             if village.resident_location(world, member) != plan.place:
                 return "Both actual workers must be at the agreed site"
             person = world.state.village.residents[member]
             if person.life and (person.life.sleeping or person.life.work):
                 return "An actual worker is sleeping or tending a batch"
+            same_job = (reserved and member in session.contributions
+                        and person.current_action == "village_project")
             if (person.busy_until > minute or
                     (person.available_at > minute and not (
                         member != world.actor_id and person.current_action == "village_project"
-                        and member in active and person.available_at == active[member]
-                        + 5 * village_life.cooldown_factor(world, member)))):
+                        and (member in active and person.available_at == active[member]
+                             + 5 * village_life.cooldown_factor(world, member)
+                             or same_job and person.available_at <= minute + 5
+                             * village_life.cooldown_factor(world, member))))):
                 return "An actual worker has not finished arriving or is still occupied"
             from npc_sim import village_extensions
             if village_extensions.blocked_until(world, member) is not None:
@@ -951,7 +994,9 @@ def advance(world: "World") -> None:
                                  and not (village_state.residents[rid].life
                                           and village_state.residents[rid].life.sleeping)])
                 continue
-        limit = notice.appointment.end_at if notice.appointment else None
+        limit = (min(notice.appointment.end_at, notice.terms.expires_at)
+                 if notice.appointment and notice.terms.expires_at is not None else
+                 notice.appointment.end_at if notice.appointment else None)
         expired = (village_state.minute > limit and not (
             notice.appointment.status == "confirmed" and (
                 _active_project_work(world, notice.appointment) or
@@ -979,6 +1024,7 @@ def _view(world: "World", notice: NoticeVersion, knowledge: NoticeKnowledge | No
     places = {eid: entity.name for eid, entity in world.state.entities.items() if entity.kind == "location"}
     return {
         "id": notice.id, "version": notice.version, "author": names[notice.author],
+        "supersedes_notice_id": notice.supersedes_notice_id,
         "recipients": [names[rid] for rid in terms.recipients],
         "subject": terms.subject, "description": terms.description, "type": terms.type,
         "status": notice.status, "quantity": terms.quantity,
@@ -1061,7 +1107,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
         "village_inbox_leave": (PostNotice, "Write a directed request at its actual recipient's box (channel inbox); no teleporting."),
         "village_request_supply": (SupplyIntent, "Request priced supply with a real supplier, purpose, quantity, deadline and freshness. The engine resolves your workplace and price; post only at a physical channel."),
         "village_propose_meeting": (MeetingIntent, "Propose a project appointment; the engine resolves the work site and partner."),
-        "village_schedule_crew": (MeetingIntent, "Schedule a project crew through a real encounter, board or partner inbox; the partner must personally receive and confirm."),
+        "village_schedule_crew": (CrewIntent, "Schedule a crew by project, earliest_start and participant_ids. The engine sets a 60-minute window; use a real encounter, board or partner inbox for consent. Accepted partners may confirm together at the site without another paper receipt."),
         "village_respond_to_request": (RespondIntent, "Respond to a personally known request using a physical channel; the engine resolves the version and author's box."),
         "village_update_request": (UpdateIntent, "Revise your personally known uncommitted request at a physical channel; provide changed business terms only."),
         "village_check_messages": (CheckMessagesIntent, "Read changed paper at the square board or your workplace inbox while there; unchanged checks are rejected."),

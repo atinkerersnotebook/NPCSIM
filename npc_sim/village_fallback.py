@@ -587,6 +587,13 @@ def action_blocker(world: "World", action: str, args: dict[str, Any], *,
             return "MEAL_DUE", "The due meal has not been checked; travel to the tavern before planning idle time."
         if next_review(world) <= state.minute:
             return "COMMITMENT_DUE", "Your scheduled meal or bedtime needs travel or action now; do not start an idle wait."
+        if (action == "village_wait" and args.get("minutes") == 5 and person.life
+                and person.life.urgent_project and person.life.urgent_until is not None
+                and state.minute < person.life.urgent_until <= state.minute + 5
+                and world.actor.location_id == (config.well_site if person.life.urgent_project == "dig_well"
+                                                else config.mill if person.life.urgent_project == "repair_mill"
+                                                else None)):
+            return None
         choices = candidates(world)
         required = next((choice for choice in choices if choice["priority"] != "P5"), None)
         if choices and (action != "wait_until_next_relevant_event" or required):

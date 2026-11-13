@@ -66,6 +66,7 @@ class NoticeVersion(CommunicationModel):
     linked_order_id: Text | None = None
     order_snapshot: dict = Field(default_factory=dict)
     appointment: Appointment | None = None
+    supersedes_notice_id: Text | None = None
 
 
 class NoticeKnowledge(CommunicationModel):
@@ -170,6 +171,16 @@ class MeetingIntent(CommunicationModel):
     purpose: Text
 
 
+class CrewIntent(CommunicationModel):
+    project: Literal["dig_well", "repair_mill"] | None = None
+    earliest_start: Number | None = None
+    participant_ids: list[Text] | None = None
+    project_id: Literal["dig_well", "repair_mill"] | None = None
+    start: Number | None = None
+    end: Number | None = None
+    purpose: Text = "Gather the crew and project supplies at the work site"
+
+
 class RespondIntent(CommunicationModel):
     request_id: Text
     response: Literal["accept", "reject", "propose"]
@@ -200,6 +211,7 @@ class CommitmentView(CommunicationModel):
 
 class CommunicationNoticeView(CommunicationModel):
     id: str
+    supersedes_notice_id: Text | None = None
     version: Positive
     author: str
     recipients: list[str]

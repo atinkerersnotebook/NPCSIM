@@ -203,6 +203,16 @@ def test_arriving_early_for_a_meal_allows_waiting_until_the_meal_is_due(tmp_path
     assert world.state.village.residents["rowan"].available_at == 4020
 
 
+def test_five_minute_wait_at_confirmed_meeting_site_is_legal(tmp_path):
+    world = make_world(tmp_path, minute=600)
+    person = world.state.village.residents["rowan"]
+    person.life.urgent_project = "dig_well"
+    person.life.urgent_until = world.state.village.minute + 5
+    world.actor.location_id = world.scenario.village.well_site
+    result = act(world, "village_wait", minutes=5)
+    assert result["outcome"] == "APPLIED", result
+
+
 def test_capped_timber_and_logs_record_specific_blocks_without_creating_stock(tmp_path):
     world = make_world(tmp_path)
     before = copy.deepcopy(world.state.village.stocks)

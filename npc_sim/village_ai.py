@@ -476,6 +476,13 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         if config.expanded_rules and rid == "ada" and action == "village_work" and person.fertilized_harvests:
             interval = max(5, interval // 2)
             person.fertilized_harvests -= 1
+        if (state.economy is not None and state.economy.config is not None
+                and rid == state.economy.config.innkeeper
+                and "meals" in outputs and any(
+                    state.minute < plan["due"]
+                    and plan["remaining_portions"] - plan["covered_portions"] > outputs["meals"]
+                    for plan in village_economy.meal_requirements(world))):
+            interval = max(5, job.duration)
         person.next_work = state.minute + interval * village_life.cooldown_factor(world, rid)
         if config.daily_life and not job.interruptible:
             if person.life is None:

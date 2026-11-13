@@ -135,6 +135,36 @@ def initial_state(scenario: Any) -> VillageEconomyState | None:
     return state
 
 
+def reconcile_inventory(world: "World") -> list[dict[str, Any]]:
+    """Reconcile every physical stock ledger against recorded movements since world creation."""
+    state = world.state.village
+    if state is None:
+        raise ValueError("An initialized village is required for inventory reconciliation")
+    economy = _state(world)
+    if economy is None:
+        raise ValueError("An economy ledger is required for inventory reconciliation")
+    if not state.initial_stock_seed_id:
+        raise ValueError("Reconciliation requires a provenance-backed initial stock seed")
+    balances: dict[tuple[str, str], int] = {}
+    increases = {"produced", "delivered", "returned", "imported"}
+    decreases = {"consumed", "loaded", "spoiled", "exported"}
+    for movement in economy.movements:
+        sign = 1 if movement.kind in increases else -1 if movement.kind in decreases else None
+        if sign is None:
+            raise ValueError(f"Unknown inventory movement kind: {movement.kind}")
+        key = movement.location, movement.product
+        balances[key] = balances.get(key, 0) + sign * movement.quantity
+    result = []
+    for location, product in sorted(balances.keys() | {
+            (location, product) for location, stock in state.stocks.items() for product in stock}):
+        expected = balances.get((location, product), 0)
+        actual = state.stocks.get(location, {}).get(product, 0)
+        if actual != expected:
+            result.append({"location": location, "product": product,
+                           "expected": expected, "actual": actual})
+    return result
+
+
 def configure(world: "World", values: dict[str, Any]) -> None:
     policy = VillageEconomyConfig.model_validate(values)
     base = world.scenario.village
@@ -460,11 +490,44 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
         tool_id = village_livestock.PAIL if operation == "milk" else village_livestock.BASKET
         tool = world.state.entities.get(tool_id)
         day = state.minute // 1440
-        if (care.day != day or not (care.fed and care.watered and care.cleaned)
-                or not village_livestock._animals(world, operation)
+        supplier = order.supplier
+        inventory = world.state.actors[supplier].inventory
+        if (not village_livestock._animals(world, operation)
                 or tool is None or tool.hidden or tool.broken
-                or (tool.location != "farm" and tool_id not in world.state.actors[order.supplier].inventory)):
-            return {}, "Animal care, real animals and collection equipment are required"
+                or (tool.location != "farm" and tool_id not in inventory)):
+            return {}, "Real animals and usable collection equipment are required"
+        care_today = care.day == day
+        cared = care_today and care.fed and care.watered and care.cleaned
+        care_finish = earliest + len(approach) * 5
+        if operation == "milk" and not cared:
+            cow = livestock.cow
+            hay = usable_stock(world, "farm", "hay", state.minute)
+            if not (care_today and cow.fed) and hay - 1 < protected_quantity(world, "farm", "hay"):
+                return {}, "Cow care needs one real hay unit above protected reserves"
+            if not (care_today and cow.watered) and livestock.water < 1:
+                well = world.state.entities.get(base.well_site)
+                water_route = village.route(world, "farm", base.well_site)
+                if (not state.well_dug or well is None or well.hidden or well.broken
+                        or water_route is None):
+                    return {}, "Cow care needs a usable well and a real route from the farm"
+                bucket = world.state.entities.get(village_livestock.BUCKET)
+                if (bucket is None or bucket.hidden or bucket.broken
+                        or (bucket.location != "farm" and village_livestock.BUCKET not in inventory)):
+                    return {}, "Cow care needs the real livestock bucket"
+                if village_livestock.BUCKET not in inventory:
+                    care_finish += 5
+                care_finish += len(water_route) * 10 + 5 * village_life.cooldown_factor(world, supplier)
+            if not (care_today and cow.cleaned):
+                brush = world.state.entities.get(village_livestock.BRUSH)
+                stall = world.state.entities.get("cow-stall")
+                if any(entity is None or entity.hidden or entity.broken
+                       or (entity.location != "farm" and key not in inventory)
+                       for key, entity in ((village_livestock.BRUSH, brush), ("cow-stall", stall))):
+                    return {}, "Cow care needs the real usable brush and stall at the farm"
+                care_finish += max(5, 15 * village_life.cooldown_factor(world, supplier)
+                                   - (cow.progress if care_today else 0))
+        elif not cared:
+            return {}, "Egg collection requires completed real hen care"
         reserved_output = sum(other.production_plan.get("output", 0) for other in pending
                               if other.product == order.product)
         if missing + reserved_output > (6 if operation == "milk" else livestock.config.hens):
@@ -472,7 +535,7 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
         duration = (15 if operation == "milk" else 10) * village_life.cooldown_factor(world, order.supplier)
         for session, start, end in (("morning", day * 1440 + 480, day * 1440 + 780),
                                     ("afternoon", day * 1440 + 780, day * 1440 + 1080)):
-            at = max(earliest, start)
+            at = max(earliest, care_finish, start)
             previous = next((chunk for chunk in reversed(livestock.chunks) if chunk.operation == "milk"
                              and chunk.start // 1440 == day), None)
             if previous and operation == "milk":
@@ -484,7 +547,8 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
                 continue
             if at + duration <= min(end, latest_start, closing):
                 return {"finish": at + duration, "output": missing,
-                        "session": 1 if session == "morning" else 2}, ""
+                        "session": 1 if session == "morning" else 2,
+                        "requires_care": int(not cared)}, ""
         return {}, "No free animal collection session before the deadline"
     return {}, "Supplier has no feasible production recipe for this product"
 

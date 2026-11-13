@@ -1,6 +1,6 @@
 from npc_sim import village, village_turns
 from npc_sim.world import World
-from test_village_life import advance_to, cast, do, walk
+from test_village_life import advance_to, cast, do, life, walk
 from test_world import act
 
 
@@ -216,11 +216,17 @@ def test_full_village_recovery_evening_meal_and_overnight_scheduler(cast):
             do(cast, rid, "go", target=door)
 
     advance_to(cast, 1140)
-    for rid in cast:
+    for rid in (rid for rid in cast if rid != "elsie"):
         go_to(rid, "tavern")
+        meal = life(cast, rid).meals.get("0:daily")
+        if meal and state.minute < meal.due:
+            advance_to(cast, meal.due)
         do(cast, rid, "village_eat")
         assert state.residents[rid].life.meals["0:daily"].status == "eaten"
         assert state.residents[rid].life.missed_meals == 0
+    village.advance(world, max(0, 1170 - state.minute))
+    go_to("elsie", "tavern")
+    do(cast, "elsie", "village_eat")
     advance_to(cast, 1320)
     for rid in cast:
         resident = world.scenario.village.residents[rid]

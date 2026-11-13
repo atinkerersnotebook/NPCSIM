@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Any
 
 from npc_sim import village, village_economy, village_goods, village_life
 from npc_sim.models import VillageCommittedWork, VillageShipment
+from npc_sim.village_economy_models import VillageSupplierOrder
 
 if TYPE_CHECKING:
     from npc_sim.world import World
@@ -79,6 +80,20 @@ def unload(world: "World") -> str | None:
     return None
 
 
+def ready_orders(world: "World") -> list[VillageSupplierOrder]:
+    from npc_sim import village_communication
+
+    state = village.context(world)[1]
+    if state.economy is None:
+        return []
+    return sorted((order for order in state.economy.orders.values()
+                   if order.status in village_economy.COMMITTED and order.loadable > 0
+                   and order.source in ROUTE and order.destination in ROUTE
+                   and village_economy.loadable_for_order(world, order) > 0
+                   and village_communication.can_use_order(world, order)),
+                  key=lambda order: (order.deadline, order.id))
+
+
 def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, str, None]:
     config, state = village.context(world)
     wagon = state.wagon
@@ -130,11 +145,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         return reject("Torvin must finish fitting the wagon parts before the wagon can be used.")
     if action == "village_start_route":
         if config.expanded_rules and state.economy is not None and not wagon.loads:
-            shipments = [order for order in state.economy.orders.values()
-                         if order.status in village_economy.COMMITTED and order.loadable > 0
-                         and order.source in ROUTE and order.destination in ROUTE
-                         and village_economy.loadable_for_order(world, order) > 0]
-            if not shipments:
+            if not ready_orders(world):
                 return reject("No confirmed shipment is ready on the standing circuit; wait for a real pickup.")
         wagon.driver, wagon.automatic = rid, True
         wagon.route_index, wagon.phase = 0, "travel"
@@ -190,8 +201,14 @@ def advance(world: "World") -> None:
         pause("The driver cannot currently move and handle the wagon.")
         return
     wagon.next_event_at = person.available_at = state.minute + 5
-    for _ in range(4):
+    if config.expanded_rules and state.economy is not None and not wagon.loads and not ready_orders(world):
+        if driver.location_id == config.residents[config.smith].work:
+            pause("No confirmed shipment is ready; the wagon and horse are back at the forge for unhitching.")
+            return
+        destination = config.residents[config.smith].work
+    else:
         destination = ROUTE[wagon.route_index]
+    for _ in range(4):
         location = driver.location_id
         if location != destination:
             path = village.route(world, location, destination, road_only=config.expanded_rules)
@@ -212,6 +229,9 @@ def advance(world: "World") -> None:
             village.observe_local(world, rid)
             wagon.phase = "unload"
             return
+        if destination not in ROUTE:
+            pause("No confirmed shipment is ready; the wagon and horse are back at the forge for unhitching.")
+            return
         if wagon.phase == "travel":
             wagon.phase = "unload"
         if wagon.phase == "unload":
@@ -224,10 +244,27 @@ def advance(world: "World") -> None:
                 person.activity = "Unloaded the wagon and settled the delivery."
                 village.event(world, rid, "wagon_unload", location, person.activity, location)
                 return
-        route = next((route for route in config.deliveries if route.source == location), None)
         wagon.phase = "travel"
         wagon.route_index = (wagon.route_index + 1) % len(ROUTE)
-        if route:
+        destination = ROUTE[wagon.route_index]
+        if config.expanded_rules and state.economy is not None:
+            orders = [order for order in ready_orders(world) if order.source == location]
+            if orders:
+                order = orders[0]
+                amount = min(order.loadable, village_economy.loadable_for_order(world, order),
+                             6 - sum(item.quantity for item in wagon.loads))
+                if amount:
+                    reason = load(world, {order.product: amount}, order.destination)
+                    if reason:
+                        pause(reason)
+                        return
+                    person.activity = f"Loaded {amount} {order.product} in one action."
+                    village.event(world, rid, "wagon_load", location, person.activity, location)
+                    return
+        else:
+            route = next((route for route in config.deliveries if route.source == location), None)
+            if not route:
+                continue
             amount = min(state.stocks.get(location, {}).get(route.resource, 0),
                          6 - sum(item.quantity for item in wagon.loads))
             if amount:

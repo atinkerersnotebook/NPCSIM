@@ -317,6 +317,99 @@ def test_schedule_crew_intent_requires_actual_partner_confirmation(world):
     assert known(world, crew[0], nid).source_type == "conversation"
 
 
+def test_schedule_crew_accepts_earliest_start_and_replaces_expired_identical_notice(world):
+    lead = actor(world, world.scenario.village.smith, "village-square")
+    ready(world)
+    intent = {"project": "dig_well", "earliest_start": 540,
+              "participant_ids": [world.scenario.village.smith, world.scenario.village.helper]}
+    first = comm.apply(lead, "village_schedule_crew", intent)
+    assert first[:2] == ("APPLIED", "NOTICE_POSTED"), first
+    old_id = next(iter(world.state.village.communication.notices))
+    assert latest(world, old_id).appointment.end_at == 600
+    ready(world, 610)
+    comm.advance(world)
+    assert latest(world, old_id).status == "expired"
+    retry = comm.apply(lead, "village_schedule_crew", {**intent, "earliest_start": 650})
+    assert retry[:2] == ("APPLIED", "NOTICE_POSTED"), retry
+    new_id = next(reversed(world.state.village.communication.notices))
+    assert new_id != old_id
+    assert latest(world, new_id).supersedes_notice_id == old_id
+    assert comm.apply(lead, "village_schedule_crew", {**intent, "earliest_start": 650})[1] == "NOTICE_UNCHANGED"
+    assert len(world.state.village.communication.notices) == 2
+
+
+def test_schedule_crew_rejects_wrong_participants_without_spreading_knowledge(world):
+    lead = actor(world, world.scenario.village.smith, "village-square")
+    ready(world)
+    result = comm.apply(lead, "village_schedule_crew", {
+        "project": "dig_well", "earliest_start": 540,
+        "participant_ids": [lead.actor_id, "mara"]})
+    assert result[:2] == ("REJECTED", "COMMUNICATION_INVALID")
+    assert "actual crew" in result[2]
+    assert not world.state.village.communication.notices
+    assert not world.state.village.communication.knowledge
+
+
+def test_schedule_crew_normalizes_past_earliest_start_to_next_work_tick(world):
+    lead = actor(world, world.scenario.village.smith, "village-square")
+    ready(world, 500)
+    result = comm.apply(lead, "village_schedule_crew", {
+        "project": "dig_well", "earliest_start": 480,
+        "participant_ids": [lead.actor_id, world.scenario.village.helper]})
+    assert result[:2] == ("APPLIED", "NOTICE_POSTED"), result
+    plan = next(iter(world.state.village.communication.notices.values()))[-1].appointment
+    assert plan.due_at == 505 and plan.end_at == 565
+
+
+def test_crew_notice_expired_before_start_can_be_superseded(world):
+    lead = actor(world, world.scenario.village.smith, "village-square")
+    ready(world)
+    terms = {"type": "meeting", "subject": "dig_well", "description": "Well crew",
+             "recipients": [world.scenario.village.helper], "project": "dig_well",
+             "destination": world.scenario.village.well_site, "due_at": 600,
+             "expires_at": 500}
+    old_id = post(lead, terms)
+    ready(world, 505)
+    comm.advance(world)
+    assert latest(world, old_id).status == "expired"
+    result = comm.apply(lead, "village_schedule_crew", {
+        "project": "dig_well", "earliest_start": 610,
+        "participant_ids": [lead.actor_id, world.scenario.village.helper]})
+    assert result[:2] == ("APPLIED", "NOTICE_POSTED"), result
+    assert next(reversed(world.state.village.communication.notices)) != old_id
+
+
+def test_physically_gathered_accepted_crew_can_work_without_paper_confirmation(world):
+    lead, partner, nid = meeting(world)
+    _, site = comm._project(world, "dig_well")
+    assert known(world, lead.actor_id, nid).snapshot.appointment.status == "proposed"
+    ready(world, 540)
+    lead.actor.location_id = partner.actor.location_id = site
+    for eid in (world.scenario.village.shovel, world.scenario.village.timber,
+                world.scenario.village.rope):
+        world.state.entities[eid].location = site
+        world.state.entities[eid].hidden = False
+    assert comm.project_blocker(lead, "dig_well") is None
+    assert known(world, lead.actor_id, nid).snapshot.appointment.status == "confirmed"
+    assert village_ai.apply(lead, "village_project", {"project": "dig_well"})[0] == "APPLIED"
+    village_ai.after_action(lead, "village_project", {"project": "dig_well"})
+    assert comm.project_blocker(partner, "dig_well") is None
+    assert village_ai.apply(partner, "village_project", {"project": "dig_well"})[0] == "APPLIED"
+
+
+def test_uninformed_partner_does_not_learn_appointment_merely_by_gathering(world):
+    lead = actor(world, world.scenario.village.smith, "village-square")
+    ready(world)
+    nid = post(lead, {"type": "meeting", "subject": "dig_well", "description": "Well crew",
+                      "recipients": [world.scenario.village.helper], "project": "dig_well",
+                      "destination": world.scenario.village.well_site, "due_at": 540})
+    partner = actor(world, world.scenario.village.helper, world.scenario.village.well_site)
+    lead.actor.location_id = partner.actor.location_id
+    ready(world, 540)
+    assert "confirm" in comm.project_blocker(lead, "dig_well")
+    assert nid not in world.state.village.communication.knowledge.get(partner.actor_id, {})
+
+
 def test_share_information_intent_uses_received_public_notice_only(world):
     poster = actor(world, "jory", "village-square")
     nid = post(poster)
@@ -901,13 +994,12 @@ def test_appointments_require_personal_confirmation_presence_time_supplies_and_e
     lead, partner, nid = meeting(world, project)
     crew, site = comm._project(world, project)
     assert latest(world, nid).appointment.status == "confirmed"
-    # Acceptance doesn't teleport the confirmation to the proposer.
+    # Acceptance doesn't teleport confirmation; gathering with the accepting partner does.
     ready(world, 540)
     lead.actor.location_id = partner.actor.location_id = site
-    assert "personally receive" in comm.project_blocker(lead, project)
-    lead.actor.location_id = "village-square"
-    read(lead)
-    lead.actor.location_id = site
+    assert known(world, crew[0], nid).snapshot.appointment.status == "proposed"
+    assert comm.project_blocker(lead, project) is None
+    assert known(world, crew[0], nid).snapshot.appointment.status == "confirmed"
     partner.actor.location_id = partner.scenario.village.residents[partner.actor_id].work
     if partner.actor.location_id == site:
         partner.actor.location_id = "village-square"

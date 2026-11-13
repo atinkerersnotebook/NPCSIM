@@ -3,11 +3,12 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from npc_sim import village_economy as economy, village_goods as goods
-from npc_sim.models import VillageCommittedWork, VillageMeal, VillageStockLot
+from npc_sim import village, village_economy as economy, village_goods as goods
+from npc_sim.models import Scenario, VillageCommittedWork, VillageMeal, VillageStockLot
 from npc_sim.village_economy_models import VillageEconomyConfig, VillageEconomyState, VillageMealPlan
 from npc_sim.world import World
 from test_village_expanded import scenario
+from test_world import act
 
 
 @pytest.fixture
@@ -292,6 +293,72 @@ def test_inn_only_cooks_near_service_and_respects_recipe_alternatives(world):
     assert economy.production_batch_limit(world, "village_cook_fish") == 2
     add(world, "tavern", "meals", 4, expiry=1300, produced=1080)
     assert economy.production_blocker(world, "village_cook_fish")[0] == "DEMAND_MET"
+
+
+def test_inn_can_finish_successive_real_batches_before_supper(world):
+    state = world.state.village
+    state.economy.config.meal_plans = [VillageMealPlan(
+        id="supper", use_minute=1140, portions=12, recipe_portions={"bread": 12})]
+    state.minute = 1080
+    add(world, "tavern", "bread", 6, expiry=1200, produced=1080)
+    for batch in range(3):
+        result = act(world, "village_work")
+        assert result["outcome"] == "APPLIED", result
+        assert state.stocks["tavern"]["meals"] == (batch + 1) * 4
+        assert state.stocks["tavern"]["bread"] == 6 - (batch + 1) * 2
+        if batch < 2:
+            village.advance(world, 5)
+    assert state.minute < 1140
+    assert economy.meal_readiness(world)[0]["projected_unserved"] == 0
+
+
+def test_inn_can_cook_final_two_at_1805_when_inputs_and_time_remain(world):
+    state = world.state.village
+    state.economy.config.meal_plans = [VillageMealPlan(
+        id="supper", use_minute=1140, portions=12, recipe_portions={"bread": 12})]
+    state.minute = 1085
+    add(world, "tavern", "meals", 10, expiry=1200, produced=1080)
+    add(world, "tavern", "bread", 1, expiry=1200, produced=1080)
+    result = act(world, "village_work")
+    assert result["outcome"] == "APPLIED", result
+    assert state.stocks["tavern"]["meals"] == 12
+    assert state.stocks["tavern"]["bread"] == 0
+
+
+def test_seeded_inventory_reconciles_across_seven_persisted_days(tmp_path):
+    from npc_sim.storage import read_json
+    from test_village_expanded import ROOT
+
+    value = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-living.json"))
+    path = tmp_path / "seven-days.json"
+    village_world = World(value, path, "seven-days", "elsie", "session-elsie")
+    state = village_world.state.village
+    opening = {location: stock.copy() for location, stock in state.stocks.items()}
+    assert economy.reconcile_inventory(village_world) == []
+
+    for day in range(1, 8):
+        village.advance(village_world, 1440)
+        village_world.save()
+        village_world = World(value, path, "seven-days", "elsie", "session-elsie")
+        state = village_world.state.village
+        assert state.minute == value.village.start_minute + day * 1440
+        assert economy.reconcile_inventory(village_world) == []
+        assert all(amount >= 0 for stock in state.stocks.values() for amount in stock.values())
+    assert state.initial_stock_seed_id == value.village.initial_stock_seed_id
+    assert state.stocks != opening
+
+
+def test_seeded_inventory_reconciliation_detects_unexplained_stock(tmp_path):
+    from npc_sim.storage import read_json
+    from test_village_expanded import ROOT
+
+    value = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-living.json"))
+    village_world = World(value, tmp_path / "audit.json", "audit", "elsie", "session-elsie")
+    village_world.state.village.stocks["tavern"]["bread"] += 1
+    assert economy.reconcile_inventory(village_world) == [{
+        "location": "tavern", "product": "bread",
+        "expected": value.village.stocks["tavern"]["bread"],
+        "actual": value.village.stocks["tavern"]["bread"] + 1}]
 
 
 def test_runtime_policy_persists_without_mutating_scenario(world):

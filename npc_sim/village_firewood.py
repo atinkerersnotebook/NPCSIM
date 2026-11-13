@@ -378,6 +378,19 @@ def save_delivery_plan(world: "World") -> VillageFuelDeliveryPlan | None:
     return plan
 
 
+def _prepare_delivery_walk(world: "World", destination: str) -> bool:
+    from npc_sim import village_walking
+    if not village_walking.enabled(world):
+        return True
+    path = village_walking._path(world, destination)
+    if path is None or path[0] != [destination]:
+        return False
+    person = world.state.village.residents[world.actor_id]
+    person.walking_plan = None
+    return village_walking.plan(world, {"destination": destination,
+                                        "purpose": "Deliver loaded firewood"})[0] == "APPLIED"
+
+
 def execute_delivery_plan(world: "World", route_id: str) -> dict[str, Any]:
     """Execute a saved fuel route with ordinary goods and door actions, stopping on any blocker."""
     if not enabled(world):
@@ -508,6 +521,8 @@ def execute_delivery_plan(world: "World", route_id: str) -> dict[str, Any]:
                                            road_only=vehicle) == [destination]), None)
             if door is None:
                 return blocked("The next physical passage is closed; cargo remains with the carrier.")
+            if not _prepare_delivery_walk(world, destination):
+                return blocked("The next physical passage is unknown to the carrier; cargo remains loaded.")
             result = act("go", target=door)
             if result["outcome"] != "APPLIED":
                 return blocked(f"Travel stopped: {result['code']}: {result['explanation']}")
@@ -639,6 +654,8 @@ def execute_delivery_step(world: "World", route_id: str) -> tuple[str, str, str,
         if door is None:
             return reject(f"edge_unavailable: Passage {world.actor.location_id} -> {next_location} is closed; cargo remains with the carrier.")
         origin = world.actor.location_id
+        if not _prepare_delivery_walk(world, next_location):
+            return reject("The next physical passage is unknown to the carrier; cargo remains loaded.")
         outcome = world._apply("go", {"target": door})
         if outcome[0] != "APPLIED":
             return outcome
@@ -647,6 +664,9 @@ def execute_delivery_step(world: "World", route_id: str) -> tuple[str, str, str,
         person = state.residents[plan.carrier]
         if door not in person.known_routes:
             person.known_routes.append(door)
+        from npc_sim import village_walking
+        if village_walking.enabled(world):
+            village_walking.advance(world, origin, next_location)
         if vehicle:
             world.state.entities["wagon"].location = next_location
             world.state.entities["work-horse"].location = next_location

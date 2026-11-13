@@ -314,7 +314,17 @@ Intent-level `village_request_supply`, `village_respond_to_request`,
 `village_update_request`, `village_check_messages`, `village_share_known_notice`
 and `village_propose_meeting` fill in engine-known notice fields while preserving
 local channel, ownership, and witnessed-conversation requirements. Personally
-posted supply requests persist as private `supply_needs` in the author's fallback
+known crew work can use `village_schedule_crew` with a project, earliest start
+and actual participant IDs; the engine supplies a 60-minute window. Expired
+appointments can be superseded, while physically gathered consenting partners
+can confirm an accepted appointment at the site without another paper trip.
+Milk orders may be accepted before cow care when a real well, feed, equipment,
+animals and enough time exist; collection still requires care and physical
+delivery. The inn can prepare consecutive funded batches when real ingredients,
+fuel and cooking time remain before supper. For seeded worlds, the operator can
+run `npc_sim.village_economy.reconcile_inventory(world)` against the movement
+ledger; it reports discrepancies rather than silently replenishing stocks.
+Personally posted supply requests persist as private `supply_needs` in the author's fallback
 state; an open request is not a reason to chase its supplier without new local
 evidence. Repeated visits to a supplier for that unresolved personal need raise a
 search-loop signal; locally observed stock or personally learned notice changes
