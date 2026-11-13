@@ -96,7 +96,7 @@ def _retry_revision(world: "World", action: str) -> str:
     if action == "village_eat":
         _, state = village.context(world)
         life = state.residents[world.actor_id].life
-        meal = village_life.meal_due(life, state.minute, include_missed=True) if life else None
+        meal = village_life.available_meal(world, world.actor_id, include_missed=True) if life else None
         local_food = state.stocks.get("tavern", {}) if world.actor.location_id == "tavern" else {}
         return _digest({
             "location": world.actor.location_id, "meal": meal.model_dump() if meal else None,
@@ -291,7 +291,8 @@ def _obligation_limits(world: "World") -> list[int]:
     policy = village_extensions.policy(world)
     resident = config.residents[world.actor_id]
     day = state.minute // 1440 * 1440
-    obligations = [(day + 1140, "tavern"), (day + resident.bed_minute, resident.home)]
+    obligations = [(day + village_life.daily_meal_minute(resident), "tavern"),
+                   (day + resident.bed_minute, resident.home)]
     if policy.breakfast:
         due = day + resident.wake_minute + policy.breakfast_delay
         obligations.append((due, "tavern"))
@@ -465,12 +466,12 @@ def candidates(world: "World") -> list[dict[str, Any]]:
     if not enabled(world) or life is None or life.sleeping or life.work or person.available_at > state.minute:
         return []
     choices: list[dict[str, Any]] = []
-    if village_life.rest_due(resident, life, state.minute):
+    if village_life.rest_due(resident, life, state.minute) or village_life.early_sleep_ready(world, world.actor_id):
         if world.actor.location_id == resident.home:
             choices.append({"task_id": "need:sleep", "action_id": "village_sleep", "arguments": {},
                             "priority": "P1", "reason": "Required sleep at your actual home."})
         return choices
-    meal = village_life.meal_due(life, state.minute, include_missed=True)
+    meal = village_life.available_meal(world, world.actor_id, include_missed=True)
     if meal and world.actor.location_id == "tavern":
         stock = state.stocks.get("tavern", {})
         if village_life.inn_open(world) and (stock.get("meals", 0) or stock.get("bread", 0)
@@ -596,8 +597,10 @@ def action_blocker(world: "World", action: str, args: dict[str, Any], *,
 
 def start_wait(world: "World") -> int:
     _, state = village.context(world)
-    until = next_review(world)
     fallback = state.residents[world.actor_id].fallback
+    duration = 10 if fallback.last_wait_end == state.minute else 5
+    until = min(next_review(world), state.minute + duration)
+    fallback.last_wait_end = until
     fallback.wait = VillageIdleWait(
         start=state.minute, planned_end=until, wake_on=WAKE_ON.copy(),
         next_safety_review=until, context_revision=context_revision(world))
@@ -649,6 +652,7 @@ def record_result(world: "World", action: str, args: dict[str, Any],
     fallback.blocked.pop(key, None)
     if code != "EVENT_WAIT_STARTED":
         fallback.wait = None
+        fallback.last_wait_end = None
     if purposeful(world):
         if action in {"village_check_messages", "village_notice_read"} and args.get("channel", "board") == "board":
             fallback.board_last_checked = state.minute
@@ -699,6 +703,8 @@ def advance(world: "World") -> None:
         due = state.minute >= wait.next_safety_review
         if changed or due:
             fallback.wait = None
+            if changed:
+                fallback.last_wait_end = None
             person.available_at = min(person.available_at, state.minute)
             _emit(bound, "WAIT_INTERRUPTED" if changed else "TASK_REEVALUATED", "wait:event",
                   "Personally observable conditions changed." if changed else "Bounded safety review is due.",

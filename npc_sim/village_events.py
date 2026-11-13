@@ -472,6 +472,32 @@ def observation(world: "World") -> dict[str, Any]:
             "incident_configuration_revision": incidents.revision}
 
 
+def completed_trades(state: "VillageState") -> list[dict[str, Any]]:
+    incidents = state.incidents
+    trades = [trade.model_dump() for trade in incidents.trades.values()] if incidents else []
+    economy = state.economy
+    if economy:
+        for index, movement in enumerate(economy.movements):
+            if movement.kind != "delivered" or not movement.order_id:
+                continue
+            order = economy.orders.get(movement.order_id)
+            if not order or order.supplier != "iron-trader" or not order.delivered_quantity:
+                continue
+            payment = movement.quantity * order.price
+            if order.paid < payment or not any(
+                entry.minute == movement.minute and entry.payer == order.buyer
+                and entry.payee == "iron-trader" and entry.kind == "goods" and entry.amount >= payment
+                for entry in economy.payments
+            ):
+                continue
+            trades.append({"id": f"iron:{order.id}:{index}",
+                           "visitor": "iron-trader", "resident": order.buyer,
+                           "direction": "import", "resource": "iron", "quantity": movement.quantity,
+                           "payment": payment, "minute": movement.minute,
+                           "location": movement.location, "source": "Iron trader consignment"})
+    return trades
+
+
 def monitor(world: "World") -> dict[str, Any]:
     incidents = _context(world)
     if incidents is None:

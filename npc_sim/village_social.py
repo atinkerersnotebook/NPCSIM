@@ -444,6 +444,12 @@ def _practical_guard(world, rid, activity, *, completing=False):
             return "ALREADY_REPAIRED", "The instrument is already usable; no duplicate repair credit."
     if activity.recipe in {"garden_tending", "herb_garden"} and person.practice_days.get(activity.location) == state.minute // 1440:
         return "ALREADY_TENDED", "Today's real garden care is already recorded."
+    if activity.kind == "rest" and person.practice_days.get(f"rest:{activity.location}") == state.minute // 1440:
+        return "ALREADY_RESTED", "Optional rest at this site was already taken today; choose useful work or another activity."
+    if activity.kind == "river_cleanup" and rid != "finn":
+        return "NOT_FISHER", "River cleanup is Finn's riverbank task."
+    if activity.kind == "river_cleanup" and person.practice_days.get(f"cleanup:{activity.location}") == state.minute // 1440:
+        return "ALREADY_CLEANED", "The riverbank was already cleaned today; avoid inventing more litter."
     if activity.kind == "fishing_survey" and activity.discovery in person.discoveries:
         return "ALREADY_OBSERVED", "This actual fishing-site discovery is already recorded."
     if activity.kind == "share_discovery" and activity.discovery not in person.discoveries:
@@ -579,6 +585,14 @@ def _finish(world, interval, reason=None):
         if activity.kind == "catch_release":
             social.residents[interval.participants[0]].practice_days[
                 f"catch_release:{interval.location}"] = interval.starts_at // 1440
+        if activity.kind == "rest":
+            social.residents[interval.participants[0]].practice_days[
+                f"rest:{interval.location}"] = interval.starts_at // 1440
+        if activity.kind == "river_cleanup":
+            social.residents[interval.participants[0]].practice_days[
+                f"cleanup:{interval.location}"] = interval.starts_at // 1440
+            _event(world, interval.participants[0], "river_cleanup_completed", interval.location,
+                   "Cleared litter from the riverbank; no salvage or goods were created.", interval.location)
         if activity.kind == "fishing_survey":
             person = social.residents[interval.participants[0]]
             person.discoveries[activity.discovery] = SocialDiscovery(
@@ -1348,6 +1362,8 @@ def example_config() -> dict[str, Any]:
                           "equipment": ["noticeboard"], "interests": ["reading"]},
         "river-rest": {"kind": "rest", "location": "riverbank", "duration": 15,
                        "interests": ["rivers"]},
+        "river-cleanup": {"kind": "river_cleanup", "location": "riverbank", "duration": 20,
+                          "interests": ["rivers"]},
         "fishing-survey": {"kind": "fishing_survey", "location": "riverbank", "duration": 20,
                            "equipment": ["fishing-rod"], "discovery": "riverbank-spot",
                            "interests": ["rivers"], "skill": "fishing"},

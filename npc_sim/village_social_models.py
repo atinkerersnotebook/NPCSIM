@@ -14,7 +14,7 @@ Amount = Annotated[int, Field(gt=0)]
 ActivityKind = Literal[
     "reading", "gardening", "crafting", "visiting", "games", "storytelling",
     "shared_tea", "rest", "field_observe", "organize_notes", "draft", "revise",
-    "recipe_test", "instrument_repair", "fishing_survey", "share_discovery", "catch_release",
+    "recipe_test", "instrument_repair", "fishing_survey", "share_discovery", "catch_release", "river_cleanup",
 ]
 CAPABILITIES = frozenset({"activity", "chapter", "item_at", "production", "repair", "discovery_shared", "band"})
 
@@ -199,7 +199,7 @@ class ActivityInterval(SocialModel):
         "reading", "gardening", "crafting", "visiting", "games", "storytelling",
         "shared_tea", "rest", "field_observe", "organize_notes", "draft", "revise",
         "rehearsal", "performance",
-        "recipe_test", "instrument_repair", "fishing_survey", "share_discovery", "catch_release",
+        "recipe_test", "instrument_repair", "fishing_survey", "share_discovery", "catch_release", "river_cleanup",
     ]
     location: str
     participants: list[str]

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { RunEvent, State } from "./contracts.ts";
 import { escape } from "./html.ts";
 import { villageClockTime } from "./view-mode.ts";
+import { actorDetailsMarkup } from "./actor-details.ts";
 
 const mapImage = new URL("./assets/millhaven.png", import.meta.url).href;
 const bubbleDuration = 18_000;
@@ -123,12 +124,14 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
     group.push(agent);
     groups.set(agent.locationId, group);
   }
-  const actorButton = (agent: MapAgent) => `<button type="button"
+  const actorButton = (agent: MapAgent) => `<span class="town-map-actor-wrap"><button type="button"
     class="town-map-actor${agent.deciding ? " deciding" : ""}${agent.visitor ? " visitor" : ""}"
     data-map-actor="${escape(agent.id)}" aria-pressed="${agent.id === options.selectedActorId}"
-    title="${escape(`${agent.name} / ${agent.location} / ${agent.activity}`)}">
+    aria-label="${escape(`${agent.name}, ${agent.location}. Select for details`)}" aria-describedby="town-actor-${escape(agent.id)}">
     <span class="town-map-avatar" aria-hidden="true">${escape(agent.name.slice(0, 1))}</span>
-    <span>${escape(agent.name)}</span></button>`;
+    <span>${escape(agent.name)}</span></button><span id="town-actor-${escape(agent.id)}" class="actor-details-popover" role="tooltip">
+      <strong>${escape(agent.name)}${agent.visitor ? " / Visitor" : ""}</strong>
+      ${actorDetailsMarkup(state, agent)}</span></span>`;
   const nameOf = (id: string) => agents.find(agent => agent.id === id)?.name
     ?? world.entities[id]?.name ?? id;
   const lineMarkup = (line: SpokenLine) => `<strong>${escape(nameOf(line.actorId))}</strong>
@@ -173,7 +176,7 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
     </div>` : ""}
     ${selected ? `<section class="town-map-selection" aria-label="Selected character">
       <h3>${escape(selected.name)}${selected.visitor ? " / Visitor" : ""}</h3>
-      <p>${escape(selected.location)} / ${escape(selected.activity)}${!selected.current ? " / Last observed, not live" : ""}</p>
+      ${actorDetailsMarkup(state, selected)}
       ${selectedLine ? `<p class="town-map-last-speech"><strong>Last spoken words:</strong> ${escape(selectedLine.text)}</p>` : ""}
     </section>` : ""}
     <section class="town-map-dialogue" aria-label="Recent spoken dialogue">

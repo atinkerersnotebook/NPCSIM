@@ -49,6 +49,19 @@ def inspect_then_wait(world):
     return world.state.village.residents["rowan"].fallback.wait
 
 
+def test_early_supper_is_an_eligible_action_and_sleep_follows_at_home(tmp_path):
+    world = make_world(tmp_path, minute=1080, living=True)
+    world.actor.location_id = "tavern"
+    village_goods.put(world, "tavern", "bread", len(world.scenario.village.residents))
+    assert any(choice["action_id"] == "village_eat" for choice in village_fallback.candidates(world))
+    assert act(world, "village_eat")["code"] == "MEAL_EATEN"
+    assert not any(choice["action_id"] == "village_eat" for choice in village_fallback.candidates(world))
+    village.advance(world, world.state.village.residents["rowan"].available_at - world.state.village.minute)
+    world.actor.location_id = world.scenario.village.residents["rowan"].home
+    assert any(choice["action_id"] == "village_sleep" for choice in village_fallback.candidates(world))
+    assert act(world, "village_sleep")["code"] == "SLEEP_STARTED"
+
+
 def test_rowan_day_three_empty_breakfast_is_attempted_once_and_penalty_is_not_duplicated(tmp_path):
     world = make_world(tmp_path, minute=3330, breakfast=True)
     world.actor.location_id = "tavern"
@@ -244,14 +257,37 @@ def test_no_legal_work_allows_an_interruptible_bounded_wait_without_advancing_ev
     state = world.state.village
     assert state.minute == 3485
     assert wait.interruptible
-    assert wait.planned_end == 3545
+    assert wait.planned_end == 3490
     assert wait.next_safety_review == wait.planned_end
     assert "local_stock_changed" in wait.wake_on
     assert state.residents["rowan"].available_at == wait.planned_end
-    village.advance(world, 20)
-    assert state.residents["rowan"].fallback.wait is not None
-    assert state.residents["rowan"].available_at == wait.planned_end
     assert act(world, "village_wait", minutes=5)["code"] == "ACTOR_BUSY"
+    village.advance(world, 5)
+    assert state.residents["rowan"].fallback.wait is None
+    assert state.residents["rowan"].available_at == wait.planned_end
+
+
+def test_consecutive_event_waits_extend_to_ten_minutes_and_reset_after_work(tmp_path):
+    world = make_world(tmp_path)
+    inspect_then_wait(world)
+    state = world.state.village
+    person = state.residents["rowan"]
+    village.advance(world, 5)
+    assert state.minute == 3490
+    assert person.fallback.wait is None
+    assert act(world, "village_wait_event")["code"] == "EVENT_WAIT_STARTED"
+    assert person.fallback.wait.planned_end == 3500
+    assert person.available_at == 3500
+    world.save()
+    restored = World(world.scenario, world.path, "fallback", "rowan", "session-rowan")
+    assert restored.state.village.residents["rowan"].fallback.last_wait_end == 3500
+    village.advance(restored, 10)
+    assert act(restored, "village_observe")["code"] == "INSPECTION_UNCHANGED"
+    village.advance(restored, 50)
+    assert act(restored, "village_observe")["code"] == "LOCAL_TOOLS_CHECKED"
+    village.advance(restored, 5)
+    assert act(restored, "village_wait_event")["code"] == "EVENT_WAIT_STARTED"
+    assert restored.state.village.residents["rowan"].fallback.wait.planned_end == restored.state.village.minute + 5
 
 
 def test_scheduler_skips_inert_period_without_repeated_model_turns(tmp_path):
@@ -403,7 +439,7 @@ def test_purposeful_downtime_opt_in_bounds_wait_and_preserves_legacy_policy(tmp_
     world = make_world(tmp_path)
     assert not village_extensions.policy(world).purposeful_downtime
     inspect_then_wait(world)
-    assert world.state.village.residents["rowan"].fallback.wait.planned_end == 3545
+    assert world.state.village.residents["rowan"].fallback.wait.planned_end == 3490
     patch = VillageDayPolicy(anti_idle=True, purposeful_downtime=True)
     village_extensions.configure(world, "purposeful", world.revision(), {"day_policy": patch.model_dump()})
     assert village_fallback.purposeful(world)

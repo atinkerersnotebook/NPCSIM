@@ -57,7 +57,8 @@ def next_personal_event(world: "World") -> int:
     person = state.residents[world.actor_id]
     resident = config.residents[world.actor_id]
     day = state.minute // 1440 * 1440
-    times = [day + resident.bed_minute, day + 1140]
+    from npc_sim import village_life
+    times = [day + resident.bed_minute, day + village_life.daily_meal_minute(resident)]
     if policy(world).breakfast:
         times.append(day + resident.wake_minute + policy(world).breakfast_delay)
     if person.next_work > state.minute:
@@ -83,7 +84,13 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     if action == "village_wait_event":
         _, state = village.context(world)
         from npc_sim import village_fallback
-        until = village_fallback.start_wait(world) if village_fallback.enabled(world) else next_personal_event(world)
+        if village_fallback.enabled(world):
+            until = village_fallback.start_wait(world)
+        else:
+            person = state.residents[world.actor_id]
+            duration = 10 if person.fallback.last_wait_end == state.minute else 5
+            until = min(next_personal_event(world), state.minute + duration)
+            person.fallback.last_wait_end = until
         state.residents[world.actor_id].available_at = until
         text = f"Waiting for the next scheduled event at {village.clock_time(until)}."
         state.residents[world.actor_id].activity = text
@@ -207,6 +214,8 @@ def blocked_until(world: "World", rid: str) -> int | None:
 
 def record_action(world: "World", action: str, args: dict[str, Any]) -> None:
     _, state = village.context(world)
+    if action != "village_wait_event":
+        state.residents[world.actor_id].fallback.last_wait_end = None
     if action not in {"look", "read"}:
         state.residents[world.actor_id].current_action = action
     if modules(world):

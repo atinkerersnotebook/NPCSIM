@@ -777,6 +777,7 @@ class VillageFallbackState(StrictModel):
     supplier_searches: dict[str, VillageSupplierSearch] = Field(default_factory=dict)
     inspections: dict[str, tuple[int, str]] = Field(default_factory=dict)
     wait: VillageIdleWait | None = None
+    last_wait_end: int | None = None
     active_inspection_until: int | None = None
     active_inspection_location: str | None = None
     decision: dict[str, Any] | None = None

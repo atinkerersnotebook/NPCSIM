@@ -79,6 +79,31 @@ def test_one_real_daily_meal_at_tavern(cast, stock, source):
     assert not life(cast, "iona").hungry
 
 
+def test_early_tavern_meal_and_early_bed_keep_the_next_morning_wake(cast):
+    walk(cast, "iona", "square-cottages", "square-tavern")
+    advance_to(cast, 1080)
+    state = cast["iona"].state.village
+    stock_before = state.stocks["tavern"]["bread"]
+    assert do(cast, "iona", "village_eat")["code"] == "MEAL_EATEN"
+    assert life(cast, "iona").meals["0:daily"].due == 1140
+    assert state.stocks["tavern"]["bread"] == stock_before - 1
+    advance_to(cast, state.residents["iona"].available_at)
+    assert act(cast["iona"], "village_eat")["code"] == "NO_MEAL_DUE"
+    walk(cast, "iona", "square-tavern", "square-cottages")
+    assert do(cast, "iona", "village_sleep")["code"] == "SLEEP_STARTED"
+    assert life(cast, "iona").sleep_until == 1440 + cast["iona"].scenario.village.residents["iona"].wake_minute
+    advance_to(cast, 1140)
+    assert life(cast, "iona").meals["0:daily"].status == "eaten"
+    assert life(cast, "iona").sleeping
+
+
+def test_early_sleep_requires_completed_supper_and_does_not_skip_it(cast):
+    cast["iona"].actor.location_id = "cottages"
+    advance_to(cast, 1080)
+    assert act(cast["iona"], "village_sleep")["code"] == "REST_NOT_DUE"
+    assert not life(cast, "iona").sleeping
+
+
 def test_no_remote_meals_and_tea_alone_is_not_food(cast):
     advance_to(cast, 1140)
     assert act(cast["iona"], "village_eat")["code"] == "TRY_TAVERN"

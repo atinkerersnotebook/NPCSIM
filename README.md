@@ -228,6 +228,11 @@ reading the actual discovery at its site; private research and remote stock
 quantities are not automatically shared. Knowing a
 recipe does not grant its required production skill. The town/NPC research
 checklists show progress, trial outcomes, blockers and actual unlocked recipes.
+The World view also shows the active researcher's project title, earned study minutes
+and successful trials beside their location. Finn can also complete a recorded
+20-minute riverbank cleanup once per day; it creates no fictional salvage. Optional
+site rests are limited to one completed session per resident, site and day; ordinary
+sleep is unaffected.
 The revision-checked village-configuration API accepts `research` with `enabled`,
 `required_minutes` and `required_successes`. Changes affect new projects, not
 existing requirements; pause active research/batches before configuring it.
@@ -659,8 +664,10 @@ respected; an early diner may remain at the tavern for breakfast. Once at work,
 or when no safe route is available, `village_wait_event` records its reason and
 wake triggers, preserving all other villagers' independent turns. With anti-idle
 enabled, repeated short idle `village_wait` polling is rejected.
-`idle_review_minutes` defaults to 60 (15–240, multiples of five); waits are also
-bounded by known events and walking/action time before meals and bedtime.
+An event wait initially lasts at most five minutes; if the next decision is another
+wait, it lasts at most ten minutes. A different successful action resets that interval.
+`idle_review_minutes` defaults to 60 (15–240, multiples of five) for inspection
+reviews; waits are also bounded by known events and walking/action time before meals and bedtime.
 Local stock/gear changes, real encounters, personally received notices and needs
 can interrupt a wait; hidden remote stock alone cannot. A resident in an event wait
 can be contacted in person for a conversation or supplier order, but cannot take
@@ -713,16 +720,26 @@ explicitly labeled. Switching views never pauses or resets the adventure.
 Timed worlds also show a live **World timeline** Gantt chart: one row per agent,
 location-coloured bands, taller rounded action/availability tiles, free-action diamonds, sleeping
 and wagon-route bands, public milestones, and a current-time line. The 64-pixel-high
-tiles show activity, duration, clock range, and a recorded-result summary as space
+tiles show an activity icon, duration, clock range, and a recorded-result summary as space
 allows; zoom in to reveal more detail in shorter activities. Hover or focus a tile
-for its complete recorded result, location, and clock times. Unknown history stays blank;
+for a rounded white detail card showing the agent, activity, status (when recorded),
+time range, duration, location, and any distinct recorded result.
+Collapse the Town map to give the timeline the full available width, and show it again when needed. Unknown history stays blank;
 scheduled intentions are never drawn as completed work. The chart follows the
 latest activity until you scroll back, and keeps agent names visible while you
-scroll horizontally. The timeline matches the other gray panels. Use **+** and
+scroll horizontally. Hover or focus a name to see the resident's location, occupation,
+activity, carried items, site stock and available coin balance; Town-map names show
+the same details. Visitor details omit unknown personal inventory and funds. The
+timeline matches the other gray panels. Use **+** and
 **-** to zoom its timescale from 100% to 800%, or **Fit** to show the full recorded
 period at the available width. Tick spacing adapts to the zoom level; zooming never
 changes simulation time. It replays saved events when opened or reconnected without
-calling the model or changing the world. The location cards remain below it.
+calling the model or changing the world. Completed merchant transfers appear as
+markers on both the resident's and visitor's timeline rows, with paid quantities
+and amounts; the World view also lists the latest settled trade notes. Standing
+"Trading" activity and accepted but unpaid iron orders are not settled trades.
+Confirmed spoken words appear separately in the Town map only when a speech action
+was actually recorded. The location cards remain below the timeline.
 
 Untimed adventures, including **The Unknown Room**, use the same chart with a
 **turn-based axis** instead of clock times. Each recorded action attempt across
@@ -935,7 +952,11 @@ stocks and the event ledger. This is operator knowledge, not shared NPC input.
   makes two meals; Elsie can also use `village_cook_fish` with the same yield.
   Opening stock includes six grain at the mill, six flour and four bread at the
   bakery, and twelve bread at the tavern.
-- `village_eat` consumes **one daily meal at the 19:00 tavern gathering**.
+- `village_eat` consumes **one daily meal at the tavern**. Once work is
+  finished, a diner already at the inn may eat before the 19:00 gathering if
+  real food is available; their portion still counts toward that day's supper.
+  Elsie serves the others first and eats at 19:30; the meal plan reserves one
+  real portion for her when stock permits, without creating food or waiving payment.
   The inn serves meals only while Elsie is awake and physically at the tavern;
   diners can retry when she returns. A prepared meal, bread, or fish with tea
   counts; tea alone does not. There is
@@ -943,12 +964,15 @@ stocks and the event ledger. This is operator knowledge, not shared NPC input.
   forbidding work. Meals still pending at midnight count as missed. Missing a
   meal doubles the following day's work cooldown; eating before midnight cancels
   that day's missed-meal penalty. A later meal never retroactively erases it.
-- `village_sleep` requires physically returning home. Each NPC keeps the existing
+- `village_sleep` requires physically returning home. After completing supper,
+  a resident can choose to sleep before the scheduled bedtime; they still wake
+  at their normal morning time. Each NPC keeps the existing
   bedtime and first work-start time as their sleep/wake schedule. In the living
   village, Elsie sleeps 23:00-05:30 to prepare the inn; Bren/Jory/Ada wake at
   06:00, and residents who previously woke at 08:00 now wake at 07:00.
-  A late bedtime delays actual waking by the full scheduled rest duration.
-  Waiting through the night without sleeping does not satisfy rest.
+  Sleeping early keeps the normal morning wake time; sleeping after bedtime
+  still requires the full scheduled rest duration. Waiting through the night
+  without sleeping does not satisfy rest.
   The living scenario retains 12 opening tavern bread units for the planned
   breakfast and supper demand (7 + 5, including each meal's stock buffer).
   Its established opening storerooms hold 12 tavern, 10 bakery, 10 forge and

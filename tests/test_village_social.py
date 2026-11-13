@@ -108,6 +108,9 @@ def feed(cast):
     for rid in cast:
         place(cast, rid, "tavern")
         life = cast[rid].state.village.residents[rid].life
+        if "0:daily" not in life.meals:
+            from npc_sim.models import VillageMeal
+            life.meals["0:daily"] = VillageMeal(kind="daily", due=1170)
         life.meals["0:daily"].status = "eaten"
         life.meals["0:daily"].source = "fixture:actual meal"
         life.hungry = False
@@ -143,6 +146,39 @@ def test_real_duration_skips_calls_and_survives_json_reload(cast):
     village_social.advance(world)
     assert len(world.state.village.events) == before
     assert village_social.monitor(world)["activities"][0]["end"] == 915
+
+
+def test_optional_rest_is_once_per_site_per_day_and_resets_next_day(cast):
+    world = cast["iona"]
+    assert leisure(cast, "rest")[0] == "APPLIED"
+    tick(cast, 915)
+    assert leisure(cast, "rest")[1] == "ALREADY_RESTED"
+    tick(cast, 2340)
+    life = world.state.village.residents["iona"].life
+    life.last_woke = 2340
+    life.sleeping = False
+    for meal in life.meals.values():
+        meal.status = "eaten"
+    life.hungry = False
+    result = leisure(cast, "rest")
+    assert result[0] == "APPLIED", result
+
+
+def test_finn_cleans_riverbank_once_daily_without_creating_goods(cast):
+    from npc_sim.village_social_models import SocialActivity
+
+    world = cast["finn"]
+    world.state.village.social.config.activities["river-cleanup"] = SocialActivity(
+        kind="river_cleanup", location="riverbank", duration=20, interests=["rivers"])
+    place(cast, "finn", "riverbank")
+    stocks = {site: goods.copy() for site, goods in world.state.village.stocks.items()}
+    assert leisure(cast, "river-cleanup", "finn")[0] == "APPLIED"
+    tick(cast, 920)
+    assert world.state.village.social.intervals[-1].status == "completed"
+    assert world.state.village.stocks == stocks
+    assert any(event.action == "river_cleanup_completed" and event.actor == "finn"
+               for event in world.state.village.events)
+    assert leisure(cast, "river-cleanup", "finn")[1] == "ALREADY_CLEANED"
 
 
 def test_tavern_leisure_must_finish_by_inn_closing(cast):

@@ -159,7 +159,7 @@ def test_discovered_food_can_be_ordered_delivered_shared_and_eaten(tmp_path, mon
     village.advance(world, 15)
     assert world.state.village.stocks["tavern"]["meals"] == 2
     assert world.state.village.stocks["tavern"][key] == 0
-    village.advance(world, 1140 - world.state.village.minute)
+    village.advance(world, 1170 - world.state.village.minute)
     assert act(elsie, "village_eat")["outcome"] == "APPLIED"
     assert world.state.village.stocks["tavern"]["meals"] == 1
 

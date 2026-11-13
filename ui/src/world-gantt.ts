@@ -3,6 +3,8 @@ import { observationSchema, villageObservationSchema } from "./contracts.ts";
 import type { RunEvent, State } from "./contracts.ts";
 import { clockTime } from "./bakery-view.ts";
 import { latestVillageMinute, villageClockText, villageClockTime } from "./view-mode.ts";
+import { actorDetailsMarkup } from "./actor-details.ts";
+import { tradeNote } from "./trade-notes.ts";
 
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
@@ -42,6 +44,7 @@ export interface GanttAgent {
   locationId: string;
   current: boolean;
   visitor?: boolean;
+  activity?: string;
 }
 export interface GanttScale {
   zoom?: number;
@@ -59,6 +62,7 @@ export interface GanttSpan {
   location: string;
   label: string;
   detail: string;
+  status?: string;
   kind: "action" | "travel" | "wait" | "sleep" | "route" | "free" | "rejected" | "event";
 }
 interface Milestone { at: number; label: string; detail: string }
@@ -93,6 +97,19 @@ function actionLabel(action: string, args: Record<string, unknown>, state: State
   }
   const target = typeof args.target === "string" ? state.world?.entities[args.target]?.name : undefined;
   return target && ["go", "look", "read", "take", "drop"].includes(action) ? `${label}: ${target}` : label;
+}
+
+function activityIcon(item: GanttSpan): string {
+  if (item.kind === "travel") return "🚶";
+  if (item.kind === "sleep") return "💤";
+  if (item.kind === "wait") return "⏳";
+  if (item.kind === "route" || /wagon|delivery|load goods|unload goods/i.test(item.label)) return "🚚";
+  if (/cook|bake|meal|food/i.test(item.label)) return "🍞";
+  if (/forge|carpentry|repair|work|project|fit/i.test(item.label)) return "🔨";
+  if (/harvest|farm|forestry|timber/i.test(item.label)) return "🌿";
+  if (/talk|meeting|trade|visit/i.test(item.label)) return "💬";
+  if (/look|read|inspect/i.test(item.label)) return "🔎";
+  return "●";
 }
 
 export function buildWorldTimeline(state: State, events: readonly RunEvent[], agents: readonly GanttAgent[]) {
@@ -168,7 +185,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       if (kind !== "sleep") row.spans.push({
         start, end: Math.max(start, Math.min(now, end)), location: result.observation.self.location_id,
         label: actionLabel(action, args, state, event.actor_id),
-        detail: villageClockText(result.explanation), kind
+        detail: villageClockText(result.explanation), status: result.outcome, kind
       });
       if (accepted && ["village_start_route", "village_stop_route"].includes(action)) {
         routeChanges.push({ at: start, actor: event.actor_id, active: action === "village_start_route" });
@@ -203,6 +220,15 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       ? "Shovel collected" : labels[notice.action];
     if (label && notice.minute <= now) milestones.push({ at: notice.minute, label, detail: notice.result });
   }
+  for (const trade of state.world?.village?.dashboard?.trades ?? []) {
+    if (trade.minute > now) continue;
+    const detail = tradeNote(state, trade);
+    for (const id of new Set([trade.resident, trade.visitor])) {
+      const row = byId.get(id);
+      if (row) row.spans.push({ start: trade.minute, end: trade.minute,
+        location: trade.location, kind: "event", label: "Completed trade", detail, status: "settled" });
+    }
+  }
   for (const row of rows) {
     const visitor = visitors.find(person => person.id === row.id);
     const activityHistory = [
@@ -218,7 +244,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       row.spans = row.spans.filter(span => !(span.kind === "action" && span.start === activity.start));
       row.spans.push({
         start: activity.start, end, location: activity.location, label: activity.label,
-        detail: `${activity.label} / ${activity.status}`, kind: "action"
+        detail: `${activity.label} / ${activity.status}`, status: activity.status, kind: "action"
       });
       row.positions.push({ at: activity.start, order: activity.start, location: activity.location });
     }
@@ -263,10 +289,20 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       if (next !== undefined) wait.end = next;
     }
     row.spans = row.spans.filter(span => span.kind !== "wait" || span.end > span.start);
+    const waits = row.spans.filter(span => span.kind === "wait").sort((a, b) => a.start - b.start);
+    const mergedWaits: GanttSpan[] = [];
+    for (const wait of waits) {
+      const previous = mergedWaits.at(-1);
+      if (!turns && previous && previous.location === wait.location && wait.start <= previous.end) {
+        previous.end = Math.max(previous.end, wait.end);
+        if (!previous.detail.includes(wait.detail)) previous.detail += `\n${wait.detail}`;
+      } else mergedWaits.push(wait);
+    }
     const merged: GanttSpan[] = [];
-    for (const item of row.spans.sort((a, b) => a.start - b.start)) {
+    for (const item of [...row.spans.filter(span => span.kind !== "wait"), ...mergedWaits]
+      .sort((a, b) => a.start - b.start)) {
       const previous = merged.at(-1);
-      if (!turns && previous && ["wait", "sleep"].includes(item.kind) && previous.kind === item.kind
+      if (!turns && previous && item.kind === "sleep" && previous.kind === "sleep"
         && previous.location === item.location && previous.end === item.start) {
         previous.end = item.end;
         if (previous.detail !== item.detail) previous.detail += `\n${item.detail}`;
@@ -333,12 +369,16 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const detail = `${row.name} / ${range} / ${duration}${location ? ` / ${location}` : ""} / ${item.label}. ${item.detail}`;
       const label = item.kind === "wait" ? "Waiting" : item.label;
       const summary = (item.detail || location).replace(/\s+/g, " ").trim();
-      const characters = Math.floor((tileWidth - 16) / 7);
+      const icon = activityIcon(item);
+      const status = item.status ?? (item.kind === "sleep" || item.kind === "route" || item.kind === "wait" ? "Recorded" : "");
+      const iconWidth = 24;
+      const characters = tileWidth >= 48 ? Math.floor((tileWidth - 16 - iconWidth) / 7) : 0;
       const detailCharacters = Math.floor((tileWidth - 16) / 6);
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail)}" class="gantt-bar ${item.kind}">
-        ${tooltip(detail)}<clipPath id="${id}"><rect x="${x(item.start) + inset + 6}" y="${y + 19}" width="${Math.max(0, tileWidth - 12)}" height="64"/></clipPath>
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail)}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.detail)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}">
+        <clipPath id="${id}"><rect x="${x(item.start) + inset + 6}" y="${y + 19}" width="${Math.max(0, tileWidth - 12)}" height="64"/></clipPath>
         <rect x="${x(item.start) + inset}" y="${y + 19}" width="${tileWidth}" height="64" rx="7"/>
-        ${characters >= 6 ? `<text x="${x(item.start) + w / 2}" y="${y + 37}" text-anchor="middle" class="gantt-cell-title" clip-path="url(#${id})">${escape(shorten(label, characters))}</text>` : ""}
+        ${tileWidth >= 28 ? `<text x="${x(item.start) + inset + 7}" y="${y + 37}" class="gantt-cell-icon" clip-path="url(#${id})">${icon}</text>` : ""}
+        ${characters >= 6 ? `<text x="${x(item.start) + w / 2 + (tileWidth >= 48 ? iconWidth / 2 : 0)}" y="${y + 37}" text-anchor="middle" class="gantt-cell-title" clip-path="url(#${id})">${escape(shorten(label, characters))}</text>` : ""}
         ${detailCharacters >= 8 ? `<text x="${x(item.start) + w / 2}" y="${y + 54}" text-anchor="middle" class="gantt-cell-time" clip-path="url(#${id})">${escape(shorten(detailCharacters >= 30 ? timing : duration, detailCharacters))}</text>` : ""}
         ${detailCharacters >= 14 && summary ? `<text x="${x(item.start) + w / 2}" y="${y + 71}" text-anchor="middle" class="gantt-cell-detail" clip-path="url(#${id})">${escape(shorten(summary, detailCharacters))}</text>` : ""}</g>`;
     }).join("");
@@ -380,9 +420,10 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       ? "Turns count recorded action attempts across all agents, including inspections and rejected actions, not elapsed time. Turn 0 is the initial observation. Boxes show recorded actions; red diamonds mark rejected attempts."
       : "Boxes show action time or reserved availability, not model thinking time. Diamonds mark instant or free actions; red diamonds are rejected actions."}
       Hover or focus for details. Scroll sideways to explore.</p>
+    <div id="gantt-tooltip" class="gantt-tooltip" role="tooltip" hidden></div>
     <div class="gantt-layout">
       <div class="gantt-names" style="padding-top:${top}px">${chart.rows.map(row =>
-        `<div style="height:${rowHeight}px"><strong>${escape(row.name)}</strong><small>${escape(row.occupation)}</small></div>`).join("")}</div>
+        `<div class="gantt-name-row" style="height:${rowHeight}px"><span class="gantt-name-anchor" data-gantt-name="${escape(row.id)}" tabindex="0" aria-label="${escape(`${row.name}, actor details`)}" aria-describedby="gantt-actor-${escape(row.id)}"><strong>${escape(row.name)}</strong><small>${escape(row.occupation)}</small><span id="gantt-actor-${escape(row.id)}" class="actor-details-popover" role="tooltip"><strong>${escape(row.name)}${row.visitor ? " / Visitor" : ""}</strong>${actorDetailsMarkup(state, { ...row, activity: agents.find(agent => agent.id === row.id)?.activity })}</span></span></div>`).join("")}</div>
       <div class="gantt-scroll" tabindex="0" aria-label="Scrollable activity timeline">
         <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="group" aria-label="Activity from ${escape(format(chart.start))} to ${escape(format(chart.now))}">
           <defs>

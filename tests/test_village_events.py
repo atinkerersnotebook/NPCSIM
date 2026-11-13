@@ -375,6 +375,65 @@ def test_iron_trader_departure_with_missing_activity_history(world):
     assert state.stocks.get("village-square", {}).get("iron", 0) == 0
 
 
+def test_monitor_projects_only_settled_merchant_and_paid_iron_trades(world):
+    visitor = merchant(world)
+    stock(world, "wagon-parts", 2)
+    assert village_events.completed_trades(world.state.village) == []
+    assert trade(world, visitor, quantity=1)[0] == "APPLIED"
+    records = village_events.completed_trades(world.state.village)
+    assert len(records) == 1
+    assert (records[0]["visitor"], records[0]["resident"], records[0]["quantity"],
+            records[0]["payment"]) == (visitor.id, "torvin", 1, 2)
+    assert trade(world, visitor, quantity=1)[1] == "TRADE_ALREADY_APPLIED"
+    assert len(village_events.completed_trades(world.state.village)) == 1
+
+    from npc_sim.village_economy_models import (VillageSupplierOrder, VillageEconomyMovement,
+                                               VillageEconomyPayment, VillageEconomyState)
+    world.state.village.economy = VillageEconomyState()
+    economy = world.state.village.economy
+    order = VillageSupplierOrder(id="iron-1", request_key="iron-1", buyer="torvin",
+                                 supplier="iron-trader", source="village-square", destination="forge",
+                                 product="iron", quantity=2, price=3, deadline=1000,
+                                 required_fresh_until=1000, created_at=605, status="accepted")
+    economy.orders[order.id] = order
+    economy.movements.append(VillageEconomyMovement(minute=610, location="forge", product="iron",
+                                                     quantity=2, kind="delivered", order_id=order.id))
+    assert len(village_events.completed_trades(world.state.village)) == 1
+    order.delivered_quantity = 2
+    order.paid = 6
+    assert len(village_events.completed_trades(world.state.village)) == 1
+    economy.payments.append(VillageEconomyPayment(minute=610, payer="torvin", payee="iron-trader",
+                                                  amount=6, kind="goods"))
+    iron = village_events.completed_trades(world.state.village)[1]
+    assert (iron["visitor"], iron["resident"], iron["quantity"], iron["payment"], iron["minute"]) == (
+        "iron-trader", "torvin", 2, 6, 610)
+
+
+def test_status_projects_persisted_trades_without_mutating_dashboard(world, tmp_path):
+    from npc_sim.controller import Controller
+    from npc_sim.models import AppConfig, VillageDashboard, WorldState
+    from npc_sim.storage import write_json
+
+    visitor = merchant(world)
+    stock(world, "wagon-parts", 1)
+    assert trade(world, visitor)[0] == "APPLIED"
+    world.state.village.dashboard = VillageDashboard()
+    saved = world.state.model_dump(mode="json")
+    path = tmp_path / "worlds" / world.state.world_id / "world-state.json"
+    write_json(path, saved)
+    controller = Controller(ROOT, tmp_path, AppConfig.model_validate(read_json(ROOT / "data" / "config.json")))
+    controller.run = {"world_id": world.state.world_id}
+
+    records = controller.status()["world"]["village"]["dashboard"]["trades"]
+    assert len(records) == 1
+    assert records[0]["visitor"] == visitor.id
+    assert records[0]["resident"] == "torvin"
+    assert records[0]["payment"] == 2
+    assert controller.status()["world"]["village"]["dashboard"]["trades"] == records
+    assert "trades" not in read_json(path)["village"]["dashboard"]
+    assert "trades" not in WorldState.model_validate(saved).village.dashboard.model_dump()
+
+
 def test_catalogue_and_monitor_schema_keep_departed_history(world):
     config = village_events.recommended_config(world.scenario, initial_example=True)
     assert config["daily_min"] == 0 and config["daily_max"] == 2

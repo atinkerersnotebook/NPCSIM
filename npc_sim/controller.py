@@ -1427,8 +1427,13 @@ class Controller:
                     saved = read_json(path)
                     saved.pop("requests", None)
                     saved.pop("admin_requests", None)
-                    self._world_snapshot = WorldState.model_validate(saved).model_dump(
+                    typed = WorldState.model_validate(saved)
+                    self._world_snapshot = typed.model_dump(
                         mode="json", exclude={"requests", "admin_requests", "request_history_id"})
+                    village = self._world_snapshot.get("village")
+                    if village and village.get("dashboard"):
+                        from npc_sim import village_events
+                        village["dashboard"]["trades"] = village_events.completed_trades(typed.village)
                     self._snapshot_key = key
                 snapshot = copy.deepcopy(self._world_snapshot)
         return {"run": self.run, "observation": self.observation,

@@ -6,6 +6,7 @@ import { eventSchema, stateSchema } from "../src/contracts.ts";
 import { TownDialogue, townMapAnchors, townMapMarkup } from "../src/town-map.ts";
 import { monitoredAgents, worldMonitorMarkup } from "../src/world-monitor.ts";
 import type { MapAgent } from "../src/town-map.ts";
+import { actorDetailsMarkup } from "../src/actor-details.ts";
 
 function fixture() {
   const scenario = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "millhaven-expanded.json"), "utf8"));
@@ -76,6 +77,43 @@ test("World view renders each resident once on the map without changing state or
   assert.ok(markup.includes('data-map-zoom="fit"'));
   assert.ok(!markup.includes("data-command"));
   assert.equal(JSON.stringify(state), before);
+});
+
+test("town actor hover and selection show actual location stock and money without private fields", () => {
+  const state = fixture();
+  state.world!.actors.torvin.location_id = "forge";
+  state.world!.actors.torvin.inventory = ["tongs"];
+  state.world!.village!.residents.torvin.cargo = { iron: 2 };
+  state.world!.village!.stocks.forge.iron = 7;
+  state.world!.village!.coins.torvin = 41;
+  state.world!.village!.roster.torvin.personality = "PRIVATE-OPERATOR-PERSONALITY";
+  const markup = townMapMarkup(state, monitoredAgents(state), { selectedActorId: "torvin" });
+  assert.match(markup, /Stock at [^<]*[Ff]orge \(site, not personal\)/);
+  assert.match(markup, /iron: 7/);
+  assert.match(markup, /41 coins/);
+  assert.match(markup, /iron ×2 \(cargo\)/);
+  assert.match(markup, /class="actor-details-popover" role="tooltip"/);
+  assert.ok(!markup.includes("PRIVATE-OPERATOR-PERSONALITY"));
+  const visitor = townMapMarkup(state, [{ id: "visitor", name: "Visitor", locationId: "forge",
+    location: "Forge", activity: "Visiting", current: true, deciding: false, visitor: true }],
+  { selectedActorId: "visitor" });
+  assert.match(visitor, /Stock at [^<]*[Ff]orge \(site, not personal\)/);
+  assert.ok(!visitor.includes("<dt>Carried</dt>"));
+  assert.ok(!visitor.includes("<dt>Money</dt>"));
+  assert.ok(!visitor.includes("coins"));
+  const torvin = monitoredAgents(state).find(agent => agent.id === "torvin")!;
+  state.world!.actors.torvin.location_id = "tavern";
+  state.world!.village!.stocks.tavern.bread = 9;
+  const moved = actorDetailsMarkup(state, torvin);
+  assert.match(moved, /Stock at [^<]*[Tt]avern \(site, not personal\)/);
+  assert.match(moved, /bread: 9/);
+  assert.ok(!moved.includes("iron: 7"));
+  assert.ok(!moved.includes("Workplace stock"));
+  assert.match(moved, /41 coins/);
+  state.world!.entities.tongs.name = '<img src=x onerror="bad()">';
+  const escaped = townMapMarkup(state, monitoredAgents(state));
+  assert.ok(escaped.includes('&lt;img src=x onerror=&quot;bad()&quot;&gt;'));
+  assert.ok(!escaped.includes('<img src=x onerror="bad()">'));
 });
 
 test("NPC positions follow the authoritative world, not a stale observation or memory", () => {

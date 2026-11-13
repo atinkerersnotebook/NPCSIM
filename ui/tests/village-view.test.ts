@@ -180,6 +180,41 @@ test("shared World systems use operator communication only, never selected NPC r
   assert.ok(!worldMonitorMarkup(state).includes("Your learned notices"));
 });
 
+test("world location cards show active research topic and verified progress", () => {
+  const state = expanded();
+  state.world!.village!.residents.finn.activity = "Research: River tackle";
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [], visitors: [], incidents: [], time_use: {},
+    research: [villageResearchSchema.parse({
+      id: "finn-tackle", title: "River tackle", description: "Test a real net", owner: "finn",
+      location: "riverbank", product: "tackle", kind: "tool", inputs: { timber: 1 }, equipment: [],
+      duration: 15, worked_minutes: 75, required_minutes: 240, attempts: 2, successes: 1,
+      required_successes: 3, discovered_at: null, status: "in_progress", blocker: null
+    })]
+  };
+  const markup = worldMonitorMarkup(state);
+  assert.match(markup, /Researching River tackle: 75\/240 study min, 1\/3 successful trials/);
+  state.world!.village!.dashboard!.research![0].status = "researching";
+  assert.ok(!worldMonitorMarkup(state).includes("Researching River tackle:"));
+});
+
+test("timeline name labels expose current-location stock and money without operator-only personality", () => {
+  const state = expanded();
+  state.world!.actors.torvin.location_id = "tavern";
+  state.world!.village!.coins.torvin = 41;
+  state.world!.village!.stocks.tavern.bread = 9;
+  state.world!.village!.stocks.forge.iron = 7;
+  state.world!.village!.roster.torvin.personality = "PRIVATE-OPERATOR-PERSONALITY";
+  const markup = worldGanttMarkup(state, [], monitoredAgents(state));
+  assert.match(markup, /data-gantt-name="torvin"/);
+  assert.match(markup, /class="actor-details-popover" role="tooltip"/);
+  assert.match(markup, /Stock at [^<]*[Tt]avern \(site, not personal\)/);
+  assert.match(markup, /bread: 9/);
+  assert.ok(!markup.includes("iron: 7"));
+  assert.match(markup, /41 coins/);
+  assert.ok(!markup.includes("PRIVATE-OPERATOR-PERSONALITY"));
+});
+
 test("visitor rows retain history but departed visitors leave current location cards", () => {
   const state = expanded();
   state.world!.village!.minute = 700;
@@ -201,6 +236,58 @@ test("visitor rows retain history but departed visitors leave current location c
   const markup = worldMonitorMarkup(state);
   assert.ok(!markup.includes('data-monitor-agent="merchant-1"'));
   assert.ok(markup.includes("Cora"));
+});
+
+test("completed trade records appear on both timeline rows and as factual world notes", () => {
+  const state = expanded();
+  state.world!.village!.minute = 700;
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [], incidents: [], time_use: {},
+    visitors: [{ id: "merchant-1", name: "Cora", location: "forge", arrival: 500, departure: null,
+      status: "present", activities: [{ actor: "merchant-1", label: "Trading", location: "forge",
+        start: 510, end: 800, status: "active" }] }]
+  };
+  const agents = monitoredAgents(state);
+  assert.ok(!buildWorldTimeline(state, [], agents)!.rows.find(row => row.id === "merchant-1")!.spans
+    .some(span => span.label === "Completed trade"));
+  assert.ok(!worldMonitorMarkup(state).includes("Recorded completed trades"));
+  state.world!.village!.dashboard!.trades = [{ id: "paid-1", visitor: "merchant-1", resident: "torvin",
+    direction: "export", resource: "wagon-parts", quantity: 2, payment: 10, minute: 605,
+    location: "forge", source: "Recorded cargo" }];
+  const timeline = buildWorldTimeline(state, [], monitoredAgents(state))!;
+  for (const id of ["torvin", "merchant-1"]) {
+    const record = timeline.rows.find(row => row.id === id)!.spans.find(span => span.label === "Completed trade")!;
+    assert.equal(record.start, 605);
+    assert.match(record.detail, /Cora bought 2 wagon-parts from torvin for 10 coins/);
+  }
+  assert.match(worldGanttMarkup(state, [], monitoredAgents(state)), /Cora bought 2 wagon-parts from torvin for 10 coins/);
+  assert.match(worldMonitorMarkup(state), /Recorded completed trades/);
+  assert.match(worldMonitorMarkup(state), /paid and transferred/);
+  state.world!.village!.dashboard!.trades[0].resource = "<unsafe>";
+  assert.ok(!worldMonitorMarkup(state).includes("<unsafe>"));
+});
+
+test("accepted iron trader orders are not settled trades until delivery and payment", () => {
+  const state = expanded();
+  state.world!.village!.minute = 800;
+  state.world!.village!.dashboard = {
+    orders: [{ id: "iron-1", buyer: "torvin", seller: "iron-trader", product: "iron",
+      quantity: 2, delivered: 0, status: "accepted", deadline: 1200 }],
+    products: [], accounts: [], activities: [], projects: [], quests: [], incidents: [], time_use: {},
+    visitors: [{ id: "iron-trader", name: "Iron trader", location: "village-square",
+      arrival: 715, departure: null, status: "present", activities: [{ actor: "iron-trader",
+        label: "Trading", location: "village-square", start: 720, end: 1080, status: "active" }] }]
+  };
+  assert.ok(!worldMonitorMarkup(state).includes("Recorded completed trades"));
+  state.world!.village!.dashboard!.trades = [{ id: "iron:iron-1:0", visitor: "iron-trader",
+    resident: "torvin", direction: "import", resource: "iron", quantity: 2, payment: 6,
+    minute: 790, location: "forge", source: "Iron trader consignment" }];
+  const timeline = buildWorldTimeline(state, [], monitoredAgents(state))!;
+  for (const id of ["torvin", "iron-trader"]) {
+    assert.match(timeline.rows.find(row => row.id === id)!.spans.find(span => span.label === "Completed trade")!.detail,
+      /bought 2 iron from Iron trader for 6 coins \(paid and delivered\)/);
+  }
+  assert.match(worldMonitorMarkup(state), /paid and delivered/);
 });
 
 test("iron trader timeline shows actual arrival, trading, and departure travel", () => {
@@ -1152,6 +1239,27 @@ test("Gantt does not stack overlapping and duplicate Jory waits", () => {
   assert.equal((markup.match(/class="gantt-bar wait"/g) ?? []).length, 1);
 });
 
+test("Gantt displays overlapping Elsie waits as one uninterrupted interval", () => {
+  const state = expanded();
+  state.world!.village!.minute = 735;
+  const events = [timelineEvent(1, "observation", 625, timelineObservation(625))];
+  for (const [sequence, minute, available] of [
+    [2, 625, 655], [4, 655, 685], [6, 660, 690], [8, 685, 715],
+    [10, 690, 720], [12, 695, 725], [14, 705, 735]
+  ] as const) {
+    events.push(timelineEvent(sequence, "action_request", minute, {
+      request_id: String(sequence), action_id: "village_wait_event", arguments: {}
+    }), timelineEvent(sequence + 1, "action_result", minute, {
+      request_id: String(sequence), outcome: "APPLIED", explanation: "Waiting for the next event.",
+      observation: timelineObservation(minute, "cottages", available)
+    }));
+  }
+  const spans = buildWorldTimeline(state, events, monitoredAgents(state))!.rows[0].spans
+    .filter(span => span.kind === "wait");
+  assert.deepEqual(spans.map(span => [span.start, span.end]), [[625, 735]]);
+  assert.equal((worldGanttMarkup(state, events, monitoredAgents(state)).match(/class="gantt-bar wait"/g) ?? []).length, 1);
+});
+
 test("Gantt stops Ada's event wait when a same-minute action begins", () => {
   const state = expanded();
   state.world!.village!.minute = 825;
@@ -1212,6 +1320,12 @@ test("Gantt fits the available width and zooms only the display with adaptive cl
   assert.match(fit, /data-timeline-zoom="out"[^>]* disabled/);
   assert.match(zoomed, /<output[^>]*>200%<\/output>/);
   assert.ok(zoomed.includes('data-timeline-zoom="fit"'));
+  const collapsed = worldMonitorMarkup(state, events, { viewportWidth: 1300 }, {}, true);
+  assert.match(collapsed, /data-map-toggle aria-expanded="false"/);
+  assert.match(collapsed, /id="monitor-town-map" hidden/);
+  assert.ok(!collapsed.includes('class="town-map"'));
+  assert.ok(!collapsed.includes('class="monitor-visuals with-town-map"'));
+  assert.match(fit, /data-map-toggle aria-expanded="true"/);
   assert.ok((zoomed.match(/class="gantt-gridline"/g) ?? []).length >
     (fit.match(/class="gantt-gridline"/g) ?? []).length);
   assert.equal((zoomed.match(/data-gantt-agent=/g) ?? []).length, 12);
@@ -1250,6 +1364,14 @@ test("Gantt uses taller aligned rows and rounded tiles without changing recorded
   assert.match(markup, /<rect[^>]*height="82" rx="8"/);
   assert.ok(markup.includes('id="gantt-tile"'));
   assert.ok(markup.includes("Recorded work."));
+  assert.match(markup, /class="gantt-cell-icon"[^>]*>🔨<\/text>/);
+  assert.match(markup, /data-gantt-title="Forge work"/);
+  assert.match(markup, /data-gantt-icon="🔨"/);
+  assert.match(markup, /data-gantt-status="APPLIED"/);
+  assert.match(markup, /data-gantt-duration="10 min"/);
+  assert.match(markup, /data-gantt-range="08:05 - 08:15"/);
+  assert.match(markup, /data-gantt-detail="Recorded work\."/);
+  assert.match(markup, /id="gantt-tooltip" class="gantt-tooltip" role="tooltip" hidden/);
   assert.deepEqual(buildWorldTimeline(state, events, agents), before);
 });
 

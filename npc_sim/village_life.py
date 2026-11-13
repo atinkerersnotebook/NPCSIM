@@ -40,12 +40,17 @@ def initial_state(resident: VillageResident, minute: int, policy: VillageDayPoli
     return life
 
 
+def daily_meal_minute(resident: VillageResident) -> int:
+    return 1170 if resident.work == "tavern" and "hospitality" in resident.skills else 1140
+
+
 def add_meals(life: VillageLifeState, resident: VillageResident, minute: int,
               policy: VillageDayPolicy | None = None) -> None:
     day = minute // 1440
     key = f"{day}:daily"
-    if minute % 1440 >= 1140 and key not in life.meals:
-        life.meals[key] = VillageMeal(kind="daily", due=day * 1440 + 1140)
+    due = day * 1440 + daily_meal_minute(resident)
+    if minute >= due and key not in life.meals:
+        life.meals[key] = VillageMeal(kind="daily", due=due)
         life.hungry = True
     if policy and policy.breakfast:
         due = day * 1440 + resident.wake_minute + policy.breakfast_delay
@@ -65,8 +70,9 @@ def meal_plan(world: "World", kind: str = "daily", day: int | None = None) -> di
     if kind == "breakfast" and not policy.breakfast:
         diners = []
     due = (day * 1440 + 1140 if kind == "daily" else None)
-    times = {rid: (due if due is not None else day * 1440 + config.residents[rid].wake_minute
-                   + policy.breakfast_delay) for rid in diners}
+    times = {rid: (day * 1440 + daily_meal_minute(config.residents[rid]) if due is not None
+                   else day * 1440 + config.residents[rid].wake_minute + policy.breakfast_delay)
+             for rid in diners}
     grace = policy.meal_window
     stock = state.stocks.get("tavern", {})
     available = sum(max(0, stock.get(item, 0)) for item in ("meals", "bread")) + min(
@@ -82,6 +88,13 @@ def meal_plan(world: "World", kind: str = "daily", day: int | None = None) -> di
             unfunded.append(rid)
     eligible = [rid for rid in diners if rid not in eaten and rid not in unfunded
                 and state.minute <= times[rid] + grace]
+    if kind == "daily":
+        eligible.sort(key=lambda rid: (state.minute < due and village.resident_location(world, rid) != "tavern", rid))
+        late = [rid for rid in eligible if times[rid] > due]
+        if late:
+            others = [rid for rid in eligible if rid not in late]
+            ahead = max(0, available - len(late)) if available >= len(late) else len(others)
+            eligible = others[:ahead] + late + others[ahead:]
     if kind == "breakfast" and state.minute >= min(times.values(), default=state.minute + 1):
         eligible.sort(key=lambda rid: (not (state.residents[rid].life.meals.get(f"{day}:{kind}")
                                             and state.residents[rid].life.meals[f"{day}:{kind}"].status == "missed"
@@ -158,6 +171,46 @@ def meal_due(life: VillageLifeState, minute: int, *, include_missed: bool = Fals
     missed = [meal for meal in life.meals.values()
               if meal.status == "missed" and meal.due // 1440 == minute // 1440]
     return max(missed, key=lambda meal: meal.due) if include_missed and missed else None
+
+
+def available_meal(world: "World", rid: str, *, include_missed: bool = False) -> VillageMeal | None:
+    _, state = village.context(world)
+    life = state_for(world, rid)
+    if life is None:
+        return None
+    due = meal_due(life, state.minute, include_missed=include_missed)
+    if due is not None:
+        return due
+    config, _ = village.context(world)
+    resident = config.residents[rid]
+    if daily_meal_minute(resident) > 1140 and state.minute % 1440 < daily_meal_minute(resident):
+        return None
+    if (village.resident_location(world, rid) != "tavern" or life.sleeping or life.work
+            or state.minute % 1440 >= 1140
+            or state.minute < state.residents[rid].available_at):
+        return None
+    from npc_sim import village_extensions
+    policy = village_extensions.policy(world)
+    day = state.minute // 1440
+    breakfast = life.meals.get(f"{day}:breakfast")
+    if (state.minute % 1440 < resident.wake_minute
+            or policy.breakfast and (state.minute % 1440 < resident.wake_minute + policy.breakfast_delay
+                                     or breakfast is None or breakfast.status not in {"eaten", "missed"})):
+        return None
+    daily = life.meals.get(f"{day}:daily")
+    return daily if daily and daily.status == "pending" else (
+        VillageMeal(kind="daily", due=day * 1440 + daily_meal_minute(resident)) if daily is None else None)
+
+
+def early_sleep_ready(world: "World", rid: str) -> bool:
+    config, state = village.context(world)
+    life = state_for(world, rid)
+    if (life is None or life.sleeping or life.work or state.minute < state.residents[rid].available_at
+            or village.resident_location(world, rid) != config.residents[rid].home):
+        return False
+    today = state.minute // 1440
+    meal = life.meals.get(f"{today}:daily")
+    return bool(meal and meal.status == "eaten" and life.last_woke >= today * 1440 + config.residents[rid].wake_minute)
 
 
 def state_for(world: "World", rid: str) -> VillageLifeState | None:
@@ -237,7 +290,8 @@ def action_blocker(world: "World", action: str, rid: str | None = None, *,
                 return "REST_DUE", "Work can wait. Go home and use village_sleep; resume after actually waking."
         meal = meal_due(life, state.minute)
         if meal is not None:
-            gathering = "the 19:00 gathering" if meal.kind == "daily" else f"breakfast at {village.clock_time(meal.due)}"
+            gathering = (f"supper at {village.clock_time(meal.due)}" if meal.kind == "daily"
+                         else f"breakfast at {village.clock_time(meal.due)}")
             return "MEAL_DUE", f"Pause work for {gathering}. Walk to the tavern and eat real food."
         if action in PRODUCTION and (village_extensions.modules(world) or village_extensions.policy(world).breakfast):
             job = config.residents[rid].job
@@ -246,7 +300,7 @@ def action_blocker(world: "World", action: str, rid: str | None = None, *,
                 job = village_ai.production_job(world, action)
             if job and not job.interruptible:
                 day = state.minute // 1440 * 1440
-                times = [day + 1140, day + config.residents[rid].bed_minute]
+                times = [day + daily_meal_minute(config.residents[rid]), day + config.residents[rid].bed_minute]
                 if village_extensions.policy(world).breakfast:
                     times.append(day + config.residents[rid].wake_minute + village_extensions.policy(world).breakfast_delay)
                 if any(state.minute < due < state.minute + job.duration for due in times):
@@ -300,17 +354,21 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
             return reject("HORSE_NOT_STABLED", "Return and release the horse at its stable before sleeping.")
         if world.actor.location_id != resident.home:
             return reject("NOT_AT_HOME", "Walk home before sleeping; no remote rest or teleportation.")
-        if not rest_due(resident, life, state.minute):
-            return reject("REST_NOT_DUE", "You have already rested for this waking day.")
-        duration = (resident.wake_minute - resident.bed_minute) % 1440
+        early = early_sleep_ready(world, rid)
+        if life.sleeping or (not rest_due(resident, life, state.minute) and not early):
+            return reject("REST_NOT_DUE", "You have already rested for this waking day, or bedtime has not arrived and today's meal is unfinished.")
         life.sleeping = True
-        life.sleep_until = state.minute + duration
+        duration = (resident.wake_minute - resident.bed_minute) % 1440
+        life.sleep_until = ((state.minute // 1440 + 1) * 1440 + resident.wake_minute
+                            if early else state.minute + duration)
         return done("SLEEP_STARTED", f"Sleeping at home until {village.clock_time(life.sleep_until)}.")
     if action != "village_eat":
         raise ValueError(f"Unknown daily-life action: {action}")
-    meal = meal_due(life, state.minute, include_missed=True)
+    meal = available_meal(world, rid, include_missed=True)
     if meal is None:
-        return reject("NO_MEAL_DUE", "No configured meal is due; supper is at 19:00.")
+        return reject("NO_MEAL_DUE", "No configured meal is available yet, or today's meal was already eaten.")
+    if meal.kind == "daily" and f"{state.minute // 1440}:daily" not in life.meals:
+        life.meals[f"{state.minute // 1440}:daily"] = meal
     if world.actor.location_id != "tavern":
         return reject("TRY_TAVERN", "Walk to the tavern for the daily meal; no remote food consumption.")
     from npc_sim import village_extensions
@@ -426,5 +484,6 @@ def advance(world: "World") -> None:
             life.work = None
         if life.sleeping and life.sleep_until is not None and state.minute >= life.sleep_until:
             life.sleeping, life.sleep_until, life.last_woke = False, None, state.minute
-            person.activity = "Woke after a full rest; work may resume. The daily meal is at 19:00."
+            person.activity = ("Woke after a full rest; work may resume. Supper is at "
+                               f"{village.clock_time(state.minute // 1440 * 1440 + daily_meal_minute(resident))}.")
             village.event(world, rid, "wake", resident.home, person.activity)

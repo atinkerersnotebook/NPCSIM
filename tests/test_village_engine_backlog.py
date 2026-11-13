@@ -123,15 +123,30 @@ def test_supplier_order_requires_travel_to_actual_person_and_records_requirement
     assert len(loaded.state.village.economy.orders) == 1
 
 
-def test_event_wait_reserves_until_personal_deadline_without_advancing_world(tmp_path):
+def test_event_wait_is_short_and_bounded_by_personal_deadline(tmp_path):
     world = make_world(tmp_path, event_driven_waits=True)
     person = world.state.village.residents["torvin"]
-    person.next_work = 540
+    person.next_work = 485
     result = act(world, "village_wait_event")
     assert result["code"] == "EVENT_WAIT_STARTED"
     assert world.state.village.minute == 480
-    assert person.available_at == 540
+    assert person.available_at == 485
     assert village_turns.next_actor(world) != "torvin"
+
+
+def test_event_wait_extends_to_ten_minutes_only_when_consecutive(tmp_path):
+    world = make_world(tmp_path, event_driven_waits=True)
+    person = world.state.village.residents["torvin"]
+    assert act(world, "village_wait_event")["code"] == "EVENT_WAIT_STARTED"
+    assert person.available_at == 485
+    village.advance(world, 5)
+    assert act(world, "village_wait_event")["code"] == "EVENT_WAIT_STARTED"
+    assert person.available_at == 495
+    village.advance(world, 10)
+    assert act(world, "village_observe")["outcome"] == "APPLIED"
+    village.advance(world, 5)
+    assert act(world, "village_wait_event")["code"] == "EVENT_WAIT_STARTED"
+    assert person.available_at == 505
 
 
 def test_event_waiters_wake_only_for_witnessed_news_without_interrupting_sleep(tmp_path):

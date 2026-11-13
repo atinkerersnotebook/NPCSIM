@@ -8,6 +8,7 @@ import { canReopenAdventure, simulationClock, villageClockText, villageClockTime
 import { villageSystemsMarkup } from "./village-view.ts";
 import { TownDialogue, townMapMarkup } from "./town-map.ts";
 import type { TownMapOptions } from "./town-map.ts";
+import { tradeNote } from "./trade-notes.ts";
 
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
@@ -39,6 +40,12 @@ export function monitoredAgents(state: State) {
         activity = `${life.work.kind === "wagon_repair" ? "Repairing the wagon" : "Completing a batch"} until ${villageClockTime(life.work.finishes_at)}`;
       } else if (village.wagon?.automatic && village.wagon.driver === id) {
         activity = "Running the wagon delivery route";
+      } else if (!deciding && village.dashboard?.research?.some(item => item.owner === id
+        && item.status === "in_progress" && resident.activity === `Research: ${item.title}`)) {
+        const project = village.dashboard.research.find(item => item.owner === id
+          && item.status === "in_progress" && resident.activity === `Research: ${item.title}`)!;
+        activity = `Researching ${project.title}: ${project.worked_minutes}/${project.required_minutes} study min, `
+          + `${project.successes}/${project.required_successes} successful trials`;
       } else if (!deciding) {
         const available = Math.max(resident.available_at ?? 0, resident.busy_until);
         const leisure = village.dashboard?.activities.filter(item => item.actor === id
@@ -70,7 +77,8 @@ export function monitoredAgents(state: State) {
 }
 
 export function worldMonitorMarkup(
-  state: State, events: readonly RunEvent[] = [], scale: GanttScale = {}, map: TownMapOptions = {}
+  state: State, events: readonly RunEvent[] = [], scale: GanttScale = {}, map: TownMapOptions = {},
+  mapCollapsed = false
 ): string {
   const agents = monitoredAgents(state);
   const clock = simulationClock(state.world ?? state.observation, state.observation);
@@ -102,10 +110,17 @@ export function worldMonitorMarkup(
   ${canReopenAdventure(state.run, Boolean(state.world)) ? `<p class="muted">The day is unfinished. <a class="button" href="/">${status === "error" ? "Recover the interrupted day in Player view" : "Continue the unfinished day in Player view"}</a></p>` : ""}
   ${!active && agents.length ? '<p class="muted">Last recorded world state. The adventure is not running.</p>' : ""}
   ${!state.world && agents.length ? '<p class="muted">World snapshot unavailable. Locations below are last observed, not live positions.</p>' : ""}
-  <div class="monitor-visuals${state.world?.village ? " with-town-map" : ""}">
-    ${townMapMarkup(state, agents, map)}
+  ${state.world?.village ? `<button type="button" class="button subtle monitor-map-toggle" data-map-toggle aria-expanded="${!mapCollapsed}" aria-controls="monitor-town-map">${mapCollapsed ? "Show Town map" : "Collapse Town map"}</button>` : ""}
+  <div class="monitor-visuals${state.world?.village && !mapCollapsed ? " with-town-map" : ""}">
+    ${state.world?.village ? `<div id="monitor-town-map"${mapCollapsed ? " hidden" : ""}>${mapCollapsed ? "" : townMapMarkup(state, agents, map)}</div>` : ""}
     ${worldGanttMarkup(state, events, agents, scale)}
   </div>
+  ${state.world?.village?.dashboard?.trades?.length ? `<section class="monitor-trades" aria-label="Recorded completed trades">
+    <h2>Recorded completed trades</h2>
+    <p class="muted">Settled goods and payments only; trading presence and accepted orders are not completed deals.</p>
+    <ul>${state.world.village.dashboard.trades.slice().sort((a, b) => b.minute - a.minute).slice(0, 20)
+      .map(trade => `<li>${escape(villageClockTime(trade.minute))} / ${escape(tradeNote(state, trade))}</li>`).join("")}</ul>
+  </section>` : ""}
   ${villageSystemsMarkup(state, [], state.observation?.village?.research?.enabled)}
   <div class="monitor-locations">${[...groups.values()].map(group =>
     `<section class="monitor-location" aria-label="${escape(group[0].location)}">
@@ -142,21 +157,24 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   let zoom = 1;
   let renderedZoom = 1;
   let mapZoom = 1;
+  let mapCollapsed = false;
+  let renderedMapCollapsed = false;
   let selectedActorId: string | undefined;
   let dialogue = new TownDialogue();
   let liveAfterSequence = 0;
   let bubbleTimer: ReturnType<typeof setTimeout> | undefined;
   let frame: number | null = null;
+  let pointerPosition: { x: number; y: number } | null = null;
   const draw = () => {
     frame = null;
     if (!state) return;
     historyReady ||= seen.size >= state.event_count;
     const old = content.querySelector<HTMLDivElement>(".gantt-scroll");
-    const viewportWidth = old?.clientWidth ?? Math.max(120,
-      (state.world?.village && content.clientWidth > 1100 ? (content.clientWidth - 18) / 2.15 : content.clientWidth) - 130);
+    const viewportWidth = (renderedMapCollapsed === mapCollapsed ? old?.clientWidth : undefined) ?? Math.max(120,
+      (state.world?.village && !mapCollapsed && content.clientWidth > 1100 ? (content.clientWidth - 18) / 2.15 : content.clientWidth) - 130);
     const now = Date.now();
     const markup = worldMonitorMarkup(state, historyReady ? [...events.values()] : [], { zoom, viewportWidth },
-      { zoom: mapZoom, selectedActorId, dialogue, now });
+      { zoom: mapZoom, selectedActorId, dialogue, now }, mapCollapsed);
     clearTimeout(bubbleTimer);
     const expiries = dialogue.active(now).map(line => line.expiresAt);
     if (expiries.length) bubbleTimer = setTimeout(schedule, Math.min(...expiries) - now + 1);
@@ -166,15 +184,18 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       const mapTop = mapScroll?.scrollTop ?? 0;
       const mapActorFocus = document.activeElement?.getAttribute("data-map-actor");
       const mapZoomFocus = document.activeElement?.getAttribute("data-map-zoom");
+      const mapToggleFocus = document.activeElement?.hasAttribute("data-map-toggle");
       const mapHadFocus = document.activeElement === mapScroll;
       const left = old?.scrollLeft ?? 0;
       const following = !old || old.scrollWidth - old.clientWidth - left < 24;
       const centre = old ? (left + old.clientWidth / 2) / old.scrollWidth : 0.5;
       const focused = document.activeElement?.getAttribute("data-gantt-focus");
+      const nameFocus = document.activeElement?.getAttribute("data-gantt-name");
       const zoomFocus = document.activeElement?.getAttribute("data-timeline-zoom");
       const hadFocus = old?.contains(document.activeElement);
       const zoomControls = renderedZoom === zoom ? content.querySelector(".gantt-zoom") : null;
       content.innerHTML = markup;
+      if (mapToggleFocus) content.querySelector<HTMLButtonElement>("[data-map-toggle]")?.focus({ preventScroll: true });
       const nextMapScroll = content.querySelector<HTMLDivElement>(".town-map-scroll");
       if (nextMapScroll) {
         nextMapScroll.scrollLeft = mapLeft;
@@ -190,6 +211,8 @@ export function startWorldMonitor(app: HTMLDivElement): void {
         (button?.disabled ? content.querySelector<HTMLButtonElement>('[data-map-zoom="fit"]') : button)
           ?.focus({ preventScroll: true });
       }
+      if (nameFocus) [...content.querySelectorAll<HTMLElement>("[data-gantt-name]")]
+        .find(label => label.dataset.ganttName === nameFocus)?.focus({ preventScroll: true });
       if (zoomControls) content.querySelector(".gantt-zoom")?.replaceWith(zoomControls);
       const scroll = content.querySelector<HTMLDivElement>(".gantt-scroll");
       if (scroll) {
@@ -199,6 +222,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
           const target = focused ? [...scroll.querySelectorAll<SVGElement>("[data-gantt-focus]")]
             .find(element => element.getAttribute("data-gantt-focus") === focused) : undefined;
           (target ?? scroll).focus({ preventScroll: true });
+          if (target?.classList.contains("gantt-bar")) showGanttTooltip(target);
         }
       }
       if (zoomFocus) {
@@ -206,8 +230,15 @@ export function startWorldMonitor(app: HTMLDivElement): void {
         (button?.disabled ? content.querySelector<HTMLButtonElement>('[data-timeline-zoom="fit"]') : button)
           ?.focus({ preventScroll: true });
       }
+      if (pointerPosition) {
+        const hovered = document.elementFromPoint(pointerPosition.x, pointerPosition.y)?.closest(".gantt-bar");
+        if (hovered) showGanttTooltip(hovered);
+      }
       renderedZoom = zoom;
+      const layoutChanged = renderedMapCollapsed !== mapCollapsed;
+      renderedMapCollapsed = mapCollapsed;
       previous = markup;
+      if (layoutChanged) schedule();
     }
     error.hidden = true;
   };
@@ -239,8 +270,83 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     error.textContent = `Could not update the world: ${failure instanceof Error ? failure.message : String(failure)}`;
     error.hidden = false;
   };
+  const showGanttTooltip = (bar: Element) => {
+    const bubble = content.querySelector<HTMLDivElement>("#gantt-tooltip");
+    if (!bubble) return;
+    const text = (name: string) => bar.getAttribute(`data-gantt-${name}`) ?? "";
+    const element = (tag: string, className: string, value: string) => {
+      const node = document.createElement(tag);
+      node.className = className;
+      node.textContent = value;
+      return node;
+    };
+    const title = text("title");
+    const status = text("status").replaceAll("_", " ");
+    const header = element("div", "gantt-tooltip-heading", "");
+    header.append(element("span", "gantt-tooltip-icon", text("icon")),
+      element("div", "gantt-tooltip-title", ""));
+    header.lastElementChild!.append(element("small", "", text("agent-name")), element("strong", "", title));
+    bubble.replaceChildren(header);
+    if (status) bubble.append(element("span", "gantt-tooltip-status", status));
+    const facts = element("dl", "gantt-tooltip-facts", "");
+    for (const [label, value] of [["When", text("range")], ["Duration", text("duration")],
+      ["Location", text("place")]]) {
+      if (!value) continue;
+      facts.append(element("dt", "", label), element("dd", "", value));
+    }
+    bubble.append(facts);
+    const detail = text("detail");
+    if (detail && detail !== title && detail !== `${title} / ${text("status")}`) {
+      const result = element("div", "gantt-tooltip-result", "");
+      result.append(element("small", "", "Recorded detail"), element("p", "", detail));
+      bubble.append(result);
+    }
+    bubble.hidden = false;
+    const bounds = bar.getBoundingClientRect();
+    const { width, height } = bubble.getBoundingClientRect();
+    bubble.style.left = `${Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8))}px`;
+    bubble.style.top = `${Math.max(8, Math.min(bounds.bottom + 8 + height > window.innerHeight
+      ? bounds.top - height - 8 : bounds.bottom + 8, window.innerHeight - height - 8))}px`;
+  };
+  const hideGanttTooltip = () => {
+    const bubble = content.querySelector<HTMLDivElement>("#gantt-tooltip");
+    if (bubble) bubble.hidden = true;
+  };
+  content.addEventListener("pointerover", event => {
+    if (event.target instanceof Element) {
+      const bar = event.target.closest(".gantt-bar");
+      if (bar) {
+        pointerPosition = { x: event.clientX, y: event.clientY };
+        showGanttTooltip(bar);
+      }
+    }
+  });
+  content.addEventListener("pointermove", event => {
+    pointerPosition = event.target instanceof Element && event.target.closest(".gantt-bar")
+      ? { x: event.clientX, y: event.clientY } : null;
+  });
+  content.addEventListener("pointerout", event => {
+    if (!(event.target instanceof Element)) return;
+    const bar = event.target.closest(".gantt-bar");
+    if (bar && !(event.relatedTarget instanceof Element && bar.contains(event.relatedTarget))) {
+      pointerPosition = null;
+      hideGanttTooltip();
+    }
+  });
+  content.addEventListener("focusin", event => {
+    if (event.target instanceof Element && event.target.matches(".gantt-bar")) showGanttTooltip(event.target);
+  });
+  content.addEventListener("focusout", event => {
+    if (event.target instanceof Element && event.target.matches(".gantt-bar")) hideGanttTooltip();
+  });
+  content.addEventListener("scroll", hideGanttTooltip, true);
   content.addEventListener("click", event => {
     if (!(event.target instanceof Element)) return;
+    if (event.target.closest("[data-map-toggle]")) {
+      mapCollapsed = !mapCollapsed;
+      schedule();
+      return;
+    }
     const actor = event.target.closest<HTMLButtonElement>("[data-map-actor]");
     if (actor) {
       selectedActorId = actor.dataset.mapActor === selectedActorId ? undefined : actor.dataset.mapActor;

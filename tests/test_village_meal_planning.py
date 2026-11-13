@@ -1,6 +1,6 @@
 import pytest
 
-from npc_sim import village, village_goods, village_life
+from npc_sim import village, village_fallback, village_goods, village_life
 from npc_sim.world import World
 from test_village_expanded import scenario
 from test_world import act
@@ -41,9 +41,11 @@ def test_allocation_is_fixed_and_independent_of_action_order(cast):
     rejected = act(cast[outside], "village_eat")
     assert rejected["code"] == "MEAL_MISSED"
     assert world.state.village.stocks["tavern"]["meals"] == 9
-    for rid in reversed(plan["reserved"]):
+    for rid in reversed([rid for rid in plan["reserved"] if rid != "elsie"]):
         result = act(cast[rid], "village_eat")
         assert result["code"] == "MEAL_EATEN", (rid, result)
+    village.advance(world, 1170 - world.state.village.minute)
+    assert act(cast["elsie"], "village_eat")["code"] == "MEAL_EATEN"
     assert world.state.village.stocks["tavern"]["meals"] == 0
     assert village_life.meal_plan(world)["consumed"] == 9
     assert village_life.meal_plan(world)["shortfall"] == 3
@@ -53,14 +55,52 @@ def test_reserved_late_diner_keeps_portion_through_grace(cast):
     world = cast["elsie"]
     village.advance(world, 1140 - world.state.village.minute)
     reserved = village_life.meal_plan(world)["reserved"]
-    late = reserved[-1]
+    late = next(rid for rid in reserved if rid != "elsie")
     village.advance(world, 35)
     assert late in village_life.meal_plan(world)["reserved"]
-    for rid in reserved[:-1]:
-        assert act(cast[rid], "village_eat")["code"] == "MEAL_EATEN"
-    assert world.state.village.stocks["tavern"]["meals"] == 1
+    for rid in reserved:
+        if rid not in {late, "elsie"}:
+            assert act(cast[rid], "village_eat")["code"] == "MEAL_EATEN"
+    assert world.state.village.stocks["tavern"]["meals"] == 2
     assert act(cast[late], "village_eat")["code"] == "MEAL_EATEN"
+    village.advance(world, 1170 - world.state.village.minute)
+    assert act(cast["elsie"], "village_eat")["code"] == "MEAL_EATEN"
     assert world.state.village.stocks["tavern"]["meals"] == 0
+
+
+def test_elsie_serves_supper_before_eating_at_seven_thirty(cast):
+    world = cast["elsie"]
+    village.advance(world, 1140 - world.state.village.minute)
+    stock = world.state.village.stocks["tavern"]
+    village_goods.take(world, "tavern", "meals", 7)
+    plan = village_life.meal_plan(world)
+    assert "elsie" in plan["reserved"]
+    assert village_life.available_meal(world, "elsie") is None
+    assert act(world, "village_eat")["code"] == "NO_MEAL_DUE"
+    assert not any(choice["action_id"] == "village_eat" for choice in village_fallback.candidates(world))
+    other = next(rid for rid in plan["reserved"] if rid != "elsie")
+    assert act(cast[other], "village_eat")["code"] == "MEAL_EATEN"
+    assert stock["meals"] == 1
+    village.advance(world, 1170 - world.state.village.minute)
+    assert world.state.village.residents["elsie"].life.meals["0:daily"].due == 1170
+    assert village_life.available_meal(world, "elsie") is not None
+    assert act(world, "village_eat")["code"] == "MEAL_EATEN"
+    assert stock["meals"] == 0
+
+
+def test_elsie_has_no_phantom_reserved_food_when_supply_is_short(cast):
+    world = cast["elsie"]
+    village.advance(world, 1140 - world.state.village.minute)
+    stock = world.state.village.stocks["tavern"]
+    village_goods.take(world, "tavern", "meals", 8)
+    plan = village_life.meal_plan(world)
+    assert plan["reserved"] == ["elsie"]
+    assert act(cast["mara"], "village_eat")["code"] == "MEAL_MISSED"
+    assert stock["meals"] == 1
+    village_goods.take(world, "tavern", "meals", 1)
+    village.advance(world, 1170 - world.state.village.minute)
+    assert act(world, "village_eat")["code"] == "MEAL_MISSED"
+    assert stock["meals"] == 0
 
 
 def test_late_diner_can_eat_unclaimed_real_food_after_grace(cast):

@@ -101,7 +101,7 @@ def observation(world: "World") -> dict[str, Any]:
                   "If a conversation reply opportunity is present, consider a brief acknowledgement, answer, question, "
                   "or polite departure before leaving. Hearing or replying never accepts a funded order; use the "
                   "actual order action for that. Do not prolong a conversation past urgent work, meals, or rest. "
-                  + (" Prioritize due meals and rest over interruptible work. Eat one daily meal at the 19:00 tavern gathering. "
+                  + (" Prioritize due meals and rest over interruptible work. Eat one daily meal at the tavern; Elsie serves others first and eats at 19:30. "
                      "A prepared meal, bread, or fish with tea counts; tea alone does not. No imaginary home pantry. "
                      "An empty tavern records hunger but allows work; missing today's meal doubles tomorrow's work cooldown. "
                      "At your own bedtime, walk home and village_sleep; no work before actually waking. "
@@ -159,8 +159,8 @@ def actions(world: "World") -> list[dict[str, Any]]:
     add("village_wait", "Wait without controlling any other villager.",
         {"minutes": {"type": "integer", "minimum": 5, "maximum": village_life.wait_limit(world), "multipleOf": 5}})
     if config.daily_life:
-        add("village_eat", "Eat a due configured meal at the tavern using real local food.", {})
-        add("village_sleep", "Sleep at your own home when rest is due; wake after your full scheduled rest.", {})
+        add("village_eat", "Eat one daily meal at the tavern using real local food; supper may be early after work.", {})
+        add("village_sleep", "Sleep at your own home after supper or when rest is due; wake at the next scheduled morning.", {})
     if nearby:
         target = {"type": "string", "enum": nearby}
         add("village_ask", "Ask a nearby resident about their own shovel knowledge, work or witnessed news.",
