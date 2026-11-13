@@ -28,6 +28,16 @@ On Linux, after installing dependencies and building the UI, use:
 NPCSIM_LAN_HOST=192.168.1.143 .venv/bin/python -m uvicorn npc_sim.app:app --host 0.0.0.0 --port 8000
 ```
 
+### Opt-in automatic repair supervisor (Linux)
+
+Stop any existing server on port 8000, then launch the supervisor instead of uvicorn:
+
+```bash
+.venv/bin/python -m npc_sim.self_heal --repair-command '["/absolute/path/to/repair-agent", "--non-interactive"]'
+```
+
+The configured executable must read a repair task from standard input, make local source/test edits, and exit with status 0; it is **not** installed or configured by NPCSIM. The supervisor tests the edited code before restarting the server. It attempts an automatic resumable save every five minutes (only when the world supports saves), tries the built-in verified adventure reopen, then the latest valid save for that run, and finally resets and runs a new episode. It never silently rolls back a failed repair, and it refuses to invoke the agent when `npc_sim/` or `tests/` already has uncommitted changes. A repair agent with write access can change code and run commands: only use a trusted executable in an appropriately isolated environment. The supervisor runs on loopback only; its server log is stored under the selected data directory. Existing running episodes may still be marked interrupted on an unclean server exit unless they were saved at a safe checkpoint; a reset loses progress. Pass `--test-command '[".venv/bin/python","-m","pytest","-q","tests"]'` to override the default full-suite validation command. Stop with Ctrl+C; the supervisor shuts down its server.
+
 Open `http://192.168.1.143:8000` from another device on the LAN. Replace the example address with the server's actual LAN IPv4 address; allow inbound TCP port 8000 in the host firewall if needed. LAN mode grants **unauthenticated full admin access**, including controls and private run data, to anyone who can reach the port. Use only on a trusted network; do not forward the port to the internet. Without LAN mode the server remains loopback-only.
 
 Open **http://127.0.0.1:8000** for the simplified **player view**. Choose a scenario
@@ -224,8 +234,8 @@ enabled on a restored/current run.
 
 Living Millhaven has two real iron supply routes:
 
-- **Daily imports:** the iron trader brings four units to the square at noon and
-  leaves at 18:00 with unsold stock. With mandatory orders enabled, the smith
+- **Daily imports:** the iron trader walks in from the mine road (or bridge in the expanded scenario) just before noon, brings four units to the square at noon, and walks out at 18:00 with unsold stock.
+  With mandatory orders enabled, the smith
   uses `village_buy_iron` face-to-face to create a funded, accepted consignment
   and collect actual cargo. Carry it to the forge and unload to pay; ordering
   never teleports stock. Another carrier may collect an already accepted order,
@@ -523,6 +533,8 @@ Conflicting request reuse and stale revisions are rejected.
 
 ### Firewood and shared household fires (opt-in)
 
+The checked-in `millhaven-living` scenario now enables firewood with three shared cottage hearths and zero starter fuel; existing saved adventures retain their own frozen configuration. New scenarios generated without `--firewood` remain opt-in.
+
 Generate a **future** Living Millhaven scenario with
 `python -m npc_sim.living_village --firewood --anti-idle --output data\scenarios\millhaven-firewood.json`.
 This does not regenerate, restart or enable fuel rules in an existing adventure.
@@ -587,12 +599,22 @@ Cold homes are visible but impose **no new health penalties**. There is no
 backdated heating debt. `season` is an explicit operator setting, not automatic
 weather/calendar simulation; rate changes affect the next fuel burn.
 
+A late firewood shipment remains loaded and unpaid until its buyer physically
+accepts or rejects it at the destination with `village_respond_late_fuel`.
+Acceptance permits one real unload and settlement; rejection leaves cargo with
+its carrier for physical return. Neither response creates fuel or advances the
+carrier automatically.
+
 Local observations expose only physically present fuel stocks/hearths. The World
 observatory additionally shows privileged town-wide household warmth, shortages,
 consumption and responsible buyers. Configurations, warming intervals and fuel
 ledgers persist in ordinary world/episode saves. Runtime configuration preserves
 the frozen scenario, existing goods, money and progress; installed participants
 and household memberships cannot be replaced through a later patch.
+
+### Purposeful downtime (opt-in)
+
+Generate a **new** Living Millhaven scenario with `python -m npc_sim.living_village --purposeful-downtime --output PATH`. This enables anti-idle planning and its shorter daytime reviews, physical noticeboard checks and mill rendezvous suggestions. It also installs finite furniture, tackle and smoked-fish crafts, catch-and-release fishing, Iona's herbal garden and gardening aptitude (without farming privileges), and a scheduled visiting merchant with explicit offers for those goods. Garden tending consumes actual manure carried from the cared-for hens and yields one herb only after a day; checking the woods and harvesting herbs remain separate actions. Bread-delivery and blocked-order suggestions require real stock, routes, knowledge and deadlines. Activities, visiting sales and repair are not automatic: residents must execute eligible actions. Existing saved episodes are unchanged; generate into a new path rather than overwriting them. See [the enhancement spec](ANTI-IDLE-ENHANCEMENT-SPEC.md) for limitations.
 
 ### Occupation fallback / anti-idle planning (Phase 1)
 
@@ -639,6 +661,19 @@ can be contacted in person for a conversation or supplier order, but cannot take
 another action until their next turn; sleep, committed work and remote contact remain
 blocked. Scheduler ticks do not call
 the model. No guarantee of constant work or extra timber is made.
+
+In Living Millhaven, ordinary walking now requires `village_plan_walk` with a final
+location and concrete purpose before taking a `go` step. The resident's personal
+`walking_plan` records the origin, destination, ordered doors and stops along the
+shortest traversable route (fewest door crossings). Intermediate stops do
+not reset the plan: the next `go` must follow the next door, preventing reversals
+like a store–square–store loop. A newly received message, due meal, rest,
+schedule change or blocked door permits replanning; arrival clears the plan.
+Walking itineraries persist in episode saves and do not replace automatic wagon
+or timber routes. Residents use the public village road and footpath map to plan ordinary walks;
+hidden doors and blocked passages are excluded.
+Existing running episodes require a backend restart before this engine change takes
+effect; restarting the process does not itself reset their saved state.
 
 Planning state persists in world and episode saves. The personal `village.fallback`
 observation contains blocked tasks, candidates, the selected decision and wait state.
@@ -834,7 +869,11 @@ reopens paused. The same `/api/adventure/reopen` request accepts
 `until_midnight: true` to simulate normally until the next midnight and pause
 there, including when everyone sleeps before then. This does not fast-forward,
 increase budgets or automatically resume; existing budget limits still apply
-unless **Run until complete** is enabled.
+unless **Run until complete** is enabled. A saved village stopped at the
+18:00 iron-trader departure by a missing trader activity record can also be
+reopened after the corrected world server is running. Recovery validates the
+saved trader state and advances an isolated copy past the failure before
+accepting a confirmed action boundary; it never invents or replays an NPC action.
 
 The current clock and Gantt endpoint follow the newest recorded village time,
 including a midnight observation newer than the inspection file. The scheduler
@@ -899,10 +938,24 @@ stocks and the event ledger. This is operator knowledge, not shared NPC input.
   meal doubles the following day's work cooldown; eating before midnight cancels
   that day's missed-meal penalty. A later meal never retroactively erases it.
 - `village_sleep` requires physically returning home. Each NPC keeps the existing
-  bedtime and first work-start time as their sleep/wake schedule: for example,
-  Bren/Jory/Ada wake at 06:00, Torvin at 08:00, and Elsie sleeps 23:00-06:00 so she can prepare the inn and cook food before guests arrive.
+  bedtime and first work-start time as their sleep/wake schedule. In the living
+  village, Elsie sleeps 23:00-05:30 to prepare the inn; Bren/Jory/Ada wake at
+  06:00, and residents who previously woke at 08:00 now wake at 07:00.
   A late bedtime delays actual waking by the full scheduled rest duration.
   Waiting through the night without sleeping does not satisfy rest.
+  The living scenario retains 12 opening tavern bread units for the planned
+  breakfast and supper demand (7 + 5, including each meal's stock buffer).
+  Its established opening storerooms hold 12 tavern, 10 bakery, 10 forge and
+  24 shared cottage firewood units (24-unit cottage capacity); bakery flour,
+  mill grain, workshop timber and farm hay also begin stocked. These are
+  scenario-configured one-time starting goods, not daily replenishment: the
+  persistent stock ledger, production, delivery and payment rules apply thereafter.
+  Elsie can inspect a tavern-local meal-readiness forecast showing prepared and
+  cookable portions, missing ingredients, fuel and projected unserved diners;
+  this forecast does not cook, import or allocate meals. Firewood replenishment
+  uses site-specific reorder points and targets, never automatic transfers.
+  Existing saved worlds are never silently seeded when loading this scenario;
+  use an explicit new-world reset for its opening inventory.
 - Due meals and rest block new work, patrols, deliveries and further construction
   contributions. Travel home and interruptible projects can pause at any action
   boundary without losing their recorded progress, cargo or unconsumed supplies.
@@ -1412,8 +1465,14 @@ turns while their partner catches up. The goal succeeds only when **both** arriv
 
 The agents can **say** messages to teammates in the same room and **give** carried
 items to a nearby teammate with enough capacity. Messages are persisted, with the
-latest 20 heard messages in each agent's observations. Remote observations and private
-plans are not shared. Roles suggest responsibilities but do not script actions.
+latest 20 heard messages in each agent's observations. In timed AI villages, speech
+addressed by name (or with the optional `recipient` argument) opens a short, optional
+conversation with the nearby listener. The listener sees a reply opportunity on their
+next available turn; neither hearing nor replying accepts a supply order. A thread
+ends after four spoken turns or 20 game minutes, or when either participant leaves
+or sleeps. The pair cannot reopen it for 30 game minutes after the turn limit.
+Remote observations and private plans are not shared. Roles suggest responsibilities
+but do not script actions.
 The actor selector switches the observed view, discoveries, constraints and story;
 the technical log labels every event's actor. Completion review checks the team goal
 against both agents' stories. Action, model-call and time budgets apply to the team.

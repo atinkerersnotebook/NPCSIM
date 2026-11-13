@@ -373,6 +373,121 @@ def test_load_allocates_multiple_freshness_deadlines_atomically(world):
         first.id: 1200, second.id: 1400}
 
 
+def test_opt_in_supper_forecast_requires_fresh_funded_physical_delivery(world):
+    from npc_sim import village_extensions
+    from npc_sim.models import VillageDayPolicy
+
+    add(world, "bakery", "bread", 4, expiry=1200)
+    assert economy.meal_delivery_forecast(world) == []
+    world.state.village.day_policy = VillageDayPolicy(purposeful_downtime=True)
+    forecast = economy.meal_delivery_forecast(world)[0]
+    assert forecast["shortfall"] == 12
+    assert forecast["delivery"]["source"] == "bakery"
+    assert forecast["delivery"]["destination"] == "tavern"
+    assert forecast["delivery"]["quantity"] == 4
+    assert forecast["delivery"]["arrival"] <= forecast["delivery_deadline"]
+    assert world.state.village.stocks["bakery"]["bread"] == 4
+    world.state.village.coins["elsie"] = 0
+    assert economy.meal_delivery_forecast(world)[0]["delivery"] is None
+    assert economy.meal_delivery_forecast(world)[0]["blocker"]
+    assert village_extensions.policy(world).purposeful_downtime
+
+
+def test_opt_in_blocked_order_replans_only_with_real_stock_and_route(world):
+    from npc_sim.models import VillageDayPolicy
+
+    add(world, "bakery", "bread", 2, expiry=1400)
+    order = propose(world, quantity=2)
+    accept(world, order)
+    goods.take(world, "bakery", "bread", 2)
+    order.status, order.reason, order.production_plan = "blocked", "Planned production did not complete", {}
+    economy.advance(world)
+    assert order.status == "blocked"
+    world.state.village.day_policy = VillageDayPolicy(purposeful_downtime=True)
+    economy.advance(world)
+    assert order.status == "blocked" and order.reason
+    add(world, "bakery", "bread", 2, expiry=1400)
+    economy.advance(world)
+    assert order.status == "ready_to_collect"
+    assert order.production_plan == {} and order.reason is None
+    assert world.state.village.stocks["bakery"]["bread"] == 2
+
+
+def test_opt_in_accepted_bread_order_exposes_physical_load_and_delivery_steps(world):
+    from npc_sim.models import VillageDayPolicy
+
+    world.state.village.day_policy = VillageDayPolicy(purposeful_downtime=True)
+    add(world, "bakery", "bread", 2, expiry=1400)
+    order = propose(world, quantity=2)
+    accept(world, order)
+    carrier = actor(world, "nella", "bakery")
+    carrier.state.village.residents["nella"].known_routes = list(
+        eid for eid, door in carrier.state.entities.items() if door.kind == "door")
+    steps = economy.meal_delivery_actions(carrier)
+    assert any(step["action"] == "village_load_goods" and step["order_id"] == order.id for step in steps)
+    shipment = carrier.state.village.residents["nella"].shipments
+    assert goods.load(carrier, "nella", {"bread": 2}, "tavern", shipment, 3) is None
+    steps = economy.meal_delivery_actions(carrier)
+    assert any(step["action"] == "go" and step["destination"] == "tavern" for step in steps)
+    carrier.actor.location_id = "tavern"
+    assert economy.meal_delivery_actions(carrier)[0]["action"] == "village_unload_goods"
+    assert goods.unload(carrier, "nella", shipment) is None
+    assert carrier.state.village.stocks["bakery"]["bread"] == 0
+    assert carrier.state.village.stocks["tavern"]["bread"] == 2
+
+
+def test_supper_procurement_is_early_and_only_requests_real_available_stock(world):
+    from npc_sim.models import VillageDayPolicy
+
+    world.state.village.day_policy = VillageDayPolicy(purposeful_downtime=True)
+    add(world, "bakery", "bread", 2, expiry=1200)
+    add(world, "bakery", "bread", 5, expiry=1130)
+    requests = [request for request in economy.suggestions(world) if request["product"] == "bread"]
+    assert len(requests) == 1
+    assert requests[0]["quantity"] == 2
+    assert requests[0]["deadline"] == 1080
+    assert requests[0]["required_fresh_until"] == 1140
+    assert world.state.village.stocks["bakery"]["bread"] == 7
+    goods.take(world, "bakery", "bread", 2, required_fresh_until=1140)
+    assert not [request for request in economy.suggestions(world) if request["product"] == "bread"]
+
+
+def test_supper_forecast_does_not_request_bread_already_at_inn(world):
+    from npc_sim.models import VillageDayPolicy
+
+    world.state.village.day_policy = VillageDayPolicy(purposeful_downtime=True)
+    add(world, "tavern", "bread", 5, expiry=1200)
+    add(world, "bakery", "bread", 3, expiry=1200)
+    forecast = economy.meal_delivery_forecast(world)[0]
+    assert forecast["bread_needed"] == 0
+    assert forecast["delivery"] is None
+    assert forecast["shortfall"] > 0
+
+
+def test_fulfilled_or_depleted_bread_order_never_suggests_another_load(world):
+    from npc_sim.models import VillageDayPolicy
+
+    world.state.village.day_policy = VillageDayPolicy(purposeful_downtime=True)
+    add(world, "bakery", "bread", 2, expiry=1400)
+    order = propose(world, quantity=2)
+    accept(world, order)
+    carrier = actor(world, "nella", "bakery")
+    carrier.state.village.residents["nella"].known_routes = list(
+        eid for eid, door in carrier.state.entities.items() if door.kind == "door")
+    goods.take(world, "bakery", "bread", 2)
+    assert economy.meal_delivery_actions(carrier) == []
+    add(world, "bakery", "bread", 2, expiry=1400)
+    shipments = carrier.state.village.residents["nella"].shipments
+    assert goods.load(carrier, "nella", {"bread": 2}, "tavern", shipments, 3) is None
+    assert all(step["action"] != "village_load_goods" for step in economy.meal_delivery_actions(carrier))
+    carrier.actor.location_id = "tavern"
+    assert goods.unload(carrier, "nella", shipments) is None
+    carrier.actor.location_id = "bakery"
+    add(world, "bakery", "bread", 2, expiry=1400)
+    assert order.status == "fulfilled" and order.loadable == 0
+    assert economy.meal_delivery_actions(carrier) == []
+
+
 def test_capacity_aware_delivery_runs_and_reserve_protection(world):
     add(world, "bakery", "bread", 5, expiry=1400)
     order = propose(world, quantity=5)

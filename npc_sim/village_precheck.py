@@ -77,8 +77,15 @@ def check(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str] 
     location = world.actor.location_id
     minute = state.minute
 
+    if action == "village_plan_walk" and world.scenario.id == "millhaven-living":
+        from npc_sim import village_walking
+        return village_walking.check_plan(world, args["destination"])
     if action == "go":
-        from npc_sim import village_fallback
+        from npc_sim import village_fallback, village_walking
+        if village_walking.enabled(world):
+            blocked = village_walking.check_step(world, args)
+            if blocked:
+                return blocked
         return village_fallback.route_blocker(world, args)
 
     if action == "village_patrol":

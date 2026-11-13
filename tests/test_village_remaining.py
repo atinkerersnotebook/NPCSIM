@@ -290,6 +290,8 @@ def test_noon_iron_is_paid_on_delivery_and_unsold_stock_leaves(cast):
     assert world.state.village.coins["torvin"] == before["torvin"] - 9
     advance_to(cast, 1080)
     assert world.state.village.stocks["village-square"]["iron"] == 0
+    assert world.state.entities["iron-trader"].location == "bridge"
+    advance_to(cast, 1085)
     assert world.state.entities["iron-trader"].location is None
 
 

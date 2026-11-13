@@ -50,11 +50,16 @@ def example_config(scenario: Scenario) -> dict[str, Any]:
                     for index in range(0, len(members), 4)},
         businesses=[rid for rid, resident in base.residents.items()
                     if resident.job and resident.job.equipment in {"anvil", "oven", "tavern-hearth"}],
-        site_capacities={site: 24 if site == base.residents[supplier].work else 16
+        site_capacities={site: 24 if site == base.residents[supplier].work or
+                         (site == base.residents[buyer].work and scenario.id == "millhaven-living") else 16
                          for site in {base.residents[supplier].work, base.residents[buyer].work,
                                       *(resident.work for resident in base.residents.values()
                                         if resident.job and resident.job.equipment in
                                         {"anvil", "oven", "tavern-hearth"})}},
+        site_reorder_points={"tavern": 9, "bakery": 7, "forge": 7, "cottages": 18}
+        if scenario.id == "millhaven-living" else {},
+        site_reserve_targets={"tavern": 12, "bakery": 10, "forge": 10, "cottages": 24}
+        if scenario.id == "millhaven-living" else {},
     ).model_dump(mode="json")
 
 
@@ -94,6 +99,15 @@ def _validate(scenario: Scenario, config: VillageFirewoodConfig) -> None:
             or any(type(limit) is not int or limit < 1 for limit in config.site_capacities.values())
             or config.site_capacities[supplier.work] < config.firewood_per_log):
         raise ValueError("Every configured fuel site needs explicit positive storage capacity")
+    if (not set(config.site_reorder_points) <= sites
+            or not set(config.site_reserve_targets) <= sites
+            or any(type(value) is not int or value < 0 or value > config.site_capacities[site]
+                   for site, value in config.site_reorder_points.items())
+            or any(type(value) is not int or value < 1 or value > config.site_capacities[site]
+                   for site, value in config.site_reserve_targets.items())
+            or any(config.site_reorder_points.get(site, config.reorder_point) > target
+                   for site, target in config.site_reserve_targets.items())):
+        raise ValueError("Fuel reorder points and reserve targets must name real sites and fit storage capacities")
 
 
 def fixtures(scenario: Scenario, config: VillageFirewoodConfig) -> dict[str, Entity]:
@@ -257,6 +271,7 @@ def consumer_target(world: "World", buyer: str) -> int:
     location = world.scenario.village.residents[buyer].work
     if buyer in config.businesses:
         target = max(target, config.reserve * config.business_buffer_days)
+    target = max(target, getattr(config, "site_reserve_targets", {}).get(location, 0))
     return min(target, config.site_capacities[location])
 
 
@@ -273,7 +288,8 @@ def requests(world: "World", actor: str) -> list[tuple[str, int, dict[str, int]]
     if not target:
         return []
     state = world.state.village
-    if village_economy.usable_stock(world, location, "firewood", state.minute) > config.reorder_point:
+    available = village_economy.usable_stock(world, location, "firewood", state.minute)
+    if available > getattr(config, "site_reorder_points", {}).get(location, config.reorder_point):
         return []
     used = state.firewood.consumed.get(location, 0)
     return [(f"firewood:{state.minute // 1440}:{location}:{used}", state.minute + 360, {"firewood": target})]
@@ -433,26 +449,28 @@ def execute_delivery_plan(world: "World", route_id: str) -> dict[str, Any]:
         capacity = (6 if vehicle else village_services.foot_capacity(world, plan.carrier)) - sum(
             item.quantity for item in shipments)
         needed = sum(stop.quantity for stop in pending)
-        if capacity < needed or village_economy.usable_stock(
+        if capacity < needed or (needed and village_economy.usable_stock(
                 world, source, "firewood", state.minute) - village_economy.policy_reserve(
-                    world, source, "firewood") < needed:
+                    world, source, "firewood") < needed):
             return blocked("Real unreserved fuel or carrying capacity no longer covers the route.")
         location, arrival = source, state.minute
         for stop in plan.stops:
             order = state.economy.orders.get(stop.order_id)
-            if (not order or order.status not in village_economy.COMMITTED or order.product != "firewood"
+            if (not order or order.product != "firewood"
                     or order.source != source or order.supplier != plan.carrier
-                    or order.destination != stop.destination or not village_communication.can_use_order(world, order)
+                    or order.destination != stop.destination
+                    or (stop in pending and (order.status not in village_economy.COMMITTED
+                        or not village_communication.can_use_order(world, order)))
                     or order.delivered_quantity != stop.delivered_before
                     or (stop in pending and village_economy.loadable_for_order(world, order) < stop.quantity)
                     or capacity_available(world, stop.destination) is not None
                     and capacity_available(world, stop.destination) < stop.quantity):
                 return blocked("A confirmed known fuel order or destination capacity has changed.")
             path = village.route(world, location, stop.destination, road_only=vehicle)
-            if path is None or path != stop.path:
+            if path is None or (stop in pending and path != stop.path):
                 return blocked("The saved physical route is no longer traversable.")
             arrival += 5 * (1 + len(path) + 1)
-            if arrival > order.deadline:
+            if stop in pending and arrival > order.deadline:
                 return blocked("The order will expire before physical delivery.")
             location = stop.destination
         for stop in pending:
@@ -473,17 +491,16 @@ def execute_delivery_plan(world: "World", route_id: str) -> dict[str, Any]:
                  and item.destination == stop.destination]
         if sum(item.quantity for item in cargo) != stop.quantity:
             return blocked("Route cargo no longer matches the accepted order; retain existing cargo.")
-        if (order.status not in village_economy.COMMITTED or state.minute > order.deadline
-                or not village_communication.can_use_order(world, order)
+        if ((not cargo and (order.status not in village_economy.COMMITTED
+                or state.minute > order.deadline or not village_communication.can_use_order(world, order)))
                 or order.product != "firewood" or order.source != source
                 or order.destination != stop.destination or order.supplier != plan.carrier
                 or order.delivered_quantity != stop.delivered_before):
             return blocked("The accepted order is no longer deliverable; retain the cargo.")
-        origin = source if stop is plan.stops[0] else plan.stops[plan.stops.index(stop) - 1].destination
-        route = [origin, *stop.path]
-        if world.actor.location_id not in route:
-            return blocked("The carrier left the saved route; cargo remains with the carrier.")
-        for destination in route[route.index(world.actor.location_id) + 1:]:
+        path = village.route(world, world.actor.location_id, stop.destination, road_only=vehicle)
+        if path is None:
+            return blocked("No legal passage to the destination; cargo remains with the carrier.")
+        for destination in path:
             door = next((eid for eid, entity in world.state.entities.items()
                          if entity.kind == "door" and {entity.location, entity.destination}
                          == {world.actor.location_id, destination} and (not vehicle or entity.village_road)
@@ -497,9 +514,9 @@ def execute_delivery_plan(world: "World", route_id: str) -> dict[str, Any]:
             finish_turn()
         if world.actor.location_id != stop.destination:
             return blocked("The carrier has not reached the delivery destination.")
-        if (state.minute > order.deadline or capacity_available(world, stop.destination) is not None
+        if (capacity_available(world, stop.destination) is not None
                 and capacity_available(world, stop.destination) < stop.quantity):
-            return blocked("The order expired or destination storage filled before unloading.")
+            return blocked("Destination storage filled before unloading; retain the cargo.")
         if vehicle and (not wagon.hitched or wagon.driver != plan.carrier or wagon.automatic
                         or world.state.entities["wagon"].location != world.actor.location_id
                         or world.state.entities["work-horse"].location != world.actor.location_id):
@@ -557,10 +574,11 @@ def execute_delivery_step(world: "World", route_id: str) -> tuple[str, str, str,
         delivered = order.delivered_quantity - stop.delivered_before
         if delivered == stop.quantity:
             continue
-        if (delivered != 0 or order.status not in village_economy.COMMITTED or
-                not village_communication.can_use_order(world, order) or state.minute > order.deadline):
-            return reject("An accepted, known fuel order has changed or expired.")
         cargo = [item for item in shipments if item.order_id == stop.order_id]
+        if (delivered != 0 or (not cargo and (order.status not in village_economy.COMMITTED
+                or not village_communication.can_use_order(world, order)
+                or state.minute > order.deadline))):
+            return reject("An accepted, known fuel order has changed or expired.")
         if cargo and (sum(item.quantity for item in cargo) != stop.quantity or any(
                 item.resource != "firewood" or item.destination != stop.destination for item in cargo)):
             return reject("Existing cargo does not match the saved fuel order.")
@@ -608,27 +626,24 @@ def execute_delivery_step(world: "World", route_id: str) -> tuple[str, str, str,
         plan.status = "loaded"
         return "APPLIED", "FUEL_ROUTE_LOADED", f"Loaded {stop.quantity} real firewood for {stop.destination}.", None
     stop, order, _ = pending[0]
-    origin = source if stop is plan.stops[0] else plan.stops[plan.stops.index(stop) - 1].destination
-    path = village.route(world, origin, stop.destination, road_only=vehicle)
-    if path is None or path != stop.path:
-        return reject("The saved physical route is no longer traversable.")
-    route = [origin, *path]
-    if world.actor.location_id not in route:
-        return reject("The carrier left the saved route; cargo remains with the carrier.")
+    path = village.route(world, world.actor.location_id, stop.destination, road_only=vehicle)
+    if path is None:
+        return reject(f"edge_unavailable: No legal passage from {world.actor.location_id} to {stop.destination}; cargo remains with the carrier.")
     if world.actor.location_id != stop.destination:
-        next_location = route[route.index(world.actor.location_id) + 1]
+        next_location = path[0]
         door = next((eid for eid, entity in world.state.entities.items()
                      if entity.kind == "door" and {entity.location, entity.destination}
                      == {world.actor.location_id, next_location} and (not vehicle or entity.village_road)
                      and village.route(world, world.actor.location_id, next_location,
                                        road_only=vehicle) == [next_location]), None)
         if door is None:
-            return reject("The next physical passage is closed.")
+            return reject(f"edge_unavailable: Passage {world.actor.location_id} -> {next_location} is closed; cargo remains with the carrier.")
+        origin = world.actor.location_id
         outcome = world._apply("go", {"target": door})
         if outcome[0] != "APPLIED":
             return outcome
         from npc_sim import village_fallback
-        village_fallback.record_location_transition(world, route[route.index(next_location) - 1], next_location)
+        village_fallback.record_location_transition(world, origin, next_location)
         person = state.residents[plan.carrier]
         if door not in person.known_routes:
             person.known_routes.append(door)
@@ -653,6 +668,43 @@ def execute_delivery_step(world: "World", route_id: str) -> tuple[str, str, str,
         return outcome
     sync_delivery_plans(world, plan.carrier, destination=stop.destination)
     return "APPLIED", "FUEL_ROUTE_DELIVERED", f"Delivered real firewood at {stop.destination}; actual payment settled.", None
+
+
+def respond_late_delivery(world: "World", order_id: str, accept: bool) -> tuple[str, str, str, None]:
+    """Record an explicit, local buyer decision for already-loaded overdue firewood."""
+    state = world.state.village
+    if not enabled(world) or state.economy is None:
+        return "REJECTED", "FUEL_DISABLED", "Firewood orders are not available.", None
+    if type(accept) is not bool:
+        return "REJECTED", "INVALID_RESPONSE", "Accept or reject the late delivery explicitly.", None
+    order = state.economy.orders.get(order_id)
+    if not order or order.product != "firewood" or order.buyer != world.actor_id:
+        return "REJECTED", "UNKNOWN_FUEL_ORDER", "Only the named buyer may decide on their fuel order.", None
+    if world.actor.location_id != order.destination:
+        return "REJECTED", "BUYER_NOT_AT_SITE", "Decide on late firewood at your actual destination.", None
+    if state.minute <= order.deadline or order.status == "fulfilled":
+        return "REJECTED", "NOT_LATE_DELIVERY", "Only overdue, undelivered cargo needs a buyer response.", None
+    if not (order.status in village_economy.COMMITTED or
+            order.status == "failed" and order.reason == "MISSED_DEADLINE"):
+        return "REJECTED", "ORDER_CLOSED", "This order is not awaiting overdue delivery.", None
+    carrier = state.residents[order.supplier]
+    loads = [*carrier.shipments, *(state.wagon.loads if state.wagon else [])]
+    if not any(item.order_id == order.id and item.resource == "firewood"
+               and item.destination == order.destination and item.quantity > 0 for item in loads):
+        return "REJECTED", "NO_LATE_CARGO", "No loaded fuel remains for this order.", None
+    key = f"late:{order.id}"
+    decision = "accepted" if accept else "rejected"
+    previous = state.firewood.statuses.get(key)
+    if previous:
+        if previous != decision:
+            return "REJECTED", "DECISION_FINAL", "The buyer already decided on this late shipment.", None
+        return "APPLIED", "LATE_FUEL_DECISION_EXISTS", "The buyer's late-delivery decision is unchanged.", None
+    state.firewood.statuses[key] = decision
+    village.event(world, order.buyer, "late_fuel_decision", order.id,
+                  f"Buyer {decision} overdue firewood; unpaid cargo remains physical until unload or return.",
+                  order.destination)
+    return "APPLIED", "LATE_FUEL_ACCEPTED" if accept else "LATE_FUEL_REJECTED", \
+        f"Buyer {decision} overdue firewood; cargo remains with its carrier.", None
 
 
 def sync_delivery_plans(world: "World", carrier: str, *, destination: str | None = None) -> None:

@@ -213,6 +213,16 @@ class VisitorState(EventsModel):
     timeline: list[VisitorInterval] = Field(default_factory=list)
 
 
+class ScheduledMerchantVisit(EventsModel):
+    template_id: str
+    scheduled_at: int = Field(ge=0)
+    retry_until: int = Field(ge=0)
+    status: Literal["pending", "activated", "expired"] = "pending"
+    reason: str | None = None
+    last_checked: int | None = None
+    activated_at: int | None = None
+
+
 class VillageEventsState(EventsModel):
     config: VillageEventsConfig
     revision: int = 0
@@ -223,4 +233,5 @@ class VillageEventsState(EventsModel):
     daily_targets: dict[str, int] = Field(default_factory=dict)
     last_activation: dict[str, int] = Field(default_factory=dict)
     scheduled_fired: list[str] = Field(default_factory=list)
+    scheduled_merchants: dict[str, ScheduledMerchantVisit] = Field(default_factory=dict)
     configuration_history: list[dict] = Field(default_factory=list)

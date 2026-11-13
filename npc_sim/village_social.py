@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from npc_sim import village, village_goods, village_life
 from npc_sim.village_social_models import (
     ActivityInterval, BandPlan, ChapterProgress, QuestProgress, SocialPerson, SocialPlan, SocialDiscovery,
-    VillageSocialConfig, VillageSocialState,
+    SocialActivity, VillageSocialConfig, VillageSocialState,
 )
 
 if TYPE_CHECKING:
@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 VERBS = {
     "village_leisure", "village_social_cancel", "village_band_invite",
     "village_band_respond", "village_band_attend", "village_quest",
-    "village_social_invite", "village_social_respond",
+    "village_social_invite", "village_social_respond", "village_garden_harvest",
+    "village_garden_manure",
 }
 FREE_ACTIONS = {"look", "read", "say", "village_observe", "village_wait", "village_social_cancel"}
 BOOK_STEPS = {
@@ -30,6 +31,10 @@ RECIPES = {
     "tea_blending": ({"herbs": 1}, {"tea": 1}),
     "plank_practice": ({"timber": 1}, {"planks": 1}),
     "garden_tending": ({"manure": 1}, {}),
+    "furniture": ({"timber": 1, "planks": 2}, {"furniture": 1}),
+    "tackle": ({"timber": 1, "iron": 1}, {"tackle": 1}),
+    "smoked_fish": ({"fish": 2, "logs": 1}, {"preserved-fish": 1}),
+    "herb_garden": ({"manure": 1}, {}),
 }
 
 
@@ -90,6 +95,17 @@ def validate_config(scenario) -> None:
                 raise ValueError(f"Activity supply is not real configured stock: {resource}")
         if activity.recipe:
             inputs, outputs = RECIPES[activity.recipe]
+            if activity.recipe in {"furniture", "tackle", "smoked_fish", "herb_garden"}:
+                if activity.max_participants != 1 or not activity.equipment:
+                    raise ValueError("Optional crafts require a solo worker and real tools")
+                if activity.recipe == "herb_garden" and not any(
+                    entities[eid].kind == "fixture" for eid in activity.equipment
+                ):
+                    raise ValueError("Herbal gardening requires a distinct physical plot")
+                if activity.recipe == "smoked_fish" and not any(
+                    "smoker" in eid and entities[eid].kind == "fixture" for eid in activity.equipment
+                ):
+                    raise ValueError("Fish preservation requires a built smoker")
             if activity.supplies != inputs:
                 raise ValueError("Practical activity inputs must match its finite supported material recipe")
             if any(not any(resource in stock for stock in base.stocks.values()) for resource in outputs):
@@ -367,9 +383,13 @@ def _book_guard(world, rid, activity, social, config):
     return None
 
 
-def _practical_guard(world, rid, activity):
+def _practical_guard(world, rid, activity, *, completing=False):
     base, state, _, social = _context(world)
     person = social.residents[rid]
+    if activity.recipe in {"furniture", "tackle", "smoked_fish", "herb_garden"} or activity.kind == "catch_release":
+        from npc_sim import village_extensions
+        if not getattr(village_extensions.policy(world), "purposeful_downtime", False):
+            return "OPTIONAL_GOODS_DISABLED", "Enable purposeful downtime for these opt-in crafts and leisure."
     required_skill = {
         "instrument_repair": "smithing", "fishing_survey": "fishing",
         "recipe_test": "baking",
@@ -380,13 +400,49 @@ def _practical_guard(world, rid, activity):
         return "CAPABILITY_REQUIRED", "Real plank practice requires actual carpentry capability."
     if activity.recipe == "garden_tending" and "farming" not in base.residents[rid].skills:
         return "CAPABILITY_REQUIRED", "Real garden care requires actual farming capability."
+    capabilities = {
+        "furniture": "carpentry", "tackle": "fishing", "smoked_fish": "fishing",
+        "herb_garden": "herbalism",
+    }
+    if activity.recipe in capabilities and capabilities[activity.recipe] not in base.residents[rid].skills:
+        return "CAPABILITY_REQUIRED", "This craft requires the resident's actual capability."
+    if activity.recipe == "furniture" and rid != base.carpenter:
+        return "CAPABILITY_REQUIRED", "Only the authorized joiner may use the workshop's furniture materials."
+    if activity.recipe == "herb_garden" and (rid != "iona" or "gardening" not in base.residents[rid].skills
+                                            or "gardening" not in world.state.actors[rid].body.capabilities):
+        return "CAPABILITY_REQUIRED", "This herbal plot requires its gardener's explicit aptitude."
+    if activity.recipe in {"tackle", "smoked_fish"} and rid != "finn":
+        return "CAPABILITY_REQUIRED", "Only the authorized fisher may use these fishing supplies."
+    if activity.kind == "catch_release":
+        if "fishing" not in base.residents[rid].skills:
+            return "CAPABILITY_REQUIRED", "Recreational fishing requires an actual angler."
+        if state.minute % 1440 < 540 or state.minute % 1440 + activity.duration > 1080:
+            return "DAYLIGHT_REQUIRED", "Fish only during the daytime."
+        if person.practice_days.get(f"catch_release:{activity.location}") == state.minute // 1440:
+            return "ALREADY_FISHED", "Today's catch-and-release has already been recorded."
+    if activity.recipe in {"herb_garden", "smoked_fish"} and (
+        state.minute % 1440 < 540 or state.minute % 1440 + activity.duration > 1080
+    ):
+        return "DAYLIGHT_REQUIRED", "This activity must finish in daylight."
+    if activity.recipe == "smoked_fish" and not completing:
+        lots = state.stock_lots.get(activity.location, {}).get("fish", [])
+        fish = state.stocks.get(activity.location, {}).get("fish", 0)
+        if fish < 2 or (base.expanded_rules and (
+            sum(lot.quantity for lot in lots) != fish or
+            sum(lot.quantity for lot in lots if lot.expires_at is None or lot.expires_at > state.minute) < 2
+        )):
+            return "NO_FISH", "Only real fresh fish can be preserved."
+    if not completing and activity.recipe in {"furniture", "tackle"} and state.stocks.get(activity.location, {}).get(
+        next(iter(RECIPES[activity.recipe][1])), 0
+    ) >= 2:
+        return "STOCK_CAP", "Finish selling existing speculative crafts before making more."
     if activity.repair_target:
         target = world.state.entities[activity.repair_target]
         if target.location not in {activity.location, rid} or target.hidden:
             return "NO_REPAIR_TARGET", "Bring the actual damaged instrument to the real repair site."
         if not target.broken:
             return "ALREADY_REPAIRED", "The instrument is already usable; no duplicate repair credit."
-    if activity.recipe == "garden_tending" and person.practice_days.get(activity.location) == state.minute // 1440:
+    if activity.recipe in {"garden_tending", "herb_garden"} and person.practice_days.get(activity.location) == state.minute // 1440:
         return "ALREADY_TENDED", "Today's real garden care is already recorded."
     if activity.kind == "fishing_survey" and activity.discovery in person.discoveries:
         return "ALREADY_OBSERVED", "This actual fishing-site discovery is already recorded."
@@ -409,7 +465,9 @@ def _start(world, aid, kind, location, duration, participants, supplies=None,
     _, state, _, social = _context(world)
     consumed = {resource: amount * len(participants) for resource, amount in (supplies or {}).items()}
     for resource, amount in consumed.items():
-        village_goods.take(world, location, resource, amount)
+        fresh_until = (state.minute + duration if resource == "fish" and aid in social.config.activities
+                       and social.config.activities[aid].recipe == "smoked_fish" else None)
+        village_goods.take(world, location, resource, amount, required_fresh_until=fresh_until)
     interval = ActivityInterval(
         id=_id(social, "social"), activity=aid, kind=kind, location=location,
         participants=participants, starts_at=state.minute, ends_at=state.minute + duration,
@@ -500,9 +558,10 @@ def _finish(world, interval, reason=None):
         if activity.recipe:
             _, outputs = RECIPES[activity.recipe]
             for resource, amount in outputs.items():
-                village_goods.put(world, interval.location, resource, amount)
+                village_goods.put(world, interval.location, resource, amount,
+                                  ingredients=list(interval.consumed))
             interval.produced = outputs.copy()
-            if activity.recipe == "garden_tending":
+            if activity.recipe in {"garden_tending", "herb_garden"}:
                 person = social.residents[interval.participants[0]]
                 person.garden_care[interval.location] = person.garden_care.get(interval.location, 0) + 1
                 person.practice_days[interval.location] = interval.starts_at // 1440
@@ -514,6 +573,12 @@ def _finish(world, interval, reason=None):
             target.health = target.max_health
             _event(world, interval.participants[0], "instrument_repaired", activity.repair_target,
                    f"Restored the actual instrument using {interval.consumed} and real repair tools.", interval.location)
+        if activity.recipe == "herb_garden":
+            social.garden_yields[interval.location] = max(
+                social.garden_yields.get(interval.location, 0), interval.starts_at + 1440)
+        if activity.kind == "catch_release":
+            social.residents[interval.participants[0]].practice_days[
+                f"catch_release:{interval.location}"] = interval.starts_at // 1440
         if activity.kind == "fishing_survey":
             person = social.residents[interval.participants[0]]
             person.discoveries[activity.discovery] = SocialDiscovery(
@@ -626,6 +691,10 @@ def _supplies_guard(world, activity, participants):
             available -= village_economy.protected_quantity(world, activity.location, resource)
         if available < each * len(participants):
             return "NO_SUPPLIES", "Required real local supplies are unavailable or reserved for actual commitments."
+        if activity.recipe == "smoked_fish" and resource == "fish":
+            from npc_sim import village_economy
+            if village_economy.usable_stock(world, activity.location, resource, state.minute + activity.duration) < each:
+                return "STALE_FISH", "Fresh fish must last through the smoking interval."
     return None
 
 
@@ -704,9 +773,15 @@ def advance(world: "World") -> None:
             problem = _book_guard(world, interval.participants[0], activity, social, config)
             if problem:
                 reason = problem[1]
-            problem = _practical_guard(world, interval.participants[0], activity)
+            problem = _practical_guard(world, interval.participants[0], activity, completing=True)
             if problem:
                 reason = problem[1]
+        if reason is None and interval.activity in config.activities:
+            activity = config.activities[interval.activity]
+            if activity.recipe == "smoked_fish":
+                lots = state.stock_lots.get(interval.location, {}).get("preserved-fish", [])
+                if sum(lot.quantity for lot in lots) != state.stocks.get(interval.location, {}).get("preserved-fish", 0):
+                    reason = "Preserved fish stock ledger does not match the real stock."
         if reason or state.minute >= interval.ends_at:
             _finish(world, interval, reason)
     for plan in social.band_plans.values():
@@ -784,12 +859,75 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         "village_quest": {"quest", "response", "until"},
         "village_social_invite": {"activity", "companions", "starts_at"},
         "village_social_respond": {"plan", "response"},
+        "village_garden_harvest": set(),
+        "village_garden_manure": set(),
     }[action]
     if set(args) != expected:
         return reject("BAD_ARGUMENTS", "Use exactly the advertised action arguments.")
     blocker = action_blocker(world, action)
     if blocker:
         return reject(*blocker)
+    if action == "village_garden_manure":
+        from npc_sim import village_economy, village_extensions
+        if (not getattr(village_extensions.policy(world), "purposeful_downtime", False)
+                or "herb-garden-care" not in config.activities or rid != "iona"):
+            return reject("GARDEN_UNAVAILABLE", "The herb garden must be opted in for its gardener.")
+        if _active(social, rid):
+            return reject("SOCIAL_COMMITTED", "Finish the current activity first.")
+        if social.manure_cargo.get(rid):
+            if world.actor.location_id != "cottages":
+                return reject("NOT_PRESENT", "Carry the real manure to the herbal plot.")
+            problem = _guard(world, rid, "cottages", state.minute + 5)
+            if problem:
+                return reject(*problem)
+            from npc_sim.models import VillageStockLot
+            lots = [VillageStockLot.model_validate(lot) for lot in social.manure_cargo[rid]]
+            village_goods.put(world, "cottages", "manure", 1, lots, kind="delivered")
+            del social.manure_cargo[rid]
+            state.residents[rid].available_at = state.minute + 5
+            return done("MANURE_DELIVERED", "Deposited the carried farm manure at the herbal plot.")
+        if world.actor.location_id != "farm":
+            return reject("NOT_PRESENT", "Visit the farm after the hens have been cared for.")
+        from npc_sim import village_livestock
+        livestock = state.livestock
+        if (not livestock or not livestock.hens.cleaned or livestock.hens.day != state.minute // 1440
+                or not any(chunk.operation == "hens" and chunk.status == "completed"
+                           and chunk.start // 1440 == state.minute // 1440
+                           for chunk in livestock.chunks)):
+            return reject("HEN_CARE_REQUIRED", "Only actual cared-for hens produce this garden manure.")
+        if state.stocks.get("farm", {}).get("manure", 0) - village_economy.protected_quantity(
+            world, "farm", "manure") < 1:
+            return reject("NO_SURPLUS", "Farm manure is absent or reserved for another commitment.")
+        if not village.route(world, "farm", "cottages"):
+            return reject("NO_ROUTE", "The plot must be reachable by an actual passable route.")
+        problem = _guard(world, rid, "farm", state.minute + 5)
+        if problem:
+            return reject(*problem)
+        if world.actor.body.capacity < 1:
+            return reject("NO_CAPACITY", "Carrying this manure requires available capacity.")
+        from npc_sim.models import VillageStockLot
+        lots = village_goods.take(world, "farm", "manure", 1, kind="loaded")
+        social.manure_cargo[rid] = [lot.model_dump() for lot in (lots or [VillageStockLot(quantity=1, produced_at=state.minute)])]
+        state.residents[rid].available_at = state.minute + 5
+        return done("MANURE_COLLECTED", "Collected one unreserved, cared-for hen manure lot for the garden.")
+    if action == "village_garden_harvest":
+        from npc_sim import village_extensions
+        if (not getattr(village_extensions.policy(world), "purposeful_downtime", False)
+                or "herb-garden-care" not in config.activities or rid != "iona"
+                or world.actor.location_id != "cottages"):
+            return reject("GARDEN_UNAVAILABLE", "The authorized gardener must be at the opted-in plot.")
+        ready = social.garden_yields.get("cottages")
+        if ready is None or state.minute < ready:
+            return reject("GARDEN_NOT_READY", "Tending has no immediate yield; wait for growth.")
+        problem = _guard(world, rid, "cottages", state.minute + 5)
+        if problem:
+            return reject(*problem)
+        if not _equipment_access(world, rid, "herb-garden-plot", "cottages", config):
+            return reject("NO_PLOT", "The physical herb garden is inaccessible.")
+        village_goods.put(world, "cottages", "herbs", 1, ingredients=["herb-garden-plot"])
+        del social.garden_yields["cottages"]
+        state.residents[rid].available_at = state.minute + 5
+        return done("GARDEN_HARVESTED", "Collected one delayed, finite herb yield from the tended plot.")
     if action == "village_social_cancel":
         interval = _active(social, rid)
         if interval is None:
@@ -1048,6 +1186,11 @@ def actions(world: "World") -> list[dict[str, Any]]:
     if _active(social, rid):
         add("village_social_cancel", "Explicitly interrupt your optional activity; no completion credit.", {})
         return result
+    if rid == "iona" and "herb-garden-care" in config.activities:
+        add("village_garden_manure", "Carry one actual, unreserved hen manure lot from farm to the plot.", {})
+    if (rid == "iona" and "herb-garden-care" in config.activities
+            and social.garden_yields.get("cottages", state.minute + 1) <= state.minute):
+        add("village_garden_harvest", "Harvest one delayed, real herb from the tended plot.", {})
     if config.activities:
         add("village_leisure", "Commit a real timed solo activity, protecting supplies, meals and the route home.",
             {"activity": enum(config.activities), "companions": {"type": "array", "maxItems": 0, "items": {"type": "string"}}})
@@ -1257,6 +1400,61 @@ def example_config() -> dict[str, Any]:
         },
     })
     return example
+
+
+def install_optional_goods(scenario) -> None:
+    """Opt in a new scenario to physical hobby crafts; never mutate saved worlds."""
+    from npc_sim.models import Entity
+
+    base = scenario.village
+    if base is None or base.social is None:
+        raise ValueError("Optional crafts require a configured social village")
+    if "herb-garden-plot" in scenario.entities:
+        raise ValueError("Optional craft fixtures are already installed")
+    gardener = base.residents.get("iona")
+    agent = next((person for person in scenario.agents if person.id == "iona"), None)
+    if gardener is None or agent is None or "herbalism" not in gardener.skills:
+        raise ValueError("Optional herbal gardening requires Iona's existing herbalism aptitude")
+    if "gardening" not in gardener.skills:
+        gardener.skills.append("gardening")
+    if "gardening" not in agent.body.capabilities:
+        agent.body.capabilities.append("gardening")
+    fixtures = {
+        "herb-garden-plot": ("Herbal garden plot", "cottages"),
+        "fish-smoker": ("Fish smoker", "riverbank"),
+    }
+    for eid, (name, location) in fixtures.items():
+        scenario.entities[eid] = Entity(name=name, kind="fixture", location=location,
+                                        description=f"A physical {name.lower()} for optional village work.")
+    base.prices.update({"furniture": 8, "tackle": 5, "preserved-fish": 6})
+    base.spoil_after["preserved-fish"] = 2880
+    for site, resources in {
+        "workshop": ("furniture",), "riverbank": ("timber", "iron", "logs", "tackle", "preserved-fish"),
+        "cottages": ("manure",),
+    }.items():
+        for resource in resources:
+            base.stocks.setdefault(site, {}).setdefault(resource, 0)
+    activities = {
+        "furniture-making": {"kind": "crafting", "location": "workshop", "duration": 45,
+                             "recipe": "furniture", "supplies": {"timber": 1, "planks": 2},
+                             "equipment": ["workbench", base.hammer], "interests": ["woodcraft"]},
+        "fly-tying": {"kind": "crafting", "location": "riverbank", "duration": 30,
+                      "recipe": "tackle", "supplies": {"timber": 1, "iron": 1},
+                      "equipment": ["fishing-net", "fishing-rod"], "interests": ["rivers"]},
+        "catch-and-release": {"kind": "catch_release", "location": "riverbank", "duration": 20,
+                              "equipment": ["fishing-rod"], "interests": ["rivers"], "skill": "fishing"},
+        "fish-smoking": {"kind": "crafting", "location": "riverbank", "duration": 45,
+                         "recipe": "smoked_fish", "supplies": {"fish": 2, "logs": 1},
+                         "equipment": ["fish-smoker"], "interests": ["rivers"]},
+        "herb-garden-care": {"kind": "gardening", "location": "cottages", "duration": 25,
+                             "recipe": "herb_garden", "supplies": {"manure": 1},
+                             "equipment": ["herb-garden-plot"], "interests": ["plants"], "skill": "gardening"},
+    }
+    for aid, activity in activities.items():
+        if aid in base.social.activities:
+            raise ValueError(f"Activity already configured: {aid}")
+        base.social.activities[aid] = SocialActivity.model_validate(activity)
+    validate_config(scenario)
 
 
 def example_fixtures() -> dict[str, dict[str, Any]]:

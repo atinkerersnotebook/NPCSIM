@@ -73,6 +73,10 @@ def validate_config(scenario: Scenario) -> None:
             resource not in config.prices or amount < 0
             for stock in config.stocks.values() for resource, amount in stock.items()):
         raise ValueError("Stocks require real locations, priced resources and nonnegative quantities")
+    if config.firewood and any(
+            config.stocks[site].get("firewood", 0) > capacity
+            for site, capacity in config.firewood.site_capacities.items() if site in config.stocks):
+        raise ValueError("Opening firewood stock exceeds its physical site capacity")
     if any(eid not in entities or owner not in residents for eid, owner in config.owners.items()):
         raise ValueError("Object ownership must reference existing objects and residents")
     for rid, resident in config.residents.items():
@@ -155,6 +159,7 @@ def initial_state(scenario: Scenario) -> VillageState:
             else config.start_minute + (resident.job.interval if resident.job else 30))
             for rid, resident in config.residents.items()},
         stocks={location: stock.copy() for location, stock in config.stocks.items()},
+        initial_stock_seed_id=config.initial_stock_seed_id,
         coins={**config.coins, "visitor": 20, **({"iron-trader": 0} if config.expanded_rules else {})},
         roster={rid: resident.model_copy(deep=True) for rid, resident in config.residents.items()}
         if config.ai_controlled else {},
@@ -162,7 +167,9 @@ def initial_state(scenario: Scenario) -> VillageState:
         stock_lots={location: {resource: [VillageStockLot(
             quantity=amount, produced_at=config.start_minute,
             expires_at=config.start_minute + config.spoil_after[resource]
-            if resource in config.spoil_after else None)] if amount else []
+            if resource in config.spoil_after else None,
+            origin="initial_village_stock" if config.initial_stock_seed_id else None,
+            seed_event_id=config.initial_stock_seed_id)] if amount else []
             for resource, amount in stock.items()} for location, stock in config.stocks.items()}
         if config.expanded_rules else {},
         deadlines={goal: VillageDeadline(due=minute) for goal, minute in config.goal_deadlines.items()},

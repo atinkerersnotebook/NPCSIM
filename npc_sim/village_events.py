@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from npc_sim import village, village_economy, village_goods
 from npc_sim.models import VillageBelief, VillageStockLot
 from npc_sim.village_events_models import (
-    EventTemplate, IncidentState, MerchantProfile, TradeRecord, VillageEventsConfig, VillageEventsState,
+    EventTemplate, IncidentState, MerchantProfile, ScheduledMerchantVisit, TradeRecord, VillageEventsConfig, VillageEventsState,
     VisitorInterval, VisitorLot, VisitorPlan, VisitorState,
 )
 
@@ -78,6 +78,10 @@ def _validate(scenario: "Scenario", config: VillageEventsConfig) -> None:
                 if (set(profile.stock) | set(profile.demand) | set(profile.buy_prices)
                         | set(profile.sell_prices)) - resources:
                     raise ValueError(f"{item.id}: unknown merchant product")
+        if item.kind == "merchant" and item.scheduled_at is not None and (
+            item.scheduled_at % 1440 >= min(item.window_end, 1080)
+        ):
+            raise ValueError(f"{item.id}: scheduled merchant starts after its safe window")
         if item.kind == "equipment" and scenario.entities[item.equipment].kind == "location":
             raise ValueError("An equipment delay must target equipment, not a location")
         if item.demand and not item.visitor:
@@ -146,31 +150,36 @@ def _wake_waiters(world: "World", location: str) -> None:
         person.available_at = min(person.available_at, state.minute)
 
 
-def _safe(world: "World", item: EventTemplate) -> bool:
+def _safety_blocker(world: "World", item: EventTemplate) -> str | None:
     base, state = village.context(world)
     minute = state.minute
     if not item.window_start <= minute % 1440 < min(item.window_end, 1080):
-        return False
+        return "outside_daytime_window"
     affected = item.residents or village.local_residents(world, item.location)
     affected = affected[:3]
     incidents = _context(world)
     for rid in affected:
         person, resident = state.residents[rid], base.residents[rid]
         if (minute % 1440 < max(540, resident.wake_minute)
-                or minute % 1440 + item.duration >= min(1080, resident.bed_minute - 30)
-                or person.busy_until > minute
+                or minute % 1440 + item.duration >= min(1080, resident.bed_minute - 30)):
+            return "resident_outside_work_window"
+        if (person.busy_until > minute
                 or (person.available_at > minute and not _event_waiting(person))
                 or (person.life and (person.life.sleeping or person.life.work or person.life.hungry))):
-            return False
+            return "resident_unavailable"
         if base.expanded_rules and rid == base.helper and state.horse_fed_day != minute // 1440:
-            return False
+            return "horse_care_pending"
         if incidents and any(old.status == "active" and (
             rid in old.template.residents or old.template.location == item.location)
                 for old in incidents.instances.values()):
-            return False
+            return "incident_conflict"
     if item.visitor and village.route(world, item.visitor.entry, item.visitor.destination) is None:
-        return False
-    return True
+        return "visitor_route_blocked"
+    return None
+
+
+def _safe(world: "World", item: EventTemplate) -> bool:
+    return _safety_blocker(world, item) is None
 
 
 def _activate(world: "World", item: EventTemplate) -> None:
@@ -189,7 +198,8 @@ def _activate(world: "World", item: EventTemplate) -> None:
     incidents.instances[iid] = instance
     incidents.last_activation[item.id] = state.minute
     day = str(state.minute // 1440)
-    incidents.daily_counts[day] = incidents.daily_counts.get(day, 0) + 1
+    if item.scheduled_at is None or item.kind != "merchant":
+        incidents.daily_counts[day] = incidents.daily_counts.get(day, 0) + 1
     if item.scheduled_at is not None:
         incidents.scheduled_fired.append(item.id)
     _log(world, instance, "incident", "event_activated", item.title)
@@ -337,12 +347,41 @@ def advance(world: "World") -> None:
     if key not in incidents.daily_targets:
         incidents.daily_targets[key] = rng.randint(config.daily_min, config.daily_max)
     active = sum(old.status == "active" for old in incidents.instances.values())
-    if active >= config.max_active or incidents.daily_counts.get(key, 0) >= config.daily_max:
+    for item in config.templates:
+        if not item.enabled or item.kind != "merchant" or item.scheduled_at is None:
+            continue
+        visit = incidents.scheduled_merchants.setdefault(item.id, ScheduledMerchantVisit(
+            template_id=item.id, scheduled_at=item.scheduled_at,
+            retry_until=item.scheduled_at // 1440 * 1440 + min(item.window_end, 1080)))
+        if visit.status != "pending":
+            continue
+        if item.id in incidents.scheduled_fired:
+            visit.status, visit.activated_at, visit.reason = "activated", incidents.last_activation.get(item.id), None
+            continue
+        if state.minute < item.scheduled_at:
+            continue
+        if state.minute >= visit.retry_until:
+            visit.status = "expired"
+            visit.reason = f"missed_visit: {visit.reason or 'daytime_window_elapsed'}"
+            visit.last_checked = state.minute
+            village.event(world, "incident", "event_visit_missed", item.id, visit.reason, item.location)
+            continue
+        blocker = ("active_event_capacity" if active >= config.max_active else
+                   "cooldown" if state.minute - incidents.last_activation.get(item.id, -10**9) < item.cooldown
+                   else _safety_blocker(world, item))
+        if blocker:
+            visit.reason, visit.last_checked = blocker, state.minute
+            continue
+        _activate(world, item)
+        visit.status, visit.reason, visit.activated_at, visit.last_checked = "activated", None, state.minute, state.minute
+        active += 1
+    if active >= config.max_active:
         return
     candidates = config.templates.copy()
     rng.shuffle(candidates)
     for item in candidates:
-        if not item.enabled or state.minute - incidents.last_activation.get(item.id, -10**9) < item.cooldown:
+        if (not item.enabled or (item.kind == "merchant" and item.scheduled_at is not None)
+                or state.minute - incidents.last_activation.get(item.id, -10**9) < item.cooldown):
             continue
         scheduled = item.scheduled_at is not None and item.id not in incidents.scheduled_fired and state.minute >= item.scheduled_at
         conditional = bool(item.condition and state.stocks.get(item.condition.location, {}).get(
@@ -351,7 +390,18 @@ def advance(world: "World") -> None:
                       and incidents.daily_counts.get(key, 0) < incidents.daily_targets[key]
                       and state.minute % 1440 >= item.window_start + rng.randrange(
                           max(1, item.window_end - item.window_start - item.duration)))
-        if (scheduled or conditional or random_due) and _safe(world, item):
+        if not (scheduled or conditional or random_due):
+            continue
+        if scheduled and state.minute >= item.scheduled_at // 1440 * 1440 + item.window_end:
+            if item.id not in incidents.scheduled_fired:
+                incidents.scheduled_fired.append(item.id)
+                village.event(world, "incident", "event_visit_missed", item.id,
+                              "Scheduled visit missed its daytime window; safety or capacity prevented arrival.",
+                              item.location)
+            continue
+        if not scheduled and incidents.daily_counts.get(key, 0) >= config.daily_max:
+            continue
+        if _safe(world, item):
             _activate(world, item)
             break
 
@@ -434,12 +484,28 @@ def monitor(world: "World") -> dict[str, Any]:
             "activities": [{"actor": visitor.id, **interval.model_dump(),
                             "status": "completed" if interval.end <= world.state.village.minute else "active"}
                            for interval in visitor.timeline],
-        } for visitor in incidents.visitors.values()],
-        "incidents": [{
+        } for visitor in incidents.visitors.values()] + ([{
+            "id": "iron-trader", "name": "Iron trader", "location": (
+                world.state.entities["iron-trader"].location or world.state.village.trader_activities[0].location),
+            "arrival": world.state.village.trader_activities[0].start,
+            "departure": (world.state.village.trader_activities[-1].end
+                          if world.state.entities["iron-trader"].location is None else None),
+            "status": ("departed" if world.state.entities["iron-trader"].location is None else
+                       "arriving" if world.state.village.trader_day < world.state.village.trader_activities[0].start // 1440
+                       else "present"),
+            "activities": [activity.model_dump() for activity in world.state.village.trader_activities],
+        }] if world.state.village.trader_day >= 0 and world.state.village.trader_activities
+           and "iron-trader" in world.state.entities else []),
+        "incidents": ([{
             "id": instance.id, "title": instance.template.title, "location": instance.template.location,
             "start": instance.activated_at, "end": instance.resolved_at or instance.expires_at,
             "status": instance.status,
-        } for instance in incidents.instances.values()],
+        } for instance in incidents.instances.values()] + [{
+            "id": f"scheduled:{item.id}", "title": item.title, "location": item.location,
+            "start": visit.scheduled_at, "end": visit.retry_until,
+            "status": (f"{visit.status}: {visit.reason}" if visit.reason else visit.status),
+        } for item in incidents.config.templates if (visit := incidents.scheduled_merchants.get(item.id))
+           and visit.status != "activated"]),
     }
 
 
@@ -493,6 +559,25 @@ def recommended_config(scenario: "Scenario", *, initial_example: bool = False) -
     config = VillageEventsConfig(seed=17, daily_min=0, daily_max=2, max_active=2, templates=templates)
     _validate(scenario, config)
     return config.model_dump()
+
+
+def offer_optional_goods(config: dict[str, Any], *, scheduled_at: int | None = None) -> dict[str, Any]:
+    """Return a new event configuration with explicit finite offers for opted-in crafts."""
+    parsed = VillageEventsConfig.model_validate(config)
+    merchant = next((item for item in parsed.templates if item.id == "visiting-merchant"), None)
+    if merchant is None or merchant.visitor is None or merchant.visitor.merchant is None:
+        raise ValueError("An existing visiting merchant profile is required")
+    offer = merchant.model_copy(deep=True)
+    profile = offer.visitor.merchant
+    profile.buy_prices.update({"furniture": 8, "tackle": 5, "preserved-fish": 6})
+    profile.demand.update({"furniture": 2, "tackle": 2, "preserved-fish": 2})
+    if scheduled_at is not None:
+        if scheduled_at < 0 or scheduled_at % 5:
+            raise ValueError("Choose a nonnegative five-minute scheduled arrival")
+        offer.random = False
+        offer.scheduled_at = scheduled_at
+    parsed.templates = [offer if item.id == offer.id else item for item in parsed.templates]
+    return parsed.model_dump()
 
 
 def actions(world: "World") -> list[dict[str, Any]]:

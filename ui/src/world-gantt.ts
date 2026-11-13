@@ -209,7 +209,8 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       ...(state.world?.village?.dashboard?.activities ?? []).filter(item => item.actor === row.id),
       ...(visitor?.activities ?? [])
     ];
-    if (visitor) row.positions.push({ at: visitor.arrival, order: -1, location: visitor.location });
+    if (visitor) row.positions.push({ at: visitor.arrival, order: -1,
+      location: visitor.activities[0]?.location ?? visitor.location });
     for (const activity of activityHistory) {
       if (activity.start > now) continue;
       const end = Math.min(now, activity.end, visitor?.departure ?? now);
@@ -221,7 +222,8 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       });
       row.positions.push({ at: activity.start, order: activity.start, location: activity.location });
     }
-    if (row.current && row.locationId) row.positions.push({
+    if (row.current && row.locationId && !(visitor?.activities.some(activity =>
+      activity.start <= now && now < activity.end && /travel/i.test(activity.label)))) row.positions.push({
       at: now, order: Number.MAX_SAFE_INTEGER, location: row.locationId
     });
     row.positions.sort((a, b) => a.at - b.at || a.order - b.order);
@@ -251,6 +253,16 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       start: routeStart, end: now, location: "", kind: "route",
       label: "Wagon route", detail: "Automatic wagon route is active."
     });
+    const recordedStarts = row.spans.filter(span => !["route", "sleep", "wait"].includes(span.kind))
+      .map(span => span.start).sort((a, b) => a - b);
+    const latestWaitAt = new Map<number, GanttSpan>();
+    for (const wait of row.spans.filter(span => span.kind === "wait")) latestWaitAt.set(wait.start, wait);
+    row.spans = row.spans.filter(span => span.kind !== "wait" || latestWaitAt.get(span.start) === span);
+    for (const wait of latestWaitAt.values()) {
+      const next = recordedStarts.find(start => start >= wait.start && start < wait.end);
+      if (next !== undefined) wait.end = next;
+    }
+    row.spans = row.spans.filter(span => span.kind !== "wait" || span.end > span.start);
     const merged: GanttSpan[] = [];
     for (const item of row.spans.sort((a, b) => a.start - b.start)) {
       const previous = merged.at(-1);

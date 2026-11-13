@@ -6,16 +6,28 @@ from npc_sim.models import Entity, Scenario, VillageEconomyConfig, VillageEvents
 from npc_sim.storage import read_json, write_json
 
 
-def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = False, firewood: bool = False) -> Scenario:
+def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = False, firewood: bool = False,
+                   purposeful_downtime: bool = False) -> Scenario:
     scenario = base.model_copy(deep=True)
     if scenario.village is None or not scenario.village.expanded_rules:
         raise ValueError("The living village requires an expanded timed village")
     scenario.id = "millhaven-living"
     scenario.title = "Millhaven Living - Work, Friends and Visitors"
     config = scenario.village
+    for rid, resident in config.residents.items():
+        wake = 330 if rid == "elsie" else 420 if resident.wake_minute == 480 else resident.wake_minute
+        if wake != resident.wake_minute:
+            for entry in resident.schedule:
+                if entry.minute == resident.wake_minute:
+                    entry.minute = wake
+            resident.wake_minute = wake
+    for agent in scenario.agents:
+        if agent.id == "elsie":
+            agent.role = agent.role.replace("wake at 06:00", "wake at 05:30")
     config.breakfast = True
     config.event_driven_waits = True
-    config.anti_idle = anti_idle
+    config.anti_idle = anti_idle or purposeful_downtime
+    config.purposeful_downtime = purposeful_downtime
     config.require_tea_use = False
     config.require_manure_use = False
     config.demand_led_completion = True
@@ -36,6 +48,22 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
     village_communication.install_scenario(scenario)
     if firewood:
         village_firewood.install_scenario(scenario)
+        config.firewood.site_capacities[config.residents[config.firewood.household_buyer].work] = 24
+        opening = {
+            "tavern": {"firewood": 12}, "bakery": {"firewood": 10, "flour": 8},
+            "forge": {"firewood": 10}, "cottages": {"firewood": 24},
+            "workshop": {"timber": 6}, "watermill": {"grain": 8},
+            "farm": {"hay": 8}, "stable": {"hay": 6},
+        }
+        for site, goods in opening.items():
+            config.stocks[site].update(goods)
+        config.initial_stock_seed_id = "millhaven-living:initial-village-stock:v1"
+    if purposeful_downtime:
+        village_social.install_optional_goods(scenario)
+        merchant = next(item for item in config.events.templates if item.id == "visiting-merchant")
+        scheduled = config.start_minute // 1440 * 1440 + merchant.window_start
+        config.events = VillageEventsConfig.model_validate(
+            village_events.offer_optional_goods(config.events.model_dump(), scheduled_at=scheduled))
     scenario.objective = (
         "Restore the well, mill and working wagon using the real crew, tools and supplies. "
         "Meet accepted orders and maintain configured reserves without unnecessary production. "
@@ -109,11 +137,13 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=root / "data" / "scenarios" / "millhaven-living.json")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--anti-idle", action="store_true", help="Enable Phase 1 fallback planning and anti-idle guards.")
+    parser.add_argument("--purposeful-downtime", action="store_true", help="Opt in purposeful planning, optional crafts and a scheduled merchant.")
     parser.add_argument("--firewood", action="store_true", help="Require real firewood for shared cottage fires, ovens and forge work.")
     args = parser.parse_args()
     if args.output.exists() and not args.force:
         parser.error("Output already exists; use --force only to regenerate this scenario")
-    scenario = build_scenario(Scenario.model_validate(read_json(args.base)), anti_idle=args.anti_idle, firewood=args.firewood)
+    scenario = build_scenario(Scenario.model_validate(read_json(args.base)), anti_idle=args.anti_idle,
+                              firewood=args.firewood, purposeful_downtime=args.purposeful_downtime)
     write_json(args.output, scenario.model_dump(mode="json"))
     print(f"Generated {scenario.id}: {args.output}")
 

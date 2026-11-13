@@ -216,7 +216,7 @@ def record_action(world: "World", action: str, args: dict[str, Any]) -> None:
             world.actor_id, VillageTimeUse(since=state.minute // 1440 * 1440))
         daily.successful_actions += 1
         if action not in {"look", "read", "say", "go", "village_observe", "village_wait",
-                          "village_wait_event", "village_sleep", "village_eat", "village_drink_tea",
+                          "village_wait_event", "wait_until_next_relevant_event", "village_sleep", "village_eat", "village_drink_tea",
                           "village_check_messages", "village_notice_read", "village_inbox_read"}:
             usage.useful_actions += 1
             daily.useful_actions += 1
@@ -228,7 +228,7 @@ def record_action(world: "World", action: str, args: dict[str, Any]) -> None:
         village_research.record_action(world, action, args)
     wake_local_waiters(world)
     from npc_sim import village_fallback
-    if action == "village_wait_event" and village_fallback.enabled(world):
+    if action in {"village_wait_event", "wait_until_next_relevant_event"} and village_fallback.enabled(world):
         wait = state.residents[world.actor_id].fallback.wait
         if wait is not None:
             wait.context_revision = village_fallback.context_revision(world)
@@ -260,7 +260,9 @@ def configure(world: "World", request_id: str, revision: str, patch: dict[str, A
                 if value is not None:
                     module.configure(world, value.model_dump(mode="json"))
             if parsed.day_policy is not None:
-                if parsed.day_policy.anti_idle and not (
+                if parsed.day_policy.purposeful_downtime and not parsed.day_policy.anti_idle:
+                    raise ValueError("Purposeful downtime requires anti-idle planning")
+                if (parsed.day_policy.anti_idle or parsed.day_policy.purposeful_downtime) and not (
                         world.scenario.village.ai_controlled and world.scenario.village.time_based_turns
                         and world.scenario.village.daily_life):
                     raise ValueError("Anti-idle planning requires an AI-controlled timed daily-life village")

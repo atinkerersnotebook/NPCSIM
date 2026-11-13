@@ -5,6 +5,7 @@ import pytest
 from npc_sim import village, village_economy, village_extensions, village_fallback, village_goods, village_life, village_turns
 from npc_sim.contracts import observation
 from npc_sim.models import VillageDayPolicy, VillageEconomyConfig
+from npc_sim.village_communication_models import NoticeTerms, NoticeVersion
 from npc_sim.world import World
 from test_village_expanded import scenario
 from test_world import act
@@ -118,6 +119,17 @@ def test_resolved_breakfast_cutoff_does_not_prevent_legitimate_waiting(tmp_path)
     assert act(world, "village_eat")["code"] == "MEAL_MISSED"
     village.advance(world, 90)
     assert act(world, "village_wait_event")["code"] == "EVENT_WAIT_STARTED"
+
+
+def test_event_wait_intent_skips_optional_leisure_and_stops_before_breakfast(tmp_path):
+    world = make_world(tmp_path, minute=3330, breakfast=True)
+    world.actor.location_id = "tavern"
+    person = world.state.village.residents["rowan"]
+    assert any(action["id"] == "wait_until_next_relevant_event" for action in world.actions())
+    result = act(world, "wait_until_next_relevant_event")
+    assert result["code"] == "EVENT_WAIT_STARTED", result
+    assert person.available_at <= min(village_fallback._obligation_limits(world))
+    assert person.fallback.wait is not None
 
 
 def test_pending_local_maintenance_prevents_an_idle_wait(tmp_path):
@@ -260,12 +272,22 @@ def test_unchanged_failed_supplier_search_is_not_repeated(tmp_path):
     assert world.state.village.economy.orders == {}
 
 
-def test_short_idle_polling_is_rejected_in_favor_of_event_wait(tmp_path):
+def test_short_idle_wait_preserves_legacy_and_purposeful_modes(tmp_path):
     world = make_world(tmp_path)
     assert act(world, "village_observe")["outcome"] == "APPLIED"
     village.advance(world, 5)
-    assert act(world, "village_wait", minutes=5)["code"] == "EVENT_WAIT_REQUIRED"
-    assert act(world, "village_wait_event")["code"] == "EVENT_WAIT_STARTED"
+    assert act(world, "village_wait", minutes=5)["code"] == "VILLAGE_WAITED"
+    person = world.state.village.residents["rowan"]
+    assert person.fallback.wait is None
+    purposeful_world = make_world(tmp_path / "purposeful")
+    assert act(purposeful_world, "village_observe")["outcome"] == "APPLIED"
+    village.advance(purposeful_world, 5)
+    village_extensions.configure(purposeful_world, "purposeful", purposeful_world.revision(),
+                                 {"day_policy": VillageDayPolicy(anti_idle=True, purposeful_downtime=True).model_dump()})
+    assert act(purposeful_world, "village_wait", minutes=5)["code"] == "EVENT_WAIT_STARTED"
+    purposeful_person = purposeful_world.state.village.residents["rowan"]
+    assert purposeful_person.fallback.wait is not None
+    assert purposeful_person.available_at == purposeful_person.fallback.wait.planned_end
 
 
 def test_due_needs_and_real_eligible_work_take_priority_over_fallback_inspection(tmp_path):
@@ -339,6 +361,78 @@ def test_legacy_opt_out_and_configuration_validation(tmp_path):
     for interval in (0, 5, 14, 241):
         with pytest.raises(ValueError):
             VillageDayPolicy(idle_review_minutes=interval)
+
+
+def test_purposeful_downtime_opt_in_bounds_wait_and_preserves_legacy_policy(tmp_path):
+    world = make_world(tmp_path)
+    assert not village_extensions.policy(world).purposeful_downtime
+    inspect_then_wait(world)
+    assert world.state.village.residents["rowan"].fallback.wait.planned_end == 3545
+    patch = VillageDayPolicy(anti_idle=True, purposeful_downtime=True)
+    village_extensions.configure(world, "purposeful", world.revision(), {"day_policy": patch.model_dump()})
+    assert village_fallback.purposeful(world)
+    assert village_extensions.policy(world).purposeful_downtime
+    world.state.village.residents["rowan"].fallback.wait = None
+    assert village_fallback.next_review(world) <= world.state.village.minute + 30
+    world.save()
+    restored = World(world.scenario, world.path, "fallback", "rowan", "session-rowan")
+    assert village_fallback.purposeful(restored)
+    with pytest.raises(ValueError, match="requires anti-idle"):
+        village_extensions.configure(restored, "bad", restored.revision(),
+                                     {"day_policy": VillageDayPolicy(purposeful_downtime=True).model_dump()})
+
+
+def test_purposeful_board_visit_requires_real_trip_and_read_to_gain_knowledge(tmp_path):
+    world = make_world(tmp_path, minute=3480)
+    from npc_sim import village_communication
+    village_communication.configure(world, {"board_id": "noticeboard", "workplace_boxes": True,
+                                           "max_hops": 8, "cooldown_minutes": 15})
+    state = world.state.village
+    comm = state.communication
+    notice = NoticeVersion(id="notice-1", version=1, author="elsie",
+                           terms=NoticeTerms(type="work_request", subject="fish", description="Need fish for supper",
+                                             recipients=["rowan"]), created_at=state.minute, updated_at=state.minute)
+    comm.notices[notice.id] = [notice]
+    comm.placements.setdefault(comm.config.board_id, {})[notice.id] = 1
+    assert notice.id not in comm.knowledge.get("rowan", {})
+    village_extensions.configure(world, "purposeful", world.revision(),
+                                 {"day_policy": VillageDayPolicy(anti_idle=True, purposeful_downtime=True).model_dump()})
+    choices = village_fallback.candidates(world)
+    assert not any(item["task_id"] == "information:board" for item in choices)
+    assert notice.id not in comm.knowledge.get("rowan", {})
+    world.actor.location_id = "village-square"
+    assert any(item["action_id"] == "village_check_messages" for item in village_fallback.candidates(world))
+    assert act(world, "village_check_messages", channel="board")["code"] == "NOTICES_READ"
+    assert notice.id in comm.knowledge["rowan"]
+    village.advance(world, 5)
+    assert not any(item["action_id"] == "village_check_messages" for item in village_fallback.candidates(world))
+
+
+def test_mill_check_in_is_scheduled_and_mara_relay_is_physical(tmp_path):
+    world = make_world(tmp_path, minute=3480)
+    config, state = village.context(world)
+    world.scenario.village.breakdown_minute = state.minute - 15
+    state.breakdown = True
+    state.repaired = False
+    hobb = world.bind(config.carpenter, f"session-{config.carpenter}")
+    mara = world.bind(config.miller, f"session-{config.miller}")
+    hobb.actor.location_id = config.residents[config.carpenter].work
+    mara.actor.location_id = config.mill
+    village.event(mara, "environment", "breakdown", config.mill_equipment, "Mill drive failed", config.mill)
+    village_extensions.configure(world, "purposeful", world.revision(),
+                                 {"day_policy": VillageDayPolicy(anti_idle=True, purposeful_downtime=True).model_dump()})
+    check = next(item for item in village_fallback.candidates(hobb) if item["task_id"] == "incident:mill-check-in")
+    assert check["destination"] == config.mill and check["action_id"] == "go"
+    relay = next(item for item in village_fallback.candidates(mara) if item["task_id"] == "incident:relay")
+    assert relay["destination"] == config.residents[config.carpenter].work
+    assert not any("mill drive fail" in message["text"] for message in hobb.actor.messages)
+    mara.actor.location_id = hobb.actor.location_id
+    say = next(item for item in village_fallback.candidates(mara) if item["task_id"] == "incident:relay")
+    assert say["action_id"] == "say"
+    assert act(mara, "say", **say["arguments"])["code"] == "SPOKEN"
+    assert any("mill drive fail" in message["text"] for message in hobb.actor.messages)
+    assert not any(item["action_id"] == "say" and item["task_id"] == "incident:relay"
+                   for item in village_fallback.candidates(mara))
 
 
 def test_runtime_configuration_enables_saved_world_without_reset_or_free_goods(tmp_path):

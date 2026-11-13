@@ -63,8 +63,11 @@ def controller(request: Request) -> Controller:
 
 
 @app.get("/api/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health(request: Request) -> JSONResponse:
+    worker = controller(request).worker
+    if worker is None or worker.done():
+        return JSONResponse({"status": "error", "reason": "Simulation worker stopped"}, status_code=503)
+    return JSONResponse({"status": "ok"})
 
 
 @app.get("/api/state")

@@ -15,7 +15,7 @@ from npc_sim import (
     village_extensions, village_goods as goods, village_life, village_services,
 )
 from npc_sim.living_village import build_scenario
-from npc_sim.models import Entity, Scenario, VillageCommittedWork, VillageEconomyConfig, VillageStockLot, WorldState
+from npc_sim.models import Entity, Scenario, VillageCommittedWork, VillageDayPolicy, VillageEconomyConfig, VillageStockLot, WorldState
 from npc_sim.prompt_context import observation_context
 from npc_sim.storage import read_json
 from npc_sim.village_communication_models import VillageCommunicationConfig
@@ -106,6 +106,22 @@ def respond(world, nid, response="accept", **channel):
     memory = known(world, world.actor_id, nid)
     return apply(world, "village_notice_reply", notice_id=nid,
                  expected_version=memory.snapshot.version, response=response, **channel)
+
+
+def test_purposeful_downtime_records_only_personal_communication_blockers(world):
+    world.state.village.day_policy = VillageDayPolicy(purposeful_downtime=True)
+    actor(world, "jory", "bakery")
+    rejected = comm.apply(world, "village_notice_read", {})
+    assert rejected[1] == "COMMUNICATION_INVALID" or rejected[1] == "CHANNEL_UNAVAILABLE"
+    own = comm.observation(world)["communication"]["recent_blocker"]
+    assert own["code"] == rejected[1]
+    assert own["action"] == "village_notice_read"
+    assert own["next_review_at"] > own["observed_at"]
+    mara = actor(world, "mara", "mill")
+    assert comm.observation(mara)["communication"]["recent_blocker"] is None
+    world.actor.location_id = "village-square"
+    assert comm.apply(world, "village_notice_read", {})[0] == "APPLIED"
+    assert comm.observation(world)["communication"]["recent_blocker"] is None
 
 
 def test_post_read_encounter_secondhand_and_repeat_suppression(world):
@@ -220,6 +236,103 @@ def test_duplicate_needs_and_authorized_meaningful_updates(world):
     assert comm.apply(world, "village_notice_post", {"notice": flour()})[0] == "REJECTED"
     new = post(world, flour(quantity=4))
     assert new != nid and latest(world, nid).status == "cancelled"
+
+
+def test_author_renews_expired_board_original_without_receiving_new_revision(world):
+    actor(world, "jory", "village-square")
+    nid = post(world)
+    state = world.state.village.communication
+    original = state.knowledge["jory"][nid].snapshot.version
+    ready(world, 901)
+    comm.advance(world)
+    assert latest(world, nid).status == "expired"
+    assert state.knowledge["jory"][nid].snapshot.version == original
+    result = comm.apply(world, "village_update_request", {
+        "request_id": nid, "changes": {"due_at": 1050, "required_fresh_until": 1100}})
+    assert result[:2] == ("APPLIED", "NOTICE_UPDATED"), result
+    assert latest(world, nid).status == "posted" and latest(world, nid).version == 3
+    assert state.placements["noticeboard"][nid] == 3
+    assert state.knowledge["jory"][nid].snapshot.version == 3
+
+
+def test_intent_duplicate_reports_existing_need_and_edit_location(world):
+    actor(world, "jory", "village-square")
+    nid = post(world)
+    result = comm.apply(world, "village_request_supply", {
+        "good": "flour", "quantity": 3, "purpose": "Two flour for real bakery work",
+        "deadline": 900, "required_fresh_until": 960, "preferred_supplier_id": "mara",
+        "destination_id": "bakery"})
+    assert result[:2] == ("APPLIED", "EXISTING_NEED")
+    assert nid in result[2] and "edit it here" in result[2]
+    assert len(world.state.village.communication.notices) == 1
+
+
+def test_supply_and_response_intents_require_physical_receipt_and_reply(world):
+    advertised = {action["id"] for action in world.actions()}
+    assert {"village_request_supply", "village_respond_to_request", "village_schedule_crew",
+            "village_share_known_information"} <= advertised
+    buyer = actor(world, "jory", "bakery")
+    request = {"good": "flour", "quantity": 2, "purpose": "Bread for the tavern",
+               "deadline": 900, "required_fresh_until": 960, "preferred_supplier_id": "mara"}
+    denied = comm.apply(buyer, "village_request_supply", request)
+    assert denied[:2] == ("REJECTED", "CHANNEL_UNAVAILABLE")
+    assert "workplace-inbox-mara" in denied[2] and "noticeboard" in denied[2]
+    buyer.actor.location_id = "watermill"
+    actor(world, "mara", "bakery")
+    assert comm.apply(buyer, "village_request_supply", request)[:2] == ("APPLIED", "NOTICE_POSTED")
+    state = world.state.village.communication
+    nid = next(iter(state.notices))
+    assert state.placements["workplace-inbox-mara"][nid] == 1
+    supplier = actor(world, "mara", "watermill")
+    assert comm.apply(supplier, "village_respond_to_request", {"request_id": nid, "response": "accept"})[0] == "REJECTED"
+    assert not world.state.village.economy.orders
+    read(supplier, inbox="workplace-inbox-mara")
+    supplier.actor.location_id = "bakery"
+    response = comm.apply(supplier, "village_respond_to_request", {"request_id": nid, "response": "accept"})
+    assert response[:2] == ("APPLIED", "NOTICE_UPDATED"), response
+    assert state.placements["workplace-inbox-jory"][nid] == 2
+    assert known(world, "jory", nid).snapshot.version == 1
+    assert known(world, "mara", nid).snapshot.version == 2
+    assert len(world.state.village.economy.orders) == 1
+
+
+def test_schedule_crew_intent_requires_actual_partner_confirmation(world):
+    crew, site = comm._project(world, "dig_well")
+    proposer = actor(world, crew[0], "village-square")
+    ready(world)
+    result = comm.apply(proposer, "village_schedule_crew", {
+        "project_id": "dig_well", "start": 570, "purpose": "Dig well together"})
+    assert result[:2] == ("APPLIED", "NOTICE_POSTED"), result
+    nid = next(iter(world.state.village.communication.notices))
+    assert latest(world, nid).appointment.place == site
+    assert latest(world, nid).appointment.status == "proposed"
+    partner = actor(world, crew[1], "village-square")
+    assert comm.apply(partner, "village_respond_to_request", {"request_id": nid, "response": "accept"})[0] == "REJECTED"
+    read(partner)
+    ready(world)
+    response = comm.apply(partner, "village_respond_to_request", {"request_id": nid, "response": "accept"})
+    assert response[:2] == ("APPLIED", "NOTICE_UPDATED"), response
+    assert latest(world, nid).appointment.status == "confirmed"
+    assert known(world, crew[0], nid).snapshot.version == 2
+    assert known(world, crew[0], nid).source_type == "conversation"
+
+
+def test_share_information_intent_uses_received_public_notice_only(world):
+    poster = actor(world, "jory", "village-square")
+    nid = post(poster)
+    sharer = actor(world, "garrick", "village-square")
+    listener = actor(world, "mara", "village-square")
+    ready(world)
+    args = {"listener_id": "mara", "notice_id": nid}
+    assert comm.apply(sharer, "village_share_known_information", args)[0] == "REJECTED"
+    read(sharer)
+    ready(world)
+    result = comm.apply(sharer, "village_share_known_information", args)
+    assert result[0] == "APPLIED", result
+    assert known(world, "mara", nid).source_type == "conversation"
+    assert known(world, "mara", nid).confidence == "secondhand"
+    assert known(world, "mara", nid).snapshot.version == 1
+    assert comm.apply(sharer, "village_share_known_information", args)[0] == "REJECTED"
 
 
 def test_private_inboxes_are_physical_owner_only_and_no_spreading(world):
@@ -857,6 +970,77 @@ def test_appointment_partner_can_work_while_other_partner_finishes_project_turn(
     assert "still occupied" in comm.project_blocker(lead, project)
 
 
+@pytest.mark.parametrize("project", ["dig_well", "repair_mill"])
+def test_confirmed_crew_work_stays_authorized_past_window_without_other_task_overlap(world, project):
+    lead, partner, nid = meeting(world, project)
+    crew, site = comm._project(world, project)
+    ready(world, 590)
+    lead.actor.location_id = "village-square"
+    read(lead)
+    lead.actor.location_id = partner.actor.location_id = site
+    supplies = ([world.scenario.village.shovel, world.scenario.village.timber,
+                 world.scenario.village.rope] if project == "dig_well" else
+                [world.scenario.village.repair_part, world.scenario.village.hammer])
+    for eid in supplies:
+        world.state.entities[eid].location = site
+        world.state.entities[eid].hidden = False
+    if project == "repair_mill":
+        world.state.village.breakdown = True
+        goods.put(world, site, "planks", 1)
+    for index in range(5):
+        member = (lead, partner)[index % 2]
+        if index:
+            ready(world, world.state.village.minute + 5)
+        assert village_ai.apply(member, "village_project", {"project": project})[0] == "APPLIED"
+        village_ai.after_action(member, "village_project", {"project": project})
+        comm.advance(world)
+    ready(world, 615)
+    comm.advance(world)
+    assert latest(world, nid).appointment.status == "confirmed"
+    assert comm.project_blocker(partner, project) is None
+    assert village_ai.apply(partner, "village_project", {"project": project})[0] == "APPLIED"
+    village_ai.after_action(partner, "village_project", {"project": project})
+    comm.advance(world)
+    assert latest(world, nid).appointment.status == "completed"
+    assert set(world.state.village.project_contributions[project]) == set(crew)
+
+
+@pytest.mark.parametrize("project", ["dig_well", "repair_mill"])
+def test_confirmed_work_does_not_exempt_unrelated_busy_partner(world, project):
+    lead, partner, nid = meeting(world, project)
+    _, site = comm._project(world, project)
+    ready(world, 540)
+    lead.actor.location_id = "village-square"
+    read(lead)
+    lead.actor.location_id = partner.actor.location_id = site
+    village.event(world, lead.actor_id, "village_project", site, "Project contribution", site)
+    lead_person = world.state.village.residents[lead.actor_id]
+    lead_person.current_action = "village_project"
+    lead_person.available_at = 545
+    assert comm.project_blocker(partner, project) is None
+    lead_person.available_at = 550
+    assert "still occupied" in comm.project_blocker(partner, project)
+    lead_person.available_at = 545
+    lead_person.busy_until = 550
+    assert "still occupied" in comm.project_blocker(partner, project)
+    lead_person.busy_until = 540
+    lead_person.current_action = "go"
+    assert "still occupied" in comm.project_blocker(partner, project)
+    lead_person.current_action = "village_project"
+    ready(world)
+    partner.actor.location_id = "village-square"
+    assert "actual workers" in comm.project_blocker(lead, project)
+    partner.actor.location_id = site
+    ready(world, 550)
+    comm.advance(world)
+    assert latest(world, nid).appointment.status == "confirmed"
+    assert comm.project_blocker(partner, project) is None
+    ready(world, 605)
+    comm.advance(world)
+    assert latest(world, nid).appointment.status == "expired"
+    assert comm.project_blocker(partner, project) is not None
+
+
 def test_appointment_version_change_revokes_old_signature_and_cannot_auto_travel(world):
     lead, partner, nid = meeting(world)
     positions = copy.deepcopy(world.state.actors)
@@ -885,6 +1069,20 @@ def test_work_continues_while_waiting_and_failed_contacts_deduplicate(world):
     first = economy.apply(world, "village_plan_supplies", {"supplier": "mara"})
     second = economy.apply(world, "village_plan_supplies", {"supplier": "mara"})
     assert first[1] == "OUT_OF_REACH" and second[1] == "CONTACT_ALREADY_FAILED"
+
+
+def test_purposeful_scenario_installs_coherent_optional_features():
+    future = build_scenario(scenario(), purposeful_downtime=True)
+    assert future.village.anti_idle and future.village.purposeful_downtime
+    assert "gardening" in future.village.residents["iona"].skills
+    assert "farming" not in future.village.residents["iona"].skills
+    assert "herb-garden-care" in future.village.social.activities
+    assert "fish-smoker" in future.entities
+    merchant = next(item for item in future.village.events.templates if item.id == "visiting-merchant")
+    assert merchant.scheduled_at is not None
+    assert merchant.window_start <= merchant.scheduled_at % 1440 < merchant.window_end
+    assert merchant.visitor.merchant.demand["preserved-fish"] == 2
+    assert not build_scenario(scenario()).village.purposeful_downtime
 
 
 def test_future_scenario_default_and_legacy_load_are_separate(workspace):

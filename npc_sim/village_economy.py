@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 VERBS = {"village_plan_supplies", "village_propose_order", "village_accept_order",
          "village_reject_order", "village_defer_order", "village_cancel_order",
-         "village_return_cargo"}
+         "village_return_cargo", "village_respond_late_fuel"}
 ACTIVE = {"proposed", "accepted", "accepted_planned", "in_production", "ready_to_collect",
           "in_transit", "blocked", "deferred"}
 COMMITTED = {"accepted", "accepted_planned", "in_production", "ready_to_collect", "in_transit"}
@@ -124,8 +124,15 @@ def initial_state(scenario: Any) -> VillageEconomyState | None:
     policy = getattr(scenario.village, "economy", None)
     if policy is None:
         return None
-    return VillageEconomyState(config=policy.model_copy(deep=True),
-                               initial_coins=scenario.village.coins.copy())
+    state = VillageEconomyState(config=policy.model_copy(deep=True),
+                                initial_coins=scenario.village.coins.copy())
+    if scenario.village.initial_stock_seed_id:
+        state.movements.extend(VillageEconomyMovement(
+            minute=scenario.village.start_minute, location=location,
+            product=product, quantity=quantity, kind="imported")
+            for location, stock in scenario.village.stocks.items()
+            for product, quantity in stock.items() if quantity)
+    return state
 
 
 def configure(world: "World", values: dict[str, Any]) -> None:
@@ -514,6 +521,169 @@ def load_blocker(world: "World", source: str, destination: str,
     return None
 
 
+def _food_policy(world: "World") -> bool:
+    from npc_sim import village_extensions
+    return bool(config(world) and village_extensions.policy(world).purposeful_downtime)
+
+
+def meal_readiness(world: "World") -> list[dict[str, Any]]:
+    """Forecast service from the inn's physical stock, without creating portions."""
+    policy = config(world)
+    if policy is None:
+        return []
+    from npc_sim import village_firewood
+    base, state = village.context(world)
+    inn = base.residents[policy.innkeeper].work
+    forecasts = []
+    spent: dict[str, int] = {}
+    for plan in meal_requirements(world):
+        due = plan["due"]
+        outstanding = max(0, plan["remaining_portions"] - plan["covered_portions"])
+        fuel_needed = sum(ceil(portions / policy.recipes[name].portions)
+                          for name, portions in plan["unmet_recipe_portions"].items()) if village_firewood.enabled(world) else 0
+        fuel_on_hand = max(0, usable_stock(world, inn, "firewood", due) - spent.get("firewood", 0)) if fuel_needed else 0
+        projected = 0
+        missing_inputs: set[str] = set()
+        for name, portions in plan["unmet_recipe_portions"].items():
+            recipe = policy.recipes[name]
+            possible = min((max(0, usable_stock(world, inn, product, due) - spent.get(product, 0)) // quantity
+                            for product, quantity in recipe.inputs.items()), default=0)
+            if possible < ceil(portions / recipe.portions):
+                missing_inputs.update(product for product, quantity in recipe.inputs.items()
+                                      if max(0, usable_stock(world, inn, product, due)
+                                             - spent.get(product, 0)) // quantity < ceil(portions / recipe.portions))
+            if fuel_needed:
+                possible = min(possible, max(0, usable_stock(world, inn, "firewood", due)
+                                          - spent.get("firewood", 0)))
+            batches = min(ceil(portions / recipe.portions), possible)
+            for product, quantity in recipe.inputs.items():
+                spent[product] = spent.get(product, 0) + batches * quantity
+            if fuel_needed:
+                spent["firewood"] = spent.get("firewood", 0) + batches
+            projected += min(portions, batches * recipe.portions)
+        forecasts.append({"service": plan["id"], "due": due,
+                          "ready_by": due - policy.cooking_lead_minutes,
+                          "planned_portions": plan["remaining_portions"],
+                          "prepared_portions": plan["covered_portions"],
+                          "cookable_portions": min(outstanding, projected),
+                          "projected_unserved": max(0, outstanding - projected),
+                          "fuel_needed": fuel_needed, "fuel_on_hand": fuel_on_hand,
+                          "missing_inputs": sorted(missing_inputs),
+                          "reason_code": ("ingredients_missing" if missing_inputs else
+                                          "fuel_missing" if fuel_on_hand < fuel_needed else
+                                          "ingredients_missing" if projected < outstanding else None)})
+    return forecasts
+
+
+def meal_delivery_forecast(world: "World") -> list[dict[str, Any]]:
+    """Describe real, funded bakery stock and the remaining physical supper route."""
+    if not _food_policy(world):
+        return []
+    from npc_sim import village_services
+    base, state = village.context(world)
+    policy = config(world)
+    inn = base.residents[policy.innkeeper].work
+    forecasts = []
+    for plan in meal_requirements(world):
+        shortage = max(0, plan["remaining_portions"] - plan["covered_portions"])
+        bread = max(0, plan["inputs"].get("bread", 0)
+                    - usable_stock(world, inn, "bread", plan["due"]))
+        deadline = plan["due"] - policy.cooking_lead_minutes
+        if not shortage or not bread:
+            forecasts.append({"service": plan["id"], "due": plan["due"], "shortfall": shortage,
+                              "bread_needed": bread, "delivery_deadline": deadline,
+                              "delivery": None,
+                              "blocker": None if not shortage else "No bread delivery needed; check other recipes and cooking capacity."})
+            continue
+        candidates = []
+        for supplier_id, supplier in base.residents.items():
+            if supplier.work == inn or not supplier.job or "bread" not in supplier.job.outputs:
+                continue
+            source = supplier.work
+            route = village.route(world, source, inn)
+            if route is None:
+                continue
+            for carrier_id in base.residents:
+                capacity = village_services.foot_capacity(world, carrier_id)
+                approach = village.route(world, village.resident_location(world, carrier_id), source)
+                if capacity < 1 or approach is None:
+                    continue
+                available = available_for_order(world, source, "bread", plan["due"])
+                available = min(available, usable_stock(world, source, "bread", plan["due"]))
+                quantity = min(bread, available)
+                if not quantity:
+                    continue
+                trips = ceil(quantity / capacity)
+                finish = (state.minute + 5 * len(approach) + trips * (5 * len(route) + 10)
+                          + (trips - 1) * 5 * len(route))
+                cost = quantity * (unit_price(world, "bread") + delivery_fee(world))
+                if finish <= deadline and state.coins.get(policy.innkeeper, 0) - commitments(world, policy.innkeeper) >= cost:
+                    candidates.append((finish, source, carrier_id, quantity, cost))
+        candidates.sort(key=lambda item: (-item[3], item[0], item[2]))
+        best = candidates[0] if candidates else None
+        forecasts.append({"service": plan["id"], "due": plan["due"], "shortfall": shortage,
+                          "bread_needed": bread, "delivery_deadline": deadline,
+                          "delivery": ({"source": best[1], "destination": inn, "carrier": best[2],
+                                        "quantity": best[3], "arrival": best[0], "cost_upper_bound": best[4],
+                                        "requires_order": policy.require_orders} if best else None),
+                          "blocker": (None if not shortage or best else
+                                      "No fresh, affordable bakery bread with a carrier and route before cooking cutoff.")})
+    return forecasts
+
+
+def meal_delivery_actions(world: "World") -> list[dict[str, Any]]:
+    """Offer only actions supported by the actor's own order knowledge and location."""
+    if not _food_policy(world):
+        return []
+    from npc_sim import village_communication, village_services
+    base, state = village.context(world)
+    policy = config(world)
+    rid, location = world.actor_id, world.actor.location_id
+    inn = base.residents[policy.innkeeper].work
+    plans = meal_requirements(world)
+    cutoff = min((plan["due"] - policy.cooking_lead_minutes for plan in plans), default=state.minute)
+    if state.minute > cutoff:
+        return []
+    steps = []
+    cargo = state.residents[rid].shipments
+    for shipment in cargo:
+        order = state.economy.orders.get(shipment.order_id) if shipment.order_id else None
+        if (order is None or order.product != "bread" or order.destination != inn
+                or order.status not in COMMITTED or not village_communication.can_use_order(world, order)):
+            continue
+        route = village.route(world, location, inn, known_routes=state.residents[rid].known_routes)
+        if route is not None and state.minute + 5 * len(route) + 5 <= min(cutoff, order.deadline):
+            steps.append({"order_id": order.id, "quantity": shipment.quantity,
+                          "action": "village_unload_goods" if location == inn else "go",
+                          "args": {} if location == inn else {"target": route[0]},
+                          "destination": inn})
+    if cargo:
+        return steps
+    for order in _personal_orders(world):
+        current = state.economy.orders.get(order.id)
+        if (order.status not in COMMITTED or current is None or current.status not in COMMITTED
+                or current.loadable <= 0 or order.product != "bread" or order.destination != inn
+                or order.deadline < state.minute
+                or not village_communication.can_use_order(world, order)):
+            continue
+        route = village.route(world, location, order.source, known_routes=state.residents[rid].known_routes)
+        delivery = village.route(world, order.source, inn, known_routes=state.residents[rid].known_routes)
+        capacity = village_services.foot_capacity(world, rid)
+        quantity = min(capacity, current.loadable, loadable_for_order(world, current))
+        if route is None or delivery is None or not quantity:
+            continue
+        if (state.minute + 5 * (len(route) + len(delivery)) + 10 > min(cutoff, current.deadline)
+                or state.coins.get(current.buyer, 0) < commitments(world, current.buyer)):
+            continue
+        if location != current.source:
+            steps.append({"order_id": current.id, "quantity": quantity, "action": "go",
+                          "args": {"target": route[0]}, "destination": current.source})
+        else:
+            steps.append({"order_id": current.id, "quantity": quantity, "action": "village_load_goods",
+                          "args": {"goods": {"bread": quantity}, "destination": inn}, "destination": inn})
+    return steps
+
+
 def _incoming(world: "World", destination: str, product: str, use_at: int,
               include_proposed: bool = False) -> int:
     state = _state(world)
@@ -716,7 +886,18 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
                 quantity = min(quantity, max(0, state.coins[buyer] - commitments(world, buyer)) // cost)
             supplier = _supplier(world, product, destination)
             if quantity and supplier:
-                deadline = max(state.minute, use_at - policy.delivery_lead_minutes)
+                if (_food_policy(world) and not personal and buyer == policy.innkeeper
+                        and key.endswith(":supper") and product in {"bread", "fish"}):
+                    source = base.residents[supplier].work
+                    quantity = min(quantity, available_for_order(world, source, product, use_at),
+                                   max(0, state.coins.get(buyer, 0) - commitments(world, buyer))
+                                   // (unit_price(world, product) + delivery_fee(world)))
+                if not quantity:
+                    continue
+                lead = max(policy.delivery_lead_minutes, policy.cooking_lead_minutes) if (
+                    _food_policy(world) and buyer == policy.innkeeper and key.endswith(":supper")
+                    and product in {"bread", "fish"}) else policy.delivery_lead_minutes
+                deadline = max(state.minute, use_at - lead)
                 result.append({"buyer": buyer, "supplier": supplier, "destination": destination,
                                "product": product, "quantity": quantity, "price": unit_price(world, product),
                                "deadline": deadline, "required_fresh_until": use_at,
@@ -871,6 +1052,9 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                 failed[0][1] if failed else "SUPPLIES_PLANNED", text, None)
     if action == "village_return_cargo":
         return _return_cargo(world, args)
+    if action == "village_respond_late_fuel":
+        from npc_sim import village_firewood
+        return village_firewood.respond_late_delivery(world, args.get("order_id", ""), args.get("accept"))
     order = economy.orders.get(args.get("order_id", ""))
     if order is None:
         return "REJECTED", "UNKNOWN_ORDER", "Choose an existing supplier order.", None
@@ -954,6 +1138,16 @@ def advance(world: "World") -> None:
                      and order.product in person.life.work.outputs
                      for person in world.state.village.residents.values()):
                 order.status = "in_production"
+        elif _food_policy(world) and order.status == "blocked":
+            feasible, reason = order_feasibility(world, order)
+            if feasible:
+                order.status, order.reason, order.production_plan = "ready_to_collect", None, {}
+            else:
+                plan, planned_reason = production_plan(world, order)
+                if plan:
+                    order.status, order.reason, order.production_plan = "accepted_planned", None, plan
+                else:
+                    order.reason = f"{reason} {planned_reason}".strip()
 
 
 def _return_cargo(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]:
@@ -1010,7 +1204,7 @@ def production_targets(world: "World", location: str, *, personal: bool = False)
     if firewood_source:
         targets["firewood"] = max(targets["firewood"], village_firewood.source_reserve(world))
     for order in _personal_orders(world) if personal else economy.orders.values():
-        if order.status in COMMITTED and order.source == location:
+        if (order.status in COMMITTED or _food_policy(world) and order.status == "blocked") and order.source == location:
             targets[order.product] = targets.get(order.product, 0) + order.loadable
     if firewood_source:
         targets["logs"] = village_firewood.log_target(world, location, targets)
@@ -1276,6 +1470,19 @@ def observation(world: "World") -> dict[str, Any]:
     report["overproduction"] = [item for item in report["overproduction"] if item["location"] in locations]
     if rid != policy.innkeeper:
         report["meal_coverage"] = []
+    else:
+        if world.actor.location_id == base.residents[rid].work:
+            report["meal_readiness"] = meal_readiness(world)
+    if rid == policy.innkeeper and _food_policy(world):
+        if village_communication.enabled(world):
+            report["meal_delivery_forecast"] = [{"service": plan["id"], "due": plan["due"],
+                "shortfall": max(0, plan["remaining_portions"] - plan["covered_portions"]),
+                "blocker": "Check the bakery through a physical channel for stock and a confirmed order."
+                } for plan in meal_requirements(world)]
+        else:
+            report["meal_delivery_forecast"] = meal_delivery_forecast(world)
+    if _food_policy(world):
+        report["meal_delivery_actions"] = meal_delivery_actions(world)
     for request in report["suggestions"]:
         blocked = _conversation_blocker(world, request["supplier"])
         request["order_availability"] = "blocked" if blocked else "available"
@@ -1381,6 +1588,20 @@ def actions(world: "World") -> list[dict[str, Any]]:
                 properties["until"] = {"type": "integer", "minimum": state.minute + 1}
             add(verb, "Respond separately to your own existing order; this does not create an upstream order.",
                 properties, blocked=blocked)
+    from npc_sim import village_firewood
+    if village_firewood.enabled(world):
+        late_ids = [order.id for order in economy.orders.values()
+                    if order.product == "firewood" and order.buyer == world.actor_id
+                    and state.minute > order.deadline and order.status != "fulfilled"
+                    and (order.status in COMMITTED or order.status == "failed" and order.reason == "MISSED_DEADLINE")
+                    and any(item.order_id == order.id for item in [
+                        *state.residents[order.supplier].shipments,
+                        *(state.wagon.loads if state.wagon else [])])]
+        if late_ids:
+            add("village_respond_late_fuel", "At the delivery site, accept or reject an overdue physical fuel shipment.",
+                {"order_id": {"type": "string", "enum": late_ids}, "accept": {"type": "boolean"}},
+                blocked=None if any(economy.orders[oid].destination == world.actor.location_id for oid in late_ids)
+                else ("BUYER_NOT_AT_SITE", "Travel to the destination to decide."))
     person = state.residents[world.actor_id]
     if person.shipments or (state.wagon and state.wagon.driver == world.actor_id and state.wagon.loads):
         add("village_return_cargo", "Physically return unpaid cargo to its original supplier.",

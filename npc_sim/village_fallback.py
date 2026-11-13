@@ -29,6 +29,10 @@ def enabled(world: "World") -> bool:
                 and village_extensions.policy(world).anti_idle)
 
 
+def purposeful(world: "World") -> bool:
+    return enabled(world) and village_extensions.policy(world).purposeful_downtime
+
+
 def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:20]
 
@@ -56,6 +60,7 @@ def _context_values(world: "World") -> dict[str, Any]:
         "heard_messages": world.actor.messages,
         "beliefs": {key: belief.model_dump(exclude={"learned_at"}) for key, belief in person.beliefs.items()},
         "known_notices": {key: memory.snapshot.model_dump() for key, memory in known.items()},
+        "communication_blocker": state.communication.recent_blockers.get(world.actor_id) if state.communication else None,
         "supply_needs": {key: need.model_dump() for key, need in person.fallback.supply_needs.items()},
         "route_goal": person.fallback.route_goal.model_dump(exclude={"attempted_edges", "last_progress_at", "retry_after"})
         if person.fallback.route_goal else None,
@@ -72,7 +77,8 @@ def _context_values(world: "World") -> dict[str, Any]:
             "reserve_targets", "production_targets", "require_orders", "stock_buffer"}) if economy else None,
         "firewood_policy": state.firewood.config.model_dump() if state.firewood else None,
         "policy": village_extensions.policy(world).model_dump(include={
-            "anti_idle", "idle_review_minutes", "breakfast", "breakfast_delay", "meal_window"}),
+            "anti_idle", "purposeful_downtime", "downtime_review_minutes", "board_check_minutes",
+            "idle_review_minutes", "breakfast", "breakfast_delay", "meal_window"}),
     }
 
 
@@ -229,6 +235,12 @@ def record_location_transition(world: "World", origin: str, destination: str) ->
             goal.last_progress_at = state.minute
             goal.blocked_reason = "Optional destination visited; defer further searches until new evidence."
             goal.retry_after = state.minute + village_extensions.policy(world).idle_review_minutes
+    if purposeful(world):
+        communication = state.communication
+        if communication and destination == world.state.entities[communication.config.board_id].location:
+            fallback.board_last_checked = state.minute
+        if world.actor_id == config.carpenter and destination == config.mill:
+            fallback.mill_last_checked = state.minute
     fallback.recent_locations.append(VillageLocationTransition(
         origin=origin, destination=destination, minute=state.minute))
     del fallback.recent_locations[:-12]
@@ -296,7 +308,9 @@ def next_review(world: "World") -> int:
     config, state = village.context(world)
     policy = village_extensions.policy(world)
     resident = config.residents[world.actor_id]
-    times = [state.minute + policy.idle_review_minutes, village_extensions.next_personal_event(world)]
+    interval = policy.downtime_review_minutes if purposeful(world) and (
+        resident.wake_minute <= state.minute % 1440 < resident.bed_minute) else policy.idle_review_minutes
+    times = [state.minute + interval, village_extensions.next_personal_event(world)]
     times.extend(max(state.minute, time) for time in _obligation_limits(world))
     if policy.breakfast:
         cutoff = (state.minute // 1440 * 1440 + resident.wake_minute
@@ -320,6 +334,130 @@ def _inspection_ready(world: "World") -> bool:
         state.minute >= previous[0] + village_extensions.policy(world).idle_review_minutes)
 
 
+def _unread_paper(world: "World", fixture: str) -> bool:
+    communication = world.state.village.communication
+    entity = world.state.entities.get(fixture)
+    if not communication or not entity or entity.hidden or entity.broken or entity.location != world.actor.location_id:
+        return False
+    for nid, version in communication.placements.get(fixture, {}).items():
+        notice = communication.notices[nid][version - 1]
+        if notice.terms.private and world.actor_id not in {notice.author, *notice.terms.recipients}:
+            continue
+        memory = communication.knowledge.get(world.actor_id, {}).get(nid)
+        if memory is None or memory.snapshot.version < version or memory.confidence != "direct":
+            return True
+    return False
+
+
+def _travel_choice(world: "World", destination: str, task: str, reason: str,
+                   priority: str) -> dict[str, Any] | None:
+    _, state = village.context(world)
+    if world.actor.location_id == destination:
+        return None
+    known = state.residents[world.actor_id].known_routes
+    path = village.route(world, world.actor.location_id, destination,
+                         known_routes=known if known else None)
+    if not path:
+        return None
+    limits = _obligation_limits(world)
+    if limits and state.minute + 5 * len(path) + 10 > min(limits):
+        return None
+    door = next((eid for eid, entity in world.state.entities.items()
+                 if entity.kind == "door" and {entity.location, entity.destination}
+                 == {world.actor.location_id, path[0]} and not entity.hidden
+                 and entity.open and not entity.locked and not entity.broken
+                 and not world.lock_for(entity).locked and not world.lock_for(entity).broken
+                 and not entity.traversal_capabilities and not entity.required_challenges
+                 and entity.max_body_size != "small" and (not known or eid in known)), None)
+    if door is None:
+        return None
+    return {"task_id": task, "action_id": "go", "arguments": {"target": door},
+            "destination": destination, "priority": priority, "reason": reason}
+
+
+def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
+    config, state = village.context(world)
+    person = state.residents[world.actor_id]
+    fallback = person.fallback
+    location = world.actor.location_id
+    choices: list[dict[str, Any]] = []
+    if not (config.residents[world.actor_id].wake_minute <= state.minute % 1440
+            < village_life.production_closing_minute(world, world.actor_id)):
+        return choices
+
+    # The check-in is scheduled, not triggered by privileged knowledge of a remote breakdown.
+    personally_informed = any(message.get("actor_id") == config.miller and "mill drive fail" in message.get("text", "")
+                              for message in world.actor.messages)
+    if world.actor_id == config.carpenter and not state.repaired and state.minute >= config.breakdown_minute + 15:
+        if location == config.mill and state.breakdown and world.state.entities[config.mill_equipment].health == 0:
+            if village.resident_location(world, config.miller) == location:
+                supplies = [config.repair_part, config.hammer]
+                ready = (not config.expanded_rules or state.stocks.get(config.mill, {}).get("planks", 0) >= 1)
+                ready = ready and all(world.state.entities[item].location in
+                                      {config.mill, config.carpenter, config.miller}
+                                      and not world.state.entities[item].broken
+                                      and not world.state.entities[item].hidden for item in supplies)
+                if ready and state.minute + 5 <= next_review(world):
+                    choices.append({"task_id": "incident:mill-repair", "action_id": "village_project",
+                                    "arguments": {"project": "repair_mill"}, "priority": "P1",
+                                    "reason": "The mill is visibly broken and both repair workers are physically here with real supplies."})
+        elif personally_informed or fallback.mill_last_checked < config.breakdown_minute:
+            check = _travel_choice(world, config.mill, "incident:mill-check-in",
+                                   "Scheduled mill check-in; confirm any failure only at the mill.", "P2")
+            if check:
+                choices.append(check)
+    witnessed_failure = any(state.events[index].action == "breakdown" and
+                            state.events[index].target == config.mill_equipment and
+                            state.events[index].minute <= state.minute
+                            for index in person.memories if index < len(state.events))
+    if (world.actor_id == config.miller and location == config.mill and state.breakdown
+            and not state.repaired and witnessed_failure
+            and village.resident_location(world, config.carpenter) != location
+            and "mill-relay" not in fallback.inspections):
+        check = _travel_choice(world, config.residents[config.carpenter].work, "incident:relay",
+                               "Personally witnessed mill failure; find the carpenter at the workshop to relay it in person.", "P2")
+        if check:
+            choices.append(check)
+    if (world.actor_id == config.miller and location == config.residents[config.carpenter].work
+            and state.breakdown and not state.repaired and witnessed_failure
+            and village.resident_location(world, config.carpenter) == location
+            and "mill-relay" not in fallback.inspections):
+        choices.append({"task_id": "incident:relay", "action_id": "say",
+                        "arguments": {"message": "I saw the mill drive fail at the watermill. Please meet me there with the beam and hammer."},
+                        "priority": "P1", "reason": "Relay a personally witnessed failure to the carpenter physically present."})
+
+    if state.social is not None and not choices:
+        from npc_sim import village_social
+        social = village_social.observation(world).get("social", {})
+        activities = social.get("activities", {})
+        chosen = next(((key, activity) for key, activity in activities.items()
+                       if activity["available"] and activity["preferred"]
+                       and activity["location"] == location
+                       and (not _obligation_limits(world) or
+                            state.minute + activity["duration"] <= min(_obligation_limits(world)))
+                       and action_blocker(world, "village_leisure", {"activity": key, "companions": []},
+                                          check_wait=False) is None), None)
+        if chosen:
+            choices.append({"task_id": f"leisure:{chosen[0]}", "action_id": "village_leisure",
+                            "arguments": {"activity": chosen[0], "companions": []}, "priority": "P5",
+                            "reason": "Preferred activity is locally feasible with actual time, equipment and supplies."})
+
+    communication = state.communication
+    if communication:
+        board = communication.config.board_id
+        board_entity = world.state.entities.get(board)
+        if board_entity and location == board_entity.location and _unread_paper(world, board):
+            choices.append({"task_id": "information:board", "action_id": "village_check_messages",
+                            "arguments": {"channel": "board"}, "priority": "P4",
+                            "reason": "Unread accessible paper at the physical noticeboard."})
+        own_box = next((box for box, owner in communication.boxes.items() if owner == world.actor_id), None)
+        if own_box and _unread_paper(world, own_box):
+            choices.append({"task_id": "information:inbox", "action_id": "village_check_messages",
+                            "arguments": {"channel": "inbox"}, "priority": "P4",
+                            "reason": "Unread accessible paper at your own workplace inbox."})
+    return choices
+
+
 def candidates(world: "World") -> list[dict[str, Any]]:
     config, state = village.context(world)
     resident, person = config.residents[world.actor_id], state.residents[world.actor_id]
@@ -340,6 +478,19 @@ def candidates(world: "World") -> list[dict[str, Any]]:
             if _meal_funded(world) and action_blocker(world, "village_eat", {}, check_wait=False) is None:
                 choices.append({"task_id": "need:meal", "action_id": "village_eat", "arguments": {},
                                 "priority": "P1", "reason": "A due meal has actual local food; payment is validated on eating."})
+    if purposeful(world):
+        for step in village_economy.meal_delivery_actions(world):
+            action_id, args = step["action"], step["args"]
+            if action_id == "go":
+                route = _travel_choice(world, step["destination"], f"meal-delivery:{step['order_id']}",
+                                       "Carry a personally known paid bread order toward supper before its real deadline.", "P1")
+                if route is None:
+                    continue
+                args = route["arguments"]
+            if action_blocker(world, action_id, args, check_wait=False) is None:
+                choices.append({"task_id": f"meal-delivery:{step['order_id']}", "action_id": action_id,
+                                "arguments": args, "priority": "P1",
+                                "reason": "A personally known funded bread delivery can reach the inn before supper."})
     if state.maintenance is not None:
         from npc_sim import village_maintenance
         for job in village_maintenance.observation(world)["maintenance"]["jobs"]:
@@ -360,6 +511,9 @@ def candidates(world: "World") -> list[dict[str, Any]]:
             if action_blocker(world, action_id, {}, check_wait=False) is None:
                 choices.append({"task_id": f"occupation:{action_id}", "action_id": action_id, "arguments": {},
                                 "priority": "P3", "reason": "Your real occupation work is currently eligible."})
+    if purposeful(world):
+        choices.extend(_purposeful_choices(world))
+        choices.sort(key=lambda choice: choice["priority"])
     if not choices and _inspection_ready(world):
         choices.append({"task_id": f"fallback:{world.actor_id}:inspect:{resident.work}",
                         "action_id": "village_observe", "arguments": {}, "priority": "P5",
@@ -382,12 +536,18 @@ def action_blocker(world: "World", action: str, args: dict[str, Any], *,
         limits = _obligation_limits(world)
         if limits and state.minute + duration > min(limits):
             return "COMMITMENT_DUE", "Leave time for the actual walk and meal/sleep action before your next obligation."
+    if purposeful(world) and action == "village_check_messages":
+        communication = state.communication
+        fixture = (communication.config.board_id if args.get("channel", "board") == "board" else
+                   next((box for box, owner in communication.boxes.items() if owner == world.actor_id), "")) if communication else ""
+        if fixture and not _unread_paper(world, fixture):
+            return "PAPER_UNCHANGED", "No unread accessible paper here; do not poll unchanged messages."
     if action == "village_observe":
         previous = person.fallback.inspections.get(world.actor.location_id)
         if previous and previous[1] == _inspection_revision(world) and (
                 state.minute < previous[0] + village_extensions.policy(world).idle_review_minutes):
             return "INSPECTION_UNCHANGED", "Already inspected here; wait for a real condition change or the next safety review."
-    if check_wait and action in {"village_wait", "village_wait_event"} and not (
+    if check_wait and action in {"village_wait", "village_wait_event", "wait_until_next_relevant_event"} and not (
             person.life and (person.life.sleeping or person.life.work)):
         config, _ = village.context(world)
         resident = config.residents[world.actor_id]
@@ -398,10 +558,10 @@ def action_blocker(world: "World", action: str, args: dict[str, Any], *,
         if next_review(world) <= state.minute:
             return "COMMITMENT_DUE", "Your scheduled meal or bedtime needs travel or action now; do not start an idle wait."
         choices = candidates(world)
-        if choices:
-            return "ELIGIBLE_TASK_PENDING", f"Before idle waiting, consider {choices[0]['action_id']}: {choices[0]['reason']}"
-        if action == "village_wait":
-            return "EVENT_WAIT_REQUIRED", "Use village_wait_event with a recorded wake trigger instead of repeated short idle waits."
+        required = next((choice for choice in choices if choice["priority"] != "P5"), None)
+        if choices and (action != "wait_until_next_relevant_event" or required):
+            choice = required if action == "wait_until_next_relevant_event" else choices[0]
+            return "ELIGIBLE_TASK_PENDING", f"Before idle waiting, consider {choice['action_id']}: {choice['reason']}"
     return None
 
 
@@ -415,7 +575,8 @@ def start_wait(world: "World") -> int:
     fallback.decision = {
         "actor_id": world.actor_id, "world_time": state.minute, "eligible_fallbacks": [],
         "blocked_primary_task_id": next(reversed(fallback.blocked), None),
-        "selected_task_id": "wait:event", "reason": "No eligible local work or useful inspection.",
+        "selected_task_id": "wait:event", "reason": ("No feasible personally grounded work, paper check, or safe route before the next obligation."
+                                                   if purposeful(world) else "No eligible local work or useful inspection."),
         "next_review": {"type": "event_or_time", "events": WAKE_ON, "latest_time": until},
     }
     _emit(world, "WAIT_STARTED", "wait:event", fallback.decision["reason"],
@@ -457,8 +618,16 @@ def record_result(world: "World", action: str, args: dict[str, Any],
     if outcome != "APPLIED":
         return False
     fallback.blocked.pop(key, None)
-    if action != "village_wait_event":
+    if code != "EVENT_WAIT_STARTED":
         fallback.wait = None
+    if purposeful(world):
+        if action in {"village_check_messages", "village_notice_read"} and args.get("channel", "board") == "board":
+            fallback.board_last_checked = state.minute
+        config, _ = village.context(world)
+        if (world.actor_id == config.miller and action == "say"
+                and "mill drive fail" in args.get("message", "")
+                and village.resident_location(world, config.carpenter) == world.actor.location_id):
+            fallback.inspections["mill-relay"] = (state.minute, "relayed")
     if action == "village_observe":
         location = world.actor.location_id
         fallback.inspections[location] = (state.minute, _inspection_revision(world))
@@ -519,10 +688,17 @@ def observation(world: "World") -> dict[str, Any]:
         "blocked_tasks": [{**item.model_dump(), "retry_suppressed": item.context_revision == _retry_revision(world, item.action_id)}
                           for item in fallback.blocked.values()],
         "supply_needs": [need.model_dump() for need in fallback.supply_needs.values()],
+        "communication_blocker": (state.communication.recent_blockers.get(world.actor_id)
+                                  if purposeful(world) and state.communication else None),
         "recent_locations": [step.model_dump() for step in fallback.recent_locations],
         "route_goal": fallback.route_goal.model_dump() if fallback.route_goal else None,
         "repeated_supplier_searches": repeated_supplier_searches(world),
         "eligible_candidates": candidates(world),
+        "information_check": ({"last_board_visit": fallback.board_last_checked,
+                               "next_board_visit": (fallback.board_last_checked + village_extensions.policy(world).board_check_minutes
+                                                    if fallback.board_last_checked >= 0 else state.minute),
+                               "last_mill_check": fallback.mill_last_checked}
+                              if purposeful(world) else None),
         "next_known_event": next_review(world),
         "wait": fallback.wait.model_dump() if fallback.wait else None,
         "decision": fallback.decision,

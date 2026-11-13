@@ -67,6 +67,38 @@ def merchant(world, **changes):
     return visitor
 
 
+def test_optional_merchant_goods_require_explicit_offer_and_real_trade(world):
+    template = event("merchant", visitor=VisitorPlan(
+        name="Tamsin Reed", entry="village-square", destination="forge",
+        departure="village-square", stay_minutes=60,
+        merchant=MerchantProfile(funds=10, capacity=2, stock={"iron": 1},
+                                 sell_prices={"iron": 3}, buy_prices={"furniture": 4},
+                                 demand={"furniture": 1})))
+    template.id = "visiting-merchant"
+    configured = village_events.offer_optional_goods(
+        VillageEventsConfig(templates=[template]).model_dump(), scheduled_at=600)
+    offered = VillageEventsConfig.model_validate(configured).templates[0]
+    assert offered.scheduled_at == 600 and not offered.random
+    assert offered.visitor.merchant.buy_prices["tackle"] == 5
+    assert offered.visitor.merchant.demand["preserved-fish"] == 2
+    world.scenario.village.prices.update(furniture=8, tackle=5, **{"preserved-fish": 6})
+    world.state.village.stocks.setdefault("forge", {}).update(furniture=0, tackle=0, **{"preserved-fish": 0})
+    configure(world, offered)
+    village_events.advance(world)
+    world.state.village.minute += 5
+    village_events.advance(world)
+    visitor = next(iter(world.state.village.incidents.visitors.values()))
+    assert visitor.status == "present"
+    stock(world, "furniture", 1)
+    first = trade(world, visitor, resource="furniture", transaction="furniture-sale")
+    assert first[0] == "APPLIED"
+    assert world.state.village.stocks["forge"]["furniture"] == 0
+    funds = visitor.coins
+    assert trade(world, visitor, resource="furniture", transaction="furniture-sale")[1] == "TRADE_ALREADY_APPLIED"
+    assert world.state.village.stocks["forge"]["furniture"] == 0
+    assert visitor.coins == funds
+
+
 def stock(world, resource, amount, expires=None):
     state = world.state.village
     state.stocks.setdefault("forge", {})[resource] = amount
@@ -237,6 +269,110 @@ def test_random_daily_selection_reproducible_and_feasibility(world):
         village_events.advance(world)
     assert list(world.state.village.incidents.instances) == first
     assert len(first) <= 2
+
+
+def test_scheduled_merchant_bypasses_zero_random_limits_and_survives_reload(world):
+    template = event("merchant", visitor=VisitorPlan(
+        name="Tamsin", entry="village-square", destination="forge", departure="village-square",
+        stay_minutes=60, merchant=MerchantProfile()), scheduled_at=600)
+    random_event = event(id="random-rain", kind="rain", equipment=None, random=True, scheduled_at=None)
+    incidents = configure(world, template, random_event, daily_min=0, daily_max=0)
+    village_events.advance(world)
+    assert incidents.daily_targets["0"] == incidents.daily_counts.get("0", 0) == 0
+    assert len(incidents.visitors) == 1
+    assert incidents.scheduled_merchants["test"].status == "activated"
+    world.state.village.incidents = VillageEventsState.model_validate_json(incidents.model_dump_json())
+    village_events.advance(world)
+    assert len(world.state.village.incidents.visitors) == 1
+    assert not any(i.template.id == "random-rain" for i in world.state.village.incidents.instances.values())
+
+
+def test_scheduled_merchant_retries_safety_and_records_missed_reason(world):
+    template = event("merchant", visitor=VisitorPlan(
+        name="Tamsin", entry="village-square", destination="forge", departure="village-square",
+        stay_minutes=60, merchant=MerchantProfile()), scheduled_at=600, window_end=620)
+    incidents = configure(world, template, daily_max=0)
+    person = world.state.village.residents["torvin"]
+    person.busy_until = 610
+    village_events.advance(world)
+    visit = incidents.scheduled_merchants["test"]
+    assert (visit.status, visit.reason, visit.retry_until) == ("pending", "resident_unavailable", 620)
+    assert "resident_unavailable" in next(i["status"] for i in village_events.monitor(world)["incidents"])
+    incidents = VillageEventsState.model_validate_json(incidents.model_dump_json())
+    world.state.village.incidents = incidents
+    world.state.village.minute = 615
+    village_events.advance(world)
+    assert incidents.scheduled_merchants["test"].status == "activated"
+    assert len(incidents.visitors) == 1
+
+
+
+def test_scheduled_merchant_expires_after_blocked_window(world):
+    template = event("merchant", visitor=VisitorPlan(
+        name="Tamsin", entry="village-square", destination="forge", departure="village-square",
+        stay_minutes=60, merchant=MerchantProfile()), scheduled_at=600, window_end=620)
+    incidents = configure(world, template, daily_max=0)
+    person = world.state.village.residents["torvin"]
+    person.busy_until = 700
+    village_events.advance(world)
+    world.state.village.minute = 620
+    village_events.advance(world)
+    visit = incidents.scheduled_merchants["test"]
+    assert visit.status == "expired" and "resident_unavailable" in visit.reason
+    assert "missed_visit" in next(i["status"] for i in village_events.monitor(world)["incidents"])
+    village_events.advance(world)
+    assert not incidents.visitors
+
+
+def test_scheduled_merchant_retries_active_capacity_and_preserves_iron_trader(world):
+    from npc_sim import village_goods
+    template = event("merchant", visitor=VisitorPlan(
+        name="Tamsin", entry="village-square", destination="forge", departure="village-square",
+        stay_minutes=60, merchant=MerchantProfile()), scheduled_at=720)
+    blocker = event("rain", id="blocker", equipment=None, scheduled_at=710)
+    incidents = configure(world, template, blocker, max_active=1, daily_max=0)
+    world.state.village.minute = 710
+    village_events.advance(world)
+    world.state.village.minute = 715
+    village_goods.advance(world)
+    world.state.village.minute = 720
+    village_goods.advance(world)
+    village_events.advance(world)
+    assert world.state.entities["iron-trader"].location == "village-square"
+    assert any(v["id"] == "iron-trader" and v["status"] == "present"
+               for v in village_events.monitor(world)["visitors"])
+    assert incidents.scheduled_merchants["test"].reason == "active_event_capacity"
+    world.state.village.minute = 740
+    village_events.advance(world)
+    assert incidents.scheduled_merchants["test"].status == "activated"
+    world.state.village.minute = 1080
+    village_goods.advance(world)
+    assert world.state.entities["iron-trader"].location == "bridge"
+    world.state.village.minute = 1085
+    village_goods.advance(world)
+    assert world.state.entities["iron-trader"].location is None
+    trader = next(v for v in village_events.monitor(world)["visitors"] if v["id"] == "iron-trader")
+    assert trader["status"] == "departed"
+    assert [(a["label"], a["location"]) for a in trader["activities"]] == [
+        ("Arrival travel", "bridge"), ("Trading", "village-square"),
+        ("Departure travel", "village-square")]
+    assert trader["arrival"] == 715 and trader["departure"] == 1085
+
+
+def test_iron_trader_departure_with_missing_activity_history(world):
+    from npc_sim import village_goods
+    state = world.state.village
+    state.minute = 1080
+    state.trader_day = 0
+    state.trader_activities = []
+    world.state.entities["iron-trader"].location = "village-square"
+
+    village_goods.advance(world)
+
+    assert world.state.entities["iron-trader"].location == "bridge"
+    assert state.trader_activities[-1].label == "Departure travel"
+    assert state.trader_activities[-1].status == "completed"
+    assert state.stocks.get("village-square", {}).get("iron", 0) == 0
 
 
 def test_catalogue_and_monitor_schema_keep_departed_history(world):

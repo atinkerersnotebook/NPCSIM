@@ -129,6 +129,13 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     if not wagon.repaired:
         return reject("Torvin must finish fitting the wagon parts before the wagon can be used.")
     if action == "village_start_route":
+        if config.expanded_rules and state.economy is not None and not wagon.loads:
+            shipments = [order for order in state.economy.orders.values()
+                         if order.status in village_economy.COMMITTED and order.loadable > 0
+                         and order.source in ROUTE and order.destination in ROUTE
+                         and village_economy.loadable_for_order(world, order) > 0]
+            if not shipments:
+                return reject("No confirmed shipment is ready on the standing circuit; wait for a real pickup.")
         wagon.driver, wagon.automatic = rid, True
         wagon.route_index, wagon.phase = 0, "travel"
         wagon.next_event_at, wagon.blocker = state.minute + 5, None

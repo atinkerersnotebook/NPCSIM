@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from npc_sim import village, village_economy
-from npc_sim.models import VillageShipment, VillageStockLot, VillageStockSnapshot
+from npc_sim.models import VillageActivityView, VillageShipment, VillageStockLot, VillageStockSnapshot
 
 if TYPE_CHECKING:
     from npc_sim.world import World
@@ -226,7 +226,12 @@ def unload(world: "World", carrier: str, shipments: list[VillageShipment]) -> st
         if getattr(item, "order_id", None) and order is None:
             return "UNKNOWN_ORDER: the shipment has no matching order."
         if order:
-            if order.status not in village_economy.COMMITTED or state.minute > order.deadline:
+            late_accepted = (item.resource == "firewood" and state.firewood is not None
+                             and state.firewood.statuses.get(f"late:{order.id}") == "accepted"
+                             and state.minute > order.deadline
+                             and (order.status in village_economy.COMMITTED or
+                                  order.status == "failed" and order.reason == "MISSED_DEADLINE"))
+            if not late_accepted and (order.status not in village_economy.COMMITTED or state.minute > order.deadline):
                 return "ORDER_CLOSED: delivery is cancelled, failed, fulfilled or late; return its unpaid cargo."
             if (item.resource != order.product or item.buyer != order.buyer or item.seller != order.supplier
                     or item.destination != order.destination or item.price != order.price):
@@ -375,19 +380,42 @@ def advance(world: "World") -> None:
             deadline.overdue = True
             village.announce(world, "village-bell", "deadline_overdue", goal,
                              f"{goal.replace('_', ' ')} is overdue. Recovery remains possible.")
-    if state.minute % 1440 == 720 and state.trader_day != state.minute // 1440:
-        state.trader_day = state.minute // 1440
-        put(world, "village-square", "iron", 4, kind="imported")
-        world.state.entities["iron-trader"].location = "village-square"
-        village.announce(world, "iron-trader", "trader_arrived", "iron",
-                         "The visiting trader offers four fresh iron units at the square, three coins each.")
-    if state.minute % 1440 == 1080 and world.state.entities["iron-trader"].location is not None:
-        unsold = state.stocks.get("village-square", {}).get("iron", 0)
-        if unsold:
-            take(world, "village-square", "iron", unsold, kind="exported")
-        world.state.entities["iron-trader"].location = None
-        village.announce(world, "iron-trader", "trader_departed", "iron",
-                         f"The trader departed with {unsold} unsold iron units.")
+    if "iron-trader" in world.state.entities:
+        trader = world.state.entities["iron-trader"]
+        entry = "iron-mine" if "iron-mine" in world.state.entities else "bridge"
+        day, clock = divmod(state.minute, 1440)
+        if (clock == 715 and state.trader_day != day and trader.location is None
+                and village.route(world, entry, "village-square") == ["village-square"]):
+            trader.location = entry
+            state.trader_activities = []
+            state.trader_activities.append(VillageActivityView(
+                actor="iron-trader", label="Arrival travel", location=entry,
+                start=state.minute, end=state.minute + 5, status="completed"))
+        if 720 <= clock < 1080 and state.trader_day != day and trader.location == entry:
+            if village.route(world, entry, "village-square") == ["village-square"]:
+                trader.location = "village-square"
+                state.trader_day = day
+                put(world, "village-square", "iron", 4, kind="imported")
+                state.trader_activities.append(VillageActivityView(
+                    actor="iron-trader", label="Trading", location="village-square",
+                    start=state.minute, end=day * 1440 + 1080, status="active"))
+                village.announce(world, "iron-trader", "trader_arrived", "iron",
+                                 "The visiting trader offers four fresh iron units at the square, three coins each.")
+        if 1080 <= clock < 1440 and trader.location == "village-square" and state.trader_day == day:
+            if village.route(world, "village-square", entry) == [entry]:
+                unsold = state.stocks.get("village-square", {}).get("iron", 0)
+                if unsold:
+                    take(world, "village-square", "iron", unsold, kind="exported")
+                if state.trader_activities:
+                    state.trader_activities[-1].status = "completed"
+                village.announce(world, "iron-trader", "trader_departed", "iron",
+                                 f"The trader departed with {unsold} unsold iron units.")
+                trader.location = entry
+                state.trader_activities.append(VillageActivityView(
+                    actor="iron-trader", label="Departure travel", location="village-square",
+                    start=state.minute, end=state.minute + 5, status="completed"))
+        if clock >= 1085 and trader.location == entry and state.trader_day == day:
+            trader.location = None
 
 
 def snapshot(world: "World") -> None:

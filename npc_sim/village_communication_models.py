@@ -105,6 +105,7 @@ class VillageCommunicationState(CommunicationModel):
     cooldowns: dict[str, int] = Field(default_factory=dict)
     failed_contacts: dict[str, str] = Field(default_factory=dict)
     failed_replies: dict[str, str] = Field(default_factory=dict)
+    recent_blockers: dict[str, dict[str, Any]] = Field(default_factory=dict)
     next_notice: Positive = 1
     transfers: dict[str, TransferAuthorization] = Field(default_factory=dict)
 

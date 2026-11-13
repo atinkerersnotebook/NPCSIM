@@ -203,6 +203,32 @@ test("visitor rows retain history but departed visitors leave current location c
   assert.ok(markup.includes("Cora"));
 });
 
+test("iron trader timeline shows actual arrival, trading, and departure travel", () => {
+  const state = expanded();
+  state.world!.village!.minute = 1085;
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [], incidents: [], time_use: {},
+    visitors: [{ id: "iron-trader", name: "Iron trader", location: "iron-mine", arrival: 715,
+      departure: 1085, status: "departed", activities: [
+        { actor: "iron-trader", label: "Arrival travel", location: "iron-mine",
+          start: 715, end: 720, status: "completed" },
+        { actor: "iron-trader", label: "Trading", location: "village-square",
+          start: 720, end: 1080, status: "completed" },
+        { actor: "iron-trader", label: "Departure travel", location: "village-square",
+          start: 1080, end: 1085, status: "completed" }
+      ] }]
+  };
+  const timeline = buildWorldTimeline(state, [], monitoredAgents(state))!;
+  const row = timeline.rows.find(item => item.id === "iron-trader")!;
+  assert.deepEqual(row.spans.map(span => [span.label, span.start, span.end]), [
+    ["Arrival travel", 715, 720], ["Trading", 720, 1080], ["Departure travel", 1080, 1085]
+  ]);
+  assert.deepEqual(row.locations.map(band => [band.location, band.start, band.end]), [
+    ["iron-mine", 715, 720], ["village-square", 720, 1085]
+  ]);
+  assert.match(worldGanttMarkup(state, [], monitoredAgents(state)), /Iron trader \/ 18:00 - 18:05 \/ 5 min \/ Village square \/ Departure travel/);
+});
+
 test("personal activities clip at now and economy reporting escapes generated labels", () => {
   const state = expanded();
   state.world!.village!.minute = 600;
@@ -1072,6 +1098,95 @@ test("Gantt combines consecutive waits but preserves production batches as separ
   const markup = worldGanttMarkup(state, events, monitoredAgents(state));
   assert.match(markup, /class="gantt-cell-title"[^>]*>Waiting<\/text>/);
   assert.match(markup, /class="gantt-cell-time"[^>]*>20 min \/ 08:00 - 08:20<\/text>/);
+});
+
+test("Gantt ends interrupted event waits when Torvin acts again", () => {
+  const state = expanded();
+  state.world!.village!.minute = 1220;
+  const events = [timelineEvent(1, "observation", 1155, timelineObservation(1155))];
+  for (const [sequence, minute, action, available] of [
+    [2, 1155, "village_wait_event", 1320],
+    [4, 1170, "village_wait_event", 1175],
+    [6, 1175, "village_wait_event", 1320],
+    [8, 1180, "village_wait_event", 1320],
+    [10, 1215, "village_wait_event", 1320]
+  ] as const) {
+    events.push(timelineEvent(sequence, "action_request", minute, {
+      request_id: String(sequence), action_id: action, arguments: {}
+    }), timelineEvent(sequence + 1, "action_result", minute, {
+      request_id: String(sequence), outcome: "APPLIED", explanation: "Waiting for the next event.",
+      observation: timelineObservation(minute, "cottages", available)
+    }));
+  }
+  events.push(timelineEvent(12, "action_request", 1218, {
+    request_id: "read", action_id: "read", arguments: {}
+  }), timelineEvent(13, "action_result", 1218, {
+    request_id: "read", outcome: "APPLIED", explanation: "Read the noticeboard.",
+    observation: timelineObservation(1218, "cottages", 1320)
+  }));
+  const spans = buildWorldTimeline(state, events, monitoredAgents(state))!.rows[0].spans
+    .filter(span => span.kind === "wait");
+  assert.deepEqual(spans.map(span => [span.start, span.end]), [[1155, 1218]]);
+});
+
+test("Gantt does not stack overlapping and duplicate Jory waits", () => {
+  const state = expanded();
+  state.world!.village!.minute = 395;
+  const events = [timelineEvent(1, "observation", 375, timelineObservation(375))];
+  for (const [sequence, minute, action, available] of [
+    [2, 375, "village_wait", 390],
+    [4, 380, "village_wait", 390],
+    [6, 380, "village_wait_event", 390]
+  ] as const) {
+    events.push(timelineEvent(sequence, "action_request", minute, {
+      request_id: String(sequence), action_id: action, arguments: {}
+    }), timelineEvent(sequence + 1, "action_result", minute, {
+      request_id: String(sequence), outcome: "APPLIED", explanation: "Waiting for the next event.",
+      observation: timelineObservation(minute, "cottages", available)
+    }));
+  }
+  const spans = buildWorldTimeline(state, events, monitoredAgents(state))!.rows[0].spans
+    .filter(span => span.kind === "wait");
+  assert.deepEqual(spans.map(span => [span.start, span.end]), [[375, 390]]);
+  const markup = worldGanttMarkup(state, events, monitoredAgents(state));
+  assert.equal((markup.match(/class="gantt-bar wait"/g) ?? []).length, 1);
+});
+
+test("Gantt stops Ada's event wait when a same-minute action begins", () => {
+  const state = expanded();
+  state.world!.village!.minute = 825;
+  const adaObservation = (minute: number, available: number) => ({
+    self: { actor_id: "ada", location_id: "village-square" },
+    village: { minute, personal: { available_at: available } }
+  });
+  const events = [
+    timelineEvent(1, "observation", 815, adaObservation(815, 815), "ada"),
+    timelineEvent(2, "action_request", 815, {
+      request_id: "wait-1", action_id: "village_wait_event", arguments: {}
+    }, "ada"),
+    timelineEvent(3, "action_result", 815, {
+      request_id: "wait-1", outcome: "APPLIED", explanation: "Waiting for an event.",
+      observation: adaObservation(815, 845)
+    }, "ada"),
+    timelineEvent(4, "action_request", 820, {
+      request_id: "wait-2", action_id: "village_wait_event", arguments: {}
+    }, "ada"),
+    timelineEvent(5, "action_result", 820, {
+      request_id: "wait-2", outcome: "APPLIED", explanation: "Waiting for another event.",
+      observation: adaObservation(820, 850)
+    }, "ada"),
+    timelineEvent(6, "action_request", 820, {
+      request_id: "plan", action_id: "village_plan_walk", arguments: {}
+    }, "ada"),
+    timelineEvent(7, "action_result", 820, {
+      request_id: "plan", outcome: "APPLIED", explanation: "Planned a walk.",
+      observation: adaObservation(820, 825)
+    }, "ada")
+  ];
+  const row = buildWorldTimeline(state, events, monitoredAgents(state))!.rows.find(item => item.id === "ada")!;
+  assert.deepEqual(row.spans.map(span => [span.label, span.start, span.end]), [
+    ["wait event", 815, 820], ["plan walk", 820, 825]
+  ]);
 });
 
 test("Gantt stores only relevant timing facts rather than model requests or private memories", () => {

@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from npc_sim import village, village_extensions
+from npc_sim import village, village_conversation, village_extensions
 
 if TYPE_CHECKING:
     from npc_sim.world import World
@@ -13,14 +13,22 @@ def next_actor(world: "World", stop_at_minute: int | None = None) -> str | None:
     if stop_at_minute is not None and state.minute >= stop_at_minute:
         world.save()
         return None
-    ids = list(config.residents)
+    ids = [rid for rid in config.residents if rid in state.residents and rid in world.state.actors]
+    if not ids:
+        raise ValueError("The timed village has no bound residents to schedule")
+    # A recovered conversation must not dereference an actor absent from this world.
+    for key, thread in list(state.conversations.items()):
+        if thread.speaker not in ids or thread.listener not in ids or thread.next_speaker not in ids:
+            del state.conversations[key]
+    village_conversation.end_invalid(world)
     if stop_at_minute is not None and state.minute >= stop_at_minute:
         world.save()
         return None
     if config.expanded_rules and state.free_turn_actor:
         rid = state.free_turn_actor
-        person = state.residents[rid]
-        if (person.life and not person.life.sleeping and not person.life.work
+        person = state.residents.get(rid)
+        if (person is not None and rid in ids and person.life
+                and not person.life.sleeping and not person.life.work
                 and village_extensions.blocked_until(world, rid) is None
                 and not person.timber_route
                 and not (state.wagon and state.wagon.automatic and state.wagon.driver == rid)):
@@ -28,13 +36,14 @@ def next_actor(world: "World", stop_at_minute: int | None = None) -> str | None:
             return rid
         state.free_turn_actor = None
     previous = state.last_scheduled_actor
-    if previous:
+    if previous in ids:
         person = state.residents[previous]
         person.available_at = max(person.available_at, state.minute + 5)
     for _ in range(576):
         if stop_at_minute is not None and state.minute >= stop_at_minute:
             world.save()
             return None
+        village_conversation.end_invalid(world)
         ready: list[str] = []
         future: list[int] = []
         for rid in ids:
@@ -59,10 +68,14 @@ def next_actor(world: "World", stop_at_minute: int | None = None) -> str | None:
                 future.append(person.available_at)
         if ready:
             earliest = min(state.residents[rid].available_at for rid in ready)
+            pending = {thread.next_speaker for thread in village_conversation.active(world)}
+            candidates = [rid for rid in ready if state.residents[rid].available_at == earliest]
+            if any(rid in pending for rid in candidates):
+                candidates = [rid for rid in candidates if rid in pending]
             for offset in range(len(ids)):
                 index = (state.turn_cursor + offset) % len(ids)
                 rid = ids[index]
-                if rid in ready and state.residents[rid].available_at == earliest:
+                if rid in candidates:
                     state.turn_cursor = (index + 1) % len(ids)
                     state.last_scheduled_actor = rid
                     world.state.revision += 1

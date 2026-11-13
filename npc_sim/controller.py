@@ -631,6 +631,11 @@ class Controller:
             and (self.run.get("reason", "").startswith("Timed out while waiting for response to ClientRequest.")
                  or self.run.get("reason") == "TimeoutError")
         )
+        scheduler_recovery = (
+            previous_status == "error"
+            and self.run.get("reason", "").startswith("MCP tool world_next_village_actor failed:")
+            and self.run.get("reason", "").endswith("list index out of range")
+        )
         premature = (previous_status == "succeeded" and analysis.get("status") == "completed"
                      and analysis.get("verdict") == "fail")
         last_ruling = next((event["payload"] for event in reversed(self.events.events)
@@ -640,22 +645,56 @@ class Controller:
                                  and last_ruling.get("source") == "ai"
                                  and last_ruling.get("verdict") == "defeat")
         if self.run["goal"]["type"] != "village_restored" or not (
-                premature or timeout_recovery or daily_defeat_recovery):
+                premature or timeout_recovery or scheduler_recovery or daily_defeat_recovery):
             raise ValueError("Only a prematurely completed village adventure, a recoverable daily-village AI defeat, "
-                             "or a confirmed recoverable world timeout can be reopened.")
+                             "or a confirmed recoverable world error can be reopened.")
         config = AppConfig.model_validate(self.run["config"]).world
         if config.command or config.transport != "stdio":
             raise ValueError("Reopening requires the built-in saved local world.")
         retry_actor = None
         stop_at_minute = None
         recovered_action = None
-        if timeout_recovery or request.until_midnight:
+        if timeout_recovery or scheduler_recovery or request.until_midnight:
             state_path = self.data / "worlds" / self.run["world_id"] / "world-state.json"
             saved_world = WorldState.model_validate(read_json(state_path))
             if saved_world.world_id != self.run["world_id"] or saved_world.village is None:
                 raise ValueError("The saved village identity does not match this adventure.")
             if request.until_midnight:
                 stop_at_minute = (saved_world.village.minute // 1440 + 1) * 1440
+            if scheduler_recovery:
+                from npc_sim import village_turns
+                from npc_sim.world import World
+                from tempfile import TemporaryDirectory
+                import shutil
+                with TemporaryDirectory(prefix="npcsim-scheduler-recovery-") as temp_dir:
+                    copied = Path(temp_dir) / "world-state.json"
+                    shutil.copy2(state_path, copied)
+                    history = state_path.with_suffix(".requests.sqlite3")
+                    if saved_world.request_history_id is not None:
+                        shutil.copy2(history, copied.with_suffix(".requests.sqlite3"))
+                    scenario = Scenario.model_validate(read_json(self.events.directory / "scenario.json"))
+                    probe = World(scenario, copied, self.run["world_id"],
+                                  self.run["actor_id"], self.run["session_id"])
+                    if (saved_world.village.trader_activities
+                            or saved_world.village.minute % 1440 != 1075
+                            or saved_world.village.trader_day != saved_world.village.minute // 1440
+                            or "iron-trader" not in saved_world.entities
+                            or saved_world.entities["iron-trader"].location != "village-square"):
+                        raise ValueError("The saved trader state does not match the confirmed scheduler failure.")
+                    village_turns.next_actor(probe, self.run.get("village_stop_minute"))
+                    if probe.state.village.minute <= saved_world.village.minute:
+                        raise ValueError("The scheduler did not advance beyond the failed trader departure.")
+                results = {event["payload"]["request_id"] for event in self.events.events
+                           if event["kind"] == "action_result"}
+                last_action = next((event for event in reversed(self.events.events)
+                                    if event["kind"] == "action_result"), None)
+                pending = any(event["payload"]["request_id"] not in results for event in self.events.events
+                              if event["kind"] == "action_request")
+                if (pending or last_action is None or last_action.get("free_action")
+                        or last_action["actor_id"] != saved_world.village.last_scheduled_actor
+                        or last_action["payload"]["observation"]["observation_revision"]
+                        != f"obs-{saved_world.revision}"):
+                    raise ValueError("The scheduler failure is not at a confirmed durable action boundary.")
             if timeout_recovery:
                 results = {event["payload"]["request_id"] for event in self.events.events
                            if event["kind"] == "action_result"}
@@ -710,7 +749,8 @@ class Controller:
             self.emit("action_result_recovered", {
                 "request_id": event["payload"]["request_id"], "request_event_id": event["id"],
                 "source": "durable_world_retry_history", "action_replayed": False})
-        self._reopen_attempt("Saved village recovered. Continue when ready." if timeout_recovery else
+        self._reopen_attempt("Saved village recovered. Continue when ready."
+                             if timeout_recovery or scheduler_recovery else
                              "Daily routines are unfinished. Continue when ready.", reset_achieved=True)
         self.run["verification"] = verification
         if stop_at_minute is not None:

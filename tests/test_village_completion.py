@@ -94,6 +94,21 @@ def test_incomplete_requirement_keeps_village_active(completed, missing):
     assert not all(result["evidence"]["checks"].values())
 
 
+def test_missed_daily_meal_stops_same_day_recovery_after_midnight(completed):
+    state = completed.state.village
+    state.day_policy = VillageDayPolicy(demand_led_completion=True)
+    state.residents["iona"].life.meals["0:daily"].status = "missed"
+    state.minute = 1300
+    before_deadline = completed.evaluate_goal("village_restored")
+    assert before_deadline["evidence"]["daily_requirements_recoverable"] is True
+    state.minute = 1320
+    after_deadline = completed.evaluate_goal("village_restored")
+    assert after_deadline["status"] == "active"
+    assert after_deadline["evidence"]["missed_daily_meals"] == ["iona"]
+    assert after_deadline["evidence"]["daily_meal_deadline"] == 1320
+    assert after_deadline["evidence"]["daily_requirements_recoverable"] is False
+
+
 def test_after_midnight_uses_previous_evening_and_allows_later_daily_recovery(completed):
     state = completed.state.village
     state.minute = 1500

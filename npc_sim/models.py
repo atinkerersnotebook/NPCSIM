@@ -495,6 +495,9 @@ class VillageDayPolicy(StrictModel):
     inn_closing_minute: int = Field(default=1320, ge=1140, lt=1440, multiple_of=5)
     event_driven_waits: bool = False
     anti_idle: bool = False
+    purposeful_downtime: bool = False
+    downtime_review_minutes: int = Field(default=30, ge=5, le=30, multiple_of=5)
+    board_check_minutes: int = Field(default=90, ge=15, le=90, multiple_of=5)
     idle_review_minutes: int = Field(default=60, ge=15, le=240, multiple_of=5)
     require_tea_use: bool = True
     require_manure_use: bool = True
@@ -535,6 +538,8 @@ class VillageFirewoodConfig(StrictModel):
     firewood_per_log: int = Field(default=4, ge=1, le=8, strict=True)
     reserve: int = Field(default=2, ge=1, le=12, strict=True)
     site_capacities: dict[str, int] = Field(default_factory=dict)
+    site_reorder_points: dict[str, int] = Field(default_factory=dict)
+    site_reserve_targets: dict[str, int] = Field(default_factory=dict)
     reorder_point: int = Field(default=2, ge=0, le=24, strict=True)
     business_buffer_days: int = Field(default=3, ge=1, le=7, strict=True)
 
@@ -639,6 +644,7 @@ class VillageConfig(VillageDayPolicy):
     goal_deadlines: dict[str, int] = Field(default_factory=dict)
     residents: dict[str, VillageResident]
     stocks: dict[str, dict[str, VillageQuantity]]
+    initial_stock_seed_id: str | None = None
     coins: dict[str, VillageQuantity]
     prices: dict[str, VillageAmount]
     owners: dict[str, str]
@@ -762,6 +768,8 @@ class VillageRouteGoal(StrictModel):
 
 
 class VillageFallbackState(StrictModel):
+    board_last_checked: int = -1
+    mill_last_checked: int = -1
     route_goal: VillageRouteGoal | None = None
     blocked: dict[str, VillageBlockedAction] = Field(default_factory=dict)
     supply_needs: dict[str, VillageSupplyNeed] = Field(default_factory=dict)
@@ -772,6 +780,19 @@ class VillageFallbackState(StrictModel):
     active_inspection_until: int | None = None
     active_inspection_location: str | None = None
     decision: dict[str, Any] | None = None
+
+
+class VillageWalkingPlan(StrictModel):
+    origin: str
+    destination: str
+    locations: list[str]
+    doors: list[str]
+    next_step: int = 0
+    purpose: str
+    last_message: str = ""
+    meal_due: bool = False
+    rest_due: bool = False
+    routine_location: str = ""
 
 
 class VillagePersonState(StrictModel):
@@ -788,6 +809,7 @@ class VillagePersonState(StrictModel):
     life: VillageLifeState | None = None
     available_at: int = Field(default=0, ge=0)
     known_routes: list[str] = Field(default_factory=list)
+    walking_plan: VillageWalkingPlan | None = None
     shipments: list["VillageShipment"] = Field(default_factory=list)
     timber_route: bool = False
     route_next_at: int = 0
@@ -801,6 +823,8 @@ class VillagePersonState(StrictModel):
 class VillageStockLot(StrictModel):
     ingredients: list[str] = Field(default_factory=list)
     source_resource: str | None = None
+    origin: str | None = None
+    seed_event_id: str | None = None
 
     @model_serializer(mode="wrap")
     def serialize_lot(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -809,6 +833,10 @@ class VillageStockLot(StrictModel):
             result.pop("ingredients", None)
         if self.source_resource is None:
             result.pop("source_resource", None)
+        if self.origin is None:
+            result.pop("origin", None)
+        if self.seed_event_id is None:
+            result.pop("seed_event_id", None)
         return result
     quantity: int = Field(gt=0)
     produced_at: int = Field(ge=0)
@@ -989,7 +1017,30 @@ class VillageDashboard(StrictModel):
     day_policy: VillageDayPolicy | None = None
 
 
+class VillageConversation(StrictModel):
+    speaker: str
+    listener: str
+    next_speaker: str
+    turns: int = Field(ge=1, le=4)
+    started_at: int
+    expires_at: int
+
+
+class VillageCrewSession(StrictModel):
+    appointment_id: str
+    project: str
+    workers: list[str]
+    site: str
+    supplies: list[str]
+    starts_at: int
+    work_window_end: int
+    contributions: dict[str, int] = Field(default_factory=dict)
+    status: Literal["active", "completed"] = "active"
+
+
 class VillageState(StrictModel):
+    conversations: dict[str, VillageConversation] = Field(default_factory=dict)
+    conversation_cooldowns: dict[str, int] = Field(default_factory=dict)
     firewood: VillageFirewoodState | None = None
     communication: VillageCommunicationState | None = None
     minute: int
@@ -1005,6 +1056,7 @@ class VillageState(StrictModel):
     roster: dict[str, VillageResident] = Field(default_factory=dict)
     role_contributions: dict[str, int] = Field(default_factory=dict)
     project_contributions: dict[str, dict[str, int]] = Field(default_factory=dict)
+    crew_sessions: dict[str, VillageCrewSession] = Field(default_factory=dict)
     shovel_recovered: bool = False
     wagon: VillageWagon | None = None
     bread_deliveries: int = Field(default=0, ge=0)
@@ -1014,11 +1066,13 @@ class VillageState(StrictModel):
     meetings: dict[str, list[str]] = Field(default_factory=dict)
     free_turn_actor: str | None = None
     stock_lots: dict[str, dict[str, list[VillageStockLot]]] = Field(default_factory=dict)
+    initial_stock_seed_id: str | None = None
     stock_history: list[VillageStockSnapshot] = Field(default_factory=list)
     deadlines: dict[str, VillageDeadline] = Field(default_factory=dict)
     horse_leader: str | None = None
     horse_fed_day: int = -1
     trader_day: int = -1
+    trader_activities: list[VillageActivityView] = Field(default_factory=list)
     economy: VillageEconomyState | None = None
     social: VillageSocialState | None = None
     incidents: VillageEventsState | None = None
@@ -1105,7 +1159,7 @@ class Scenario(StrictModel):
                      "village_patrol", "village_observe", "village_eat", "village_sleep",
                      "village_fit_wagon", "village_start_route", "village_stop_route",
                      "village_load_wagon", "village_unload_wagon", "village_meeting", "village_cook_fish",
-                     "village_drive_wagon"}
+                     "village_drive_wagon", "village_plan_walk"}
         core_ids |= {"village_load_goods", "village_unload_goods", "village_grow_hay",
                      "village_gather_herbs", "village_fell_logs", "village_fertilize",
                      "village_drink_tea", "village_buy_iron", "village_lead_horse",

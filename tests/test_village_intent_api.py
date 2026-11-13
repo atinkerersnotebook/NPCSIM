@@ -143,6 +143,19 @@ def test_meeting_intent_engine_resolves_site_and_partner(world):
     assert notice.terms.recipients == [world.scenario.village.helper]
 
 
+def test_busy_meeting_partner_reports_channel_unavailable_without_crashing(world):
+    world = actor(world, "bren", "tavern-yard")
+    world = actor(world, "torvin", "tavern-yard")
+    minute = world.state.village.minute
+    world.state.village.residents["bren"].available_at = minute + 15
+    result = invoke(world, "village_propose_meeting", project_id="dig_well",
+                    start=900, purpose="Dig together")
+    assert result[:2] == ("REJECTED", "CHANNEL_UNAVAILABLE")
+    assert f"bren is busy until {minute + 15}" in result[2]
+    assert "noticeboard" in result[2]
+    assert not world.state.village.communication.notices
+
+
 def test_personal_supply_needs_observation(world):
     world = actor(world, "jory", "village-square")
     assert invoke(world, "village_request_supply", **supply())[0] == "APPLIED"

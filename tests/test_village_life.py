@@ -136,20 +136,126 @@ def test_sleep_requires_home_full_rest_and_cannot_be_skipped(cast):
     assert act(cast["bren"], "village_work")["code"] == "REST_DUE"
 
 
-@pytest.mark.parametrize("scenario_id", ["millhaven-expanded", "millhaven-living"])
-def test_elsie_wakes_at_six_to_prepare_her_inn(tmp_path, scenario_id):
+@pytest.mark.parametrize("scenario_id,wake", [("millhaven-expanded", 360), ("millhaven-living", 330)])
+def test_elsie_wakes_early_to_prepare_her_inn(tmp_path, scenario_id, wake):
     value = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / f"{scenario_id}.json"))
     resident = value.village.residents["elsie"]
     assert resident.home == resident.work == "tavern"
-    assert resident.wake_minute == 360
-    assert resident.schedule[1].minute == 360
+    assert resident.wake_minute == wake
+    assert resident.schedule[1].minute == wake
     assert "prepar" in resident.schedule[1].activity.lower()
     assert "food" in resident.schedule[1].activity.lower()
     world = World(value, tmp_path / "elsie.json", "elsie", "elsie", "session-elsie")
-    assert world.state.village.residents["elsie"].life.sleep_until == 360
-    village.advance(world, 60)
+    assert world.state.village.residents["elsie"].life.sleep_until == wake
+    village.advance(world, wake - world.state.village.minute)
     assert not world.state.village.residents["elsie"].life.sleeping
-    assert world.state.village.residents["elsie"].life.last_woke == 360
+    assert world.state.village.residents["elsie"].life.last_woke == wake
+
+
+@pytest.mark.parametrize("rid,wake", [
+    ("elsie", 330), ("torvin", 420), ("mara", 420), ("hobb", 420),
+    ("nella", 420), ("garrick", 420), ("iona", 420),
+    ("bren", 360), ("jory", 360), ("ada", 360), ("rowan", 420), ("finn", 420),
+])
+def test_living_village_morning_wake_schedule(tmp_path, rid, wake):
+    from npc_sim.living_village import build_scenario
+
+    base = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-expanded.json"))
+    generated = build_scenario(base, firewood=True)
+    configured = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-living.json"))
+    for value in (generated, configured):
+        resident = value.village.residents[rid]
+        assert resident.wake_minute == wake
+        assert resident.schedule[1].minute == wake
+    world = World(configured, tmp_path / f"wake-{rid}.json", "living-wake", rid, f"session-{rid}")
+    person = world.state.village.residents[rid].life
+    assert person.sleeping
+    assert person.sleep_until == wake
+    village.advance(world, wake - world.state.village.minute)
+    assert not person.sleeping
+    assert person.last_woke == wake
+    village.advance(world, configured.village.breakfast_delay)
+    assert person.meals["0:breakfast"].due == wake + configured.village.breakfast_delay
+
+
+def test_established_living_stock_is_seeded_once_and_persists(tmp_path):
+    from npc_sim.living_village import build_scenario
+
+    base = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-expanded.json"))
+    generated = build_scenario(base, firewood=True)
+    configured = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-living.json"))
+    expected = {"tavern": {"firewood": 12, "bread": 12},
+                "bakery": {"firewood": 10, "flour": 8}, "forge": {"firewood": 10},
+                "cottages": {"firewood": 24}, "workshop": {"timber": 6},
+                "watermill": {"grain": 8}, "farm": {"hay": 8}, "stable": {"hay": 6}}
+    for value in (generated, configured):
+        path = tmp_path / f"seed-{len(list(tmp_path.iterdir()))}.json"
+        world = World(value, path, "seed", "elsie", "session-elsie")
+        state = world.state.village
+        assert state.initial_stock_seed_id == value.village.initial_stock_seed_id
+        assert state.initial_stock_seed_id
+        for location, goods in expected.items():
+            for product, quantity in goods.items():
+                assert state.stocks[location][product] == quantity
+                lot = state.stock_lots[location][product][0]
+                assert lot.origin == "initial_village_stock"
+                assert lot.seed_event_id == state.initial_stock_seed_id
+                assert lot.produced_at == value.village.start_minute
+        imports = {(event.location, event.product): event.quantity for event in state.economy.movements
+                   if event.kind == "imported"}
+        assert all(imports[location, product] == quantity for location, goods in expected.items()
+                   for product, quantity in goods.items())
+        assert len(imports) == sum(bool(quantity) for goods in state.stocks.values()
+                                   for quantity in goods.values())
+        opening_events = [event.model_dump() for event in state.economy.movements]
+        state.stocks["tavern"]["firewood"] -= 1
+        state.stock_lots["tavern"]["firewood"][0].quantity -= 1
+        world.save()
+        reloaded = World(value, path, "seed", "elsie", "session-elsie")
+        assert reloaded.state.village.stocks["tavern"]["firewood"] == 11
+        assert len(reloaded.state.village.economy.movements) == len(state.economy.movements)
+        village.advance(reloaded, 1440)
+        assert reloaded.state.village.initial_stock_seed_id == state.initial_stock_seed_id
+        assert [event.model_dump() for event in reloaded.state.village.economy.movements[:len(opening_events)]] == opening_events
+
+
+def test_living_opening_bread_covers_configured_breakfast_and_supper(tmp_path):
+    from npc_sim import village_economy
+    from npc_sim.living_village import build_scenario
+
+    base = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-expanded.json"))
+    generated = build_scenario(base, firewood=True)
+    configured = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-living.json"))
+    for value in (generated, configured):
+        world = World(value, tmp_path / f"bread-{id(value)}.json", "living-bread", "elsie", "session-elsie")
+        requirements = village_economy.meal_requirements(world)
+        assert [plan["portions"] for plan in requirements] == [12, 12]
+        required_bread = sum(plan["inputs"].get("bread", 0) for plan in requirements)
+        assert required_bread == 12
+        assert world.state.village.stocks["tavern"]["bread"] >= required_bread
+        readiness = village_economy.meal_readiness(world)
+        assert [item["planned_portions"] for item in readiness] == [12, 12]
+        assert readiness[0]["cookable_portions"] == 12
+        assert readiness[1]["reason_code"] == "ingredients_missing"
+        assert readiness[1]["projected_unserved"] == 4
+        assert readiness[1]["missing_inputs"] == ["fish"]
+        assert [item["fuel_needed"] for item in readiness] == [6, 6]
+        world.actor.location_id = "tavern"
+        assert village_economy.observation(world)["meal_readiness"] == readiness
+        world.actor.location_id = "bakery"
+        assert "meal_readiness" not in village_economy.observation(world)
+        world.actor.location_id = "tavern"
+        from npc_sim import village_goods
+        village_goods.take(world, "tavern", "firewood", 12, kind="consumed")
+        missing_fuel = village_economy.meal_readiness(world)
+        assert missing_fuel[0]["reason_code"] == "fuel_missing"
+        assert missing_fuel[0]["projected_unserved"] == 12
+        assert missing_fuel[0]["fuel_on_hand"] == 0
+        village_goods.put(world, "tavern", "meals", 3, kind="imported")
+        partially_ready = village_economy.meal_readiness(world)
+        assert partially_ready[0]["prepared_portions"] == 3
+        assert partially_ready[0]["projected_unserved"] == 9
+        assert partially_ready[1]["prepared_portions"] == 0
 
 
 @pytest.mark.parametrize("rid,home", [("elsie", "tavern"), ("ada", "farm")])

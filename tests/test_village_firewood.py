@@ -1,4 +1,5 @@
 import copy
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -10,9 +11,29 @@ from npc_sim import (
 )
 from npc_sim.living_village import build_scenario
 from npc_sim.models import Scenario, VillageEconomyConfig, VillageFirewoodConfig
+from npc_sim.storage import read_json
 from npc_sim.world import World
 from test_village_expanded import scenario
 from test_world import act
+
+
+def test_living_scenario_has_physical_shared_hearths_and_enabled_fuel():
+    from npc_sim.living_village import build_scenario
+
+    base = Scenario.model_validate(read_json(Path(__file__).resolve().parents[1] / "data/scenarios/millhaven-expanded.json"))
+    generated = build_scenario(base, firewood=True)
+    configured = Scenario.model_validate(read_json(Path(__file__).resolve().parents[1] / "data/scenarios/millhaven-living.json"))
+    for value in (generated, configured):
+        policy = value.village.firewood
+        assert policy is not None and policy.enabled
+        assert len(policy.households) == 3
+        assert policy.site_capacities["cottages"] == 24
+        assert policy.site_reorder_points == {"tavern": 9, "bakery": 7, "forge": 7, "cottages": 18}
+        assert policy.site_reserve_targets == {"tavern": 12, "bakery": 10, "forge": 10, "cottages": 24}
+        assert {site: value.village.stocks[site]["firewood"] for site in policy.site_capacities} == {
+            "tavern": 12, "bakery": 10, "forge": 10, "cottages": 24, "woods": 0,
+        }
+        assert all(f"cottage-{hearth}" in value.entities for hearth in policy.households)
 
 
 def make_world(tmp_path, *, minute=600, enabled=True, communication=False, livestock=False):
@@ -280,6 +301,30 @@ def test_actual_fuel_requests_use_local_stock_affordable_funds_and_no_remote_sto
     assert not [row for row in economy.suggestions(keeper) if row["product"] == "firewood"]
 
 
+def test_site_fuel_thresholds_and_targets_are_validated_and_trigger_locally(tmp_path):
+    world = make_world(tmp_path)
+    config = world.state.village.firewood.config
+    config.site_reorder_points = {"tavern": 9, "bakery": 7, "forge": 7, "cottages": 12}
+    config.site_reserve_targets = {"tavern": 12, "bakery": 10, "forge": 10, "cottages": 16}
+    for resident, location, threshold, target in (
+        ("elsie", "tavern", 9, 12), ("jory", "bakery", 7, 10),
+        ("torvin", "forge", 7, 10), ("iona", "cottages", 12, 16),
+    ):
+        buyer = actor(world, resident, location)
+        goods.put(world, location, "firewood", threshold + 1)
+        assert not fuel.requests(buyer, resident)
+        goods.take(world, location, "firewood", 1)
+        assert fuel.requests(buyer, resident)[0][2] == {"firewood": target}
+    original = config.model_dump()
+    for updates in ({"site_reserve_targets": {"tavern": 17}},
+                    {"site_reorder_points": {"not-a-site": 1}},
+                    {"site_reorder_points": {"tavern": 13}},
+                    {"site_reorder_points": {"tavern": -1}}):
+        value = original | updates
+        with pytest.raises(ValueError, match="Fuel reorder points and reserve targets"):
+            fuel._validate(world.scenario, VillageFirewoodConfig.model_validate(value))
+
+
 def test_funded_order_requires_actual_haul_unloading_and_payment_then_recurs(tmp_path):
     world = make_world(tmp_path)
     buyer = actor(world, "iona", "woods")
@@ -318,6 +363,26 @@ def test_funded_order_requires_actual_haul_unloading_and_payment_then_recurs(tmp
     after = next(row for row in economy.suggestions(buyer) if row["product"] == "firewood")
     assert after["request_key"] != before["request_key"]
     assert stocks["cottages"]["firewood"] == 0  # Iona's and Rowan's occupied groups each burn once.
+
+
+def test_fuel_acceptance_uses_existing_uncommitted_stock_before_production(tmp_path):
+    world = make_world(tmp_path)
+    goods.put(world, "woods", "firewood", 3)
+    world.state.village.economy.config.reserve_targets["woods"] = {}
+    buyer = actor(world, "jory", "woods")
+    assert economy.apply(buyer, "village_propose_order", {
+        "product": "firewood", "quantity": 2, "supplier": "rowan",
+        "deadline": 700, "required_fresh_until": 760})[0] == "APPLIED"
+    order = next(iter(world.state.village.economy.orders.values()))
+    world.state.entities[fuel.AXE].hidden = True
+    result = economy.apply(world, "village_accept_order", {"order_id": order.id})
+    assert result[:2] == ("APPLIED", "ORDER_ACCEPTED")
+    assert order.production_plan == {} and order.loadable == 2
+    assert world.state.village.stocks["woods"]["firewood"] == 3
+    assert economy.apply(world, "village_accept_order", {"order_id": order.id})[1] == "ORDER_ALREADY_ACCEPTED"
+    assert act(world, "village_load_goods", goods={"firewood": 2}, destination="bakery")["outcome"] == "APPLIED"
+    assert world.state.village.stocks["woods"]["firewood"] == 1
+    assert order.in_transit == 2
 
 
 def test_physical_notices_keep_supplier_private_and_allow_real_future_felling_capacity(tmp_path):
@@ -636,6 +701,192 @@ def test_fuel_route_action_replays_request_and_retains_cargo_at_blocked_stop(tmp
     assert plan.status == "loaded"
     door.open = True
     assert act(world, action_id, route_id=plan.route_id)["code"] == "FUEL_ROUTE_TRAVEL"
+
+
+def test_loaded_fuel_route_reroutes_after_an_edge_closes_without_reloading(tmp_path):
+    world = make_world(tmp_path)
+    plan = _fund_grouped_route(world)
+    action_id = "village_execute_fuel_delivery"
+    for _ in plan.stops:
+        assert act(world, action_id, route_id=plan.route_id)["code"] == "FUEL_ROUTE_LOADED"
+        village.advance(world, 5)
+    assert act(world, action_id, route_id=plan.route_id)["code"] == "FUEL_ROUTE_TRAVEL"
+    assert world.actor.location_id == "bridge"
+    village.advance(world, 5)
+    blocked_edge = next(entity for entity in world.state.entities.values()
+                        if entity.kind == "door" and {entity.location, entity.destination}
+                        == {"bridge", "village-square"})
+    blocked_edge.open = False
+    assert village.route(world, "bridge", "cottages") == ["watermill", "farm", "village-square", "cottages"]
+    stock = world.state.village.stocks["woods"]["firewood"]
+    cargo = sum(item.quantity for item in world.state.village.residents["rowan"].shipments)
+    assert act(world, action_id, route_id=plan.route_id)["code"] == "FUEL_ROUTE_TRAVEL"
+    assert world.actor.location_id == "watermill"
+    assert world.state.village.stocks["woods"]["firewood"] == stock
+    assert sum(item.quantity for item in world.state.village.residents["rowan"].shipments) == cargo
+    blocked_edge.open = True
+    for _ in range(32):
+        if plan.status == "completed":
+            break
+        village.advance(world, 5)
+        result = act(world, action_id, route_id=plan.route_id)
+        assert result["outcome"] == "APPLIED", result
+    assert plan.status == "completed"
+    assert all(world.state.village.economy.orders[stop.order_id].delivered_quantity == 1 for stop in plan.stops)
+
+
+def test_fuel_delivery_retry_does_not_duplicate_unload_or_payment(tmp_path):
+    world = make_world(tmp_path)
+    plan = _fund_grouped_route(world)
+    for _ in plan.stops:
+        assert act(world, "village_execute_fuel_delivery", route_id=plan.route_id)["code"] == "FUEL_ROUTE_LOADED"
+        village.advance(world, 5)
+    for _ in range(12):
+        if world.actor.location_id == plan.stops[0].destination:
+            break
+        assert act(world, "village_execute_fuel_delivery", route_id=plan.route_id)["code"] == "FUEL_ROUTE_TRAVEL"
+        village.advance(world, 5)
+    stop = plan.stops[0]
+    order = world.state.village.economy.orders[stop.order_id]
+    request, revision = "fuel-unload-once", world.revision()
+    result = world.act(request, revision, "village_execute_fuel_delivery", {"route_id": plan.route_id})
+    assert result["code"] == "FUEL_ROUTE_DELIVERED"
+    stock = world.state.village.stocks[stop.destination]["firewood"]
+    coins = world.state.village.coins.copy()
+    assert world.act(request, revision, "village_execute_fuel_delivery", {"route_id": plan.route_id}) == result
+    assert world.state.village.stocks[stop.destination]["firewood"] == stock == 1
+    assert world.state.village.coins == coins and order.delivered_quantity == 1
+
+
+def test_late_fuel_route_retains_loaded_shipment_and_reaches_destination(tmp_path):
+    world = make_world(tmp_path)
+    plan = _fund_grouped_route(world)
+    for _ in plan.stops:
+        assert act(world, "village_execute_fuel_delivery", route_id=plan.route_id)["code"] == "FUEL_ROUTE_LOADED"
+        village.advance(world, 5)
+    order = world.state.village.economy.orders[plan.stops[0].order_id]
+    world.state.village.minute = order.deadline + 1
+    initial = world.state.village.stocks["woods"]["firewood"]
+    for _ in range(12):
+        if world.actor.location_id == plan.stops[0].destination:
+            break
+        result = act(world, "village_execute_fuel_delivery", route_id=plan.route_id)
+        assert result["code"] == "FUEL_ROUTE_TRAVEL", result
+        village.advance(world, 5)
+    assert world.actor.location_id == plan.stops[0].destination
+    assert world.state.village.stocks["woods"]["firewood"] == initial
+    assert order.in_transit == 1
+    assert sum(item.quantity for item in world.state.village.residents["rowan"].shipments) == 2
+    coins = world.state.village.coins.copy()
+    result = act(world, "village_execute_fuel_delivery", route_id=plan.route_id)
+    assert result["outcome"] == "REJECTED", result
+    assert world.state.village.coins == coins
+    assert order.in_transit == 1
+    assert world.state.village.residents["rowan"].shipments
+
+
+def test_late_fuel_buyer_decision_requires_loaded_cargo_local_buyer_and_is_final(tmp_path):
+    world = make_world(tmp_path)
+    plan = _fund_grouped_route(world)
+    for _ in plan.stops:
+        assert act(world, "village_execute_fuel_delivery", route_id=plan.route_id)["code"] == "FUEL_ROUTE_LOADED"
+        village.advance(world, 5)
+    order = world.state.village.economy.orders[plan.stops[0].order_id]
+    buyer = actor(world, order.buyer, order.destination)
+    assert fuel.respond_late_delivery(buyer, order.id, True)[1] == "NOT_LATE_DELIVERY"
+    world.state.village.minute = order.deadline + 1
+    economy.advance(world)
+    assert order.status == "failed" and order.in_transit == 1
+    assert fuel.respond_late_delivery(world, order.id, True)[1] == "UNKNOWN_FUEL_ORDER"
+    buyer.actor.location_id = "woods"
+    assert fuel.respond_late_delivery(buyer, order.id, True)[1] == "BUYER_NOT_AT_SITE"
+    buyer.actor.location_id = order.destination
+    assert fuel.respond_late_delivery(buyer, order.id, False)[1] == "LATE_FUEL_REJECTED"
+    assert fuel.respond_late_delivery(buyer, order.id, False)[1] == "LATE_FUEL_DECISION_EXISTS"
+    assert fuel.respond_late_delivery(buyer, order.id, True)[1] == "DECISION_FINAL"
+    assert world.state.village.firewood.statuses[f"late:{order.id}"] == "rejected"
+    assert order.in_transit == 1 and order.delivered_quantity == 0
+
+
+def test_rejected_late_fuel_keeps_unpaid_cargo_for_physical_return(tmp_path):
+    world = make_world(tmp_path)
+    plan = _fund_grouped_route(world)
+    for _ in plan.stops:
+        assert act(world, "village_execute_fuel_delivery", route_id=plan.route_id)["code"] == "FUEL_ROUTE_LOADED"
+        village.advance(world, 5)
+    stop = plan.stops[0]
+    order = world.state.village.economy.orders[stop.order_id]
+    world.state.village.minute = order.deadline + 1
+    economy.advance(world)
+    buyer = actor(world, order.buyer, stop.destination)
+    assert fuel.respond_late_delivery(buyer, order.id, False)[1] == "LATE_FUEL_REJECTED"
+    for _ in range(12):
+        if world.actor.location_id == stop.destination:
+            break
+        result = act(world, "village_execute_fuel_delivery", route_id=plan.route_id)
+        assert result["code"] == "FUEL_ROUTE_TRAVEL", result
+        village.advance(world, 5)
+    assert world.actor.location_id == stop.destination
+    coins = world.state.village.coins.copy()
+    assert act(world, "village_execute_fuel_delivery", route_id=plan.route_id)["code"] == "ORDER_CLOSED"
+    assert order.in_transit == 1 and order.delivered_quantity == 0
+    assert world.state.village.coins == coins
+    assert world.state.village.stocks[stop.destination]["firewood"] == 0
+    path = village.route(world, stop.destination, order.source)
+    for destination in path:
+        door = next(eid for eid, entity in world.state.entities.items()
+                    if entity.kind == "door" and {entity.location, entity.destination}
+                    == {world.actor.location_id, destination} and entity.open)
+        assert act(world, "go", target=door)["outcome"] == "APPLIED"
+        village.advance(world, 5)
+    assert world.actor.location_id == order.source
+    assert act(world, "village_return_cargo", wagon=False)["code"] == "CARGO_RETURNED"
+    assert order.in_transit == 0 and order.returned_quantity == 1
+    assert world.state.village.coins == coins
+    assert world.state.village.stocks[stop.destination]["firewood"] == 0
+
+
+def test_accepted_late_fuel_settles_once_at_physical_destination(tmp_path):
+    world = make_world(tmp_path)
+    plan = _fund_grouped_route(world)
+    for _ in plan.stops:
+        assert act(world, "village_execute_fuel_delivery", route_id=plan.route_id)["code"] == "FUEL_ROUTE_LOADED"
+        village.advance(world, 5)
+    stop = plan.stops[0]
+    order = world.state.village.economy.orders[stop.order_id]
+    world.state.village.minute = order.deadline + 1
+    economy.advance(world)
+    buyer = actor(world, order.buyer, stop.destination)
+    assert "village_respond_late_fuel" in {item["id"] for item in buyer.actions()}
+    assert act(buyer, "village_respond_late_fuel", order_id=order.id, accept=True)["code"] == "LATE_FUEL_ACCEPTED"
+    coins_before = world.state.village.coins.copy()
+    assert order.in_transit == 1 and order.delivered_quantity == 0
+    for _ in range(12):
+        if world.actor.location_id == stop.destination:
+            break
+        result = act(world, "village_execute_fuel_delivery", route_id=plan.route_id)
+        assert result["code"] == "FUEL_ROUTE_TRAVEL", result
+        village.advance(world, 5)
+    assert world.actor.location_id == stop.destination
+    request, revision = "accepted-late-fuel-once", world.revision()
+    result = world.act(request, revision, "village_execute_fuel_delivery", {"route_id": plan.route_id})
+    assert result["code"] == "FUEL_ROUTE_DELIVERED", result
+    assert order.delivered_quantity == 1 and order.in_transit == 0
+    assert world.state.village.stocks[stop.destination]["firewood"] == 1
+    assert world.state.village.coins[order.buyer] < coins_before[order.buyer]
+    coins_after = world.state.village.coins.copy()
+    payments_after = [entry.model_dump() for entry in world.state.village.economy.payments]
+    assert world.act(request, revision, "village_execute_fuel_delivery", {"route_id": plan.route_id}) == result
+    assert world.state.village.stocks[stop.destination]["firewood"] == 1
+    assert world.state.village.coins == coins_after
+    assert [entry.model_dump() for entry in world.state.village.economy.payments] == payments_after
+    world.save()
+    reloaded = World(world.scenario, world.path, "firewood", "rowan", "session-rowan")
+    assert reloaded.state.village.firewood.statuses[f"late:{order.id}"] == "accepted"
+    assert reloaded.state.village.economy.orders[order.id].delivered_quantity == 1
+    assert reloaded.state.village.stocks[stop.destination]["firewood"] == 1
+    assert reloaded.state.village.coins == coins_after
+    assert [entry.model_dump() for entry in reloaded.state.village.economy.payments] == payments_after
 
 
 def test_fuel_route_action_rejects_non_owner_opt_out_and_blocked_passage(tmp_path):

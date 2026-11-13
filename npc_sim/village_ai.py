@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any
 
 from npc_sim import handling, village, village_goods, village_life, village_services, village_wagon, village_extensions, village_communication
-from npc_sim.models import VillageCommittedWork, VillageJob
+from npc_sim.models import VillageCommittedWork, VillageCrewSession, VillageJob
 
 if TYPE_CHECKING:
     from npc_sim.world import World
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 VERBS = {"village_wait", "village_ask", "village_tell", "village_observe", "village_work",
          "village_load", "village_deliver", "village_project", "village_patrol", "village_eat", "village_sleep",
          "village_meeting", "village_cook_fish", "village_share_route", "village_split_firewood",
-         "village_execute_fuel_delivery"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS
+         "village_execute_fuel_delivery", "village_plan_walk", "wait_until_next_relevant_event"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS
 
 
 def observation(world: "World") -> dict[str, Any]:
@@ -49,6 +49,7 @@ def observation(world: "World") -> dict[str, Any]:
             if person.fallback else [],
             "recent_locations": [step.model_dump() for step in person.fallback.recent_locations],
             "route_goal": person.fallback.route_goal.model_dump() if person.fallback.route_goal else None,
+            "walking_plan": person.walking_plan.model_dump() if person.walking_plan else None,
             "occupation": resident.occupation, "personality": resident.personality,
             "skills": resident.skills, "beliefs": {key: value.model_dump() for key, value in person.beliefs.items()},
             "relationships": person.trust.copy(), "schedule": [entry.model_dump() for entry in resident.schedule],
@@ -68,7 +69,12 @@ def observation(world: "World") -> dict[str, Any]:
             **village_life.personal(world),
         },
         "policy": "You are this villager, not a visiting commander. Move and perform your own work with real actions. "
-                  "Schedules are commitments, never automatic movement. Looking and reading are free. "
+                  + ("Before walking, use village_plan_walk with a final destination and a concrete purpose. "
+                     "Follow walking_plan.doors[walking_plan.next_step], even through intermediate stops; do not wander or "
+                     "reverse course for a new whim. A new task, due meal, rest, schedule change or fresh "
+                     "message permits a justified replan; a blocked route permits a detour. "
+                     if world.scenario.id == "millhaven-living" and config.time_based_turns else "")
+                  + "Schedules are commitments, never automatic movement. Looking and reading are free. "
                   + ("The earliest available villager acts next; work and travel reserve only that person's time. "
                      "Sleeping, committed baking and the accepted standing wagon route skip AI turns. "
                      "Use village_wait when idle; it reserves your time without delaying other villagers. "
@@ -91,6 +97,9 @@ def observation(world: "World") -> dict[str, Any]:
                   "an urgent deadline, or rejection/expiry. Check physical messages when a response is expected, "
                   "not on every short turn; never infer a remote reply from authoritative records. "
                   "Say I and my for yourself, and you and your for the person addressed. Use their actual occupation. "
+                  "If a conversation reply opportunity is present, consider a brief acknowledgement, answer, question, "
+                  "or polite departure before leaving. Hearing or replying never accepts a funded order; use the "
+                  "actual order action for that. Do not prolong a conversation past urgent work, meals, or rest. "
                   + (" Prioritize due meals and rest over interruptible work. Eat one daily meal at the 19:00 tavern gathering. "
                      "A prepared meal, bread, or fish with tea counts; tea alone does not. No imaginary home pantry. "
                      "An empty tavern records hunger but allows work; missing today's meal doubles tomorrow's work cooldown. "
@@ -134,6 +143,18 @@ def actions(world: "World") -> list[dict[str, Any]]:
                        "availability": "available", "reason": None})
 
     add("village_observe", "Check local tools and correct your own stale location beliefs.", {})
+    if config.time_based_turns and world.scenario.id == "millhaven-living":
+        from npc_sim import village_walking
+        plan = state.residents[rid].walking_plan
+        if not plan or village_walking._interruption(world, plan) or village_walking._blocked_step(world, plan):
+            destinations = [eid for eid, entity in world.state.entities.items()
+                            if entity.kind == "location" and eid != world.actor.location_id
+                            and village_walking._path(world, eid) is not None]
+            add("village_plan_walk", "Commit to a shortest, traversable route before walking. Replan only for a new task or interruption.",
+                {"destination": {"type": "string", "enum": destinations},
+                 "purpose": {"type": "string", "minLength": 3, "maxLength": 160}})
+    if config.time_based_turns:
+        add("wait_until_next_relevant_event", "Wait for the next personal event, bounded by the next meal, appointment or bedtime; other residents keep acting.", {})
     add("village_wait", "Wait without controlling any other villager.",
         {"minutes": {"type": "integer", "minimum": 5, "maximum": village_life.wait_limit(world), "multipleOf": 5}})
     if config.daily_life:
@@ -304,6 +325,11 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     def contribute() -> None:
         state.role_contributions[rid] = state.role_contributions.get(rid, 0) + 1
 
+    if action == "village_plan_walk":
+        from npc_sim import village_walking
+        return village_walking.plan(world, args)
+    if action == "wait_until_next_relevant_event":
+        return village_extensions.apply(world, "village_wait_event", args)
     if action in village_extensions.VERBS:
         return village_extensions.apply(world, action, args)
     if action == "village_wait":
@@ -313,6 +339,11 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             return done("SLEEP_CONTINUES", f"Still sleeping until {village.clock_time(person.life.sleep_until)}.")
         if person.life and person.life.work:
             return done("BATCH_CONTINUES", f"Tending the committed batch until {village.clock_time(person.life.work.finishes_at)}.")
+        from npc_sim import village_fallback
+        if village_fallback.purposeful(world):
+            until = village_fallback.start_wait(world)
+            person.available_at = until
+            return done("EVENT_WAIT_STARTED", f"Waiting for the next scheduled event at {village.clock_time(until)}.")
         return done("VILLAGE_WAITED", f"Waiting {args['minutes']} minutes.")
     if action in {"village_eat", "village_sleep"}:
         return village_life.apply(world, action)
@@ -515,6 +546,10 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         crew = {config.smith: "digging", config.helper: "digging"} if digging else {
             config.carpenter: "carpentry", config.miller: "milling"}
         site = config.well_site if digging else config.mill
+        session = state.crew_sessions.get(kind)
+        if session is not None and (session.status != "active" or set(session.workers) != set(crew)
+                                    or session.site != site):
+            return reject("CREW_RESERVED", "This project is reserved by another crew session.")
         if rid not in crew or any(
                 member not in world.state.actors or village.resident_location(world, member) != site
                 for member in crew):
@@ -522,8 +557,12 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         if any(skill not in world.state.actors[member].body.capabilities
                or "manipulate" not in world.state.actors[member].body.capabilities for member, skill in crew.items()):
             return reject("CAPABILITY_REQUIRED", "Both partners need their actual project skills.")
-        if any(state.minute < state.residents[member].busy_until for member in crew):
-            return reject("CREW_BUSY", "A partner still has an urgent prior commitment.")
+        occupied = [(member, state.residents[member].busy_until) for member in crew
+                    if state.minute < state.residents[member].busy_until]
+        if occupied:
+            member, until = max(occupied, key=lambda entry: entry[1])
+            return reject("CREW_BUSY", f"{village.resident_name(world, member)} has an urgent prior commitment "
+                          f"until {village.clock_time(until)}; remain at the site and retry then.")
         for member in crew:
             blocked = village_life.action_blocker(world, action, member)
             if blocked:
@@ -549,9 +588,25 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                 if blocked:
                     return reject("BODY_HANDLING_REQUIRED", f"{village.resident_name(world, member)}: {blocked}")
         progress = state.project_contributions.setdefault(kind, {})
+        if village_communication.enabled(world):
+            plan = village_communication.confirmed_project_plan(world, kind)
+            if plan is None:
+                return reject("APPOINTMENT_REQUIRED", "The confirmed crew appointment is no longer available.")
+            if session is None:
+                session = VillageCrewSession(
+                    appointment_id=plan.id, project=kind, workers=list(crew), site=site,
+                    supplies=supplies, starts_at=state.minute, work_window_end=plan.end_at,
+                    contributions=progress.copy())
+                state.crew_sessions[kind] = session
+            elif session.appointment_id != plan.id:
+                return reject("CREW_RESERVED", "This project is reserved by another crew session.")
         progress[rid] = progress.get(rid, 0) + 1
+        if session is not None:
+            session.contributions[rid] = progress[rid]
         contribute()
         if sum(progress.values()) >= 6 and all(progress.get(member, 0) >= 2 for member in crew):
+            if session is not None:
+                session.status = "completed"
             for eid in ([config.timber, config.rope] if digging else [config.repair_part]):
                 entity = world.state.entities[eid]
                 for actor in world.state.actors.values():
@@ -590,6 +645,9 @@ def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
         origin = door.destination if door.location == destination else door.location
         if origin is not None:
             village_fallback.record_location_transition(world, origin, destination)
+            if world.scenario.id == "millhaven-living" and config.time_based_turns:
+                from npc_sim import village_walking
+                village_walking.advance(world, origin, destination)
     if (action == "go" and state.wagon and state.wagon.driver == world.actor_id
             and not state.wagon.automatic):
         world.state.entities["wagon"].location = world.actor.location_id
@@ -623,7 +681,7 @@ def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
                     world.state.entities["work-horse"].location = world.actor.location_id
         if action == "village_project":
             minutes *= village_life.cooldown_factor(world, world.actor_id)
-        if action == "village_wait_event":
+        if action in {"village_wait_event", "wait_until_next_relevant_event"} or (action == "village_wait" and person.fallback.wait is not None):
             minutes = max(5, person.available_at - state.minute)
         person.available_at = state.minute + minutes
         until = village_extensions.blocked_until(world, world.actor_id)
@@ -672,9 +730,15 @@ def evaluate_goal(world: "World") -> dict[str, Any]:
                                and person.life.sleep_until is not None and person.life.sleep_until > state.minute
                                for person in state.residents.values()),
         )
+        meal_deadline = meal_day * 1440 + village_extensions.policy(world).inn_closing_minute
+        missed_daily_meals = [rid for rid, fed in meal_checks.items() if not fed] if evening_reached else []
         evidence.update(completion_scope="full_village_day", meal_day=meal_day,
                         residents_home=home_checks, residents_fed=meal_checks,
-                        daily_requirements_recoverable=village_extensions.policy(world).demand_led_completion)
+                        missed_daily_meals=missed_daily_meals,
+                        daily_meal_deadline=meal_deadline if evening_reached else None,
+                        daily_requirements_recoverable=(
+                            village_extensions.policy(world).demand_led_completion
+                            and (not missed_daily_meals or state.minute < meal_deadline)))
         if state.livestock and state.livestock.config.enabled and 0 <= state.livestock.started_day <= meal_day:
             care = {operation: any(chunk.operation == operation and chunk.status == "completed"
                                    and chunk.start // 1440 == meal_day for chunk in state.livestock.chunks)

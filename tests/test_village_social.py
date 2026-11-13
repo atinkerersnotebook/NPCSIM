@@ -438,6 +438,132 @@ def test_production_quest_needs_completed_engine_work_not_speech_or_load(cast):
     assert world.state.village.coins == coins
 
 
+def opt_in_goods(cast):
+    world = cast["iona"]
+    village_social.install_optional_goods(world.scenario)
+    for eid in ("herb-garden-plot", "fish-smoker"):
+        world.state.entities[eid] = world.scenario.entities[eid].model_copy(deep=True)
+    world.state.village.social.config = world.scenario.village.social.model_copy(deep=True)
+    world.state.actors["iona"].body.capabilities.append("gardening")
+    world.state.village.day_policy = world.scenario.village.model_copy(update={"purposeful_downtime": True})
+
+
+def test_opted_in_goods_preserve_real_inputs_and_bounded_leisure(cast):
+    world = cast["iona"]
+    from npc_sim.models import VillageStockLot
+    from npc_sim import village_goods
+    opt_in_goods(cast)
+    assert "gardening" in world.scenario.village.residents["iona"].skills
+    assert "gardening" in world.state.actors["iona"].body.capabilities
+    assert "farming" not in world.scenario.village.residents["iona"].skills
+    assert "farming" not in world.state.actors["iona"].body.capabilities
+    assert world.scenario.village.residents["iona"].work == "cottages"
+    place(cast, "finn", "riverbank")
+    before = world.state.village.stocks["riverbank"].get("fish", 0)
+    assert leisure(cast, "catch-and-release", "finn")[0] == "APPLIED"
+    tick(cast, 920)
+    assert world.state.village.stocks["riverbank"].get("fish", 0) == before
+    assert leisure(cast, "catch-and-release", "finn")[1] == "ALREADY_FISHED"
+    place(cast, "iona", "cottages")
+    assert leisure(cast, "herb-garden-care")[1] == "NO_SUPPLIES"
+    world.state.village.stocks.setdefault("farm", {})["manure"] = 1
+    world.state.village.stock_lots.setdefault("farm", {})["manure"] = [VillageStockLot(quantity=1, produced_at=900)]
+    livestock = world.state.village.livestock
+    if livestock is None:
+        from npc_sim.village_livestock_models import VillageLivestockState, VillageLivestockConfig
+        livestock = VillageLivestockState(config=VillageLivestockConfig(keeper="ada"))
+        world.state.village.livestock = livestock
+    livestock.hens.day = 0
+    livestock.hens.cleaned = True
+    from npc_sim.village_livestock_models import LivestockChunk
+    livestock.chunks.append(LivestockChunk(actor="ada", operation="hens", location="farm",
+                                           equipment=[], start=875, end=900, status="completed"))
+    place(cast, "iona", "farm")
+    assert village_social.apply(world, "village_garden_manure", {})[0] == "APPLIED"
+    assert world.state.village.stocks["farm"]["manure"] == 0
+    assert world.state.village.social.manure_cargo["iona"]
+    assert village_social.apply(world, "village_garden_manure", {})[1] == "NOT_PRESENT"
+    tick(cast, 925)
+    place(cast, "iona", "cottages")
+    assert village_social.apply(world, "village_garden_manure", {})[0] == "APPLIED"
+    tick(cast, 930)
+    assert leisure(cast, "herb-garden-care")[0] == "APPLIED"
+    assert world.state.village.stocks["cottages"]["manure"] == 0
+    herbs = world.state.village.stocks["cottages"]["herbs"]
+    tick(cast, 955)
+    assert world.state.village.stocks["cottages"]["herbs"] == herbs
+    assert village_social.apply(world, "village_garden_harvest", {})[1] == "GARDEN_NOT_READY"
+    world.state.village.social = VillageSocialState.model_validate_json(world.state.village.social.model_dump_json())
+    assert world.state.village.social.garden_yields["cottages"] == 2370
+    tick(cast, 2370)
+    place(cast, "iona", "cottages")
+    world.state.village.residents["iona"].life.sleeping = False
+    world.state.village.residents["iona"].life.hungry = False
+    world.state.village.residents["iona"].life.last_woke = 2370
+    harvest = village_social.apply(world, "village_garden_harvest", {})
+    assert harvest[0] == "APPLIED", harvest
+    assert world.state.village.stocks["cottages"]["herbs"] == herbs + 1
+    assert village_social.apply(world, "village_garden_harvest", {})[1] == "GARDEN_NOT_READY"
+
+
+def test_optional_crafts_consume_finite_inputs_and_survive_reload(cast):
+    world = cast["iona"]
+    opt_in_goods(cast)
+    stocks = world.state.village.stocks
+    place(cast, "hobb", "workshop")
+    stocks["workshop"].update(timber=1, planks=2)
+    assert leisure(cast, "furniture-making", "hobb")[0] == "APPLIED"
+    assert stocks["workshop"]["timber"] == stocks["workshop"]["planks"] == 0
+    assert stocks["workshop"].get("furniture", 0) == 0
+    tick(cast, 945)
+    assert stocks["workshop"]["furniture"] == 1
+    assert leisure(cast, "furniture-making", "hobb")[1] == "NO_SUPPLIES"
+    place(cast, "finn", "riverbank")
+    stocks["riverbank"].update(timber=1, iron=1, logs=1, fish=2)
+    assert leisure(cast, "fly-tying", "finn")[0] == "APPLIED"
+    tick(cast, 975)
+    assert stocks["riverbank"]["tackle"] == 1
+    assert stocks["riverbank"]["timber"] == stocks["riverbank"]["iron"] == 0
+    assert leisure(cast, "fish-smoking", "finn")[0] == "APPLIED"
+    assert stocks["riverbank"]["fish"] == 0
+    tick(cast, 1020)
+    assert stocks["riverbank"]["preserved-fish"] == 1
+    assert stocks["riverbank"]["logs"] == 0
+    saved = VillageSocialState.model_validate_json(world.state.village.social.model_dump_json())
+    assert [entry.produced for entry in saved.intervals[-3:]] == [
+        {"furniture": 1}, {"tackle": 1}, {"preserved-fish": 1}]
+
+
+def test_optional_goods_disabled_and_missing_tool_or_fuel(cast):
+    world = cast["iona"]
+    opt_in_goods(cast)
+    place(cast, "finn", "riverbank")
+    stocks = world.state.village.stocks["riverbank"]
+    stocks.update(fish=2, logs=0)
+    assert leisure(cast, "fish-smoking", "finn")[1] == "NO_SUPPLIES"
+    stocks["logs"] = 1
+    world.state.entities["fish-smoker"].health = 0
+    assert leisure(cast, "fish-smoking", "finn")[1] == "NO_EQUIPMENT"
+    world.state.entities["fish-smoker"].health = 100
+    world.state.village.day_policy = world.scenario.village.model_copy(update={"purposeful_downtime": False})
+    assert leisure(cast, "fish-smoking", "finn")[1] == "OPTIONAL_GOODS_DISABLED"
+    assert leisure(cast, "catch-and-release", "finn")[1] == "OPTIONAL_GOODS_DISABLED"
+
+
+def test_smoking_rejects_fish_expiring_during_recipe(cast):
+    from npc_sim.models import VillageStockLot
+
+    world = cast["iona"]
+    opt_in_goods(cast)
+    place(cast, "finn", "riverbank")
+    world.scenario.village.expanded_rules = True
+    world.state.village.stocks["riverbank"].update(fish=2, logs=1)
+    world.state.village.stock_lots.setdefault("riverbank", {})["fish"] = [
+        VillageStockLot(quantity=2, produced_at=895, expires_at=930)]
+    assert leisure(cast, "fish-smoking", "finn")[1] == "STALE_FISH"
+    assert world.state.village.stocks["riverbank"]["fish"] == 2
+
+
 def test_fresh_example_has_distinct_interests_existing_instruments_and_validates(cast):
     world = cast["iona"]
     for eid, definition in village_social.example_fixtures().items():

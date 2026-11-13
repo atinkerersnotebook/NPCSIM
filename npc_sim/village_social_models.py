@@ -14,7 +14,7 @@ Amount = Annotated[int, Field(gt=0)]
 ActivityKind = Literal[
     "reading", "gardening", "crafting", "visiting", "games", "storytelling",
     "shared_tea", "rest", "field_observe", "organize_notes", "draft", "revise",
-    "recipe_test", "instrument_repair", "fishing_survey", "share_discovery",
+    "recipe_test", "instrument_repair", "fishing_survey", "share_discovery", "catch_release",
 ]
 CAPABILITIES = frozenset({"activity", "chapter", "item_at", "production", "repair", "discovery_shared", "band"})
 
@@ -37,7 +37,7 @@ class SocialActivity(SocialModel):
     skill: str | None = None
     project: str | None = None
     chapter: str | None = None
-    recipe: Literal["bread_test", "tea_blending", "plank_practice", "garden_tending"] | None = None
+    recipe: Literal["bread_test", "tea_blending", "plank_practice", "garden_tending", "furniture", "tackle", "smoked_fish", "herb_garden"] | None = None
     repair_target: str | None = None
     discovery: str | None = None
 
@@ -60,6 +60,8 @@ class SocialActivity(SocialModel):
             raise ValueError("Instrument repair requires real consumed materials")
         if (self.kind in {"fishing_survey", "share_discovery"}) != (self.discovery is not None):
             raise ValueError("Only verified survey/sharing activities specify a discovery")
+        if self.kind == "catch_release" and (not self.equipment or self.max_participants != 1):
+            raise ValueError("Catch-and-release requires a real rod and a solo angler")
         if self.kind == "fishing_survey" and (not self.equipment or self.max_participants != 1):
             raise ValueError("A fishing survey is solo and requires actual fishing equipment")
         if self.kind == "share_discovery" and self.min_participants < 2:
@@ -197,7 +199,7 @@ class ActivityInterval(SocialModel):
         "reading", "gardening", "crafting", "visiting", "games", "storytelling",
         "shared_tea", "rest", "field_observe", "organize_notes", "draft", "revise",
         "rehearsal", "performance",
-        "recipe_test", "instrument_repair", "fishing_survey", "share_discovery",
+        "recipe_test", "instrument_repair", "fishing_survey", "share_discovery", "catch_release",
     ]
     location: str
     participants: list[str]
@@ -281,3 +283,5 @@ class VillageSocialState(SocialModel):
     sequence: int = Field(default=0, ge=0)
     production_counts: dict[str, int] = Field(default_factory=dict)
     processed_event_count: int = Field(default=0, ge=0)
+    garden_yields: dict[str, int] = Field(default_factory=dict)
+    manure_cargo: dict[str, list[dict]] = Field(default_factory=dict)

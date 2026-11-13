@@ -200,6 +200,15 @@ def needed(world, product) -> int:
     state = village.context(world)[1]
     target = village_economy.production_targets(world, "farm").get(product, 0)
     available = village_economy.usable_stock(world, "farm", product, state.minute)
+    if village_economy._food_policy(world) and state.economy:
+        orders = [order for order in state.economy.orders.values()
+                  if order.status == "blocked" and order.source == "farm" and order.product == product
+                  and order.deadline >= state.minute]
+        if orders:
+            cutoff = min(order.required_fresh_until for order in orders)
+            allocated = village_economy.available_for_order(world, "farm", product, cutoff)
+            deficit = max(0, sum(order.loadable for order in orders) - allocated)
+            target = max(target, available + deficit)
     # Production targets already deduct order cargo via order.loadable.
     available += sum(chunk.quantity for chunk in _state(world).chunks
                      if chunk.status == "active" and chunk.operation == ("milk" if product == "milk" else "eggs"))

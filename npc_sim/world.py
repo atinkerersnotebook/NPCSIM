@@ -7,7 +7,7 @@ from typing import Any
 from jsonschema import ValidationError, validate
 
 from npc_sim.models import Actor, Body, ClockRequest, Entity, ERPState, RPSState, Scenario, SimulationClock, TicTacToeState, VoyageState, WorldState
-from npc_sim import bakery, bbq, equipment, erp, handling, recipes, rps, skills, spells, tic_tac_toe, village, voyage
+from npc_sim import bakery, bbq, equipment, erp, handling, recipes, rps, skills, spells, tic_tac_toe, village, village_conversation, voyage
 from npc_sim.storage import read_json
 from npc_sim.world_storage import WorldStorage
 
@@ -354,7 +354,14 @@ class World:
                                        for eid in other.inventory]}
                         for other in self.state.actors.values()
                         if other.actor_id != self.actor_id and other.location_id == actor.location_id],
-                    "messages": copy.deepcopy(actor.messages)}
+                    "messages": copy.deepcopy(actor.messages),
+                    **({"conversation": {"with": (thread.listener if thread.speaker == self.actor_id else thread.speaker),
+                                          "turns_remaining": 4 - thread.turns,
+                                          "expires_at": thread.expires_at,
+                                          "guidance": "You may reply briefly or leave; hearing is not accepting an order."}}
+                       if self.scenario.village and self.scenario.village.ai_controlled
+                       and (thread := village_conversation.pending(self))
+                       else {})}
                    if self.scenario.agents else {}),
                 **(bakery.observation(self) if self.scenario.bakery else {}),
                 **voyage.observation(self),
@@ -397,8 +404,14 @@ class World:
         peers = [other.actor_id for other in self.state.actors.values()
                  if other.actor_id != self.actor_id and other.location_id == self.actor.location_id]
         if peers:
-            add("say", "Speak to nearby teammates. Only agents here hear this; coordinate your shared goal.",
-                {"message": {"type": "string", "minLength": 1, "maxLength": 500, "pattern": r"\S"}},
+            conversation = (village_conversation.pending(self)
+                            if self.scenario.village and self.scenario.village.ai_controlled else None)
+            add("say", "Speak to nearby teammates. Only agents here hear this; coordinate your shared goal."
+                + (" A brief reply is welcome; acknowledging speech does not accept a request."
+                   if conversation else ""),
+                {"message": {"type": "string", "minLength": 1, "maxLength": 500, "pattern": r"\S"},
+                 **({"recipient": {"type": "string", "enum": peers}}
+                    if self.scenario.village and self.scenario.village.ai_controlled else {})},
                 ["message"], peers)
             if self.actor.inventory:
                 add("give", "Give a carried item to a nearby teammate if it fits their carrying capacity.",
@@ -534,6 +547,18 @@ class World:
                                     if (action.get("availability") != "blocked" and action["targets"]
                                             and len(action.get("target_requirements", {})) == len(action["targets"])):
                                         action["availability"], action["reason"] = "blocked", next(iter(action["target_requirements"].values()))
+        if self.scenario.village and self.scenario.village.ai_controlled and self.scenario.id == "millhaven-living":
+            from npc_sim import village_walking
+            for action in actions:
+                if action["id"] != "go":
+                    continue
+                for target in action["targets"]:
+                    blocked = village_walking.check_step(self, {"target": target})
+                    if blocked:
+                        action.setdefault("target_requirements", {})[target] = blocked[1]
+                if action["targets"] and len(action.get("target_requirements", {})) == len(action["targets"]):
+                    action["availability"] = "blocked"
+                    action["reason"] = next(iter(action["target_requirements"].values()))
         if self.state.clock is not None and self.state.clock.mode == "decision_paused":
             for action in actions:
                 action["simulation_seconds"] = bakery.action_seconds(action["id"])
@@ -893,6 +918,15 @@ class World:
             return "APPLIED", "FEATURE_DISCOVERED", "You search and discover " + ", ".join(revealed) + ".", None
         if action == "say":
             message = {"actor_id": self.actor_id, "text": args["message"]}
+            if self.scenario.village and self.scenario.village.ai_controlled:
+                peers = [other.actor_id for other in self.state.actors.values()
+                         if other.actor_id != self.actor_id and other.location_id == self.actor.location_id
+                         and not (self.state.village.residents[other.actor_id].life
+                                  and self.state.village.residents[other.actor_id].life.sleeping)]
+                recipient = village_conversation.recipient(self, args["message"], peers,
+                                                           args.get("recipient"))
+                if recipient:
+                    village_conversation.spoken(self, recipient)
             for other in self.state.actors.values():
                 if self.scenario.village and self.scenario.village.daily_life and self.state.village:
                     life = self.state.village.residents[other.actor_id].life

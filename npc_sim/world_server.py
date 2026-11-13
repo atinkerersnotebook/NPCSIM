@@ -50,7 +50,7 @@ def main() -> None:
             try:
                 actor_id = village_turns.next_actor(world, stop_at_minute)
                 return {"actor_id": actor_id, "minute": world.state.village.minute}
-            except (OSError, ValueError):
+            except Exception:
                 world.state = before
                 raise
 
