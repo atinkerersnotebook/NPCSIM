@@ -316,6 +316,8 @@ const villageDashboardSchema = z.object({
   visitors: z.array(z.object({
     id: z.string(), name: z.string(), location: z.string(), arrival: z.number().int().nonnegative(),
     departure: z.number().int().nonnegative().nullable(), status: z.string(),
+    stock: z.record(z.string(), z.number().int().nonnegative()).optional(),
+    coins: z.number().int().nonnegative().optional(),
     activities: z.array(villageActivityViewSchema).default([])
   })).default([]),
   trades: z.array(z.object({

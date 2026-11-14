@@ -231,7 +231,9 @@ def unload(world: "World", carrier: str, shipments: list[VillageShipment]) -> st
                              and state.minute > order.deadline
                              and (order.status in village_economy.COMMITTED or
                                   order.status == "failed" and order.reason == "MISSED_DEADLINE"))
-            if not late_accepted and (order.status not in village_economy.COMMITTED or state.minute > order.deadline):
+            if not late_accepted and (order.status not in village_economy.COMMITTED
+                                      and order.status != "blocked"
+                                      or state.minute > order.deadline):
                 return "ORDER_CLOSED: delivery is cancelled, failed, fulfilled or late; return its unpaid cargo."
             if (item.resource != order.product or item.buyer != order.buyer or item.seller != order.supplier
                     or item.destination != order.destination or item.price != order.price):

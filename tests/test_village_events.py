@@ -197,6 +197,10 @@ def test_discovery_is_real_local_and_not_world_announced(world):
 
 def test_merchant_conservation_retry_capacity_budget_and_departure(world):
     visitor = merchant(world)
+    assert village_events.monitor(world)["visitors"][0]["stock"] == {"iron": 2}
+    assert village_events.monitor(world)["visitors"][0]["coins"] == 10
+    assert any(event.action == "visitor_route_planned" and event.target == "forge"
+               for event in world.state.village.events)
     stock(world, "wagon-parts", 5)
     before_money = sum(world.state.village.coins.values()) + visitor.coins
     before_parts = world.state.village.stocks["forge"]["wagon-parts"] + visitor.stock.get("wagon-parts", 0)
@@ -219,7 +223,25 @@ def test_merchant_conservation_retry_capacity_budget_and_departure(world):
     assert visitor.id in world.state.village.incidents.visitors
     assert visitor.unsatisfied == {}
     assert all(interval.start <= interval.end for interval in visitor.timeline)
+    assert all(current.end <= following.start for current, following in
+               zip(visitor.timeline, visitor.timeline[1:]))
     assert trade(world, visitor, transaction="too-late")[0] == "REJECTED"
+
+
+def test_merchant_asks_each_present_resident_once_without_making_a_trade(world):
+    visitor = merchant(world)
+    state = world.state.village
+    state.minute += 5
+    village_events.advance(world)
+    enquiries = [event for event in state.events if event.action == "visitor_trade_enquiry"
+                 and event.actor == visitor.id]
+    assert [event.target for event in enquiries] == ["torvin"]
+    assert state.incidents.trades == {}
+    assert visitor.stock == {"iron": 2} and visitor.coins == 10
+    state.minute += 5
+    village_events.advance(world)
+    assert len([event for event in state.events if event.action == "visitor_trade_enquiry"
+                and event.actor == visitor.id]) == 1
 
 
 def test_deadline_unmet_freshness_and_invalid_trade_no_changes(world):
@@ -448,7 +470,8 @@ def test_catalogue_and_monitor_schema_keep_departed_history(world):
     person = snapshot["visitors"][0]
     assert person["status"] == "departed"
     assert type(person["arrival"]) is int and type(person["departure"]) is int
-    assert set(person) == {"id", "name", "location", "arrival", "departure", "status", "activities"}
+    assert set(person) == {"id", "name", "location", "arrival", "departure", "status", "activities",
+                           "stock", "coins"}
     assert set(person["activities"][0]) == {"actor", "label", "location", "start", "end", "status"}
     assert set(snapshot["incidents"][0]) == {"id", "title", "location", "start", "end", "status"}
 
@@ -535,6 +558,84 @@ def test_overnight_visitor_meals_and_lodging_are_explicit_and_once(world):
     assert visitor.status == "present"
     assert visitor.location == "tavern"
     assert any(interval.label == "Lodging" and interval.end >= 1440 for interval in visitor.timeline)
+
+
+def test_traveller_can_buy_tavern_meal_at_supper_without_a_planned_meal_stop(world):
+    plan = VisitorPlan(name="Iris", entry="tavern", destination="tavern",
+                       departure="tavern", stay_minutes=720, funds=12)
+    incidents = configure(world, event("traveller", location="tavern", residents=["elsie"],
+                                       visitor=plan, responses=["decline"], scheduled_at=600))
+    state = world.state.village
+    state.minute = 600
+    village_events.advance(world)
+    visitor = next(iter(incidents.visitors.values()))
+    state.minute = 605
+    village_events.advance(world)
+    state.minute = 1140
+    state.stocks["tavern"]["meals"] = 1
+    state.stock_lots["tavern"]["meals"] = [VillageStockLot(quantity=1, produced_at=1140, expires_at=1300)]
+    village_events.advance(world)
+    state.minute = 1145
+    village_events.advance(world)
+    host = world.bind("elsie", "events-host")
+    assert village_events.apply(host, "village_visitor_meal", {"visitor": visitor.id})[0] == "APPLIED"
+    assert visitor.meals == [0] and state.stocks["tavern"]["meals"] == 0
+    assert village_events.apply(host, "village_visitor_meal", {"visitor": visitor.id})[0] == "REJECTED"
+
+
+def test_traveller_detours_to_tavern_for_supper_and_returns_to_visit(world):
+    plan = VisitorPlan(name="Iris", entry="village-square", destination="bakery",
+                       departure="village-square", stay_minutes=720, funds=12)
+    incidents = configure(world, event("traveller", location="bakery", residents=["jory"],
+                                       visitor=plan, responses=["decline"], scheduled_at=600))
+    state = world.state.village
+    village_events.advance(world)
+    visitor = next(iter(incidents.visitors.values()))
+    state.minute = 605
+    village_events.advance(world)
+    assert visitor.location == "bakery"
+    state.minute = 1135
+    village_events.advance(world)
+    assert visitor.location == "bakery"
+    state.minute = 1140
+    village_events.advance(world)
+    assert visitor.path and visitor.path[-1] == "tavern"
+    state.minute = 1160
+    village_events.advance(world)
+    assert visitor.location == "tavern"
+    state.stocks["tavern"]["meals"] = 1
+    state.stock_lots["tavern"]["meals"] = [VillageStockLot(quantity=1, produced_at=1160, expires_at=1300)]
+    host = world.bind("elsie", "events-host")
+    assert village_events.apply(host, "village_visitor_meal", {"visitor": visitor.id})[0] == "APPLIED"
+    state.minute = 1180
+    village_events.advance(world)
+    assert visitor.location == "bakery"
+    assert visitor.meals == [0] and state.stocks["tavern"]["meals"] == 0
+
+
+def test_traveller_can_visit_tavern_for_breakfast_when_service_is_enabled(world):
+    world.scenario.village.breakfast = True
+    plan = VisitorPlan(name="Iris", entry="bakery", destination="bakery",
+                       departure="bakery", stay_minutes=120, funds=12)
+    incidents = configure(world, event("traveller", location="bakery", residents=["jory"],
+                                       visitor=plan, responses=["decline"], scheduled_at=590))
+    state = world.state.village
+    state.minute = 590
+    village_events._activate(world, incidents.config.templates[0])
+    visitor = next(iter(incidents.visitors.values()))
+    state.minute = 595
+    village_events.advance(world)
+    assert visitor.path and visitor.path[-1] == "tavern"
+    state.minute = 600
+    village_events.advance(world)
+    assert visitor.location == "tavern"
+    state.stocks["tavern"]["bread"] = 1
+    state.stock_lots["tavern"]["bread"] = [VillageStockLot(quantity=1, produced_at=600, expires_at=700)]
+    host = world.bind("elsie", "events-host")
+    assert village_events.apply(host, "village_visitor_meal", {"visitor": visitor.id})[0] == "APPLIED"
+    state.minute = 620
+    village_events.advance(world)
+    assert visitor.location == "bakery" and visitor.meals == [0]
 
 
 def test_real_reserve_targets_protect_merchant_surplus_and_reports(world):

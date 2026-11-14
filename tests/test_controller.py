@@ -323,7 +323,7 @@ async def test_nonprogress_stalls_and_pause_reset(configuration):
                            response=httpx.Response(code))
       for code in (408, 429, 500, 502, 503, 504)],
 ])
-async def test_proxy_failure_pauses_without_finishing_or_retrying(configuration, failure):
+async def test_proxy_failure_pauses_without_finishing_or_retrying_immediately(configuration, failure):
     data, config = configuration
     controller = Controller(ROOT, data, config)
     class OfflineProxy(TestProxy):
@@ -344,7 +344,7 @@ async def test_proxy_failure_pauses_without_finishing_or_retrying(configuration,
         await asyncio.wait_for(controller.command("pause"), timeout=2)
         assert controller.run["actions"] == 0
         assert controller.run["model_calls"] == 1
-        assert "Adventure paused" in controller.run["reason"]
+        assert "waiting to reconnect" in controller.run["reason"]
         assert controller.run["goal"]["status"] != "failed"
         assert controller.started_clock is None
         assert not any(event["kind"] in {"finished", "assessment_started", "error"}
@@ -354,6 +354,90 @@ async def test_proxy_failure_pauses_without_finishing_or_retrying(configuration,
         await asyncio.sleep(0.1)
         assert controller.run["model_calls"] == 1
         assert controller.run["elapsed_seconds"] == saved["elapsed_seconds"]
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_running_episode_reconnects_without_replaying_actions(configuration):
+    data, config = configuration
+    config.world.scenario = "storm-signal"
+    controller = Controller(ROOT, data, config)
+    recovered = asyncio.Event()
+
+    class IntermittentProxy(TestProxy):
+        attempts = 0
+        probes = 0
+
+        async def choose(self, *args, **kwargs):
+            self.attempts += 1
+            if self.attempts == 1:
+                raise httpx.ConnectError("connection refused")
+            recovered.set()
+            return await super().choose(*args, **kwargs)
+
+        async def models(self):
+            self.probes += 1
+            if self.probes == 1:
+                raise httpx.ConnectError("connection refused")
+            return ["test-model"]
+
+    fake = IntermittentProxy(controller.proxy, [("release_lens", {"target": "optical-cache"})])
+    controller.proxy = fake
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        world, run_id = controller.world, controller.run["id"]
+        await controller.command("run")
+        for _ in range(500):
+            if controller.run["status"] == "paused":
+                break
+            await asyncio.sleep(0.01)
+        assert controller._llm_retry_at is not None
+        controller._llm_retry_delay = 0.02
+        await asyncio.wait_for(recovered.wait(), 10)
+        await controller.command("pause")
+        assert controller.world is world
+        assert controller.run["id"] == run_id
+        assert controller.run["actions"] == 1
+        assert fake.probes == 2
+        assert fake.attempts == 2
+        assert controller.run["reason"] == ""
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_manual_pause_cancels_llm_reconnection(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+
+    class OfflineProxy(TestProxy):
+        probes = 0
+
+        async def choose(self, *args, **kwargs):
+            raise httpx.ConnectError("connection refused")
+
+        async def models(self):
+            self.probes += 1
+            raise httpx.ConnectError("connection refused")
+
+    fake = OfflineProxy(controller.proxy, [])
+    controller.proxy = fake
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        await controller.command("run")
+        for _ in range(500):
+            if controller.run["status"] == "paused":
+                break
+            await asyncio.sleep(0.01)
+        assert controller._llm_retry_at is not None
+        await controller.command("pause")
+        assert controller._llm_retry_at is None
+        await asyncio.sleep(0.1)
+        assert fake.probes == 0
+        assert controller.run["status"] == "paused"
     finally:
         await controller.shutdown()
 

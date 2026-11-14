@@ -224,6 +224,9 @@ def _activate(world: "World", item: EventTemplate) -> None:
         visitor.timeline.append(VisitorInterval(label="Arrival travel", location=visitor.location,
                                                 start=state.minute, end=state.minute))
         incidents.visitors[visitor.id] = visitor
+        if visitor.path:
+            village.event(world, visitor.id, "visitor_route_planned", plan.destination,
+                          f"{visitor.name} planned a walk from {plan.entry} to {plan.destination}.", plan.entry)
         instance.expires_at = visitor.leave_at
 
 
@@ -231,11 +234,49 @@ def _interval(visitor: VisitorState, label: str, location: str, start: int, end:
     if visitor.timeline and visitor.timeline[-1].label == label and visitor.timeline[-1].location == location:
         visitor.timeline[-1].end = max(visitor.timeline[-1].end, end)
     else:
+        if visitor.timeline and visitor.timeline[-1].end > start:
+            visitor.timeline[-1].end = max(visitor.timeline[-1].start, start)
         visitor.timeline.append(VisitorInterval(label=label, location=location, start=start, end=end))
 
 
+def _plan_visitor_route(world: "World", visitor: VisitorState, destination: str) -> bool:
+    route = village.route(world, visitor.location, destination)
+    if route is None:
+        visitor.activity = "Travel blocked; waiting for a safe route"
+        return False
+    visitor.path = route
+    village.event(world, visitor.id, "visitor_route_planned", destination,
+                  f"{visitor.name} planned a walk from {visitor.location} to {destination}.", visitor.location)
+    return True
+
+
+def _ask_local_traders(world: "World", visitor: VisitorState) -> None:
+    profile = visitor.plan.merchant
+    if profile is None:
+        return
+    for rid in village.local_residents(world, visitor.location):
+        person = world.state.village.residents[rid]
+        if (rid in visitor.asked_residents or person.life and person.life.sleeping
+                or person.busy_until > world.state.village.minute
+                or person.life and person.life.work):
+            continue
+        visitor.asked_residents.append(rid)
+        offers = ", ".join(f"{quantity} {resource} at {profile.sell_prices[resource]} coins each"
+                           for resource, quantity in visitor.stock.items() if quantity > 0
+                           and resource in profile.sell_prices) or "no goods for sale"
+        wants = ", ".join(f"{amount - visitor.purchased.get(resource, 0)} {resource} "
+                          f"at {profile.buy_prices[resource]} coins each"
+                          for resource, amount in profile.demand.items()
+                          if amount > visitor.purchased.get(resource, 0)) or "no more goods"
+        village.event(world, visitor.id, "visitor_trade_enquiry", rid,
+                      f"{visitor.name} asks {village.resident_name(world, rid)} whether they have anything to trade. "
+                      f"Offering {offers}; seeking {wants}. Any exchange still requires a local, funded trade action.",
+                      visitor.location)
+        _wake_waiters(world, visitor.location)
+
+
 def _visitor_advance(world: "World", visitor: VisitorState) -> None:
-    _, state = village.context(world)
+    base, state = village.context(world)
     incidents = _context(world)
     assert incidents is not None
     now = state.minute
@@ -254,11 +295,12 @@ def _visitor_advance(world: "World", visitor: VisitorState) -> None:
         tick = visitor.next_step_at
         visitor.next_step_at += 5
         if tick >= visitor.leave_at and visitor.status != "departing":
-            route = village.route(world, visitor.location, visitor.plan.departure)
-            if route is None:
+            if visitor.location == visitor.plan.departure or _plan_visitor_route(
+                    world, visitor, visitor.plan.departure):
+                visitor.status = "departing"
+            else:
                 visitor.activity = "Departure blocked; still physically present"
                 continue
-            visitor.status, visitor.path = "departing", route
         if visitor.path:
             origin = visitor.location
             next_location = visitor.path[0]
@@ -268,6 +310,7 @@ def _visitor_advance(world: "World", visitor: VisitorState) -> None:
                 continue
             visitor.path.pop(0)
             visitor.location = next_location
+            visitor.asked_residents = []
             visitor.activity = "Departure travel" if visitor.status == "departing" else "Travel"
             _interval(visitor, visitor.activity, origin, tick - 5, tick)
             if not visitor.path and visitor.status == "present":
@@ -301,14 +344,16 @@ def _visitor_advance(world: "World", visitor: VisitorState) -> None:
             return
         if visitor.status == "present":
             day, clock = divmod(tick, 1440)
+            meal_time = (base.breakfast and 480 <= clock <= 600
+                         or 1140 <= clock < 1260)
             if clock >= 1200 and day not in visitor.meals and day not in visitor.missed_meals:
                 visitor.missed_meals.append(day)
                 village.event(world, visitor.id, "visitor_missed_meal", visitor.id,
                               f"{visitor.name} has not been supplied a meal.", visitor.location)
             target = (visitor.plan.lodging_location if clock >= 1260 or clock < 480
-                      else visitor.plan.meal_location if 1080 <= clock < 1260 and day not in visitor.meals
+                      else (visitor.plan.meal_location or "tavern") if meal_time and day not in visitor.meals
                       else visitor.plan.destination)
-            if 480 <= clock < 1080 and visitor.plan.visits:
+            if 480 <= clock < 1080 and visitor.plan.visits and not meal_time:
                 if visitor.visit_index and visitor.visit_index <= len(visitor.plan.visits):
                     target = visitor.plan.visits[visitor.visit_index - 1]
                 if (visitor.next_visit_at <= tick and not visitor.path
@@ -317,7 +362,9 @@ def _visitor_advance(world: "World", visitor: VisitorState) -> None:
                     visitor.visit_index += 1
                     visitor.next_visit_at = tick + 20
             if target and target != visitor.location and not visitor.path:
-                visitor.path = village.route(world, visitor.location, target) or []
+                _plan_visitor_route(world, visitor, target)
+            if visitor.status == "present":
+                _ask_local_traders(world, visitor)
             lodging_day = day - 1 if clock < 480 else day
             label = ("Lodging" if (clock >= 1260 or clock < 480)
                      and lodging_day in visitor.lodging_days else visitor.activity)
@@ -507,7 +554,10 @@ def monitor(world: "World") -> dict[str, Any]:
             "id": visitor.id, "name": visitor.name, "location": visitor.location,
             "arrival": visitor.arrived_at if visitor.arrived_at is not None else visitor.timeline[0].start,
             "departure": visitor.departed_at, "status": visitor.status,
+            "stock": visitor.stock.copy(), "coins": visitor.coins,
             "activities": [{"actor": visitor.id, **interval.model_dump(),
+                            "label": "Offering trade" if interval.label == "Trading" and visitor.plan.merchant
+                            else interval.label,
                             "status": "completed" if interval.end <= world.state.village.minute else "active"}
                            for interval in visitor.timeline],
         } for visitor in incidents.visitors.values()] + ([{
@@ -807,9 +857,13 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     day = state.minute // 1440
     if action in {"village_visitor_meal", "village_visitor_lodging"}:
         lodging = action == "village_visitor_lodging"
-        if (location != (visitor.plan.lodging_location if lodging else visitor.plan.meal_location)
+        breakfast = (base.breakfast and 480 <= state.minute % 1440 <= 600)
+        supper = 1140 <= state.minute % 1440 < 1260
+        meal_places = {"tavern", visitor.plan.meal_location}
+        if ((location != visitor.plan.lodging_location if lodging else location not in meal_places)
+                or not lodging and not (breakfast or supper)
                 or day in (visitor.lodging_days if lodging else visitor.meals)):
-            return reject("Use the committed host location once per day.")
+            return reject("Use the host location at meal time and serve a visitor at most once per day.")
         if lodging and sum(day in other.lodging_days and other.plan.lodging_location == location
                            for other in incidents.visitors.values()) >= visitor.plan.lodging_capacity:
             return reject("All finite lodging places are already committed tonight.")

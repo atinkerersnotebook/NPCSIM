@@ -22,6 +22,15 @@ export function actorDetailsMarkup(state: State, agent: DetailActor): string {
   ];
   if (resident) facts.push(["Occupation", resident.occupation]);
   if (agent.activity) facts.push(["Activity", agent.activity]);
+  if (agent.visitor && agent.current) {
+    const visitor = village?.dashboard?.visitors.find(item => item.id === agent.id);
+    if (visitor) {
+      if (visitor.stock) facts.push(["Carried goods", Object.entries(visitor.stock)
+        .filter(([, quantity]) => quantity > 0)
+        .map(([item, quantity]) => `${item.replaceAll("-", " ")} ×${quantity}`).join(", ") || "None"]);
+      if (visitor.coins !== undefined) facts.push(["Money", `${visitor.coins} coins`]);
+    }
+  }
   if (agent.current && !agent.visitor && actor) {
     const items = actor.inventory.map(id => world?.entities[id]?.name ?? id);
     const cargo = village?.residents[agent.id]?.cargo ?? {};

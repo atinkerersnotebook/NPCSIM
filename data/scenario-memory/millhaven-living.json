@@ -425,6 +425,31 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "2f250eaec1644707a2f22fd112fb72af",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-13T21:02:58.385763+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: shovel recovered, well dug, mill repaired, bread supply resumed, every resident contributed, working wagon, evening reached, everyone fed, everyone home, everyone asleep, resource reserves ready.",
+          "evidence_ids": [
+            "2f250eaec1644707a2f22fd112fb72af:55"
+          ]
+        },
+        {
+          "reason": "The well and mill were not restored, and the wagon was not working.",
+          "evidence_ids": [
+            "2f250eaec1644707a2f22fd112fb72af:55"
+          ]
+        },
+        {
+          "reason": "The day was incomplete: evening had not arrived, residents were not fed or asleep, and resource reserves were short.",
+          "evidence_ids": [
+            "2f250eaec1644707a2f22fd112fb72af:55"
+          ]
+        }
+      ]
     }
   ]
 }

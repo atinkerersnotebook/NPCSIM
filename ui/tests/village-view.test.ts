@@ -238,6 +238,41 @@ test("visitor rows retain history but departed visitors leave current location c
   assert.ok(markup.includes("Cora"));
 });
 
+test("present trader details show personal stock and money separately from site stock", () => {
+  const state = expanded();
+  state.world!.village!.minute = 600;
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [], incidents: [], time_use: {},
+    visitors: [{ id: "merchant-1", name: "Cora", location: "forge", arrival: 500, departure: null,
+      status: "present", stock: { iron: 3 }, coins: 24, activities: [] }]
+  };
+  const markup = worldGanttMarkup(state, [], monitoredAgents(state));
+  assert.match(markup, /Carried goods<\/dt><dd>iron ×3/);
+  assert.match(markup, /Money<\/dt><dd>24 coins/);
+  assert.match(markup, /Stock at Torvin&#39;s forge \(site, not personal\)/);
+});
+
+test("visitor route plans and local trade enquiries appear without implying a sale", () => {
+  const state = expanded();
+  state.world!.village!.minute = 600;
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [], incidents: [], time_use: {},
+    visitors: [{ id: "merchant-1", name: "Cora", location: "forge", arrival: 500, departure: null,
+      status: "present", activities: [] }]
+  };
+  state.world!.village!.events = [
+    { minute: 505, actor: "merchant-1", action: "visitor_route_planned", target: "forge",
+      result: "Cora planned a walk to forge.", witnesses: [] },
+    { minute: 510, actor: "merchant-1", action: "visitor_trade_enquiry", target: "torvin",
+      result: "Cora asks torvin whether they have anything to trade.", witnesses: ["torvin"] }
+  ];
+  const row = buildWorldTimeline(state, [], monitoredAgents(state))!.rows.find(item => item.id === "merchant-1")!;
+  assert.deepEqual(row.spans.map(span => span.label), ["Planned walk", "Trade enquiry"]);
+  const markup = worldGanttMarkup(state, [], monitoredAgents(state));
+  assert.match(markup, /Trade enquiry: Cora asks torvin whether they have anything to trade/);
+  assert.ok(!markup.includes("Completed trade"));
+});
+
 test("completed trade records appear on both timeline rows and as factual world notes", () => {
   const state = expanded();
   state.world!.village!.minute = 700;
@@ -314,6 +349,44 @@ test("iron trader timeline shows actual arrival, trading, and departure travel",
     ["iron-mine", 715, 720], ["village-square", 720, 1085]
   ]);
   assert.match(worldGanttMarkup(state, [], monitoredAgents(state)), /Iron trader \/ 18:00 - 18:05 \/ 5 min \/ Village square \/ Departure travel/);
+});
+
+test("visitor trading intervals end when travel starts even for old overlapping records", () => {
+  const state = expanded();
+  state.world!.village!.minute = 630;
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [], incidents: [], time_use: {},
+    visitors: [{ id: "merchant-1", name: "Tamsin Reed", location: "bakery", arrival: 545,
+      departure: null, status: "present", activities: [
+        { actor: "merchant-1", label: "Trading", location: "forge",
+          start: 545, end: 570, status: "completed" },
+        { actor: "merchant-1", label: "Travel", location: "forge",
+          start: 565, end: 570, status: "completed" },
+        { actor: "merchant-1", label: "Trading", location: "bakery",
+          start: 620, end: 690, status: "active" }
+      ] }]
+  };
+  const timeline = buildWorldTimeline(state, [], monitoredAgents(state))!;
+  const spans = timeline.rows.find(row => row.id === "merchant-1")!.spans;
+  assert.deepEqual(spans.map(span => [span.label, span.start, span.end]), [
+    ["Trading", 545, 565], ["Travel", 565, 570], ["Trading", 620, 630]
+  ]);
+  assert.ok(!spans.some(span => span.label === "Completed trade"));
+  assert.match(worldGanttMarkup(state, [], monitoredAgents(state)), /Tamsin Reed \/ 09:05 - 09:25 \/ 20 min \/ Torvin&#39;s forge \/ Trading/);
+});
+
+test("active merchant stop is an offer, not a recorded trade", () => {
+  const state = expanded();
+  state.world!.village!.minute = 600;
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [], incidents: [], time_use: {},
+    visitors: [{ id: "merchant-1", name: "Cora", location: "forge", arrival: 545, departure: null,
+      status: "present", activities: [{ actor: "merchant-1", label: "Offering trade", location: "forge",
+        start: 545, end: 620, status: "active" }] }]
+  };
+  const row = buildWorldTimeline(state, [], monitoredAgents(state))!.rows.find(item => item.id === "merchant-1")!;
+  assert.equal(row.spans[0].label, "Offering trade");
+  assert.ok(!row.spans.some(span => span.label === "Completed trade"));
 });
 
 test("personal activities clip at now and economy reporting escapes generated labels", () => {
@@ -1036,6 +1109,87 @@ test("Gantt reconstructs real positions and action durations rather than schedul
   assert.equal(model.rows.length, 12);
   assert.equal(JSON.stringify(events), before);
   assert.equal(buildWorldTimeline(state, [...events].reverse(), monitoredAgents(state))!.start, 480);
+});
+
+test("walking tiles show the recorded plan destination and purpose for each route", () => {
+  const state = expanded();
+  state.world!.village!.minute = 510;
+  state.world!.actors.torvin.location_id = "forge";
+  const events = [
+    timelineEvent(1, "observation", 480, timelineObservation(480)),
+    timelineEvent(2, "action_request", 480, { request_id: "plan", action_id: "village_plan_walk",
+      arguments: { destination: "forge", purpose: "Retrieve <iron> for the wagon" } }),
+    timelineEvent(3, "action_result", 480, { request_id: "plan", outcome: "APPLIED",
+      explanation: "Planned route.", observation: timelineObservation(480, "cottages", 485) }),
+    timelineEvent(4, "action_request", 485, { request_id: "first", action_id: "go",
+      arguments: { target: "square-cottages" } }),
+    timelineEvent(5, "action_result", 485, { request_id: "first", outcome: "APPLIED",
+      explanation: "Walked to the square.", observation: timelineObservation(485, "village-square", 490) }),
+    timelineEvent(6, "action_request", 495, { request_id: "second", action_id: "go",
+      arguments: { target: "square-forge" } }),
+    timelineEvent(7, "action_result", 495, { request_id: "second", outcome: "APPLIED",
+      explanation: "Reached the forge.", observation: timelineObservation(495, "forge", 500) })
+  ];
+  const projected = events.map(timelineEventProjection).filter(event => event !== null);
+  const row = buildWorldTimeline(state, projected, monitoredAgents(state))!.rows
+    .find(row => row.id === "torvin")!;
+  const plan = row.spans.find(span => span.label === "plan walk")!;
+  assert.equal(plan.detail, "Purpose: Retrieve <iron> for the wagon. Planned route.");
+  const spans = row.spans.filter(span => span.kind === "travel");
+  assert.equal(spans.length, 2);
+  for (const span of spans) {
+    assert.equal(span.label, "Walk to Torvin's forge");
+    assert.match(span.detail, /Purpose: Retrieve <iron> for the wagon/);
+  }
+  const markup = worldGanttMarkup(state, projected, monitoredAgents(state));
+  assert.match(markup, /data-gantt-title="plan walk"[^>]*data-gantt-detail="Purpose: Retrieve &lt;iron&gt; for the wagon\. Planned route\."/);
+  assert.match(markup, /data-gantt-title="Walk to Torvin&#39;s forge"/);
+  assert.equal((markup.match(/Purpose: Retrieve &lt;iron&gt; for the wagon/g) ?? []).length >= 2, true);
+  assert.ok(!markup.includes("<iron>"));
+});
+
+test("research tiles identify the project and show progress recorded with each action", () => {
+  const state = expanded();
+  state.world!.village!.minute = 510;
+  const project = {
+    id: "discovery-test", title: "Herbal <blend>", description: "Grind herbs for later recipes.",
+    owner: "torvin", location: "forge", product: "discovery-test", kind: "material",
+    inputs: { herbs: 1 }, equipment: ["mortar"], duration: 30,
+    worked_minutes: 0, required_minutes: 240, attempts: 0, successes: 0,
+    required_successes: 3, discovered_at: null, status: "researching", blocker: null
+  };
+  const observed = (minute: number, progress: number, attempts: number, successes: number) => ({
+    ...timelineObservation(minute, "forge", minute + 5),
+    village: { minute, personal: { available_at: minute + 5 }, research: {
+      projects: [{ ...project, worked_minutes: progress, attempts, successes }] } }
+  });
+  const events = [
+    timelineEvent(1, "observation", 480, timelineObservation(480, "forge")),
+    timelineEvent(2, "action_request", 480, { request_id: "propose", action_id: "village_research_propose",
+      arguments: { title: project.title } }),
+    timelineEvent(3, "action_result", 480, { request_id: "propose", outcome: "APPLIED",
+      explanation: "Registered.", observation: observed(480, 0, 0, 0) }),
+    timelineEvent(4, "action_request", 490, { request_id: "study", action_id: "village_research",
+      arguments: { project: project.id } }),
+    timelineEvent(5, "action_result", 490, { request_id: "study", outcome: "APPLIED",
+      explanation: "Study started.", observation: observed(490, 60, 1, 0) })
+  ];
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [], visitors: [],
+    incidents: [], time_use: {}, research: [{ ...project, worked_minutes: 240, attempts: 4, successes: 3,
+      status: "discovered", discovered_at: 510 }]
+  };
+  const projected = events.map(timelineEventProjection).filter(event => event !== null);
+  const spans = buildWorldTimeline(state, projected, monitoredAgents(state))!.rows
+    .find(row => row.id === "torvin")!.spans.filter(span => span.label === "Research: Herbal <blend>");
+  assert.equal(spans.length, 2);
+  assert.match(spans[0].detail, /Study: 0\/240 min; trials: 0\/0 successful/);
+  assert.match(spans[1].detail, /Study: 60\/240 min; trials: 0\/1 successful/);
+  assert.match(spans[1].detail, /Grind herbs for later recipes/);
+  assert.ok(!spans[0].detail.includes("240/240"));
+  const markup = worldGanttMarkup(state, projected, monitoredAgents(state));
+  assert.match(markup, /data-gantt-title="Research: Herbal &lt;blend&gt;"/);
+  assert.ok(!markup.includes("<blend>"));
 });
 
 test("Gantt keeps free and rejected actions instantaneous and clips committed work at now", () => {

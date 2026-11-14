@@ -75,6 +75,13 @@ and frozen scenario after a server restart. Other interrupted or finished outcom
 cannot be reopened this way. Previous outcome reviews remain in event history;
 their now-stale failure feedback is removed when the adventure is reopened.
 
+During continuous Play, a temporary LLM connection failure pauses the adventure
+and its clock, checks proxy availability with backoff (2 to 60 seconds), and
+continues the same run when the proxy returns. Pause, Step, or another control
+command cancels automatic reconnection; single-step failures remain paused for
+manual retry. Authentication and configuration errors require manual correction.
+Automatic reconnection does not persist across server restarts.
+
 Use **Admin view** in the header (or **http://127.0.0.1:8000/?view=admin**) for
 setup, detailed perspectives, archives and technical inspection. **Player view**
 returns to the simplified screen. Switching views does not stop or reset the

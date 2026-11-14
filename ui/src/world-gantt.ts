@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { observationSchema, villageObservationSchema } from "./contracts.ts";
+import { observationSchema, villageObservationSchema, villageResearchSchema } from "./contracts.ts";
 import type { RunEvent, State } from "./contracts.ts";
 import { clockTime } from "./bakery-view.ts";
 import { latestVillageMinute, villageClockText, villageClockTime } from "./view-mode.ts";
@@ -11,8 +11,14 @@ const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "
 const personalSchema = villageObservationSchema.shape.personal.unwrap().pick({
   life: true, available_at: true
 });
+const researchProjectSchema = villageResearchSchema.pick({
+  id: true, title: true, description: true, status: true, blocker: true,
+  worked_minutes: true, required_minutes: true, attempts: true, successes: true,
+  required_successes: true, inputs: true, equipment: true, duration: true, product: true
+});
 const timeSchema = z.object({
-  village: z.object({ minute: z.number().nonnegative(), personal: personalSchema.optional() }).nullish(),
+  village: z.object({ minute: z.number().nonnegative(), personal: personalSchema.optional(),
+    research: z.object({ projects: z.array(researchProjectSchema) }).optional() }).nullish(),
   clock: z.object({ seconds: z.number().nonnegative() }).nullish(),
   bbq: z.object({ elapsed_seconds: z.number().nonnegative() }).nullish()
 });
@@ -95,8 +101,16 @@ function actionLabel(action: string, args: Record<string, unknown>, state: State
     };
     return jobs[state.world?.village?.roster[actor]?.occupation ?? ""] ?? label;
   }
+
   const target = typeof args.target === "string" ? state.world?.entities[args.target]?.name : undefined;
   return target && ["go", "look", "read", "take", "drop"].includes(action) ? `${label}: ${target}` : label;
+}
+
+function researchDetail(project: z.infer<typeof researchProjectSchema>): string {
+  const inputs = Object.entries(project.inputs).map(([item, quantity]) => `${quantity} ${item}`).join(", ") || "none";
+  return `Study: ${project.worked_minutes}/${project.required_minutes} min; trials: ${project.successes}/${project.attempts} successful (${project.required_successes} required). `
+    + `Status: ${project.status}${project.blocker ? ` - ${project.blocker}` : ""}. ${project.description} `
+    + `Proposed recipe: ${inputs} -> 1 ${project.title} / ${project.duration} min; equipment: ${project.equipment.join(", ") || "none"}.`;
 }
 
 function activityIcon(item: GanttSpan): string {
@@ -134,6 +148,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
   }));
   const byId = new Map(rows.map(row => [row.id, row]));
   const requests = new Map<string, { event: RunEvent; request: z.infer<typeof requestSchema> }>();
+  const walkingPlans = new Map<string, { destination: string; purpose: string }>();
   const milestones: Milestone[] = [];
   const routeChanges: { at: number; actor: string; active: boolean }[] = [];
   const recordObservation = (raw: z.infer<typeof observedSchema>, order: number) => {
@@ -166,6 +181,20 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       recordObservation(result.observation, event.sequence);
       if (!linked || !row || at === undefined || at > now) continue;
       const { action_id: action, arguments: args } = linked.request;
+      const projects = result.observation.village?.research?.projects ?? [];
+      const research = action === "village_research_propose" && result.outcome === "APPLIED"
+        ? projects.find(project => project.title.trim().toLowerCase() ===
+          (typeof args.title === "string" ? args.title.trim().toLowerCase() : undefined))
+        : action.startsWith("village_research_") || action === "village_research"
+          ? projects.find(project => project.id === args.project) : undefined;
+      if (action === "village_plan_walk" && result.outcome === "APPLIED"
+        && typeof args.destination === "string" && typeof args.purpose === "string") {
+        walkingPlans.set(event.actor_id, { destination: args.destination, purpose: args.purpose });
+      }
+      const walkingPlan = action === "go" && result.outcome === "APPLIED"
+        ? walkingPlans.get(event.actor_id) : undefined;
+      const planForTile = action === "village_plan_walk" && result.outcome === "APPLIED"
+        ? walkingPlans.get(event.actor_id) : walkingPlan;
       const prior = row.positions.filter(point => point.order < event.sequence).at(-1);
       const start = turns ? at - 1
         : village ? linked.event.village_minute ?? prior?.at ?? at : prior?.at ?? at;
@@ -184,9 +213,17 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
         : /wait/.test(action) ? "wait" : life?.sleeping ? "sleep" : "action";
       if (kind !== "sleep") row.spans.push({
         start, end: Math.max(start, Math.min(now, end)), location: result.observation.self.location_id,
-        label: actionLabel(action, args, state, event.actor_id),
-        detail: villageClockText(result.explanation), status: result.outcome, kind
+        label: research ? `Research: ${research.title}`
+          : walkingPlan ? `Walk to ${state.world?.entities[walkingPlan.destination]?.name ?? walkingPlan.destination}`
+          : actionLabel(action, args, state, event.actor_id),
+        detail: research ? `${researchDetail(research)} ${villageClockText(result.explanation)}`
+          : planForTile
+          ? `Purpose: ${planForTile.purpose}${/[.!?]$/.test(planForTile.purpose) ? "" : "."} ${villageClockText(result.explanation)}`
+          : villageClockText(result.explanation), status: result.outcome, kind
       });
+      if (walkingPlan && result.observation.self.location_id === walkingPlan.destination) {
+        walkingPlans.delete(event.actor_id);
+      }
       if (accepted && ["village_start_route", "village_stop_route"].includes(action)) {
         routeChanges.push({ at: start, actor: event.actor_id, active: action === "village_start_route" });
         if (action === "village_start_route") milestones.push({ at: start, label: "Wagon route started", detail: result.explanation });
@@ -201,6 +238,11 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
   for (const event of state.world?.village?.events ?? []) {
     if (event.minute > now) continue;
     const row = byId.get(event.actor);
+    if (row?.visitor && ["visitor_route_planned", "visitor_trade_enquiry"].includes(event.action)) {
+      row.spans.push({ start: event.minute, end: event.minute, location: "", kind: "event",
+        label: event.action === "visitor_route_planned" ? "Planned walk" : "Trade enquiry",
+        detail: event.result });
+    }
     if (row && ["wagon_drive", "timber_walk"].includes(event.action)
       && state.world?.entities[event.target]?.kind === "location") {
       row.positions.push({ at: event.minute, order: -1, location: event.target });
@@ -237,9 +279,11 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
     ];
     if (visitor) row.positions.push({ at: visitor.arrival, order: -1,
       location: visitor.activities[0]?.location ?? visitor.location });
-    for (const activity of activityHistory) {
+    const orderedActivities = activityHistory.slice().sort((a, b) => a.start - b.start);
+    for (const [index, activity] of orderedActivities.entries()) {
       if (activity.start > now) continue;
-      const end = Math.min(now, activity.end, visitor?.departure ?? now);
+      const end = Math.min(now, activity.end, orderedActivities[index + 1]?.start ?? now,
+        visitor?.departure ?? now);
       if (end < activity.start) continue;
       row.spans = row.spans.filter(span => !(span.kind === "action" && span.start === activity.start));
       row.spans.push({

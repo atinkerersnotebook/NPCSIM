@@ -201,6 +201,7 @@ class VisitorState(EventsModel):
     visit_index: int = 0
     next_visit_at: int = 0
     activity: str = "Travelling"
+    asked_residents: list[str] = Field(default_factory=list)
     coins: int = Field(ge=0)
     stock: dict[str, int] = Field(default_factory=dict)
     stock_lots: dict[str, list[VisitorLot]] = Field(default_factory=dict)

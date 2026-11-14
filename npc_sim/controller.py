@@ -54,6 +54,8 @@ class Controller:
         self.events: EventStore | None = None
         self.queue: asyncio.Queue[tuple[str, dict[str, Any], asyncio.Future[Any]]] = asyncio.Queue()
         self.worker: asyncio.Task[None] | None = None
+        self._llm_retry_at: float | None = None
+        self._llm_retry_delay = 2.0
         self.started_clock: float | None = None
         self.patterns: list[str] = []
         self.replan_count = 0
@@ -214,15 +216,24 @@ class Controller:
             if self.run and self.run["status"] in TERMINAL and self.run.get("completion_analysis", {}).get("status") == "pending":
                 await self.assess_completion()
             automatic = self.run is not None and self.run["status"] == "running"
+            retrying = self._llm_retry_at is not None and self.run is not None and self.run["status"] == "paused"
             try:
                 if automatic:
                     item = await asyncio.wait_for(self.queue.get(), timeout=0.05)
+                elif retrying and self._llm_retry_at is not None:
+                    item = await asyncio.wait_for(self.queue.get(), timeout=max(0, self._llm_retry_at - time.monotonic()))
                 else:
                     item = await self.queue.get()
             except asyncio.TimeoutError:
-                await self.cycle()
+                if automatic:
+                    await self.cycle()
+                else:
+                    await self._retry_llm()
                 continue
             name, arguments, future = item
+            self._llm_retry_at = None
+            if name in {"run", "resume", "start", "reset"}:
+                self._llm_retry_delay = 2.0
             previous_run_id = self.run["id"] if self.run else None
             try:
                 if name == "shutdown":
@@ -954,6 +965,7 @@ class Controller:
         self.in_flight = True
         actions_before = self.run["actions"] if self.run else 0
         selected_turn = False
+        automatic = self.run is not None and self.run["status"] == "running"
         try:
             if self.run and self.run.get("pending_dungeon_master_review"):
                 await self.review_team_progress()
@@ -964,12 +976,14 @@ class Controller:
                 return
             selected_turn = True
             await self._cycle()
+            self._llm_retry_delay = 2.0
         except LLMUnavailable as error:
             LOGGER.warning("Pausing adventure: %s", error, exc_info=True)
             if not self.run:
                 raise
             self.run["status"] = "paused"
-            self.run["reason"] = f"{error} Adventure paused; resume when the LLM is available."
+            self.run["reason"] = (f"{error} Adventure paused; waiting to reconnect to the LLM."
+                                  if automatic else f"{error} Adventure paused; resume when the LLM is available.")
             if error.phase == "decision" and self.agents:
                 self.run["next_agent_index"] = list(self.agents).index(self.run["actor_id"])
             elif error.phase == "dungeon_master":
@@ -978,6 +992,9 @@ class Controller:
             self._pause_budget()
             self.emit("control", {"command": "pause", "source": "llm_unavailable",
                                   "reason": self.run["reason"]})
+            if automatic:
+                self._llm_retry_at = time.monotonic() + self._llm_retry_delay
+                self._llm_retry_delay = min(self._llm_retry_delay * 2, 60)
         except Exception as error:
             LOGGER.exception("NPC decision/action cycle failed")
             self.emit("error", {"kind": type(error).__name__, "message": self.safe_error(error)})
@@ -989,6 +1006,25 @@ class Controller:
                 self.run["pending_actor_id"] = self.run["actor_id"]
             self.in_flight = False
             self.checkpoint()
+
+    async def _retry_llm(self) -> None:
+        if not self.run or self.run["status"] != "paused" or self._llm_retry_at is None:
+            return
+        try:
+            await asyncio.wait_for(self._call_proxy(self.proxy.models()), timeout=5)
+        except (LLMUnavailable, asyncio.TimeoutError):
+            LOGGER.info("LLM still unavailable; retrying in %.0f seconds", self._llm_retry_delay)
+            self._llm_retry_at = time.monotonic() + self._llm_retry_delay
+            self._llm_retry_delay = min(self._llm_retry_delay * 2, 60)
+            return
+        except (httpx.HTTPStatusError, ValueError, KeyError) as error:
+            self._llm_retry_at = None
+            self.run["reason"] = f"LLM availability check failed: {self.safe_error(error)} Resume manually after fixing the proxy."
+            LOGGER.warning("LLM availability check failed: %s", self.safe_error(error))
+            self.checkpoint()
+            return
+        self._llm_retry_at = None
+        await self._command("resume", {})
 
     async def _call_proxy(self, request: Awaitable[ProxyResult],
                           phase: Literal["decision", "dungeon_master"] = "decision") -> ProxyResult:

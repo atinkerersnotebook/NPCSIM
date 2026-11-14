@@ -535,7 +535,12 @@ completion rules. A separate generated living scenario enables:
 - Persistent interests, timed leisure, relationships, personal projects, shared
   band rehearsals/performances and optional evidence-verified sidequests.
 - Bounded deterministic village events and named temporary visitors with real
-  presence, finite merchant money/capacity and protected, fresh surplus exports.
+  presence, planned physical routes, finite personal merchant stock/money/capacity
+  and protected, fresh surplus exports. Merchants ask available local residents
+  about trade, but only explicit funded transactions transfer goods. Visitors at
+  the tavern may buy a real meal during breakfast or supper service. Travellers
+  without a planned meal stop walk to the tavern during meal service and resume
+  their visit after eating.
 - Typed monitoring projections for orders, inventory, accounts, projects, quests,
   events, activity durations, time use and historical visitor Gantt rows.
 

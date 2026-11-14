@@ -174,6 +174,41 @@ def test_partial_deliveries_payment_once_and_conserved_cash_and_stock(world):
     assert carrier.state.village.stocks["tavern"]["bread"] == 3
 
 
+def test_blocked_production_allows_previously_loaded_partial_delivery(world):
+    add(world, "bakery", "bread", 3, expiry=1400)
+    add(world, "bakery", "flour", 1, expiry=1400)
+    order = propose(world, quantity=4, deadline=1080)
+    accept(world, order)
+    assert order.status == "accepted_planned"
+    carrier = actor(world, "jory", "bakery")
+    loads = carrier.state.village.residents["jory"].shipments
+    assert goods.load(carrier, "jory", {"bread": 3}, "tavern", loads, 3) is None
+    carrier.actor.location_id = "tavern"
+    carrier.state.village.minute = 570
+    economy.advance(carrier)
+    assert order.status == "blocked"
+    result = carrier.act("planned-partial-unload", carrier.observe()["observation_revision"],
+                         "village_unload_goods", {})
+    assert (result["outcome"], result["code"]) == ("APPLIED", "GOODS_TRANSFERRED")
+    assert (order.delivered_quantity, order.remaining, order.in_transit) == (3, 1, 0)
+    assert loads == []
+
+
+def test_blocked_order_still_rejects_late_cargo(world):
+    add(world, "bakery", "bread", 3, expiry=1400)
+    add(world, "bakery", "flour", 1, expiry=1400)
+    order = propose(world, quantity=4, deadline=600)
+    accept(world, order)
+    carrier = actor(world, "jory", "bakery")
+    loads = carrier.state.village.residents["jory"].shipments
+    assert goods.load(carrier, "jory", {"bread": 3}, "tavern", loads, 3) is None
+    carrier.actor.location_id = "tavern"
+    carrier.state.village.minute = 605
+    order.status = "blocked"
+    assert "ORDER_CLOSED" in goods.unload(carrier, "jory", loads)
+    assert order.delivered_quantity == 0 and order.in_transit == 3
+
+
 def test_consolidated_orders_keep_accounting_and_charge_one_trip_fee(world):
     add(world, "bakery", "bread", 3, expiry=1400)
     first = propose(world, quantity=1, request_key="first")
