@@ -118,7 +118,7 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
         for resource, amount in goods.items():
             remaining = amount
             for order in sorted(economy.orders.values(), key=lambda order: (order.deadline, order.id)):
-                if (order.status not in village_economy.COMMITTED or order.source != source or order.destination != destination
+                if (order.status not in village_economy.LOADABLE or order.source != source or order.destination != destination
                         or order.product != resource or order.loadable <= 0):
                     continue
                 if not village_communication.can_use_order(world, order):

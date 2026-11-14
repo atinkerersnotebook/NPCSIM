@@ -797,6 +797,34 @@ def test_planned_milk_cannot_double_book_a_collection_session(workspace):
     assert world.state.village.stocks["farm"]["milk"] == 0
 
 
+def test_planned_milk_notice_tracks_real_collection_and_delivery(workspace):
+    world = create_world(workspace / "milk-delivery.json", value=build_scenario(scenario()))
+    buyer = actor(world, "elsie", "village-square")
+    nid = post(buyer, {
+        "type": "supply_request", "subject": "milk", "description": "One fresh farm milk",
+        "recipients": ["ada"], "quantity": 1, "destination": "tavern",
+        "due_at": 900, "required_fresh_until": 960})
+    supplier = actor(world, "ada", "village-square")
+    read(supplier)
+    care = world.state.village.livestock.cow
+    care.day, care.fed, care.watered, care.cleaned = 0, True, True, True
+    respond(supplier, nid)
+    order = next(iter(world.state.village.economy.orders.values()))
+    assert order.status == "accepted_planned"
+    goods.put(world, "farm", "milk", 1)
+    supplier.actor.location_id = "farm"
+    ready(world)
+    economy.advance(supplier)
+    assert order.status == "ready_to_collect"
+    loads = supplier.state.village.residents["ada"].shipments
+    assert goods.load(supplier, "ada", {"milk": 1}, "tavern", loads, 3) is None
+    supplier.actor.location_id = "tavern"
+    assert goods.unload(supplier, "ada", loads) is None
+    assert (order.status, order.delivered_quantity, order.paid) == ("fulfilled", 1, order.price)
+    assert latest(world, nid).status == "completed"
+    assert world.state.village.stocks["tavern"]["milk"] >= 1
+
+
 def test_impossible_flour_plan_never_creates_commitment(world):
     buyer = actor(world, "jory", "village-square")
     nid = post(buyer)
@@ -1147,6 +1175,33 @@ def test_appointment_version_change_revokes_old_signature_and_cannot_auto_travel
     assert latest(world, nid).appointment.status == "expired"
     assert known(world, partner.actor_id, nid).snapshot.appointment.status == "confirmed"
     assert world.state.actors == positions
+
+
+def test_expired_mill_appointment_renews_only_for_accepted_gathered_equipped_crew(world):
+    lead, partner, nid = meeting(world, "repair_mill")
+    _, site = comm._project(world, "repair_mill")
+    ready(world, 605)
+    world.state.village.breakdown = True
+    comm.advance(world)
+    assert latest(world, nid).status == "expired"
+    lead.actor.location_id = partner.actor.location_id = site
+    assert comm.project_blocker(lead, "repair_mill") is not None
+    base = world.scenario.village
+    for eid in (base.repair_part, base.hammer):
+        world.state.entities[eid].location = site
+        world.state.entities[eid].hidden = False
+    goods.put(world, site, "planks", 1)
+    assert comm.project_blocker(lead, "repair_mill") is None
+    renewed = latest(world, nid)
+    assert renewed.appointment.status == "confirmed"
+    assert renewed.appointment.due_at == 605
+    assert known(world, lead.actor_id, nid).snapshot.version == renewed.version
+    assert known(world, partner.actor_id, nid).snapshot.version == renewed.version
+    assert village_ai.apply(lead, "village_project", {"project": "repair_mill"})[0] == "APPLIED"
+    for member in [partner, lead, partner, lead, partner]:
+        ready(world, world.state.village.minute + 5)
+        assert village_ai.apply(member, "village_project", {"project": "repair_mill"})[0] == "APPLIED"
+    assert world.state.village.repaired
 
 
 def test_work_continues_while_waiting_and_failed_contacts_deduplicate(world):

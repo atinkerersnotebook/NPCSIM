@@ -108,7 +108,9 @@ class VillageSupplierOrder(EconomyModel):
     @property
     def commitment(self) -> int:
         # Reserve the worst case: each remaining unit needs a separate trip.
-        return self.remaining * (self.price + self.delivery_fee) if self.status == "accepted" else 0
+        return (self.remaining * (self.price + self.delivery_fee)
+                if self.status in {"accepted", "accepted_planned", "in_production",
+                                   "ready_to_collect", "in_transit", "blocked"} else 0)
 
 
 class VillageEconomyPayment(EconomyModel):

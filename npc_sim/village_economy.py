@@ -20,6 +20,7 @@ VERBS = {"village_plan_supplies", "village_propose_order", "village_accept_order
 ACTIVE = {"proposed", "accepted", "accepted_planned", "in_production", "ready_to_collect",
           "in_transit", "blocked", "deferred"}
 COMMITTED = {"accepted", "accepted_planned", "in_production", "ready_to_collect", "in_transit"}
+LOADABLE = COMMITTED | {"blocked"}
 
 
 def example_config(scenario: Any) -> dict[str, Any]:
@@ -291,7 +292,7 @@ def protected_quantity(world: "World", location: str, product: str) -> int:
                  if (state_parent := world.state.village.communication) else 0)
     return policy_reserve(world, location, product) + transfers + sum(
         order.loadable for order in state.orders.values()
-        if order.status in COMMITTED and order.source == location and order.product == product)
+        if order.status in LOADABLE and order.source == location and order.product == product)
 
 
 def policy_reserve(world: "World", location: str, product: str) -> int:
@@ -330,7 +331,7 @@ def _allocated_stock(world: "World", location: str, product: str,
                  and person.life.work.location == location and product in person.life.work.outputs]
     if economy:
         orders = (order for order in economy.orders.values()
-                  if order.status in COMMITTED and order.id != excluding
+                  if order.status in LOADABLE and order.id != excluding
                   and order.source == location and order.product == product)
         for order in sorted(orders, key=lambda item: (item.required_fresh_until, item.deadline, item.id)):
             cutoff = max(state.minute, order.required_fresh_until)
@@ -554,7 +555,7 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
 
 
 def loadable_for_order(world: "World", order: VillageSupplierOrder) -> int:
-    if order.status not in COMMITTED or world.state.village.minute > order.deadline:
+    if order.status not in LOADABLE or world.state.village.minute > order.deadline:
         return 0
     return min(order.loadable, available_for_order(
         world, order.source, order.product, order.required_fresh_until, excluding=order.id))
@@ -569,7 +570,7 @@ def load_blocker(world: "World", source: str, destination: str,
     for product, amount in goods.items():
         remaining = amount
         for order in sorted(economy.orders.values(), key=lambda item: (item.deadline, item.id)):
-            if (order.status not in COMMITTED or order.source != source or order.destination != destination
+            if (order.status not in LOADABLE or order.source != source or order.destination != destination
                     or order.product != product or order.loadable <= 0):
                 continue
             from npc_sim import village_communication
@@ -713,7 +714,7 @@ def meal_delivery_actions(world: "World") -> list[dict[str, Any]]:
     for shipment in cargo:
         order = state.economy.orders.get(shipment.order_id) if shipment.order_id else None
         if (order is None or order.product != "bread" or order.destination != inn
-                or order.status not in COMMITTED or not village_communication.can_use_order(world, order)):
+                or order.status not in LOADABLE or not village_communication.can_use_order(world, order)):
             continue
         route = village.route(world, location, inn, known_routes=state.residents[rid].known_routes)
         if route is not None and state.minute + 5 * len(route) + 5 <= min(cutoff, order.deadline):
@@ -725,7 +726,7 @@ def meal_delivery_actions(world: "World") -> list[dict[str, Any]]:
         return steps
     for order in _personal_orders(world):
         current = state.economy.orders.get(order.id)
-        if (order.status not in COMMITTED or current is None or current.status not in COMMITTED
+        if (order.status not in LOADABLE or current is None or current.status not in LOADABLE
                 or current.loadable <= 0 or order.product != "bread" or order.destination != inn
                 or order.deadline < state.minute
                 or not village_communication.can_use_order(world, order)):
@@ -816,7 +817,7 @@ def _supply_buckets(world: "World", location: str, product: str,
             if order.status in ACTIVE and order.destination == location and order.product == product:
                 buckets.append({"quantity": order.remaining, "available_at": order.deadline,
                                 "expires_at": order.required_fresh_until + 1,
-                                "confirmed": order.status in COMMITTED})
+                                "confirmed": order.status in LOADABLE})
     return buckets
 
 
@@ -908,7 +909,7 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
     job = base.residents[buyer].job
     if job and job.inputs and buyer != policy.innkeeper and economy:
         accepted = [order for order in (_personal_orders(world) if personal else economy.orders.values())
-                    if order.status in COMMITTED and order.supplier == buyer and order.loadable]
+                    if order.status in LOADABLE and order.supplier == buyer and order.loadable]
         if accepted:
             batches = max((ceil(max(0, sum(order.loadable for order in accepted if order.product == product)
                                     - usable_stock(world, destination, product,
@@ -1200,9 +1201,12 @@ def advance(world: "World") -> None:
                 village.event(world, order.buyer, "order_failed", order.id,
                               f"Delivery deadline missed; {order.remaining} {order.product} outstanding.",
                               order.destination)
+            continue
         elif order.status in {"accepted_planned", "in_production"}:
             if loadable_for_order(world, order) >= order.loadable:
                 order.status, order.production_plan = "ready_to_collect", {}
+                from npc_sim import village_communication
+                village_communication.sync_order(world, order, "commitment_ready", order.source)
             elif (order.production_plan.get("finish", 0) < world.state.village.minute
                   and not any(person.life and person.life.work and person.life.work.location == order.source
                               and order.product in person.life.work.outputs
@@ -1214,14 +1218,25 @@ def advance(world: "World") -> None:
                      and order.product in person.life.work.outputs
                      for person in world.state.village.residents.values()):
                 order.status = "in_production"
-        elif _food_policy(world) and order.status == "blocked":
-            feasible, reason = order_feasibility(world, order)
-            if feasible:
+                from npc_sim import village_communication
+                village_communication.sync_order(world, order, "commitment_in_progress", order.source)
+        elif order.status == "blocked":
+            if loadable_for_order(world, order) >= order.loadable:
                 order.status, order.reason, order.production_plan = "ready_to_collect", None, {}
-            else:
+                from npc_sim import village_communication
+                village_communication.sync_order(world, order, "commitment_ready", order.source)
+            elif _food_policy(world):
+                feasible, reason = order_feasibility(world, order)
+                if feasible:
+                    order.status, order.reason, order.production_plan = "ready_to_collect", None, {}
+                    from npc_sim import village_communication
+                    village_communication.sync_order(world, order, "commitment_ready", order.source)
+                    continue
                 plan, planned_reason = production_plan(world, order)
                 if plan:
                     order.status, order.reason, order.production_plan = "accepted_planned", None, plan
+                    from npc_sim import village_communication
+                    village_communication.sync_order(world, order, "commitment_planned", order.source)
                 else:
                     order.reason = f"{reason} {planned_reason}".strip()
 
@@ -1281,7 +1296,7 @@ def production_targets(world: "World", location: str, *, personal: bool = False)
     if firewood_source:
         targets["firewood"] = max(targets["firewood"], village_firewood.source_reserve(world))
     for order in _personal_orders(world) if personal else economy.orders.values():
-        if (order.status in COMMITTED or _food_policy(world) and order.status == "blocked") and order.source == location:
+        if order.status in LOADABLE and order.source == location:
             targets[order.product] = targets.get(order.product, 0) + order.loadable
     if (_food_policy(world) and location == "riverbank" and "fish-smoking" in
             (state.social.config.activities if state.social else {})
@@ -1433,7 +1448,7 @@ def delivery_runs(world: "World", carrier: str | None = None) -> list[dict[str, 
     location = village.resident_location(world, carrier)
     runs: dict[str, dict[str, Any]] = {}
     for order in sorted(economy.orders.values(), key=lambda order: (order.deadline, order.id)):
-        if order.status not in COMMITTED or order.source != location or order.loadable <= 0:
+        if order.status not in LOADABLE or order.source != location or order.loadable <= 0:
             continue
         run = runs.setdefault(order.destination, {"destination": order.destination,
                               "goods": {}, "orders": {}, "capacity": max(0, capacity),

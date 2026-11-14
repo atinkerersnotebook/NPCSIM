@@ -87,7 +87,7 @@ def ready_orders(world: "World") -> list[VillageSupplierOrder]:
     if state.economy is None:
         return []
     return sorted((order for order in state.economy.orders.values()
-                   if order.status in village_economy.COMMITTED and order.loadable > 0
+                   if order.status in village_economy.LOADABLE and order.loadable > 0
                    and order.source in ROUTE and order.destination in ROUTE
                    and village_economy.loadable_for_order(world, order) > 0
                    and village_communication.can_use_order(world, order)),

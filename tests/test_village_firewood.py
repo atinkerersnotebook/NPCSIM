@@ -605,6 +605,21 @@ def test_fuel_delivery_plan_groups_only_confirmed_feasible_stops(tmp_path):
                              for index, stop in enumerate(blocked.stops))
 
 
+def test_blocked_fuel_commitment_uses_newly_split_stock_for_real_route(tmp_path):
+    world = make_world(tmp_path)
+    goods.put(world, "woods", "firewood", 4)
+    buyer = actor(world, "jory", "woods")
+    assert economy.apply(buyer, "village_propose_order", {
+        "product": "firewood", "quantity": 1, "supplier": "rowan",
+        "deadline": 1000, "required_fresh_until": 1080})[0] == "APPLIED"
+    order = next(iter(world.state.village.economy.orders.values()))
+    assert economy.apply(world, "village_accept_order", {"order_id": order.id})[0] == "APPLIED"
+    order.status = "blocked"
+    assert fuel.delivery_plan(world) is not None
+    assert fuel.delivery_plan(world).stops[0].order_id == order.id
+    assert world.state.village.stocks["woods"]["firewood"] == 4
+
+
 def _fund_grouped_route(world):
     goods.put(world, "woods", "firewood", 12)
     for buyer_id in ("iona", "jory"):

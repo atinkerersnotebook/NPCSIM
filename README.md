@@ -336,6 +336,9 @@ known crew work can use `village_schedule_crew` with a project, earliest start
 and actual participant IDs; the engine supplies a 60-minute window. Expired
 appointments can be superseded, while physically gathered consenting partners
 can confirm an accepted appointment at the site without another paper trip.
+An expired confirmed appointment can also be renewed in place when both
+accepting workers have physically gathered with the required real tools and
+materials; renewal creates a new witnessed version, not remote travel or supplies.
 Milk orders may be accepted before cow care when a real well, feed, equipment,
 animals and enough time exist; collection still requires care and physical
 delivery. The inn can prepare consecutive funded batches when real ingredients,
@@ -363,12 +366,15 @@ snapshots rather than leaking unreceived replies. Older pre-installation orders
 retain their original behavior. A verified status can be published with
 `village_notice_update` **without** a `notice` field; it still requires a local
 channel and an exactly compatible personally received version.
+If planned production stalls, already loaded goods remain deliverable before
+the deadline. Newly produced stock can then restore the same order to a
+loadable state, retaining its outstanding quantity and reserved buyer funds.
 
 Well/mill meetings are versioned appointments proposed by the actual project
 crew at the actual site, with an explicit future `due_at`. The initial proposer
 signs only for themselves; the partner accepts through a real channel, and both
 must personally receive confirmation. Attendance is a personal plan, not
-automatic movement. Work is permitted during the one-hour appointment window
+automatic movement. Work is permitted during the one-hour appointment window (or a renewed window)
 only with both actual workers at the site and the original real supplies; each
 worker still contributes their own actions. A partner's ongoing project turn
 counts as participation, not as an unrelated availability conflict; travel and

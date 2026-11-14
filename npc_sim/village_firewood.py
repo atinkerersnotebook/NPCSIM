@@ -321,7 +321,7 @@ def delivery_plan(world: "World", carrier: str | None = None) -> VillageFuelDeli
     if capacity <= 0 or stock <= 0 or not state.economy:
         return None
     orders = sorted((order for order in state.economy.orders.values()
-                     if order.status in village_economy.COMMITTED and order.product == "firewood"
+                     if order.status in village_economy.LOADABLE and order.product == "firewood"
                      and order.source == source and order.loadable > 0 and order.deadline >= state.minute
                      and village_communication.can_use_order(world, order)),
                     key=lambda order: (order.deadline, order.id))
@@ -472,7 +472,7 @@ def execute_delivery_plan(world: "World", route_id: str) -> dict[str, Any]:
             if (not order or order.product != "firewood"
                     or order.source != source or order.supplier != plan.carrier
                     or order.destination != stop.destination
-                    or (stop in pending and (order.status not in village_economy.COMMITTED
+                    or (stop in pending and (order.status not in village_economy.LOADABLE
                         or not village_communication.can_use_order(world, order)))
                     or order.delivered_quantity != stop.delivered_before
                     or (stop in pending and village_economy.loadable_for_order(world, order) < stop.quantity)
@@ -504,7 +504,7 @@ def execute_delivery_plan(world: "World", route_id: str) -> dict[str, Any]:
                  and item.destination == stop.destination]
         if sum(item.quantity for item in cargo) != stop.quantity:
             return blocked("Route cargo no longer matches the accepted order; retain existing cargo.")
-        if ((not cargo and (order.status not in village_economy.COMMITTED
+        if ((not cargo and (order.status not in village_economy.LOADABLE
                 or state.minute > order.deadline or not village_communication.can_use_order(world, order)))
                 or order.product != "firewood" or order.source != source
                 or order.destination != stop.destination or order.supplier != plan.carrier
@@ -590,7 +590,7 @@ def execute_delivery_step(world: "World", route_id: str) -> tuple[str, str, str,
         if delivered == stop.quantity:
             continue
         cargo = [item for item in shipments if item.order_id == stop.order_id]
-        if (delivered != 0 or (not cargo and (order.status not in village_economy.COMMITTED
+        if (delivered != 0 or (not cargo and (order.status not in village_economy.LOADABLE
                 or not village_communication.can_use_order(world, order)
                 or state.minute > order.deadline))):
             return reject("An accepted, known fuel order has changed or expired.")

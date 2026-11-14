@@ -209,6 +209,53 @@ def test_blocked_order_still_rejects_late_cargo(world):
     assert order.delivered_quantity == 0 and order.in_transit == 3
 
 
+def test_blocked_production_recovers_after_real_stock_arrives_without_new_order(world):
+    add(world, "bakery", "bread", 3, expiry=1400)
+    add(world, "bakery", "flour", 1, expiry=1400)
+    order = propose(world, quantity=4, deadline=1080)
+    accept(world, order)
+    carrier = actor(world, "jory", "bakery")
+    loads = carrier.state.village.residents["jory"].shipments
+    assert goods.load(carrier, "jory", {"bread": 3}, "tavern", loads, 3) is None
+    carrier.state.village.minute = 570
+    economy.advance(carrier)
+    assert order.status == "blocked"
+    carrier.actor.location_id = "tavern"
+    assert goods.unload(carrier, "jory", loads) is None
+    assert (order.delivered_quantity, order.paid, order.remaining) == (3, 9, 1)
+    add(world, "bakery", "bread", 1, expiry=1400, produced=575)
+    carrier.actor.location_id = "bakery"
+    economy.advance(carrier)
+    assert order.status == "ready_to_collect"
+    assert goods.load(carrier, "jory", {"bread": 1}, "tavern", loads, 3) is None
+    carrier.actor.location_id = "tavern"
+    assert goods.unload(carrier, "jory", loads) is None
+    assert (order.status, order.delivered_quantity, order.paid, order.remaining) == ("fulfilled", 4, 12, 0)
+    assert len([item for item in carrier.state.village.economy.orders.values() if item.id == order.id]) == 1
+    assert carrier.state.village.stocks["tavern"]["bread"] == 4
+
+
+def test_planned_and_blocked_orders_keep_buyer_funds_reserved(world):
+    add(world, "bakery", "bread", 3, expiry=1400)
+    add(world, "bakery", "flour", 1, expiry=1400)
+    order = propose(world, quantity=4, deadline=1080)
+    accept(world, order)
+    reserved = order.remaining * (order.price + order.delivery_fee)
+    assert economy.commitments(world, "elsie") == reserved
+    carrier = actor(world, "jory", "bakery")
+    assert goods.load(carrier, "jory", {"bread": 3}, "tavern",
+                      carrier.state.village.residents["jory"].shipments, 3) is None
+    carrier.state.village.minute = 570
+    economy.advance(carrier)
+    assert order.status == "blocked"
+    assert economy.commitments(world, "elsie") == reserved
+    carrier.state.village.coins["elsie"] = 3 * order.price + order.delivery_fee - 1
+    carrier.actor.location_id = "tavern"
+    assert "INSUFFICIENT_COINS" in goods.unload(
+        carrier, "jory", carrier.state.village.residents["jory"].shipments)
+    assert order.delivered_quantity == 0
+
+
 def test_consolidated_orders_keep_accounting_and_charge_one_trip_fee(world):
     add(world, "bakery", "bread", 3, expiry=1400)
     first = propose(world, quantity=1, request_key="first")
