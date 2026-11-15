@@ -18,7 +18,9 @@ const researchProjectSchema = villageResearchSchema.pick({
 });
 const timeSchema = z.object({
   village: z.object({ minute: z.number().nonnegative(), personal: personalSchema.optional(),
-    research: z.object({ projects: z.array(researchProjectSchema) }).optional() }).nullish(),
+    research: z.object({ projects: z.array(researchProjectSchema) }).optional(),
+    fallback: z.object({ decision: z.object({ selected_task_id: z.string().nullable(),
+      reason: z.string() }).nullable() }).optional() }).nullish(),
   clock: z.object({ seconds: z.number().nonnegative() }).nullish(),
   bbq: z.object({ elapsed_seconds: z.number().nonnegative() }).nullish()
 });
@@ -211,12 +213,18 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       const kind = result.outcome === "REJECTED" ? "rejected" : !accepted ? "event"
         : end === start ? "free" : action === "go" ? "travel"
         : /wait/.test(action) ? "wait" : life?.sleeping ? "sleep" : "action";
+      const decision = result.observation.village?.fallback?.decision;
+      const waitReason = kind === "wait" && decision?.selected_task_id === "wait:event"
+        ? decision.reason.trim().replace(/[.!?]+$/, "") : "";
+      const waitLabel = waitReason ? /^waiting\b/i.test(waitReason) ? waitReason : `Waiting: ${waitReason}` : "";
       if (kind !== "sleep") row.spans.push({
         start, end: Math.max(start, Math.min(now, end)), location: result.observation.self.location_id,
-        label: research ? `Research: ${research.title}`
+        label: waitLabel ? waitLabel
+          : research ? `Research: ${research.title}`
           : walkingPlan ? `Walk to ${state.world?.entities[walkingPlan.destination]?.name ?? walkingPlan.destination}`
           : actionLabel(action, args, state, event.actor_id),
-        detail: research ? `${researchDetail(research)} ${villageClockText(result.explanation)}`
+        detail: waitReason ? `Reason: ${waitReason}`
+          : research ? `${researchDetail(research)} ${villageClockText(result.explanation)}`
           : planForTile
           ? `Purpose: ${planForTile.purpose}${/[.!?]$/.test(planForTile.purpose) ? "" : "."} ${villageClockText(result.explanation)}`
           : villageClockText(result.explanation), status: result.outcome, kind
@@ -339,7 +347,10 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       const previous = mergedWaits.at(-1);
       if (!turns && previous && previous.location === wait.location && wait.start <= previous.end) {
         previous.end = Math.max(previous.end, wait.end);
-        if (!previous.detail.includes(wait.detail)) previous.detail += `\n${wait.detail}`;
+        if (previous.label !== wait.label) {
+          previous.label = "Waiting: multiple reasons";
+          if (!previous.detail.split("\n").includes(wait.detail)) previous.detail += `\n${wait.detail}`;
+        }
       } else mergedWaits.push(wait);
     }
     const merged: GanttSpan[] = [];
@@ -411,7 +422,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const range = chart.turns ? format(item.end) : `${format(item.start)} - ${format(item.end)}`;
       const timing = `${duration} / ${range}`;
       const detail = `${row.name} / ${range} / ${duration}${location ? ` / ${location}` : ""} / ${item.label}. ${item.detail}`;
-      const label = item.kind === "wait" ? "Waiting" : item.label;
+      const label = item.kind === "wait" && item.label === "Wait" ? "Waiting" : item.label;
       const summary = (item.detail || location).replace(/\s+/g, " ").trim();
       const icon = activityIcon(item);
       const status = item.status ?? (item.kind === "sleep" || item.kind === "route" || item.kind === "wait" ? "Recorded" : "");

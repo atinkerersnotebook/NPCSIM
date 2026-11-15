@@ -491,6 +491,11 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
         tool_id = village_livestock.PAIL if operation == "milk" else village_livestock.BASKET
         tool = world.state.entities.get(tool_id)
         day = state.minute // 1440
+        if operation == "eggs" and order.deadline // 1440 > day and (care.eggs or earliest > day * 1440 + 1080):
+            day += 1
+            earliest = max(earliest, day * 1440 + resident.wake_minute)
+            closing = day * 1440 + min(
+                village_life.production_closing_minute(world, order.supplier), resident.bed_minute)
         supplier = order.supplier
         inventory = world.state.actors[supplier].inventory
         if (not village_livestock._animals(world, operation)
@@ -502,8 +507,10 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
         care_finish = earliest + len(approach) * 5
         if operation == "milk" and not cared:
             cow = livestock.cow
-            hay = usable_stock(world, "farm", "hay", state.minute)
-            if not (care_today and cow.fed) and hay - 1 < protected_quantity(world, "farm", "hay"):
+            from npc_sim import village_depot
+            feed_site = village_depot.FEED_STORE if village_depot.enabled(world) else "farm"
+            hay = usable_stock(world, feed_site, "hay", state.minute)
+            if not (care_today and cow.fed) and hay - 1 < protected_quantity(world, feed_site, "hay"):
                 return {}, "Cow care needs one real hay unit above protected reserves"
             if not (care_today and cow.watered) and livestock.water < 1:
                 well = world.state.entities.get(base.well_site)
@@ -528,11 +535,38 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
                 care_finish += max(5, 15 * village_life.cooldown_factor(world, supplier)
                                    - (cow.progress if care_today else 0))
         elif not cared:
-            return {}, "Egg collection requires completed real hen care"
+            if day == state.minute // 1440:
+                return {}, "Egg collection requires completed real hen care"
+            from npc_sim import village_depot, village_recycling
+            feed_site = village_depot.FEED_STORE if village_depot.enabled(world) else "farm"
+            grain, _ = village_recycling.hen_ration(world)
+            if usable_stock(world, feed_site, "grain", day * 1440 + resident.wake_minute) - grain < protected_quantity(world, feed_site, "grain"):
+                return {}, "Tomorrow's hen care needs real unreserved feed"
+            if livestock.water < 1:
+                well = world.state.entities.get(base.well_site)
+                bucket = world.state.entities.get(village_livestock.BUCKET)
+                if (not state.well_dug or well is None or well.hidden or well.broken
+                        or village.route(world, "farm", base.well_site) is None
+                        or bucket is None or bucket.hidden or bucket.broken
+                        or bucket.location != "farm" and village_livestock.BUCKET not in inventory):
+                    return {}, "Tomorrow's hen care needs real well water and a bucket"
+            brush = world.state.entities.get(village_livestock.BRUSH)
+            coop = world.state.entities.get("hen-coop")
+            if any(entity is None or entity.hidden or entity.broken
+                   or entity.location != "farm" and key not in inventory
+                   for key, entity in ((village_livestock.BRUSH, brush), ("hen-coop", coop))):
+                return {}, "Tomorrow's hen care needs usable hen equipment"
+            care_finish = max(care_finish, day * 1440 + resident.wake_minute
+                              + 10 * village_life.cooldown_factor(world, supplier))
         reserved_output = sum(other.production_plan.get("output", 0) for other in pending
-                              if other.product == order.product)
+                              if other.product == order.product
+                              and other.production_plan.get("finish", 0) // 1440 == day)
         if missing + reserved_output > (6 if operation == "milk" else livestock.config.hens):
             return {}, "Animal collection capacity is insufficient"
+        if operation == "eggs" and any(other.product == "eggs"
+                                      and other.production_plan.get("finish", 0) // 1440 == day
+                                      for other in pending):
+            return {}, "Egg collection is already reserved for that day"
         duration = (15 if operation == "milk" else 10) * village_life.cooldown_factor(world, order.supplier)
         for session, start, end in (("morning", day * 1440 + 480, day * 1440 + 780),
                                     ("afternoon", day * 1440 + 780, day * 1440 + 1080)):
@@ -541,10 +575,10 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
                              and chunk.start // 1440 == day), None)
             if previous and operation == "milk":
                 at = max(at, previous.start + 240)
-            if ((operation == "milk" and session in care.milk_sessions)
-                    or (operation == "eggs" and care.eggs)
+            if ((operation == "milk" and care_today and session in care.milk_sessions)
+                    or (operation == "eggs" and care_today and care.eggs)
                     or any(other.production_plan.get("session") == (1 if session == "morning" else 2)
-                           for other in pending)):
+                           and other.production_plan.get("finish", 0) // 1440 == day for other in pending)):
                 continue
             if at + duration <= min(end, latest_start, closing):
                 return {"finish": at + duration, "output": missing,
@@ -625,7 +659,7 @@ def meal_readiness(world: "World") -> list[dict[str, Any]]:
                 spent[product] = spent.get(product, 0) + batches * quantity
             if fuel_needed:
                 spent["firewood"] = spent.get("firewood", 0) + batches
-            projected += min(portions, batches * recipe.portions)
+            projected += batches * recipe.portions
         forecasts.append({"service": plan["id"], "due": due,
                           "ready_by": due - policy.cooking_lead_minutes,
                           "planned_portions": plan["remaining_portions"],
@@ -1256,6 +1290,22 @@ def _return_cargo(world: "World", args: dict[str, Any]) -> tuple[str, str, str, 
     economy = _state(world)
     returned = []
     for item in shipments[:]:
+        if item.depot_transfer:
+            from npc_sim import village_depot
+            source = (world.scenario.village.residents[world.actor_id].work
+                      if item.depot_transfer == "deposit" else
+                      village_depot.FEED_STORE if item.destination == village_depot.FEED_STORE else village_depot.DEPOT)
+            if source != world.actor.location_id:
+                continue
+            if any(lot.expires_at is not None and lot.expires_at <= state.minute for lot in item.lots):
+                return "REJECTED", "STALE_CARGO", "Expire stale cargo before returning it.", None
+            village_goods.put(world, source, item.resource, item.quantity, item.lots, kind="returned")
+            if item.depot_transfer == "withdrawal":
+                village_depot.return_withdrawal(world, source, item.seller, item.resource, item.lots)
+            shipments.remove(item)
+            returned.append(f"{item.quantity} {item.resource}")
+            village_depot.reconcile(world)
+            continue
         order = economy.orders.get(getattr(item, "order_id", None)) if economy else None
         source = order.source if order else world.scenario.village.residents.get(item.seller)
         if source is not None and not isinstance(source, str):
@@ -1369,7 +1419,7 @@ def production_batch_limit(world: "World", action: str, *, personal: bool = Fals
             recipe_demand = sum(plan["unmet_recipe_portions"].get(recipe, 0)
                                 for plan in meal_requirements(world)
                                 if now >= plan["due"] - policy.cooking_lead_minutes)
-            limits.append(recipe_demand // amount)
+            limits.append(ceil(recipe_demand / amount))
         committed = sum(person.life.work.outputs.get(product, 0)
                         for person in world.state.village.residents.values()
                         if person.life and person.life.work and person.life.work.location == location)
@@ -1394,9 +1444,9 @@ def production_batch_limit(world: "World", action: str, *, personal: bool = Fals
             available_reserve = sum(bucket["quantity"] for bucket in buckets
                                     if bucket["expires_at"] is None or bucket["expires_at"] > now)
             short = accepted_shortfall + max(0, reserve - available_reserve)
-        limits.append(ceil(short / amount) if (
-            product in livestock_feed and livestock_feed[product] or action == "village_split_firewood"
-        ) else short // amount)
+        needs_full_batch = (product == "meals" and location == world.scenario.village.residents[policy.innkeeper].work
+                            or bool(livestock_feed.get(product)) or action == "village_split_firewood")
+        limits.append(ceil(short / amount) if needs_full_batch else short // amount)
     return min(limits)
 
 
@@ -1461,7 +1511,13 @@ def delivery_runs(world: "World", carrier: str | None = None) -> list[dict[str, 
         if amount:
             run["goods"][order.product] = used_product + amount
             run["orders"][order.id] = amount
-    return [run for run in runs.values() if run["goods"]]
+    result = [run for run in runs.values() if run["goods"]]
+    if state.legacy is not None and carrier == world.actor_id:
+        from npc_sim import village_legacy
+        if any(state.legacy.chronicle[item.entry].lesson == "delivery"
+               for item in village_legacy.active_lessons(world, carrier)):
+            result.sort(key=lambda run: min(economy.orders[oid].deadline for oid in run["orders"]))
+    return result
 
 
 def _report(world: "World") -> dict[str, Any]:

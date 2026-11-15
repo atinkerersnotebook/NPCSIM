@@ -89,6 +89,13 @@ live episode; unsaved form selections are reloaded. These are presentation modes
 not authentication or authorization: both use the same local API, and the admin
 view remains accessible without a login. The service is loopback-only.
 
+Player view groups the dashboard into **Play**, **Cast**, and **Story** tabs;
+Admin view uses **Live**, **Cast & setup**, **Story**, and **Technical**. The
+selected tab is reflected in the URL hash for refresh and sharing. Without an
+episode, the cast tab opens by default. The masthead and episode commands remain
+available above the tabs, with Archive and (in Admin) Export JSON alongside
+the simulation controls. Village tracking opens on demand in the live tab.
+
 Player, World, and Admin views fill the available window width, keeping their
 normal edge padding and responsive layouts rather than a fixed maximum width.
 
@@ -98,7 +105,9 @@ World view displays the supplied Millhaven illustration with named residents and
 present visitors grouped at their authoritative building/location. Select a marker
 for activity details; use the map zoom buttons and scroll to explore. Placement is
 location-level, not precise indoor coordinates or continuous walking. Locations
-not pictured (such as the iron mine) and unverified positions are explicitly listed
+including secondary sites remain marked even when empty; hover or focus a location
+label to read its current site stock (or whether no stock is recorded).
+Locations not pictured (such as the iron mine) and unverified positions are explicitly listed
 off map. On wider screens the World timeline sits to the right of the town map;
 on narrower screens it stacks below. Other, non-village adventures retain their existing World view.
 
@@ -108,6 +117,23 @@ private questions, memories and model reasoning never become bubbles. Historical
 events populate recent dialogue without replaying on initial load or reconnect.
 Bubbles expire even while paused and stop following a speaker who changes location.
 The map uses a bundled local image; no external mapping service is required.
+
+Select **Millhaven Living - Resilient Village** (`millhaven-resilient`) for the supplied
+updated map and a separate living-village setup. It adds a walkable communal depot,
+physical woodsheds, a farm cistern and handcart as visible fixtures, plus assigned
+bridge, road, millrace and fence upkeep. The depot starts empty; fuel remains limited
+by the existing site stock and capacity rules. Residents can physically carry
+unreserved workplace surplus to the depot and withdraw owner-accounted goods for
+their own workplace, with payment on delivery and freshness/capacity checks. Ada
+can similarly carry grain and hay into the finite farm feed store; cow and hen
+care consumes that stored feed. Ada's opt-in planner checks the feed store in
+person, uses her observed stock and unreserved farm stock to plan physical
+replenishment, and reports shortages. Autonomous depot trading and multi-day
+feed-store reliability have not been verified. The cistern,
+handcart, home cooking and market-day/seasonal systems are not yet usable
+mechanics; livestock water and deliveries still follow the existing well and
+transport rules.
+Existing `millhaven-living` runs and their frozen scenarios are unchanged.
 
 ### Named episode save points
 
@@ -141,6 +167,50 @@ Operator API: `GET /api/saves`, `POST /api/saves` with `run_id` and `name`, and
 Saving/loading requires the built-in local stdio world and makes no model calls.
 
 ### Living Millhaven
+
+See [Millhaven test criteria](MILLHAVEN-TEST-CRITERIA.md) for the consolidated
+scenario-by-scenario success checks, release gates, and evidence requirements.
+
+For offline Generation 8 reliability investigations, create a frozen day-one
+baseline from a specified scenario without starting or changing the active run:
+
+```powershell
+.\.venv\Scripts\python.exe -m npc_sim.village_release_evidence --scenario data\scenarios\millhaven-living.json --output data\fixtures\generation8-baseline
+```
+
+The output contains the frozen scenario, a complete initial world and a SHA-256
+evidence manifest with opening stocks, lots, orders, meals, crew sessions and
+cargo. It is an **engine baseline for the specified scenario**, not an archived
+Generation 7 snapshot or a model-driven replay. To capture a failure from a
+saved world copy and an action-result JSON document, run the same module with
+`--baseline <baseline-directory> --world <saved-world.json> --diagnostic
+<action-result.json> --output <new-evidence.json>`. This verifies the baseline
+hashes and writes a timestamped state summary without changing either source.
+Keep the frozen scenario and baseline together when comparing failures; record
+the run's actual model/settings separately. Never point the output at an
+existing file or the live world.
+
+**Millhaven - A Village That Remembers** (`millhaven-generations`) is an opt-in
+scenario with inherited family histories and obligations for the twelve AI
+residents. The square's readable chronicle records significant mill production,
+trade, successes and setbacks across days. Only residents who read it learn its
+entries; residents can share a read lesson with a nearby awake listener. Verified
+shortages, late deliveries and completed repairs provide short-lived, sourced
+planning hints; learned shortages can shorten funded meal-production cooldowns
+by five minutes and learned repairs can help a real crew. Unread events do not
+affect decisions. A new generation is opt-in: save a resumable midnight episode,
+then POST `/api/control/start` with `scenario_id: "millhaven-generations"` and
+`generation_save_id` set to that save ID. The named successor takes over the
+same controller/actor slot and work/home role; the lineage, up to 100 chronicle
+entries, recent personally learned lessons and at most 20 coins transfer. Active
+cargo, owned depot lots and in-flight orders must be settled first. Workplace
+stock and unrelated residents reset to the scenario's starting state; the saved
+episode remains a reversible checkpoint. A normal start imports nothing. Named
+non-playable newcomers arrive and depart on configured days; the AI cast remains
+stable. The existing mill and visitors still use real goods and coins. World/Admin
+shows the chronicle and named population without sharing private reading history.
+Saves retain the chronicle and current population. These fictional
+backstories do not retell the history of Millhaven, Ontario.
 
 The engine supports opt-in supplier orders, demand-limited production,
 breakfast, funded meal pricing/subsidies, reserve and freshness forecasts,
@@ -328,6 +398,12 @@ Global bell broadcasts and live noticeboard stock reports are disabled for
 opted-in worlds. Existing legacy memories are not erased.
 
 Supply acceptance creates a normal funded economy order, never goods or coins.
+When a same-day supply deadline cannot be met, a supplier can use
+`village_respond_to_request` with `response: "propose"`, a next-day
+`proposed_deadline`, and `proposed_fresh_until`. This records a conditional
+counteroffer, not a commitment or virtual stock. The buyer must receive the
+reply and use `village_update_request` to revise both terms at a real channel;
+the supplier must receive that version and accept after checking real capacity.
 Intent-level `village_request_supply`, `village_respond_to_request`,
 `village_update_request`, `village_check_messages`, `village_share_known_notice`
 and `village_propose_meeting` fill in engine-known notice fields while preserving
@@ -682,9 +758,15 @@ A live meal forecast shows expected diners, real prepared portions, funding,
 shortfall, input demand and a configurable preparation cutoff. When stock is
 scarce, a deterministic resident allocation reserves real portions through the
 meal grace window; a missed diner can still recover when food or funds arrive.
+Before a diner's supper due time, an unallocated attempt remains pending rather
+than recording a premature missed meal; stock arriving before service can still
+be allocated. A real shortage at service still records a missed meal.
 After grace, an arriving diner may still eat unclaimed, fresh, funded tavern food
 before the inn closes at 22:00; no reservation or extra portion is created.
 The tavern cook prioritizes feasible meal preparation over optional research.
+An odd final portion of demand permits one whole real recipe batch when inputs,
+fuel and time allow; readiness counts the resulting batch without creating a
+fractional portion or permitting extra production after demand is covered.
 Empty-meal retries depend on the meal, food and funding, not unrelated chatter or
 tool observations. An empty/unfunded attempt can mark a meal missed, and a
 later real, paid meal can recover that outcome. Meal preparation now has a
@@ -998,15 +1080,16 @@ stocks and the event ledger. This is operator knowledge, not shared NPC input.
   forbidding work. Meals still pending at midnight count as missed. Missing a
   meal doubles the following day's work cooldown; eating before midnight cancels
   that day's missed-meal penalty. A later meal never retroactively erases it.
-- `village_sleep` requires physically returning home. After completing supper,
-  a resident can choose to sleep before the scheduled bedtime; they still wake
-  at their normal morning time. Each NPC keeps the existing
+- `village_sleep` requires physically returning home and reaching the scheduled
+  bedtime, even if supper was eaten early. Elsie may close and sleep from 21:00
+  if everyone has eaten that day's supper and every other resident has gone
+  home (none remains at the tavern); she still wakes at her scheduled time.
+  Each NPC keeps the existing
   bedtime and first work-start time as their sleep/wake schedule. In the living
   village, Elsie sleeps 23:00-05:30 to prepare the inn; Bren/Jory/Ada wake at
   06:00, and residents who previously woke at 08:00 now wake at 07:00.
-  Sleeping early keeps the normal morning wake time; sleeping after bedtime
-  still requires the full scheduled rest duration. Waiting through the night
-  without sleeping does not satisfy rest.
+  Sleeping after bedtime requires the full scheduled rest duration. Waiting
+  through the night without sleeping does not satisfy rest.
   The living scenario retains 12 opening tavern bread units for the planned
   breakfast and supper demand (7 + 5, including each meal's stock buffer).
   Its established opening storerooms hold 12 tavern, 10 bakery, 10 forge and

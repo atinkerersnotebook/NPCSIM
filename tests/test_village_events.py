@@ -197,6 +197,12 @@ def test_discovery_is_real_local_and_not_world_announced(world):
 
 def test_merchant_conservation_retry_capacity_budget_and_departure(world):
     visitor = merchant(world)
+    from npc_sim.models import VillageDashboard
+    from npc_sim import village_extensions
+    village_extensions.refresh(world)
+    assert isinstance(world.state.village.dashboard, VillageDashboard)
+    assert world.state.village.dashboard.visitors[0].stock == {"iron": 2}
+    assert world.state.village.dashboard.visitors[0].coins == 10
     assert village_events.monitor(world)["visitors"][0]["stock"] == {"iron": 2}
     assert village_events.monitor(world)["visitors"][0]["coins"] == 10
     assert any(event.action == "visitor_route_planned" and event.target == "forge"

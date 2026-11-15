@@ -199,6 +199,9 @@ def unload(world: "World", carrier: str, shipments: list[VillageShipment]) -> st
     deliveries = [item for item in shipments if item.destination == location]
     if not deliveries:
         return "No cargo is intended for this destination."
+    if any(item.depot_transfer for item in deliveries):
+        from npc_sim import village_depot
+        return village_depot.unload(world, carrier, shipments, deliveries)
     from npc_sim import village_firewood
     available = village_firewood.capacity_available(world, location)
     if available is not None and sum(item.quantity for item in deliveries
@@ -345,6 +348,17 @@ def advance(world: "World") -> None:
             if amount:
                 state.stocks[location][resource] -= amount
                 resources[resource] = [lot for lot in lots if lot not in expired]
+                from npc_sim import village_depot
+                if village_depot.enabled(world) and location in {village_depot.DEPOT, village_depot.FEED_STORE}:
+                    remaining = amount
+                    for owner, inventory in state.depot_lots.get(location, {}).items():
+                        owned = inventory.get(resource, [])
+                        for lot in owned:
+                            if lot.expires_at is not None and lot.expires_at <= state.minute:
+                                remaining -= lot.quantity
+                        inventory[resource] = [lot for lot in owned if lot.expires_at is None or lot.expires_at > state.minute]
+                    if remaining:
+                        raise ValueError("Owner ledger disagrees with spoiled depot stock")
                 village_recycling.recover(world, location, resource, expired)
                 village_economy.record_movement(world, location, resource, amount, "spoiled")
                 village.event(world, "spoilage", "stock_spoiled", resource,

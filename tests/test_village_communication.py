@@ -777,6 +777,236 @@ def test_future_livestock_notice_acceptance_requires_real_care_without_inventing
     assert world.state.village.stocks["farm"][product] == 0
 
 
+def test_egg_request_can_counteroffer_next_day_without_committing_today(workspace):
+    world = create_world(workspace / "egg-counteroffer.json", value=build_scenario(scenario()))
+    state = world.state.village
+    ready(world, 920)
+    buyer = actor(world, "elsie", "farm")
+    supplier = actor(world, "ada", "farm")
+    nid = post(buyer, {
+        "type": "supply_request", "subject": "eggs", "description": "Two eggs for dairy meals",
+        "recipients": ["ada"], "quantity": 2, "destination": "tavern",
+        "due_at": 1050, "required_fresh_until": 1140},
+        channel="conversation", listener="ada")
+    care = state.livestock.hens
+    care.day, care.fed, care.watered, care.cleaned, care.eggs = 0, True, True, True, 2
+    ready(world)
+    rejected = comm.apply(supplier, "village_respond_to_request", {"request_id": nid, "response": "accept"})
+    assert rejected[:2] == ("REJECTED", "COMMUNICATION_INVALID")
+    assert "No free animal collection session" in rejected[2]
+    assert not state.economy.orders
+
+    goods.put(world, "farm", "grain", 10)
+    state.livestock.water = 2
+    counter = comm.apply(supplier, "village_respond_to_request", {
+        "request_id": nid, "response": "propose", "proposed_deadline": 2490,
+        "proposed_fresh_until": 2580})
+    assert counter[:2] == ("APPLIED", "NOTICE_UPDATED"), counter
+    assert latest(world, nid).status == "seen"
+    assert "2490" in latest(world, nid).response and "2580" in latest(world, nid).response
+    assert known(world, "elsie", nid).snapshot.version == 2
+    assert not state.economy.orders
+    ready(world)
+    updated = comm.apply(buyer, "village_update_request", {
+        "request_id": nid, "changes": {"due_at": 2490, "required_fresh_until": 2580}})
+    assert updated[:2] == ("APPLIED", "NOTICE_UPDATED"), updated
+    assert latest(world, nid).status == "posted" and latest(world, nid).version == 3
+    assert not state.economy.orders
+    assert known(world, "ada", nid).snapshot.version == 3
+
+    ready(world, 1980)
+    care.day, care.fed, care.watered, care.cleaned, care.eggs = 1, True, True, True, 0
+    accepted = comm.apply(supplier, "village_respond_to_request", {"request_id": nid, "response": "accept"})
+    assert accepted[:2] == ("APPLIED", "NOTICE_UPDATED"), accepted
+    order = next(iter(state.economy.orders.values()))
+    assert (order.deadline, order.required_fresh_until, order.status) == (2490, 2580, "accepted_planned")
+    assert state.stocks["farm"]["eggs"] == 0
+
+
+def test_autonomous_egg_counteroffer_requires_physical_receipt_and_tomorrow_feed(workspace):
+    from npc_sim import village_fallback
+
+    world = create_world(workspace / "autonomous-eggs.json",
+                         value=build_scenario(scenario(), purposeful_downtime=True))
+    state = world.state.village
+    ready(world, 920)
+    buyer = actor(world, "elsie", "farm")
+    supplier = actor(world, "ada", "farm")
+    nid = post(buyer, {
+        "type": "supply_request", "subject": "eggs", "description": "Two eggs for dairy meals",
+        "recipients": ["ada"], "quantity": 2, "destination": "tavern",
+        "due_at": 1050, "required_fresh_until": 1140},
+        channel="conversation", listener="ada")
+    state.livestock.hens.day = 0
+    state.livestock.hens.fed = state.livestock.hens.watered = state.livestock.hens.cleaned = True
+    state.livestock.hens.eggs = 2
+    goods.put(world, "farm", "grain", 10)
+    state.livestock.water = 2
+    ready(world)
+    choices = village_fallback.candidates(supplier)
+    counter = next(item for item in choices if item["task_id"] == f"supply:eggs:propose:{nid}")
+    assert counter["arguments"]["proposed_deadline"] // 1440 == 1
+    assert comm.apply(supplier, counter["action_id"], counter["arguments"])[:2] == (
+        "APPLIED", "NOTICE_UPDATED")
+    assert latest(world, nid).proposed_deadline == counter["arguments"]["proposed_deadline"]
+    assert not state.economy.orders
+    assert not any(item["task_id"] == f"supply:eggs:propose:{nid}"
+                   for item in village_fallback.candidates(supplier))
+
+    ready(world, 1060)
+    comm.advance(world)
+    assert latest(world, nid).status == "seen"
+    assert latest(world, nid).terms.due_at == 1050
+    update = next(item for item in village_fallback.candidates(buyer)
+                  if item["task_id"] == f"supply:eggs:revise:{nid}")
+    assert comm.apply(buyer, update["action_id"], update["arguments"])[:2] == (
+        "APPLIED", "NOTICE_UPDATED")
+    assert not state.economy.orders
+    ready(world)
+    accept = next(item for item in village_fallback.candidates(supplier)
+                  if item["task_id"] == f"supply:eggs:accept:{nid}")
+    assert comm.apply(supplier, accept["action_id"], accept["arguments"])[:2] == (
+        "APPLIED", "NOTICE_UPDATED")
+    order = next(iter(state.economy.orders.values()))
+    assert order.production_plan["finish"] // 1440 == 1
+    assert state.stocks["farm"]["eggs"] == 0
+    ready(world)
+    assert not [item for item in village_fallback.candidates(supplier)
+                if item["task_id"] == f"supply:eggs:accept:{nid}"]
+
+
+def test_egg_counteroffer_survives_midnight_and_rechecks_capacity(workspace):
+    from npc_sim import village_fallback
+    from test_world import act
+
+    world = create_world(workspace / "egg-midnight.json",
+                         value=build_scenario(scenario(), purposeful_downtime=True))
+    ready(world, 920)
+    buyer = actor(world, "elsie", "farm")
+    supplier = actor(world, "ada", "farm")
+    nid = post(buyer, {
+        "type": "supply_request", "subject": "eggs", "description": "Two eggs for dairy meals",
+        "recipients": ["ada"], "quantity": 2, "destination": "tavern",
+        "due_at": 1050, "required_fresh_until": 1140},
+        channel="conversation", listener="ada")
+    state = world.state.village
+    state.livestock.hens.day, state.livestock.hens.eggs = 0, 2
+    state.livestock.water = 2
+    goods.put(world, "farm", "grain", 10)
+    ready(world)
+    offer = next(item for item in village_fallback.candidates(supplier)
+                 if item["task_id"] == f"supply:eggs:propose:{nid}")
+    assert act(supplier, offer["action_id"], **offer["arguments"])["outcome"] == "APPLIED"
+    ready(world)
+    revision = next(item for item in village_fallback.candidates(buyer)
+                    if item["task_id"] == f"supply:eggs:revise:{nid}")
+    assert act(buyer, revision["action_id"], **revision["arguments"])["outcome"] == "APPLIED"
+    world.save()
+    restored = World(world.scenario, world.path, "communication", "ada", "session-ada")
+    for agent in restored.scenario.agents:
+        restored.bind(agent.id, f"session-{agent.id}")
+    ready(restored, 1980)
+    supplier = actor(restored, "ada", "farm")
+    assert latest(restored, nid).revised_from_counteroffer
+    assert known(restored, "ada", nid).snapshot.version == latest(restored, nid).version
+    assert not restored.state.village.residents["ada"].life.sleeping
+    assert restored.state.village.residents["ada"].available_at <= 1980
+    care = restored.state.village.livestock.hens
+    care.day, care.fed, care.watered, care.cleaned, care.eggs = 1, True, True, True, 0
+    restored.state.village.residents["ada"].life.last_woke = 1800
+    accept = next(item for item in village_fallback.candidates(supplier)
+                  if item["task_id"] == f"supply:eggs:accept:{nid}")
+    before_coins = restored.state.village.coins.copy()
+    assert act(supplier, accept["action_id"], **accept["arguments"])["outcome"] == "APPLIED"
+    assert restored.state.village.coins == before_coins
+    assert len(restored.state.village.economy.orders) == 1
+    assert restored.state.village.stocks["farm"]["eggs"] == 0
+
+
+def test_autonomous_egg_counteroffer_declines_without_next_day_meal_demand(workspace):
+    from npc_sim import village_fallback
+    from test_world import act
+
+    world = create_world(workspace / "egg-decline.json",
+                         value=build_scenario(scenario(), purposeful_downtime=True))
+    ready(world, 920)
+    buyer = actor(world, "elsie", "farm")
+    supplier = actor(world, "ada", "farm")
+    nid = post(buyer, {
+        "type": "supply_request", "subject": "eggs", "description": "Two eggs for dairy meals",
+        "recipients": ["ada"], "quantity": 2, "destination": "tavern",
+        "due_at": 1050, "required_fresh_until": 1140},
+        channel="conversation", listener="ada")
+    state = world.state.village
+    state.livestock.hens.day, state.livestock.hens.eggs = 0, 2
+    state.livestock.water = 2
+    goods.put(world, "farm", "grain", 10)
+    ready(world)
+    offer = next(item for item in village_fallback.candidates(supplier)
+                 if item["task_id"] == f"supply:eggs:propose:{nid}")
+    assert act(supplier, offer["action_id"], **offer["arguments"])["outcome"] == "APPLIED"
+    state.economy.config.meal_plans = []
+    ready(world)
+    decline = next(item for item in village_fallback.candidates(buyer)
+                   if item["task_id"] == f"supply:eggs:decline:{nid}")
+    assert act(buyer, decline["action_id"], **decline["arguments"])["outcome"] == "APPLIED"
+    assert latest(world, nid).status == "cancelled"
+    assert not state.economy.orders
+
+
+def test_autonomous_egg_offer_waits_for_real_feed_and_receipt(workspace):
+    from npc_sim import village_fallback
+
+    world = create_world(workspace / "egg-feed.json",
+                         value=build_scenario(scenario(), purposeful_downtime=True))
+    ready(world, 920)
+    buyer = actor(world, "elsie", "farm")
+    supplier = actor(world, "ada", "farm")
+    nid = post(buyer, {
+        "type": "supply_request", "subject": "eggs", "description": "Two eggs for dairy meals",
+        "recipients": ["ada"], "quantity": 2, "destination": "tavern",
+        "due_at": 1050, "required_fresh_until": 1140},
+        channel="conversation", listener="ada")
+    state = world.state.village
+    state.livestock.hens.day, state.livestock.hens.eggs = 0, 2
+    state.livestock.water = 2
+    ready(world)
+    assert not [item for item in village_fallback.candidates(supplier)
+                if item["task_id"] == f"supply:eggs:propose:{nid}"]
+    goods.put(world, "farm", "grain", 10)
+    assert [item for item in village_fallback.candidates(supplier)
+            if item["task_id"] == f"supply:eggs:propose:{nid}"]
+    # A reply posted at the square is not remotely learned.
+    buyer.actor.location_id = "tavern"
+    supplier.actor.location_id = "village-square"
+    ready(world)
+    offer = next(item for item in village_fallback.candidates(supplier)
+                 if item["task_id"] == f"supply:eggs:propose:{nid}")
+    assert comm.apply(supplier, offer["action_id"], offer["arguments"])[0] == "APPLIED"
+    assert known(world, "elsie", nid).snapshot.version == 1
+    assert not [item for item in village_fallback.candidates(buyer)
+                if item["task_id"] == f"supply:eggs:revise:{nid}"]
+    buyer.actor.location_id = "village-square"
+    ready(world)
+    assert comm.apply(buyer, "village_check_messages", {"channel": "board"})[0] == "APPLIED"
+    assert known(world, "elsie", nid).snapshot.version == 2
+    world.save()
+    assert read_json(world.path)["village"]["communication"]["notices"][nid][-1]["proposed_deadline"]
+
+
+def test_supply_counteroffer_requires_tomorrow_and_preserves_original_terms_on_invalid_input(world):
+    buyer = actor(world, "jory", "watermill")
+    supplier = actor(world, "mara", "watermill")
+    nid = post(buyer, channel="conversation", listener="mara")
+    ready(world)
+    for deadline, fresh in [(900, 960), (2340, 2339), (2340, None)]:
+        result = comm.apply(supplier, "village_respond_to_request", {
+            "request_id": nid, "response": "propose", "proposed_deadline": deadline,
+            "proposed_fresh_until": fresh})
+        assert result[0] == "REJECTED", result
+        assert latest(world, nid).version == 1 and not world.state.village.economy.orders
+
+
 def test_planned_milk_cannot_double_book_a_collection_session(workspace):
     world = create_world(workspace / "milk.json", value=build_scenario(scenario()))
     care = world.state.village.livestock.cow

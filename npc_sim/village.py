@@ -125,8 +125,8 @@ def validate_config(scenario: Scenario) -> None:
     if reachable != locations:
         raise ValueError("All village locations must have connected, initially passable routes")
     from npc_sim import village_economy, village_social, village_events, village_maintenance, village_research, village_mining, village_livestock
-    from npc_sim import village_communication, village_firewood
-    for module in (village_economy, village_social, village_events, village_maintenance, village_research, village_mining, village_livestock, village_communication, village_firewood):
+    from npc_sim import village_communication, village_firewood, village_depot, village_legacy
+    for module in (village_economy, village_social, village_events, village_maintenance, village_research, village_mining, village_livestock, village_communication, village_firewood, village_depot, village_legacy):
         module.validate_config(scenario)
     if config.breakfast and not config.daily_life:
         raise ValueError("Breakfast requires daily life")
@@ -139,8 +139,30 @@ def initial_state(scenario: Scenario) -> VillageState:
     config = scenario.village
     if config is None:
         raise ValueError("Missing village configuration")
-    from npc_sim import village_communication, village_firewood
+    from npc_sim import village_communication, village_firewood, village_legacy
+    from npc_sim import village_depot
+    feed_lots = {}
+    if scenario.id == "millhaven-resilient" and village_depot.FEED_STORE in scenario.entities:
+        if config.livestock is None:
+            raise ValueError("Resilient Millhaven needs a livestock keeper")
+        keeper = config.livestock.keeper
+        feed_lots = {village_depot.FEED_STORE: {keeper: {
+            product: [VillageStockLot(quantity=quantity, produced_at=config.start_minute,
+                                      expires_at=(config.start_minute + config.spoil_after[product]
+                                                  if product in config.spoil_after else None),
+                                      origin="initial_village_stock", seed_event_id=config.initial_stock_seed_id)]
+            for product, quantity in config.stocks[village_depot.FEED_STORE].items() if quantity}}}
+        if any(config.stocks[village_depot.DEPOT].values()):
+            depot_keeper = config.courier
+            feed_lots[village_depot.DEPOT] = {depot_keeper: {
+                product: [VillageStockLot(quantity=quantity, produced_at=config.start_minute,
+                                          expires_at=(config.start_minute + config.spoil_after[product]
+                                                      if product in config.spoil_after else None),
+                                          origin="initial_village_stock", seed_event_id=config.initial_stock_seed_id)]
+                for product, quantity in config.stocks[village_depot.DEPOT].items() if quantity}}
     return VillageState(
+        legacy=village_legacy.initial_state(scenario),
+        depot_lots=feed_lots,
         firewood=village_firewood.initial_state(scenario),
         communication=village_communication.initial_state(scenario),
         minute=config.start_minute,
@@ -211,6 +233,9 @@ def resident_location(world: "World", resident: str) -> str:
 
 
 def resident_name(world: "World", resident: str) -> str:
+    state = world.state.village
+    if state is not None and state.legacy is not None and resident in state.legacy.current:
+        return state.legacy.current[resident]
     entity = world.state.entities.get(resident)
     return entity.name if entity is not None else resident.replace("-", " ").title()
 

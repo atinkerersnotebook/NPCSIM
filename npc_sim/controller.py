@@ -273,7 +273,8 @@ class Controller:
             if (name == "reset" and skill_mode is None and self.run
                     and scenario_id == self.run["scenario_id"]):
                 skill_mode = self.run.get("skill_mode")
-            await self.new_run(args.get("objective"), scenario_id, assignments, skill_mode)
+            await self.new_run(args.get("objective"), scenario_id, assignments, skill_mode,
+                               args.get("generation_save_id"))
         elif name == "assess":
             if not self.run or self.run["status"] not in TERMINAL:
                 raise ValueError("End the attempt before assessing its completed story.")
@@ -645,7 +646,10 @@ class Controller:
         scheduler_recovery = (
             previous_status == "error"
             and self.run.get("reason", "").startswith("MCP tool world_next_village_actor failed:")
-            and self.run.get("reason", "").endswith("list index out of range")
+            and (self.run.get("reason", "").endswith("list index out of range")
+                 or ("validation errors for VillageDashboard" in self.run.get("reason", "")
+                     and "visitors.0.stock" in self.run.get("reason", "")
+                     and "visitors.0.coins" in self.run.get("reason", "")))
         )
         premature = (previous_status == "succeeded" and analysis.get("status") == "completed"
                      and analysis.get("verdict") == "fail")
@@ -686,15 +690,22 @@ class Controller:
                     scenario = Scenario.model_validate(read_json(self.events.directory / "scenario.json"))
                     probe = World(scenario, copied, self.run["world_id"],
                                   self.run["actor_id"], self.run["session_id"])
-                    if (saved_world.village.trader_activities
-                            or saved_world.village.minute % 1440 != 1075
-                            or saved_world.village.trader_day != saved_world.village.minute // 1440
-                            or "iron-trader" not in saved_world.entities
-                            or saved_world.entities["iron-trader"].location != "village-square"):
-                        raise ValueError("The saved trader state does not match the confirmed scheduler failure.")
+                    if self.run["reason"].endswith("list index out of range"):
+                        if (saved_world.village.trader_activities
+                                or saved_world.village.minute % 1440 != 1075
+                                or saved_world.village.trader_day != saved_world.village.minute // 1440
+                                or "iron-trader" not in saved_world.entities
+                                or saved_world.entities["iron-trader"].location != "village-square"):
+                            raise ValueError("The saved trader state does not match the confirmed scheduler failure.")
+                    elif not (saved_world.village.incidents
+                              and saved_world.village.incidents.config.templates
+                              and saved_world.village.minute == 540):
+                        raise ValueError("The saved visitor schedule does not match the confirmed scheduler failure.")
                     village_turns.next_actor(probe, self.run.get("village_stop_minute"))
                     if probe.state.village.minute <= saved_world.village.minute:
                         raise ValueError("The scheduler did not advance beyond the failed trader departure.")
+                    if not self.run["reason"].endswith("list index out of range") and not probe.state.village.incidents.visitors:
+                        raise ValueError("The corrected scheduler did not activate a visitor.")
                 results = {event["payload"]["request_id"] for event in self.events.events
                            if event["kind"] == "action_result"}
                 last_action = next((event for event in reversed(self.events.events)
@@ -782,7 +793,8 @@ class Controller:
 
     async def new_run(self, objective: str | None, scenario_id: str | None = None,
                       agent_assignments: dict[str, str] | None = None,
-                      skill_mode: SkillMode | None = None) -> None:
+                      skill_mode: SkillMode | None = None,
+                      generation_save_id: str | None = None) -> None:
         scenario_id = scenario_id or self.config.world.scenario
         if not scenario_id or any(not (character.isascii() and (character.isalnum() or character in "_-")) for character in scenario_id):
             raise ValueError("Invalid scenario ID")
@@ -791,6 +803,45 @@ class Controller:
             raise ValueError(f"Unknown scenario: {scenario_id}")
         scenario = Scenario.model_validate(read_json(scenario_path))
         scenario, profiles = assign_profiles(scenario, load_profiles(self.data), agent_assignments, skill_mode)
+        generation_save = None
+        if generation_save_id is not None:
+            from npc_sim import episode_saves
+            generation_save = await asyncio.to_thread(episode_saves.read_save, self.data, generation_save_id)
+            if (scenario.village is None or scenario.village.legacy is None
+                    or generation_save.scenario.id != scenario.id
+                    or generation_save.scenario.village is None
+                    or generation_save.scenario.village.legacy is None
+                    or not generation_save.resumable
+                    or generation_save.world.village is None
+                    or generation_save.world.village.minute < 1440
+                    or generation_save.world.village.minute % 1440):
+                raise ValueError("Generation handoff requires a resumable midnight save from the same legacy scenario")
+            from npc_sim import village_legacy
+            from npc_sim.world import World
+            from tempfile import TemporaryDirectory
+            with TemporaryDirectory() as temporary:
+                candidate = World(scenario, Path(temporary) / "generation.json", uuid4().hex,
+                                  scenario.agents[0].id, uuid4().hex)
+                village_legacy.successor_state(generation_save.scenario, generation_save.world,
+                                               candidate, generation_save.id)
+            for agent in scenario.agents:
+                successor = scenario.village.legacy.families[agent.id].successor
+                if successor:
+                    agent.role = (f"{successor}, successor in the {agent.id} household: pursue the assigned "
+                                  "village task using the inherited role's actual skills and possessions.")
+                    profiles[agent.id].name = successor
+                    profiles[agent.id].identity = (
+                        f"{successor}, Millhaven's {scenario.village.residents[agent.id].occupation}, "
+                        "succeeding a retired family member with private knowledge and commitments.")
+                    from npc_sim.agent_documents import default_documents
+                    original_documents = profiles[agent.id].documents
+                    profiles[agent.id].documents = {
+                        **original_documents,
+                        "IDENTITY.md": default_documents(profiles[agent.id])["IDENTITY.md"],
+                        "MEMORY.md": (f"# Inherited family background\n\n"
+                                      f"{scenario.village.legacy.families[agent.id].history}\n\n"
+                                      "Other events must be learned in the world; these notes do not grant "
+                                      "access to another resident's private knowledge.\n")}
         dungeon_master = load_dungeon_master(self.data)
         if ((agent_assignments is not None or scenario.skill_mode == "npc_only")
                 and (self.config.world.command or self.config.world.transport != "stdio")):
@@ -852,6 +903,13 @@ class Controller:
                 max_actions=100, max_model_calls=120, max_seconds=600).model_dump()
         frozen_scenario = directory / "scenario.json"
         write_json(frozen_scenario, scenario.model_dump(mode="json"))
+        if generation_save is not None:
+            from npc_sim.world import World
+            initial = World(scenario, state_path, world_id, actor_id, session_id)
+            village_legacy.successor_state(generation_save.scenario, generation_save.world,
+                                           initial, generation_save.id)
+            initial.save()
+            self.run["generation_handoff"] = initial.state.village.legacy.handoff
         self.world = WorldClient(world_config, self.root, frozen_scenario, state_path,
                                  world_id, actor_id, session_id)
         await self.world.connect()

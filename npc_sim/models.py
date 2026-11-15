@@ -415,6 +415,63 @@ class VillageResident(StrictModel):
     bed_minute: int = Field(default=1320, gt=1080, lt=1440, multiple_of=5)
 
 
+class VillageFamily(StrictModel):
+    history: str = Field(min_length=1)
+    inherited_skill: str = Field(min_length=1)
+    obligation: str = Field(min_length=1)
+    successor: str | None = Field(default=None, min_length=1)
+
+
+class VillageLegacyArrival(StrictModel):
+    day: int = Field(ge=1)
+    name: str = Field(min_length=1)
+    home: str
+    reason: str = Field(min_length=1)
+    departure_day: int | None = Field(default=None, ge=2)
+
+    @model_validator(mode="after")
+    def valid_departure(self) -> "VillageLegacyArrival":
+        if self.departure_day is not None and self.departure_day <= self.day:
+            raise ValueError("A newcomer must depart after arriving")
+        return self
+
+
+class VillageLegacyConfig(StrictModel):
+    history: list[str] = Field(min_length=1)
+    families: dict[str, VillageFamily]
+    arrivals: list[VillageLegacyArrival] = Field(default_factory=list)
+
+
+class VillageLegacyEntry(StrictModel):
+    minute: int = Field(ge=0)
+    text: str
+    kind: str
+    source_event: int | None = Field(default=None, ge=0)
+    lesson: Literal["shortage", "delivery", "repair"] | None = None
+    origin_world_id: str | None = None
+    origin_minute: int | None = Field(default=None, ge=0)
+
+
+class VillageLegacyLesson(StrictModel):
+    entry: int = Field(ge=0)
+    learned_at: int = Field(ge=0)
+    source: str
+
+
+class VillageLegacyState(StrictModel):
+    chronicle: list[VillageLegacyEntry] = Field(default_factory=list)
+    newcomers: dict[str, VillageLegacyArrival] = Field(default_factory=dict)
+    recorded_events: int = Field(default=0, ge=0)
+    last_day: int = Field(default=0, ge=0)
+    learned: dict[str, list[int]] = Field(default_factory=dict)
+    lessons: dict[str, list[VillageLegacyLesson]] = Field(default_factory=dict)
+    lineage: dict[str, list[str]] = Field(default_factory=dict)
+    retired: dict[str, list[str]] = Field(default_factory=dict)
+    current: dict[str, str] = Field(default_factory=dict)
+    inherited_coins: dict[str, int] = Field(default_factory=dict)
+    handoff: dict[str, str] | None = None
+
+
 class VillageDelivery(StrictModel):
     source: str
     destination: str
@@ -638,6 +695,7 @@ class VillageConfig(VillageDayPolicy):
     research: VillageResearchConfig | None = None
     mining: VillageMiningConfig | None = None
     livestock: VillageLivestockConfig | None = None
+    legacy: VillageLegacyConfig | None = None
     delivery_fee: int = Field(default=0, ge=0)
     meal_price: int = Field(default=0, ge=0)
     spoil_after: dict[str, int] = Field(default_factory=dict)
@@ -696,6 +754,7 @@ class VillageLifeState(StrictModel):
     sleeping: bool = False
     sleep_until: int | None = Field(default=None, ge=0)
     last_woke: int
+    last_daytime_rest: int | None = Field(default=None, ge=0)
     work: VillageCommittedWork | None = None
     fatigue_days: list[int] = Field(default_factory=list)
     tea_day: int = -1
@@ -770,6 +829,8 @@ class VillageRouteGoal(StrictModel):
 class VillageFallbackState(StrictModel):
     board_last_checked: int = -1
     mill_last_checked: int = -1
+    feed_store_checked_day: int = -1
+    feed_store_stock: dict[str, int] = Field(default_factory=dict)
     route_goal: VillageRouteGoal | None = None
     blocked: dict[str, VillageBlockedAction] = Field(default_factory=dict)
     supply_needs: dict[str, VillageSupplyNeed] = Field(default_factory=dict)
@@ -854,6 +915,8 @@ class VillageShipment(StrictModel):
     lots: list[VillageStockLot] = Field(default_factory=list)
     order_id: str | None = None
     owned_transfer: bool = False
+    depot_transfer: Literal["deposit", "withdrawal"] | None = None
+    depot_owner: str | None = None
 
 
 class VillageWagon(StrictModel):
@@ -925,6 +988,8 @@ class VillageVisitorView(StrictModel):
     arrival: int = Field(ge=0)
     departure: int | None = Field(default=None, ge=0)
     status: str
+    stock: dict[str, int] = Field(default_factory=dict)
+    coins: int = Field(default=0, ge=0)
     activities: list[VillageActivityView] = Field(default_factory=list)
 
 
@@ -1067,6 +1132,7 @@ class VillageState(StrictModel):
     meetings: dict[str, list[str]] = Field(default_factory=dict)
     free_turn_actor: str | None = None
     stock_lots: dict[str, dict[str, list[VillageStockLot]]] = Field(default_factory=dict)
+    depot_lots: dict[str, dict[str, dict[str, list[VillageStockLot]]]] = Field(default_factory=dict)
     initial_stock_seed_id: str | None = None
     stock_history: list[VillageStockSnapshot] = Field(default_factory=list)
     deadlines: dict[str, VillageDeadline] = Field(default_factory=dict)
@@ -1081,6 +1147,7 @@ class VillageState(StrictModel):
     research: VillageResearchState | None = None
     mining: VillageMiningState | None = None
     livestock: VillageLivestockState | None = None
+    legacy: VillageLegacyState | None = None
     day_policy: VillageDayPolicy | None = None
     configuration_requests: dict[str, dict[str, Any]] = Field(default_factory=dict)
     dashboard: VillageDashboard | None = None
@@ -1157,7 +1224,7 @@ class Scenario(StrictModel):
                     "cast_unlock", "cast_shrink", "cast_restore_size",
                     "village_ask", "village_request", "village_wait", "village_trade", "village_tell", "village_cancel"}
         core_ids |= {"village_work", "village_load", "village_deliver", "village_project",
-                     "village_patrol", "village_observe", "village_eat", "village_sleep",
+                     "village_patrol", "village_observe", "village_eat", "village_sleep", "village_daytime_rest",
                      "village_fit_wagon", "village_start_route", "village_stop_route",
                      "village_load_wagon", "village_unload_wagon", "village_meeting", "village_cook_fish",
                      "village_drive_wagon", "village_plan_walk"}
@@ -1167,8 +1234,8 @@ class Scenario(StrictModel):
                      "village_release_horse", "village_hitch", "village_unhitch",
                      "village_start_timber_route", "village_stop_timber_route",
                      "village_urgent_work", "village_share_route"}
-        from npc_sim import village_economy, village_social, village_events, village_research, village_mining, village_livestock, village_communication
-        core_ids |= village_economy.VERBS | village_social.VERBS | village_events.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | {"village_wait_event"}
+        from npc_sim import village_economy, village_social, village_events, village_research, village_mining, village_livestock, village_communication, village_legacy
+        core_ids |= village_economy.VERBS | village_social.VERBS | village_events.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | village_legacy.VERBS | {"village_wait_event"}
         if len(recovery_ids) != len(set(recovery_ids)) or set(recovery_ids) & core_ids:
             raise ValueError("Recovery action IDs must be unique and not conflict with core world verbs")
         if set(self.recipe_actions) & (core_ids | set(recovery_ids)):
@@ -1504,6 +1571,7 @@ class StartRequest(StrictModel):
     scenario_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]+$")
     agent_assignments: dict[str, str] | None = None
     skill_mode: SkillMode | None = None
+    generation_save_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
 
 class ReopenRequest(StrictModel):

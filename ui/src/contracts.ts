@@ -226,6 +226,15 @@ export const villageFirewoodSchema = z.object({
   policy: z.string()
 });
 export const villageObservationSchema = z.object({
+  legacy: z.object({
+    family: z.object({ history: z.string(), inherited_skill: z.string(), obligation: z.string(),
+      successor: z.string().nullable().optional() }),
+    chronicle: z.array(z.object({ minute: z.number(), kind: z.string(), text: z.string() }).passthrough()),
+    lessons: z.array(z.object({ minute: z.number(), kind: z.string(), text: z.string(),
+      source: z.string(), learned_at: z.number() }).passthrough()).default([]),
+    lineage: z.array(z.string()).default([]), current: z.string().nullable().optional(),
+    inherited_coins: z.number().default(0), newcomers_here: z.array(z.string())
+  }).optional(),
   firewood: villageFirewoodSchema.optional(),
   communication: communicationSchema.optional(),
   livestock: z.object({
@@ -339,6 +348,19 @@ const villageDashboardSchema = z.object({
   day_policy: villageDayPolicySchema.nullable().optional()
 });
 const villageStateSchema = z.object({
+  legacy: z.object({
+    chronicle: z.array(z.object({ minute: z.number(), kind: z.string(), text: z.string(),
+      source_event: z.number().nullable().optional(), lesson: z.string().nullable().optional(),
+      origin_world_id: z.string().nullable().optional(), origin_minute: z.number().nullable().optional() })),
+    newcomers: z.record(z.string(), z.object({ day: z.number(), name: z.string(), home: z.string(),
+      reason: z.string(), departure_day: z.number().nullable() })),
+    recorded_events: z.number(), last_day: z.number(), learned: z.record(z.string(), z.array(z.number())),
+    lessons: z.record(z.string(), z.array(z.object({ entry: z.number(), learned_at: z.number(), source: z.string() }))).optional(),
+    lineage: z.record(z.string(), z.array(z.string())).optional(),
+    current: z.record(z.string(), z.string()).optional(),
+    inherited_coins: z.record(z.string(), z.number()).optional(),
+    handoff: z.record(z.string(), z.string()).nullable().optional()
+  }).nullable().optional(),
   minute: z.number().int().nonnegative(),
   residents: z.record(z.string(), z.object({
     beliefs: z.record(z.string(), villageBeliefSchema),

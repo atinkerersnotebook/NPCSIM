@@ -450,6 +450,99 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "014e5b64c6c141dd8057ad43dfb484aa",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-14T13:25:54.069600+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: mill repaired, every resident contributed, everyone fed.",
+          "evidence_ids": [
+            "014e5b64c6c141dd8057ad43dfb484aa:15276"
+          ]
+        },
+        {
+          "reason": "The mill was not repaired; the final recovery check failed.",
+          "evidence_ids": [
+            "014e5b64c6c141dd8057ad43dfb484aa:15276"
+          ]
+        },
+        {
+          "reason": "The required resident-contribution check failed.",
+          "evidence_ids": [
+            "014e5b64c6c141dd8057ad43dfb484aa:15276"
+          ]
+        },
+        {
+          "reason": "Torvin and Nella missed the daily meal, so the everyone-fed check failed.",
+          "evidence_ids": [
+            "014e5b64c6c141dd8057ad43dfb484aa:15276"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "3439e076232743ce913787493a82eb64",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-14T13:29:36.065000+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: shovel recovered, well dug, mill repaired, bread supply resumed, every resident contributed, working wagon, evening reached, everyone fed, everyone home, everyone asleep, resource reserves ready.",
+          "evidence_ids": [
+            "3439e076232743ce913787493a82eb64:354"
+          ]
+        },
+        {
+          "reason": "The final check reports that the well, mill, and working wagon were not restored.",
+          "evidence_ids": [
+            "3439e076232743ce913787493a82eb64:354"
+          ]
+        },
+        {
+          "reason": "The full-day requirements were not complete: evening had not been reached, not everyone was fed or home, and resource reserves were short.",
+          "evidence_ids": [
+            "3439e076232743ce913787493a82eb64:354"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "a52816c2c5fd48d7bbe83f0d3bea06b9",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-14T20:55:11.312561+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: every resident contributed, everyone fed, livestock daily care, resource reserves ready.",
+          "evidence_ids": [
+            "a52816c2c5fd48d7bbe83f0d3bea06b9:13254"
+          ]
+        },
+        {
+          "reason": "Rowan and Iona missed supper; the everyone-fed check failed.",
+          "evidence_ids": [
+            "a52816c2c5fd48d7bbe83f0d3bea06b9:13254"
+          ]
+        },
+        {
+          "reason": "Daily care was not completed for the cow or hens.",
+          "evidence_ids": [
+            "a52816c2c5fd48d7bbe83f0d3bea06b9:13254"
+          ]
+        },
+        {
+          "reason": "The general store had three usable grain against a reserve of four.",
+          "evidence_ids": [
+            "a52816c2c5fd48d7bbe83f0d3bea06b9:13254"
+          ]
+        },
+        {
+          "reason": "The every-resident-contributed check failed.",
+          "evidence_ids": [
+            "a52816c2c5fd48d7bbe83f0d3bea06b9:13254"
+          ]
+        }
+      ]
     }
   ]
 }

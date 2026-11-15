@@ -13,7 +13,8 @@ import type { StoryEntry, StoryMembers } from "./story";
 import { actorPerspective, agentPerspectives, discoveredEntities, goalPresentation, inventoryUnitsUsed, locationNetwork, nutritionLabel, teamLocationNetwork } from "./world-view";
 import { batchTiming, clockHelp, clockTime } from "./bakery-view";
 import { villageDashboardMarkup, villageMarkup } from "./village-view";
-import { adventureStatus, budgetSummary, canAskQuestions, canExtendBudget, canReopenAdventure, isAdminView, playerCommandVisible, simulationClock, villageClockText, viewMode, viewNavigation } from "./view-mode";
+import { adventureStatus, budgetSummary, canAskQuestions, canExtendBudget, canReopenAdventure, dashboardTab, isAdminView, playerCommandVisible, simulationClock, villageClockText, viewMode, viewNavigation } from "./view-mode";
+import type { DashboardTab } from "./view-mode";
 import { startWorldMonitor } from "./world-monitor";
 import { conditionText } from "./secondary-goals";
 import { savedEpisodesMarkup } from "./episode-saves";
@@ -31,16 +32,9 @@ app.className = adminView ? "admin-view" : "player-view";
 document.title = adminView ? "NPCSIM · World Observatory" : "NPCSIM · Adventures";
 
 app.innerHTML = `
-  <aside class="rail" data-admin-only>
-    <a class="brand" href="/" aria-label="NPCSIM home">N<span>·</span></a>
-    <div class="rail-icon active" title="World observatory">◈</div>
-    <button class="rail-icon" id="history-button" title="Episode history" aria-label="Episode history">↺</button>
-    <a class="rail-icon" href="/api/transcript" title="Export JSON transcript" aria-label="Export transcript">↓</a>
-    <span class="rail-bottom">V.01</span>
-  </aside>
   <main id="observatory">
     <header>
-      <div><div class="eyebrow">NPCSIM / ${adminView ? "LOCAL SIMULATION" : "CHARACTERS WITH A MIND OF THEIR OWN"}</div><h1>${adminView ? "World observatory" : "Every adventure has a story"}<span class="dot">.</span></h1></div>
+      <div class="masthead-title"><a class="brand" href="/" aria-label="NPCSIM home">NPCSIM<span>·</span></a><div><span class="eyebrow">${adminView ? "WORLD OBSERVATORY" : "THE ADVENTURE"}</span><h1 id="masthead-episode">No episode yet</h1></div><span id="episode-status" class="tag" role="status">NO EPISODE</span></div>
       <div class="header-right"><div id="simulation-clock" class="simulation-clock" role="timer" aria-label="Current game time" hidden></div><span class="live-dot"></span><span id="connection">Connecting</span>${viewNavigation(adminView ? "admin" : "player")}</div>
     </header>
     <div id="notice" class="notice" role="alert" hidden></div>
@@ -56,8 +50,12 @@ app.innerHTML = `
         <button data-command="reset" class="button subtle">↺ ${adminView ? "Reset" : "Restart"}</button>
         <button id="save-episode" class="button subtle">Save episode</button>
         <button id="load-episode" class="button subtle">Load saved episode</button>
+        <button id="history-button" class="button subtle" type="button">Archive</button>
+        <a class="button subtle" href="/api/transcript" data-admin-only>Export JSON</a>
       </div>
     </section>
+    <nav class="dashboard-tabs" role="tablist" aria-label="Dashboard sections"></nav>
+    <div id="dashboard-panels"></div>
     <section class="panel agent-setup">
       <div class="panel-heading"><div><span class="eyebrow">${adminView ? "CAST / TASK ASSIGNMENTS" : "YOUR NEXT ADVENTURE"}</span><h2>${adminView ? "Choose your agents" : "Choose your cast"}</h2></div><span class="tag">${adminView ? "NEXT EPISODE" : "NEXT ADVENTURE"}</span></div>
       <p class="timeline-note">${adminView ? "Each agent brings its own personality, rules and physical abilities. Slots retain their task starting locations, not their original character's skills." : "Choose a world and its characters, then click New adventure and Play. Each character brings their own personality and abilities. Your choices apply to the next adventure."}</p>
@@ -126,17 +124,14 @@ app.innerHTML = `
     <section id="village-overview" class="village-panel" aria-label="Village-wide tracking" hidden></section>
     <section id="team-overview" class="team-overview" aria-label="Team overview" hidden>
       <div class="team-left">
-        <div id="team-map-host"></div>
       </div>
       <section class="team-live" id="team-live" aria-label="Live team">
-        <div id="team-review-host"></div>
         <div class="team-perspectives-content">
         <div class="team-perspectives-heading"><div><span class="eyebrow">${adminView ? "LIVE TEAM / SEPARATE PERSPECTIVES" : "ON THE ADVENTURE"}</span><h2>${adminView ? "All agent perspectives" : "Your characters"}</h2></div><span class="tag green" data-admin-only>OBSERVATIONS STAY PRIVATE</span></div>
         <p class="timeline-note" data-admin-only>Watch every agent's surroundings, task focus and actions together. Turns remain sequential; private observations are not shared with teammates.</p>
         <div id="agent-perspectives" class="agent-perspectives" aria-label="Agent perspectives"></div>
         </div>
       </section>
-      <div id="team-story-host"></div>
     </section>
     <div class="workspace" id="workspace" data-admin-only>
       <div class="left-column" id="left-column">
@@ -229,6 +224,98 @@ app.innerHTML = `
   </dialog>
 `;
 
+const tabLabels: [DashboardTab, string][] = adminView ?
+  [["live", "Live"], ["cast", "Cast & setup"], ["story", "Story"], ["technical", "Technical"]] :
+  [["live", "Play"], ["cast", "Cast"], ["story", "Story"]];
+let explicitTab = Boolean(location.hash);
+const tabs = document.querySelector<HTMLElement>(".dashboard-tabs");
+const panels = document.getElementById("dashboard-panels");
+if (!tabs || !panels) throw new Error("Missing dashboard navigation");
+const shell = document.createElement("div");
+shell.className = "command-shell";
+const header = document.querySelector("#observatory > header");
+const toolbar = document.querySelector("#observatory > .toolbar");
+if (!header || !toolbar) throw new Error("Missing dashboard commands");
+header.before(shell);
+shell.append(header, toolbar, tabs);
+tabs.innerHTML = tabLabels.map(([id, label]) =>
+  `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="false" tabindex="-1">${label}</button>`).join("");
+for (const id of ["live", "cast", "story", "technical"] as const) {
+  const panel = document.createElement("section");
+  panel.id = `panel-${id}`;
+  panel.className = "dashboard-panel";
+  panel.setAttribute("role", "tabpanel");
+  panel.setAttribute("aria-labelledby", `tab-${id}`);
+  panel.tabIndex = 0;
+  panels.append(panel);
+}
+function moveToTab(id: DashboardTab, ...selectors: string[]): void {
+  const panel = document.getElementById(`panel-${id}`);
+  if (!panel) throw new Error(`Missing panel ${id}`);
+  for (const selector of selectors) {
+    const node = document.querySelector(selector);
+    if (!node) throw new Error(`Missing panel content ${selector}`);
+    panel.append(node);
+  }
+}
+moveToTab("cast", ".agent-setup", "#dungeon-master-panel");
+moveToTab("live", "#bakery-panel", "#metrics", "#budget-controls", "#team-overview");
+const worldDetails = document.createElement("details");
+worldDetails.className = "world-details panel";
+worldDetails.innerHTML = "<summary>Explore the discovered world map</summary>";
+const worldPanel = document.querySelector(".world-panel");
+if (!worldPanel) throw new Error("Missing world panel");
+worldDetails.append(worldPanel);
+document.getElementById("panel-live")?.append(worldDetails);
+const villageDetails = document.createElement("details");
+villageDetails.className = "village-details panel";
+villageDetails.innerHTML = "<summary>Village tracking & resident details</summary>";
+const villageOverview = document.getElementById("village-overview");
+if (!villageOverview) throw new Error("Missing village overview");
+villageDetails.append(villageOverview);
+document.getElementById("panel-live")?.append(villageDetails);
+moveToTab("story", "#narrative-column", "#story-panel", "#completion-panel");
+moveToTab("technical", "#technical-log", "#self-panel", "#connection-panel", "#observation-panel");
+document.querySelector("#observatory > .workspace")?.remove();
+
+let activeTab: DashboardTab | null = null;
+function selectTab(tab: DashboardTab, updateHash = false): void {
+  if (!tabLabels.some(([id]) => id === tab)) return;
+  activeTab = tab;
+  for (const [id] of tabLabels) {
+    const button = document.getElementById(`tab-${id}`);
+    const panel = document.getElementById(`panel-${id}`);
+    if (!button || !panel) throw new Error(`Missing tab ${id}`);
+    button.setAttribute("aria-selected", String(id === tab));
+    button.tabIndex = id === tab ? 0 : -1;
+    panel.hidden = id !== tab;
+  }
+  if (updateHash) {
+    explicitTab = true;
+    history.replaceState(null, "", `#${tab}`);
+  }
+  if (updateHash) window.scrollTo({ top: 0 });
+  if (tab === "live") requestAnimationFrame(updateGoalExpansion);
+}
+tabs.addEventListener("click", event => {
+  const button = (event.target as Element).closest<HTMLButtonElement>("[role=tab]");
+  if (button) selectTab(button.id.slice(4) as DashboardTab, true);
+});
+tabs.addEventListener("keydown", event => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const current = tabLabels.findIndex(([id]) => id === activeTab);
+  const next = event.key === "Home" ? 0 : event.key === "End" ? tabLabels.length - 1 :
+    (current + (event.key === "ArrowRight" ? 1 : -1) + tabLabels.length) % tabLabels.length;
+  selectTab(tabLabels[next][0], true);
+  document.getElementById(`tab-${tabLabels[next][0]}`)?.focus();
+});
+window.addEventListener("hashchange", () => {
+  explicitTab = Boolean(location.hash);
+  selectTab(dashboardTab(location.hash, adminView, Boolean(state?.run)));
+});
+selectTab(dashboardTab(location.hash, adminView, false));
+
 let state: State | null = null;
 let events: RunEvent[] = [];
 let activeRun: string | null = null;
@@ -292,6 +379,8 @@ function applyState(next: State): void {
   state = next;
   const id = next.run?.id ?? null;
   if (id !== activeRun) {
+    if (!explicitTab) selectTab(dashboardTab("", adminView, Boolean(next.run)));
+    goalExpanded = false;
     activeRun = id;
     selectedActor = "";
     selectedStoryDay = null;
@@ -309,6 +398,7 @@ function applyState(next: State): void {
     renderAssignments();
     renderTimeline();
   }
+  if (!explicitTab) selectTab(dashboardTab("", adminView, Boolean(next.run)));
   if (!configured) {
     element<HTMLInputElement>("proxy-url").value = next.config.proxy.base_url;
     if (next.config.proxy.model) {
@@ -319,6 +409,10 @@ function applyState(next: State): void {
   element("episode-name").textContent = next.run ? (adminView ?
     `${next.run.title} / ${next.run.id.slice(0, 8)}${next.run.agents ? ` / ${Object.keys(next.run.agents).length} agents / active: ${next.run.actor_id}` : ""}` :
     `Current adventure: ${next.run.title}`) : adminView ? "Create an episode to begin" : "Create an adventure to begin";
+  element("masthead-episode").textContent = next.run?.title ?? "No episode yet";
+  const statusPill = element("episode-status");
+  statusPill.textContent = (next.run?.status ?? "no episode").replaceAll("_", " ").toUpperCase();
+  statusPill.className = `tag ${next.run?.status === "running" ? "green" : ""}`;
   element<HTMLButtonElement>("run-command").textContent = adminView ? (next.run?.agents ? "▶ Run agents" : "▶ Run agent") : "▶ Play";
   renderMetrics();
   renderBakery();
@@ -345,19 +439,42 @@ function renderMetrics(): void {
   const status = run?.status ?? "idle";
   if (!adminView) {
     element("metrics").innerHTML = `
-      <div class="metric goal"><span class="eyebrow">${run?.goal.revealed === false ? "A TASK TO DISCOVER" : "THE QUEST"}</span><strong>${escape(run?.goal.objective ?? "A new world is waiting.")}</strong><span class="muted">${escape(run?.goal.status ?? "Choose a scenario and your cast to get started.")}</span></div>
+      <div class="metric goal"><span class="eyebrow">${run?.goal.revealed === false ? "A TASK TO DISCOVER" : "THE QUEST"}</span><strong class="goal-objective">${escape(run?.goal.objective ?? "A new world is waiting.")}</strong><button class="goal-expand button subtle" type="button" aria-expanded="false" hidden>Read full objective</button><span class="muted">${escape(run?.goal.status ?? "Choose a scenario and your cast to get started.")}</span></div>
       <div class="metric"><span class="eyebrow">YOUR ADVENTURE</span><strong class="status ${escape(status)}">${escape(adventureStatus(status, run?.completion_analysis))}</strong><span class="muted">${run ? `${run.actions} actions · ${run.elapsed_seconds.toFixed(1)} seconds${state.in_flight ? " · A character is taking a turn" : ""}` : "Create an adventure, then press Play."}</span></div>`;
+    updateGoalExpansion();
     return;
   }
   const budgets = run?.config ? record(record(run.config).budgets) : state.config.budgets;
   const actionLimit = run?.run_until_complete ? "No limit" : budgets.max_actions;
   const callLimit = run?.run_until_complete ? "No limit" : budgets.max_model_calls;
   element("metrics").innerHTML = `
-    <div class="metric goal"><span class="eyebrow">${run?.goal.revealed === false ? "UNKNOWN TASK" : "ROOT GOAL"}</span><strong>${escape(run?.goal.objective ?? "Leave the room.")}</strong><span class="muted">${escape(run?.goal.status ?? "Waiting to start")}</span></div>
+    <div class="metric goal"><span class="eyebrow">${run?.goal.revealed === false ? "UNKNOWN TASK" : "ROOT GOAL"}</span><strong class="goal-objective">${escape(run?.goal.objective ?? "Leave the room.")}</strong><button class="goal-expand button subtle" type="button" aria-expanded="false" hidden>Read full objective</button><span class="muted">${escape(run?.goal.status ?? "Waiting to start")}</span></div>
     <div class="metric"><span class="eyebrow">ATTEMPT STATUS</span><strong class="status ${escape(status)}">${run?.completion_analysis ? "finished" : escape(status.replaceAll("_", " "))}</strong><span class="muted">${run?.completion_analysis ? `Execution: ${escape(status.replaceAll("_", " "))} · Grade: ${escape(run.completion_analysis.verdict ?? run.completion_analysis.status)}` : state.in_flight ? "One cycle in progress" : "Sequential action loop"}</span></div>
     <div class="metric"><span class="eyebrow">ACTIONS / BUDGET</span><strong>${run?.actions ?? 0}<small> / ${escape(actionLimit)}</small></strong><span class="muted">${run?.model_calls ?? 0} / ${escape(callLimit)} decision/interaction calls${run?.dungeon_master ? ` + ${run.dungeon_master.model_calls} supervisor` : ""}${run?.completion_analysis || run?.previous_review_model_calls ? ` + ${(run.previous_review_model_calls ?? 0) + (run.completion_analysis?.model_calls ?? 0)} review` : ""}</span></div>
     <div class="metric"><span class="eyebrow">ELAPSED</span><strong>${(run?.elapsed_seconds ?? 0).toFixed(1)}<small>s</small></strong><span class="muted">${run?.run_until_complete ? "No active-time limit" : `${escape(budgets.max_seconds)}s episode limit`}</span></div>`;
+  updateGoalExpansion();
 }
+
+let goalExpanded = false;
+function updateGoalExpansion(): void {
+  const objective = document.querySelector<HTMLElement>(".goal-objective");
+  const button = document.querySelector<HTMLButtonElement>(".goal-expand");
+  if (!objective || !button) return;
+  if (!goalExpanded) button.hidden = true;
+  objective.classList.toggle("expanded", goalExpanded);
+  button.setAttribute("aria-expanded", String(goalExpanded));
+  button.textContent = goalExpanded ? "Show less" : "Read full objective";
+  requestAnimationFrame(() => {
+    if (objective.getBoundingClientRect().width) {
+      button.hidden = !goalExpanded && objective.scrollHeight <= objective.clientHeight + 1;
+    }
+  });
+}
+element("metrics").addEventListener("click", event => {
+  if (!(event.target instanceof Element) || !event.target.closest(".goal-expand")) return;
+  goalExpanded = !goalExpanded;
+  updateGoalExpansion();
+});
 
 function renderAssignments(): void {
   element<HTMLSelectElement>("skill-mode").value = skillMode;
@@ -495,8 +612,9 @@ function renderControls(): void {
   const budgetPanel = element<HTMLDetailsElement>("budget-controls");
   budgetPanel.hidden = !canExtendBudget(status, Boolean(state?.world));
   if (focusBudget && !budgetPanel.hidden) {
+    selectTab("live", true);
     budgetPanel.open = true;
-    budgetPanel.scrollIntoView({block: "start"});
+    requestAnimationFrame(() => budgetPanel.scrollIntoView({block: "start"}));
     focusBudget = false;
   }
   element("budget-usage").textContent = state ? budgetSummary(state) : "";
@@ -866,37 +984,13 @@ function renderTeamPerspectives(): void {
   const agents = state ? agentPerspectives(state) : [];
   const team = agents.length > 1;
   const perspectivesVisible = !adminView || agents.length > 0;
-  element("observatory").classList.toggle("team-layout", perspectivesVisible);
   element("team-overview").hidden = !perspectivesVisible;
   element("observation-panel").hidden = perspectivesVisible;
-  element("story-panel").hidden = perspectivesVisible;
-  document.querySelector(".workspace")?.classList.toggle("team-mode", perspectivesVisible);
   element("world-title").textContent = adminView ? (team ? "The whole team, one map" : "The world") : "Their world";
   element("map-scope").textContent = adminView && team ? "COMBINED DISCOVERIES" : "DISCOVERED MAP";
   element("narrative-note").textContent = team ?
     "One chronological adventure following every agent's discoveries, attempts and confirmed outcomes." :
     "A continuous account of what the NPC discovers, attempts and explains.";
-  const worldPanel = element("world-title").closest<HTMLElement>(".world-panel");
-  if (!worldPanel) throw new Error("Missing world panel");
-  const host = element(perspectivesVisible ? "team-map-host" : "left-column");
-  if (worldPanel.parentElement !== host) host.prepend(worldPanel);
-  if (!adminView) {
-    const liveTeam = element("team-live");
-    const mapHost = element("team-map-host");
-    if (mapHost.nextElementSibling !== liveTeam) mapHost.after(liveTeam);
-  }
-  const technicalLog = element("technical-log");
-  if (worldPanel.nextElementSibling !== technicalLog) worldPanel.after(technicalLog);
-  const selfPanel = element("self-panel");
-  if (technicalLog.nextElementSibling !== selfPanel) technicalLog.after(selfPanel);
-  const connectionPanel = element("connection-panel");
-  if (selfPanel.nextElementSibling !== connectionPanel) selfPanel.after(connectionPanel);
-  const narrativeColumn = element("narrative-column");
-  const storyHost = element(perspectivesVisible ? "team-story-host" : "workspace");
-  if (narrativeColumn.parentElement !== storyHost) storyHost.append(narrativeColumn);
-  const completionPanel = element("completion-panel");
-  const reviewHost = element(perspectivesVisible ? "team-review-host" : "narrative-column");
-  if (completionPanel.parentElement !== reviewHost) reviewHost.append(completionPanel);
   const grid = element("agent-perspectives");
   grid.style.setProperty("--agent-count", String(Math.max(1, Math.min(3, agents.length))));
   if (!perspectivesVisible) {

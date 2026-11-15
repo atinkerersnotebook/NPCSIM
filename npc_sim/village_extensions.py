@@ -2,13 +2,13 @@ from typing import TYPE_CHECKING, Any
 
 from npc_sim import village, village_economy, village_events, village_social, village_maintenance, village_research, village_mining, village_livestock
 from npc_sim.models import VillageConfigurationPatch, VillageDashboard, VillageDayPolicy, VillageTimeUse
-from npc_sim import village_communication, village_firewood
+from npc_sim import village_communication, village_firewood, village_legacy
 
 if TYPE_CHECKING:
     from npc_sim.world import World
 
 
-VERBS = village_economy.VERBS | village_events.VERBS | village_social.VERBS | village_maintenance.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | {"village_wait_event"}
+VERBS = village_economy.VERBS | village_events.VERBS | village_social.VERBS | village_maintenance.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | village_legacy.VERBS | {"village_wait_event"}
 
 
 def policy(world: "World") -> VillageDayPolicy:
@@ -28,6 +28,7 @@ def modules(world: "World") -> list[Any]:
         (village_livestock, state.livestock),
         (village_communication, state.communication),
         (village_firewood, state.firewood),
+        (village_legacy, state.legacy),
     ) if enabled is not None]
 
 

@@ -1,0 +1,564 @@
+{
+  "scenario_sha256": "9fe74a067b8a071c06e8aba08ddd91413675760a9a070595c5804d2039bcf3d5",
+  "baseline_sha256": "958bc33169c1f1339c9b94a458f6ce63367d7ceedd8a84a919350dfac765422a",
+  "scenario_id": "millhaven-living",
+  "model_calls": 0,
+  "model_settings": "none: deterministic initial engine state only",
+  "starting_state": {
+    "minute": 300,
+    "stocks": {
+      "forge": {
+        "iron": 4,
+        "wagon-parts": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "firewood": 10
+      },
+      "stable": {
+        "hay": 6,
+        "manure": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "firewood": 0
+      },
+      "watermill": {
+        "grain": 8,
+        "flour": 2,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "firewood": 0
+      },
+      "bakery": {
+        "flour": 8,
+        "bread": 4,
+        "milk": 0,
+        "eggs": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "firewood": 10
+      },
+      "farm": {
+        "grain": 6,
+        "milk": 0,
+        "eggs": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "firewood": 0,
+        "hay": 8
+      },
+      "tavern": {
+        "bread": 12,
+        "meals": 0,
+        "milk": 0,
+        "eggs": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "firewood": 12
+      },
+      "woods": {
+        "logs": 10,
+        "timber": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "firewood": 0
+      },
+      "workshop": {
+        "timber": 6,
+        "planks": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "furniture": 0,
+        "firewood": 0
+      },
+      "cottages": {
+        "herbs": 10,
+        "tea": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "manure": 0,
+        "firewood": 24
+      },
+      "riverbank": {
+        "fish": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "timber": 0,
+        "iron": 0,
+        "logs": 0,
+        "tackle": 0,
+        "preserved-fish": 0,
+        "firewood": 0
+      },
+      "general-store": {
+        "grain": 3,
+        "flour": 2,
+        "bread": 2,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "firewood": 0
+      },
+      "iron-mine": {
+        "iron-ore": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "firewood": 0
+      }
+    },
+    "stock_lots": {
+      "forge": {
+        "iron": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 4,
+            "produced_at": 300,
+            "expires_at": null
+          }
+        ],
+        "wagon-parts": [],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "firewood": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 10,
+            "produced_at": 300,
+            "expires_at": null
+          }
+        ]
+      },
+      "stable": {
+        "hay": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 6,
+            "produced_at": 300,
+            "expires_at": 86700
+          }
+        ],
+        "manure": [],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "firewood": []
+      },
+      "watermill": {
+        "grain": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 8,
+            "produced_at": 300,
+            "expires_at": 129900
+          }
+        ],
+        "flour": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 2,
+            "produced_at": 300,
+            "expires_at": 43500
+          }
+        ],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "firewood": []
+      },
+      "bakery": {
+        "flour": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 8,
+            "produced_at": 300,
+            "expires_at": 43500
+          }
+        ],
+        "bread": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 4,
+            "produced_at": 300,
+            "expires_at": 3180
+          }
+        ],
+        "milk": [],
+        "eggs": [],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "firewood": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 10,
+            "produced_at": 300,
+            "expires_at": null
+          }
+        ]
+      },
+      "farm": {
+        "grain": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 6,
+            "produced_at": 300,
+            "expires_at": 129900
+          }
+        ],
+        "milk": [],
+        "eggs": [],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "firewood": [],
+        "hay": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 8,
+            "produced_at": 300,
+            "expires_at": 86700
+          }
+        ]
+      },
+      "tavern": {
+        "bread": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 12,
+            "produced_at": 300,
+            "expires_at": 3180
+          }
+        ],
+        "meals": [],
+        "milk": [],
+        "eggs": [],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "firewood": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 12,
+            "produced_at": 300,
+            "expires_at": null
+          }
+        ]
+      },
+      "woods": {
+        "logs": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 10,
+            "produced_at": 300,
+            "expires_at": null
+          }
+        ],
+        "timber": [],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "firewood": []
+      },
+      "workshop": {
+        "timber": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 6,
+            "produced_at": 300,
+            "expires_at": null
+          }
+        ],
+        "planks": [],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "furniture": [],
+        "firewood": []
+      },
+      "cottages": {
+        "herbs": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 10,
+            "produced_at": 300,
+            "expires_at": 4620
+          }
+        ],
+        "tea": [],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "manure": [],
+        "firewood": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 24,
+            "produced_at": 300,
+            "expires_at": null
+          }
+        ]
+      },
+      "riverbank": {
+        "fish": [],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "timber": [],
+        "iron": [],
+        "logs": [],
+        "tackle": [],
+        "preserved-fish": [],
+        "firewood": []
+      },
+      "general-store": {
+        "grain": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 3,
+            "produced_at": 300,
+            "expires_at": 129900
+          }
+        ],
+        "flour": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 2,
+            "produced_at": 300,
+            "expires_at": 43500
+          }
+        ],
+        "bread": [
+          {
+            "origin": "initial_village_stock",
+            "seed_event_id": "millhaven-living:initial-village-stock:v1",
+            "quantity": 2,
+            "produced_at": 300,
+            "expires_at": 3180
+          }
+        ],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "firewood": []
+      },
+      "iron-mine": {
+        "iron-ore": [],
+        "plant-scraps": [],
+        "compost-material": [],
+        "compost": [],
+        "firewood": []
+      }
+    },
+    "coins": {
+      "torvin": 40,
+      "bren": 30,
+      "mara": 100,
+      "elsie": 150,
+      "hobb": 40,
+      "jory": 100,
+      "ada": 30,
+      "nella": 80,
+      "rowan": 20,
+      "garrick": 20,
+      "iona": 20,
+      "finn": 20,
+      "visitor": 20,
+      "iron-trader": 0
+    },
+    "orders": {},
+    "meals": {
+      "torvin": {},
+      "bren": {},
+      "mara": {},
+      "elsie": {},
+      "hobb": {},
+      "jory": {},
+      "ada": {},
+      "nella": {},
+      "rowan": {},
+      "garrick": {},
+      "iona": {},
+      "finn": {}
+    },
+    "meal_reservations": {
+      "breakfast": {
+        "day": 0,
+        "kind": "breakfast",
+        "due": null,
+        "cutoff": null,
+        "grace_until": null,
+        "expected": 12,
+        "diners": [
+          "ada",
+          "bren",
+          "elsie",
+          "finn",
+          "garrick",
+          "hobb",
+          "iona",
+          "jory",
+          "mara",
+          "nella",
+          "rowan",
+          "torvin"
+        ],
+        "prepared": 12,
+        "reserved": [
+          "ada",
+          "bren",
+          "elsie",
+          "finn",
+          "garrick",
+          "hobb",
+          "iona",
+          "jory",
+          "mara",
+          "nella",
+          "rowan",
+          "torvin"
+        ],
+        "consumed": 0,
+        "unfunded": [],
+        "at_risk": [],
+        "shortfall": 0,
+        "inputs_needed": {}
+      },
+      "daily": {
+        "day": 0,
+        "kind": "daily",
+        "due": 1140,
+        "cutoff": 1110,
+        "grace_until": 1230,
+        "expected": 12,
+        "diners": [
+          "ada",
+          "bren",
+          "elsie",
+          "finn",
+          "garrick",
+          "hobb",
+          "iona",
+          "jory",
+          "mara",
+          "nella",
+          "rowan",
+          "torvin"
+        ],
+        "prepared": 12,
+        "reserved": [
+          "ada",
+          "bren",
+          "finn",
+          "garrick",
+          "hobb",
+          "iona",
+          "jory",
+          "mara",
+          "nella",
+          "rowan",
+          "torvin",
+          "elsie"
+        ],
+        "consumed": 0,
+        "unfunded": [],
+        "at_risk": [],
+        "shortfall": 0,
+        "inputs_needed": {
+          "bread": 0
+        }
+      }
+    },
+    "crew_sessions": {},
+    "cargo": {
+      "torvin": {
+        "loose": {},
+        "shipments": []
+      },
+      "bren": {
+        "loose": {},
+        "shipments": []
+      },
+      "mara": {
+        "loose": {},
+        "shipments": []
+      },
+      "elsie": {
+        "loose": {},
+        "shipments": []
+      },
+      "hobb": {
+        "loose": {},
+        "shipments": []
+      },
+      "jory": {
+        "loose": {},
+        "shipments": []
+      },
+      "ada": {
+        "loose": {},
+        "shipments": []
+      },
+      "nella": {
+        "loose": {},
+        "shipments": []
+      },
+      "rowan": {
+        "loose": {},
+        "shipments": []
+      },
+      "garrick": {
+        "loose": {},
+        "shipments": []
+      },
+      "iona": {
+        "loose": {},
+        "shipments": []
+      },
+      "finn": {
+        "loose": {},
+        "shipments": []
+      }
+    },
+    "wagon": {
+      "repaired": false,
+      "driver": null,
+      "automatic": false,
+      "loads": [],
+      "route_index": 0,
+      "phase": "travel",
+      "next_event_at": 0,
+      "blocker": null,
+      "hitched": false
+    },
+    "diagnostic": null
+  }
+}

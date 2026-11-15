@@ -97,7 +97,7 @@ def check(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str] 
         if minute < state.residents[world.actor_id].next_work:
             return "WORK_COOLDOWN", f"Your next patrol is due at {village.clock_time(state.residents[world.actor_id].next_work)}."
 
-    if action in {"village_load_goods", "village_buy_iron"}:
+    if action in {"village_load_goods", "village_buy_iron", "village_depot_load", "village_depot_withdraw", "village_store_feed"}:
         from npc_sim.village_services import foot_capacity
         goods = {"iron": args["quantity"]} if action == "village_buy_iron" else args["goods"]
         if sum(goods.values()) > foot_capacity(world, world.actor_id) - sum(

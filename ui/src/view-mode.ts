@@ -34,6 +34,17 @@ export function simulationClock(snapshot: {
 }
 
 export type ViewMode = "player" | "admin" | "world";
+export type DashboardTab = "live" | "cast" | "story" | "technical";
+
+export function dashboardTab(hash: string, admin: boolean, hasEpisode: boolean): DashboardTab {
+  const requested = hash.replace(/^#/, "").toLowerCase();
+  if (requested === "cast" || requested === "story" ||
+    requested === "live" || (!admin && requested === "play") ||
+    (admin && requested === "technical")) {
+    return requested === "play" ? "live" : requested as DashboardTab;
+  }
+  return hasEpisode ? "live" : "cast";
+}
 
 export function viewMode(search: string): ViewMode {
   const view = new URLSearchParams(search).get("view");

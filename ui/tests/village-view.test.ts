@@ -884,15 +884,16 @@ test("expanded overview tracks every real villager and their private evidence", 
   assert.ok(!villageMarkup(view()).includes("memory:lent-to-bren"));
 });
 
-test("new expanded villagers all start at their cottage homes, including Elsie", () => {
+test("new expanded villagers start at their configured homes, including Elsie's tavern", () => {
   const state = expanded();
   const village = state.world!.village!;
   assert.equal(Object.keys(state.world!.actors).length, 12);
   for (const [id, actor] of Object.entries(state.world!.actors)) {
-    assert.equal(actor.location_id, "cottages", id);
+    assert.equal(actor.location_id, village.roster[id].home, id);
     assert.equal(actor.start_location_id, village.roster[id].home, id);
   }
-  assert.equal(village.roster.elsie.home, "cottages");
+  assert.equal(village.roster.elsie.home, "tavern");
+  assert.equal(state.world!.actors.elsie.location_id, "tavern");
   assert.equal(village.roster.elsie.work, "tavern");
 });
 
@@ -961,6 +962,24 @@ test("overview is absent in original scenarios and rejects corrupt memory refere
   assert.equal(villageDashboardMarkup(state, []), "");
   state.world!.village = null;
   assert.equal(villageDashboardMarkup(state, []), "");
+});
+
+test("operator chronicle displays named population without publishing private readership", () => {
+  const state = expanded();
+  state.world!.village!.legacy = {
+    chronicle: [{ minute: 0, kind: "founding", text: "<record>", source_event: null,
+      lesson: null, origin_world_id: null, origin_minute: null }],
+    newcomers: { "Lena": { day: 2, name: "Lena <script>", home: "cottages",
+      reason: "Visiting", departure_day: 4 } },
+    recorded_events: 0, last_day: 0, learned: { torvin: [0] },
+    current: { torvin: "Torvin", rowan: "Rina Woodward" }, lineage: { rowan: ["Rowan"] },
+    handoff: { save_id: "abc", source_world_id: "older" }
+  };
+  const markup = villageDashboardMarkup(stateSchema.parse(state), []);
+  assert.ok(markup.includes("Square chronicle &amp; named population"));
+  assert.ok(markup.includes("Rina Woodward") && markup.includes("predecessors: Rowan"));
+  assert.ok(markup.includes("&lt;record&gt;") && markup.includes("Lena &lt;script&gt;"));
+  assert.ok(!markup.includes("<script>") && !markup.includes("torvin: [0]"));
 });
 
 test("dashboard explicitly shows actors still binding during streamed startup", () => {
@@ -1339,6 +1358,78 @@ test("Gantt combines consecutive waits but preserves production batches as separ
   const markup = worldGanttMarkup(state, events, monitoredAgents(state));
   assert.match(markup, /class="gantt-cell-title"[^>]*>Waiting<\/text>/);
   assert.match(markup, /class="gantt-cell-time"[^>]*>20 min \/ 08:00 - 08:20<\/text>/);
+});
+
+test("Gantt wait tile shows the recorded reason and preserves distinct reasons when merged", () => {
+  const state = expanded();
+  state.world!.village!.minute = 510;
+  const waits = [
+    { sequence: 2, minute: 480, reason: "Waiting for a meal." },
+    { sequence: 4, minute: 490, reason: "Waiting for a supplier." }
+  ];
+  const events = [timelineEvent(1, "observation", 480, timelineObservation(480))];
+  for (const { sequence, minute, reason } of waits) {
+    events.push(timelineEvent(sequence, "action_request", minute, {
+      request_id: String(sequence), action_id: "village_wait_event", arguments: {}
+    }), timelineEvent(sequence + 1, "action_result", minute, {
+      request_id: String(sequence), outcome: "APPLIED", explanation: "Waiting for the next event.",
+      observation: { ...timelineObservation(minute, "cottages", minute + 10),
+        village: { minute, personal: { available_at: minute + 10 },
+          fallback: { decision: { selected_task_id: "wait:event", reason } } } }
+    }));
+  }
+  const waitsInTimeline = buildWorldTimeline(state, events, monitoredAgents(state))!.rows[0].spans
+    .filter(span => span.kind === "wait");
+  assert.equal(waitsInTimeline.length, 1);
+  assert.equal(waitsInTimeline[0].label, "Waiting: multiple reasons");
+  assert.match(waitsInTimeline[0].detail, /Reason: Waiting for a meal/);
+  assert.match(waitsInTimeline[0].detail, /Reason: Waiting for a supplier/);
+  const markup = worldGanttMarkup(state, events, monitoredAgents(state), { viewportWidth: 1400 });
+  assert.match(markup, /class="gantt-cell-title"[^>]*>Waiting: multiple reasons<\/text>/);
+  assert.match(markup, /data-gantt-detail="[^"]*Waiting for a meal[\s\S]*Waiting for a supplier/);
+});
+
+test("Gantt shows a single meal wait reason inside its timeline box", () => {
+  const state = expanded();
+  state.world!.village!.minute = 510;
+  const events = [timelineEvent(1, "observation", 480, timelineObservation(480)),
+    timelineEvent(2, "action_request", 480, {
+      request_id: "meal-wait", action_id: "village_wait_event", arguments: {}
+    }), timelineEvent(3, "action_result", 480, {
+      request_id: "meal-wait", outcome: "APPLIED", explanation: "Waiting for the next event.",
+      observation: { ...timelineObservation(480, "cottages", 510),
+        village: { minute: 480, personal: { available_at: 510 },
+          fallback: { decision: { selected_task_id: "wait:event", reason: "Waiting for a meal" } } } }
+    })];
+  const markup = worldGanttMarkup(state, events, monitoredAgents(state), { viewportWidth: 1400 });
+  assert.match(markup, /class="gantt-cell-title"[^>]*>Waiting for a meal<\/text>/);
+  assert.match(markup, /class="gantt-cell-detail"[^>]*>Reason: Waiting for a meal/);
+});
+
+test("Gantt extends a continuous wait without repeating its reason or intermediate times", () => {
+  const state = expanded();
+  state.world!.village!.minute = 510;
+  const events = [timelineEvent(1, "observation", 480, timelineObservation(480))];
+  for (const [sequence, minute] of [[2, 480], [4, 490], [6, 500]]) {
+    events.push(timelineEvent(sequence, "action_request", minute, {
+      request_id: String(sequence), action_id: "village_wait_event", arguments: {}
+    }), timelineEvent(sequence + 1, "action_result", minute, {
+      request_id: String(sequence), outcome: "APPLIED",
+      explanation: `Waiting for the next scheduled event at ${minute + 10}.`,
+      observation: { ...timelineObservation(minute, "cottages", minute + 10),
+        village: { minute, personal: { available_at: minute + 10 },
+          fallback: { decision: { selected_task_id: "wait:event", reason: "Waiting for a meal" } } } }
+    }));
+  }
+  const waits = buildWorldTimeline(state, events, monitoredAgents(state))!.rows[0].spans
+    .filter(span => span.kind === "wait");
+  assert.equal(waits.length, 1);
+  assert.deepEqual([waits[0].start, waits[0].end, waits[0].detail], [480, 510, "Reason: Waiting for a meal"]);
+  const markup = worldGanttMarkup(state, events, monitoredAgents(state), { viewportWidth: 1400 });
+  assert.match(markup, /data-gantt-range="08:00 - 08:30"/);
+  assert.match(markup, /data-gantt-detail="Reason: Waiting for a meal"/);
+  assert.ok(!markup.includes("data-gantt-detail=\"Reason: Waiting for a meal&#10;"));
+  assert.ok(!markup.includes("at 490") && !markup.includes("at 500"));
 });
 
 test("Gantt ends interrupted event waits when Torvin acts again", () => {

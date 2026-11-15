@@ -164,6 +164,23 @@ def rest_due(resident: VillageResident, life: VillageLifeState, minute: int) -> 
             or life.last_woke < wake)
 
 
+def early_inn_close_ready(world: "World", rid: str) -> bool:
+    config, state = village.context(world)
+    if rid != "elsie" or rid not in config.residents or config.residents[rid].home != "tavern":
+        return False
+    minute = state.minute % 1440
+    if not 1260 <= minute < config.residents[rid].bed_minute:
+        return False
+    day = state.minute // 1440
+    for other, resident in config.residents.items():
+        life = state.residents[other].life
+        if life is None or (meal := life.meals.get(f"{day}:daily")) is None or meal.status != "eaten":
+            return False
+        if other != rid and (resident.home == "tavern" or village.resident_location(world, other) != resident.home):
+            return False
+    return True
+
+
 def meal_due(life: VillageLifeState, minute: int, *, include_missed: bool = False) -> VillageMeal | None:
     pending = [meal for meal in life.meals.values() if meal.status == "pending" and meal.due <= minute]
     if pending:
@@ -200,17 +217,6 @@ def available_meal(world: "World", rid: str, *, include_missed: bool = False) ->
     daily = life.meals.get(f"{day}:daily")
     return daily if daily and daily.status == "pending" else (
         VillageMeal(kind="daily", due=day * 1440 + daily_meal_minute(resident)) if daily is None else None)
-
-
-def early_sleep_ready(world: "World", rid: str) -> bool:
-    config, state = village.context(world)
-    life = state_for(world, rid)
-    if (life is None or life.sleeping or life.work or state.minute < state.residents[rid].available_at
-            or village.resident_location(world, rid) != config.residents[rid].home):
-        return False
-    today = state.minute // 1440
-    meal = life.meals.get(f"{today}:daily")
-    return bool(meal and meal.status == "eaten" and life.last_woke >= today * 1440 + config.residents[rid].wake_minute)
 
 
 def state_for(world: "World", rid: str) -> VillageLifeState | None:
@@ -325,6 +331,7 @@ def personal(world: "World") -> dict[str, Any]:
     from npc_sim import village_extensions
     day_policy = village_extensions.policy(world)
     return {"life": {**life.model_dump(), "rest_due": rest_due(resident, life, state.minute),
+                     "early_inn_close_ready": early_inn_close_ready(world, world.actor_id),
                      "cooldown_factor": cooldown_factor(world, world.actor_id),
                      "wake_minute": resident.wake_minute, "bed_minute": resident.bed_minute,
                      "home": resident.home, "tavern": "tavern",
@@ -354,13 +361,14 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
             return reject("HORSE_NOT_STABLED", "Return and release the horse at its stable before sleeping.")
         if world.actor.location_id != resident.home:
             return reject("NOT_AT_HOME", "Walk home before sleeping; no remote rest or teleportation.")
-        early = early_sleep_ready(world, rid)
-        if life.sleeping or (not rest_due(resident, life, state.minute) and not early):
-            return reject("REST_NOT_DUE", "You have already rested for this waking day, or bedtime has not arrived and today's meal is unfinished.")
+        overnight = state.minute % 1440 >= resident.bed_minute or state.minute % 1440 < resident.wake_minute
+        early_close = early_inn_close_ready(world, rid)
+        if life.sleeping or not (overnight or early_close) or not (rest_due(resident, life, state.minute) or early_close):
+            return reject("REST_NOT_DUE", "You have already rested for this waking day, or bedtime has not arrived.")
         life.sleeping = True
         duration = (resident.wake_minute - resident.bed_minute) % 1440
         life.sleep_until = ((state.minute // 1440 + 1) * 1440 + resident.wake_minute
-                            if early else state.minute + duration)
+                            if early_close else state.minute + duration)
         return done("SLEEP_STARTED", f"Sleeping at home until {village.clock_time(life.sleep_until)}.")
     if action != "village_eat":
         raise ValueError(f"Unknown daily-life action: {action}")
@@ -386,8 +394,8 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
     from npc_sim import village_extensions
     in_grace = state.minute <= meal.due + village_extensions.policy(world).meal_window
     if in_grace and not meal_allocation(world, rid, meal):
-        if meal.status == "missed":
-            return reject("MEAL_UNALLOCATED", "No portion is allocated to this diner yet.")
+        if meal.status == "missed" or state.minute < meal.due:
+            return reject("MEAL_UNALLOCATED", "No portion is allocated to this diner yet; try again when food arrives or service begins.")
         miss_meal(world, rid, meal)
         return done("MEAL_MISSED", "No portion is allocated to this diner; real food is reserved for the fair queue.")
     if config.expanded_rules and state.economy is None and state.coins[rid] < config.meal_price:

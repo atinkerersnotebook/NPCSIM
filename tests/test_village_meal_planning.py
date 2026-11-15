@@ -51,6 +51,32 @@ def test_allocation_is_fixed_and_independent_of_action_order(cast):
     assert village_life.meal_plan(world)["shortfall"] == 3
 
 
+def test_unallocated_early_supper_is_pending_until_service(cast):
+    world = cast["elsie"]
+    village.advance(world, 1080 - world.state.village.minute)
+    village_goods.take(world, "tavern", "meals", 8)
+    plan = village_life.meal_plan(world)
+    outside = next(rid for rid in plan["diners"] if rid not in plan["reserved"])
+    result = act(cast[outside], "village_eat")
+    assert result["outcome"] == "REJECTED"
+    assert result["code"] == "MEAL_UNALLOCATED"
+    assert world.state.village.residents[outside].life.meals["0:daily"].status == "pending"
+    assert world.state.village.residents[outside].life.missed_meals == 0
+    assert world.state.village.stocks["tavern"]["meals"] == 1
+    village_goods.put(world, "tavern", "meals", 1)
+    assert act(cast[outside], "village_eat")["code"] == "MEAL_EATEN"
+
+
+def test_unallocated_service_meal_records_real_shortage(cast):
+    world = cast["elsie"]
+    village.advance(world, 1140 - world.state.village.minute)
+    village_goods.take(world, "tavern", "meals", 8)
+    outside = next(rid for rid in village_life.meal_plan(world)["diners"]
+                   if rid not in village_life.meal_plan(world)["reserved"])
+    assert act(cast[outside], "village_eat")["code"] == "MEAL_MISSED"
+    assert world.state.village.residents[outside].life.meals["0:daily"].status == "missed"
+
+
 def test_reserved_late_diner_keeps_portion_through_grace(cast):
     world = cast["elsie"]
     village.advance(world, 1140 - world.state.village.minute)

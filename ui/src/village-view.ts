@@ -308,6 +308,20 @@ export function villageDashboardMarkup(state: State, events: RunEvent[]): string
           deadline.overdue ? "Overdue; recovery allowed" : "Pending"}</p>`).join("")}</section>` : ""}
     ${village.notices.length ? `<details><summary>Public noticeboard & bell</summary>
       ${village.notices.map(entry => `<p>${time(entry.minute)} / ${named(entry.actor)} / ${escape(villageClockText(entry.result))}</p>`).join("")}</details>` : ""}
+    ${village.legacy ? `<section class="village-panel" aria-label="Village chronicle and named population">
+      <h3>Square chronicle &amp; named population</h3>
+      <p class="muted">Operator record only. Residents learn entries only by visiting the square or hearing a story.</p>
+      ${village.legacy.handoff ? `<p>Generation handoff from save ${escape(village.legacy.handoff.save_id)}</p>` : ""}
+      ${Object.entries(village.legacy.current ?? {}).map(([id, person]) =>
+        `<p>${escape(person)} / ${named(id)} household${village.legacy?.lineage?.[id]?.length
+          ? ` / predecessors: ${village.legacy.lineage[id].map(escape).join(", ")}` : ""}</p>`).join("")}
+      <p>Named newcomers: ${Object.values(village.legacy.newcomers).map(person =>
+        `${escape(person.name)} at ${named(person.home)}`).join(", ") || "None currently"}</p>
+      <details><summary>Chronicle (${village.legacy.chronicle.length})</summary>
+        ${village.legacy.chronicle.map(entry => `<p>Day ${Math.floor(entry.minute / 1440) + 1} ${time(entry.minute)} /
+          ${label(entry.kind)}: ${escape(entry.text)}${entry.origin_world_id ? " / carried from an earlier world" : ""}</p>`).join("")}
+      </details>
+    </section>` : ""}
     ${villageSystemsMarkup(state, events, state.observation?.village?.research?.enabled)}
     <div class="village-roster">${cards}</div>
     <details><summary>Village stock & event ledger</summary>

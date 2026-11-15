@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 
 
 VERBS = {"village_load_goods", "village_unload_goods", "village_fertilize", "village_fertilize_compost", "village_drink_tea",
+         "village_depot_load", "village_depot_withdraw", "village_store_feed",
          "village_buy_iron", "village_lead_horse", "village_release_horse", "village_hitch",
          "village_unhitch", "village_start_timber_route", "village_stop_timber_route", "village_urgent_work"}
 JOBS = {"village_grow_hay": ("farming", "hay", "sickle"),
@@ -79,9 +80,14 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         village.event(world, rid, action, location, text)
         return "APPLIED", code, text, None
 
-    if action in {"village_load_goods", "village_buy_iron", "village_unload_goods"}:
+    if action in {"village_load_goods", "village_buy_iron", "village_unload_goods",
+                  "village_depot_load", "village_depot_withdraw", "village_store_feed"}:
         if action == "village_unload_goods":
             reason = foot_unload(world, rid)
+        elif action in {"village_depot_load", "village_depot_withdraw", "village_store_feed"}:
+            from npc_sim import village_depot
+            reason = village_depot.load(world, args["goods"], action == "village_depot_withdraw",
+                                        feed=action == "village_store_feed")
         else:
             goods = {"iron": args["quantity"]} if action == "village_buy_iron" else args["goods"]
             destination = config.residents[config.smith].work if action == "village_buy_iron" else args["destination"]

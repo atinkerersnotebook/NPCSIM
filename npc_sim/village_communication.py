@@ -32,6 +32,8 @@ GUIDANCE = (
     "while passing, or your own workplace box on return; writing/reading requires being there. "
     "Use village_request_supply or village_propose_meeting for new needs; the engine resolves "
     "prices, recipients and physical channels. Use one notice per unmet need, then continue useful work while awaiting replies. "
+    "If today's supply deadline is infeasible, propose a next-day deadline and freshness time through a real reply; "
+    "the buyer must revise the request before the supplier can accept, and tomorrow's stock is not guaranteed. "
     "A board or physical inbox reply can commit funded supply without chasing the buyer. "
     "Acceptance is not delivery: use real production, cargo, unloading and payment. "
     "Share at most the listed relevant candidates with an awake available person actually here; "
@@ -298,7 +300,13 @@ def _known_current(world: "World", request: ChangeNotice, *, allow_closed: bool 
     revising_expired_original = (request.channel == "board" and local_original
                                  and notice.status == "expired"
                                  and isinstance(request, UpdateNotice) and request.notice is not None)
-    if not allow_closed and (notice.status in TERMINAL or _overdue(world, notice)) and not revising_expired_original:
+    revising_counteroffer = (isinstance(request, UpdateNotice) and request.notice is not None
+                             and notice.status == "seen" and notice.proposed_deadline is not None
+                             and world.state.village.minute <= notice.proposed_deadline
+                             and request.notice.due_at == notice.proposed_deadline
+                             and request.notice.required_fresh_until == notice.proposed_fresh_until)
+    if not allow_closed and (notice.status in TERMINAL or _overdue(world, notice)) and not (
+            revising_expired_original or revising_counteroffer):
         raise ValueError("This request is closed or its deadline has passed")
     return notice
 
@@ -493,20 +501,63 @@ def _intent_request(world: "World", action: str, request: Any) -> tuple[str, str
                 and state.placements.get(board, {}).get(original.id) in
                 {original.version, original.version - 1 if original.status == "expired" else original.version}):
             notice = original
-    channel = _intent_channel(world, notice.terms, author=notice.author if action == "village_respond_to_request" else None)
+    channel = _intent_channel(world, notice.terms,
+                              author=notice.author if action == "village_respond_to_request" else None)
     if action == "village_respond_to_request":
+        proposed = request.proposed_deadline is not None or request.proposed_fresh_until is not None
+        if proposed:
+            next_day = (world.state.village.minute // 1440 + 1) * 1440
+            if (request.response != "propose" or notice.terms.type != "supply_request"
+                    or request.proposed_deadline is None or request.proposed_fresh_until is None
+                    or not next_day <= request.proposed_deadline < next_day + 1440
+                    or request.proposed_fresh_until < request.proposed_deadline):
+                raise ValueError("A supply counteroffer needs a next-day deadline and freshness through that deadline")
+            from npc_sim.village_economy_models import VillageSupplierOrder
+            terms = notice.terms
+            if (actor == notice.author or actor not in terms.recipients
+                    or terms.destination is None or terms.quantity is None
+                    or terms.unit_price is None or terms.delivery_fee is None):
+                raise ValueError("Only the named supplier can offer feasible, priced supply")
+            order = VillageSupplierOrder(
+                id=f"counteroffer:{notice.id}", request_key=f"notice:{notice.id}",
+                buyer=notice.author, supplier=actor,
+                source=world.scenario.village.residents[actor].work,
+                destination=terms.destination, product=terms.subject, quantity=terms.quantity,
+                price=terms.unit_price, delivery_fee=terms.delivery_fee,
+                deadline=request.proposed_deadline,
+                required_fresh_until=request.proposed_fresh_until,
+                created_at=world.state.village.minute)
+            stock = village_economy.available_for_order(world, order.source, order.product,
+                                                         order.required_fresh_until)
+            if stock >= order.quantity:
+                feasible, blocker = village_economy.order_feasibility(world, order)
+            else:
+                plan, blocker = village_economy.production_plan(world, order)
+                feasible = bool(plan)
+            if not feasible:
+                raise ValueError(f"Cannot counteroffer without real supply: {blocker}")
+            reason = (f"I can consider delivery tomorrow by minute {request.proposed_deadline}, "
+                      f"fresh through minute {request.proposed_fresh_until}, if stock and care permit. "
+                      "Please revise the request before I accept.")
+        else:
+            reason = request.reason
         current = state.notices[notice.id][-1]
         if (current.version >= notice.version and actor != current.author
                 and actor in current.terms.recipients and current.responder == actor
-                and current.response == (request.reason or request.response)
+                and current.response == (reason or request.response)
                 and current.status == {"accept": "accepted", "reject": "rejected", "propose": "seen"}[request.response]
                 and current.terms == notice.terms):
             return "REPLY_UNCHANGED", f"Reply already recorded for {notice.id}; no second commitment."
         return _apply(world, "village_notice_reply", ReplyNotice(
             notice_id=notice.id, expected_version=notice.version,
-            response=request.response, reason=request.reason, **channel))
+            response=request.response, reason=reason,
+            proposed_deadline=request.proposed_deadline,
+            proposed_fresh_until=request.proposed_fresh_until, **channel))
     if actor != notice.author:
         raise ValueError("Only the request author may revise its terms")
+    if (channel.get("channel") == "conversation" and notice.terms.recipients
+            and channel.get("listener") != notice.terms.recipients[0]):
+        channel = _intent_channel(world, notice.terms)
     if not request.changes:
         return "NOTICE_UNCHANGED", "No changes requested."
     allowed = {"subject", "description", "quantity", "destination", "due_at", "expires_at",
@@ -685,7 +736,15 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
         if notice.appointment and (request.notice.type != "meeting"
                                    or request.notice.project != notice.terms.project):
             raise ValueError("An appointment cannot change its project")
-        changes.update(terms=request.notice, status="posted", responder=None, response=None)
+        changes.update(terms=request.notice, status="posted", responder=None, response=None,
+                       proposed_deadline=None, proposed_fresh_until=None,
+                       revised_from_counteroffer=(notice.status == "seen"
+                                                  and notice.terms.type == request.notice.type
+                                                  and notice.terms.subject == request.notice.subject
+                                                  and notice.terms.quantity == request.notice.quantity
+                                                  and notice.terms.destination == request.notice.destination
+                                                  and notice.proposed_deadline == request.notice.due_at
+                                                  and notice.proposed_fresh_until == request.notice.required_fresh_until))
         if notice.appointment:
             changes["appointment"] = notice.appointment.model_copy(update={
                 "version": notice.appointment.version + 1, "accepted": [actor], "status": "proposed",
@@ -708,6 +767,17 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
             raise ValueError("Only an intended other recipient may respond")
         if notice.status not in {"posted", "seen"}:
             raise ValueError("A committed request cannot be accepted or rejected again")
+        if request.proposed_deadline is not None or request.proposed_fresh_until is not None:
+            next_day = (minute // 1440 + 1) * 1440
+            if (request.response != "propose" or notice.terms.type != "supply_request"
+                    or request.proposed_deadline is None or request.proposed_fresh_until is None
+                    or not next_day <= request.proposed_deadline < next_day + 1440
+                    or request.proposed_fresh_until < request.proposed_deadline):
+                raise ValueError("A supply counteroffer needs a next-day deadline and freshness through that deadline")
+            if notice.proposed_deadline is not None:
+                raise ValueError("A counteroffer is already pending; await a revised request or its expiry")
+            changes.update(proposed_deadline=request.proposed_deadline,
+                           proposed_fresh_until=request.proposed_fresh_until)
         changes.update(responder=actor, response=request.reason or request.response)
         if request.response == "accept":
             if notice.terms.type == "supply_request":
@@ -1058,7 +1128,10 @@ def advance(world: "World") -> None:
                 _active_project_work(world, notice.appointment) or
                 (session := village_state.crew_sessions.get(notice.appointment.project)) is not None
                 and session.status == "active" and session.appointment_id == notice.appointment.id)
-        )) if limit is not None else _overdue(world, notice)
+        )) if limit is not None else (
+            village_state.minute > notice.proposed_deadline
+            if notice.status == "seen" and notice.proposed_deadline is not None
+            else _overdue(world, notice))
         if expired:
             if notice.linked_order_id:
                 order = village_state.economy.orders[notice.linked_order_id]
@@ -1164,7 +1237,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
         "village_request_supply": (SupplyIntent, "Request priced supply with a real supplier, purpose, quantity, deadline and freshness. The engine resolves your workplace and price; post only at a physical channel."),
         "village_propose_meeting": (MeetingIntent, "Propose a project appointment; the engine resolves the work site and partner."),
         "village_schedule_crew": (CrewIntent, "Schedule a crew by project, earliest_start and participant_ids. The engine sets a 60-minute window; use a real encounter, board or partner inbox for consent. Accepted partners may confirm together at the site without another paper receipt."),
-        "village_respond_to_request": (RespondIntent, "Respond to a personally known request using a physical channel; the engine resolves the version and author's box."),
+        "village_respond_to_request": (RespondIntent, "Respond through a physical channel. For infeasible same-day supply, propose a next-day deadline and proposed_fresh_until; the buyer must revise terms before acceptance."),
         "village_update_request": (UpdateIntent, "Revise your personally known uncommitted request at a physical channel; provide changed business terms only."),
         "village_check_messages": (CheckMessagesIntent, "Read changed paper at the square board or your workplace inbox while there; unchanged checks are rejected."),
         "village_share_known_notice": (ShareIntent, "Share personally received relevant new notice news with a resident actually here."),

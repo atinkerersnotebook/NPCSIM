@@ -1,6 +1,6 @@
 import pytest
 
-from npc_sim import village, village_life, village_turns
+from npc_sim import village, village_fallback, village_life, village_turns
 from npc_sim.world import World
 from npc_sim.storage import read_json
 from npc_sim.models import Scenario
@@ -79,7 +79,7 @@ def test_one_real_daily_meal_at_tavern(cast, stock, source):
     assert not life(cast, "iona").hungry
 
 
-def test_early_tavern_meal_and_early_bed_keep_the_next_morning_wake(cast):
+def test_early_tavern_meal_does_not_allow_daytime_sleep(cast):
     walk(cast, "iona", "square-cottages", "square-tavern")
     advance_to(cast, 1080)
     state = cast["iona"].state.village
@@ -90,11 +90,15 @@ def test_early_tavern_meal_and_early_bed_keep_the_next_morning_wake(cast):
     advance_to(cast, state.residents["iona"].available_at)
     assert act(cast["iona"], "village_eat")["code"] == "NO_MEAL_DUE"
     walk(cast, "iona", "square-tavern", "square-cottages")
-    assert do(cast, "iona", "village_sleep")["code"] == "SLEEP_STARTED"
-    assert life(cast, "iona").sleep_until == 1440 + cast["iona"].scenario.village.residents["iona"].wake_minute
+    advance_to(cast, state.residents["iona"].available_at)
+    assert act(cast["iona"], "village_sleep")["code"] == "REST_NOT_DUE"
     advance_to(cast, 1140)
     assert life(cast, "iona").meals["0:daily"].status == "eaten"
-    assert life(cast, "iona").sleeping
+    assert not life(cast, "iona").sleeping
+    advance_to(cast, cast["iona"].scenario.village.residents["iona"].bed_minute)
+    assert do(cast, "iona", "village_sleep")["code"] == "SLEEP_STARTED"
+    resident = cast["iona"].scenario.village.residents["iona"]
+    assert life(cast, "iona").sleep_until == cast["iona"].state.village.minute + (resident.wake_minute - resident.bed_minute) % 1440
 
 
 def test_early_sleep_requires_completed_supper_and_does_not_skip_it(cast):
@@ -102,6 +106,58 @@ def test_early_sleep_requires_completed_supper_and_does_not_skip_it(cast):
     advance_to(cast, 1080)
     assert act(cast["iona"], "village_sleep")["code"] == "REST_NOT_DUE"
     assert not life(cast, "iona").sleeping
+
+
+def test_missing_previous_nights_sleep_does_not_allow_daytime_sleep(cast):
+    advance_to(cast, 1440 + 720)
+    world = cast["iona"]
+    assert village_life.rest_due(world.scenario.village.residents["iona"], life(cast, "iona"),
+                                 world.state.village.minute)
+    assert act(world, "village_sleep")["code"] == "REST_NOT_DUE"
+    assert not life(cast, "iona").sleeping
+
+
+def test_elsie_closes_at_nine_after_everyone_eats_and_goes_home(cast):
+    world = cast["elsie"]
+    state = world.state.village
+    config = world.scenario.village
+    for rid, resident in config.residents.items():
+        if rid != "elsie":
+            cast[rid].actor.location_id = resident.home
+    advance_to(cast, 1255)
+    for rid in config.residents:
+        life(cast, rid).meals["0:daily"].status = "eaten"
+    assert act(world, "village_sleep")["code"] == "REST_NOT_DUE"
+    advance_to(cast, 1260)
+    cast["iona"].actor.location_id = "tavern"
+    assert act(world, "village_sleep")["code"] == "REST_NOT_DUE"
+    cast["iona"].actor.location_id = config.residents["iona"].home
+    life(cast, "jory").meals["0:daily"].status = "missed"
+    assert act(world, "village_sleep")["code"] == "REST_NOT_DUE"
+    life(cast, "jory").meals["0:daily"].status = "eaten"
+    assert village_life.early_inn_close_ready(world, "elsie")
+    assert not village_life.early_inn_close_ready(cast["jory"], "jory")
+    config.anti_idle = True
+    assert any(choice["action_id"] == "village_sleep" for choice in village_fallback.candidates(world))
+    assert do(cast, "elsie", "village_sleep")["code"] == "SLEEP_STARTED"
+    assert life(cast, "elsie").sleep_until == 1440 + config.residents["elsie"].wake_minute
+    assert not village_life.inn_open(world)
+    advance_to(cast, life(cast, "elsie").sleep_until)
+    assert not life(cast, "elsie").sleeping
+
+
+def test_living_inn_closes_early_when_guests_are_home(tmp_path):
+    value = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-living.json"))
+    value.village.start_minute = 1260
+    world = World(value, tmp_path / "early-close.json", "early-close", "elsie", "session-elsie")
+    state = world.state.village
+    for rid, resident in value.village.residents.items():
+        actor = world if rid == "elsie" else world.bind(rid, f"session-{rid}")
+        state.residents[rid].life.meals["0:daily"].status = "eaten"
+        if rid != "elsie":
+            actor.actor.location_id = resident.home
+    assert act(world, "village_sleep")["code"] == "SLEEP_STARTED"
+    assert state.residents["elsie"].life.sleep_until == 1440 + value.village.residents["elsie"].wake_minute
 
 
 def test_no_remote_meals_and_tea_alone_is_not_food(cast):

@@ -214,6 +214,11 @@ def route_blocker(world: "World", args: dict[str, Any]) -> tuple[str, str] | Non
 def record_location_transition(world: "World", origin: str, destination: str) -> None:
     config, state = village.context(world)
     fallback = state.residents[world.actor_id].fallback
+    if world.scenario.id == "millhaven-resilient" and world.actor_id == config.livestock.keeper:
+        from npc_sim import village_depot
+        if destination == village_depot.FEED_STORE:
+            fallback.feed_store_stock = state.stocks[destination].copy()
+            fallback.feed_store_checked_day = state.minute // 1440
     goal = fallback.route_goal
     if goal and _route_evidence(world) != goal.evidence:
         goal.blocked_reason = ""
@@ -390,6 +395,131 @@ def _travel_choice(world: "World", destination: str, task: str, reason: str,
             "destination": destination, "priority": priority, "reason": reason}
 
 
+def _egg_negotiation_choices(world: "World") -> list[dict[str, Any]]:
+    from npc_sim import village_communication
+    from npc_sim.village_economy_models import VillageSupplierOrder
+
+    _, state = village.context(world)
+    communication = state.communication
+    livestock = state.livestock
+    economy = state.economy
+    if not communication or not livestock or not livestock.config.enabled or economy is None:
+        return []
+    rid = world.actor_id
+    if rid not in {livestock.config.keeper, economy.config.innkeeper}:
+        return []
+    known = communication.knowledge.get(rid, {})
+    choices = []
+    for memory in known.values():
+        notice = memory.snapshot
+        terms = notice.terms
+        if (memory.confidence != "direct" or terms.type != "supply_request" or terms.subject != "eggs"
+                or terms.recipients != [livestock.config.keeper] or notice.status not in {"posted", "seen"}
+                or terms.quantity is None or terms.destination is None or terms.unit_price is None
+                or terms.delivery_fee is None or terms.required_fresh_until is None
+                or terms.due_at is None):
+            continue
+        if rid == livestock.config.keeper:
+            if notice.author == rid or notice.responder == rid:
+                continue
+            if terms.due_at <= state.minute:
+                continue
+            proposed_day = state.minute // 1440 + 1
+            if notice.revised_from_counteroffer and terms.due_at // 1440 in {state.minute // 1440, proposed_day}:
+                response = "accept"
+                arguments = {"request_id": notice.id, "response": response}
+            else:
+                if terms.due_at // 1440 != state.minute // 1440:
+                    continue
+                response = "propose"
+                if notice.status != "posted" or notice.proposed_deadline is not None:
+                    continue
+                use_at = proposed_day * 1440 + 1140
+                deadline = use_at - economy.config.delivery_lead_minutes
+                arguments = {"request_id": notice.id, "response": response,
+                             "proposed_deadline": deadline, "proposed_fresh_until": use_at}
+                current = VillageSupplierOrder(
+                    id="candidate-egg-current", request_key=f"notice:{notice.id}",
+                    buyer=notice.author, supplier=rid, source="farm", destination=terms.destination,
+                    product="eggs", quantity=terms.quantity, price=terms.unit_price,
+                    delivery_fee=terms.delivery_fee, deadline=terms.due_at,
+                    required_fresh_until=terms.required_fresh_until, created_at=state.minute)
+                available = village_economy.available_for_order(world, "farm", "eggs", current.required_fresh_until)
+                if available >= current.quantity:
+                    feasible_today, _ = village_economy.order_feasibility(world, current)
+                else:
+                    plan_today, _ = village_economy.production_plan(world, current)
+                    feasible_today = bool(plan_today)
+                if feasible_today:
+                    continue
+            deadline = arguments["proposed_deadline"] if response == "propose" else terms.due_at
+            fresh_until = arguments["proposed_fresh_until"] if response == "propose" else terms.required_fresh_until
+            order = VillageSupplierOrder(
+                id="candidate-egg", request_key=f"notice:{notice.id}", buyer=notice.author,
+                supplier=rid, source="farm", destination=terms.destination, product="eggs",
+                quantity=terms.quantity, price=terms.unit_price, delivery_fee=terms.delivery_fee,
+                deadline=deadline, required_fresh_until=fresh_until,
+                created_at=state.minute)
+            stock = village_economy.available_for_order(world, "farm", "eggs", order.required_fresh_until)
+            if stock >= order.quantity:
+                feasible, _ = village_economy.order_feasibility(world, order)
+            else:
+                plan, _ = village_economy.production_plan(world, order)
+                feasible = bool(plan)
+            if not feasible:
+                continue
+        else:
+            if (notice.author != rid or notice.responder != livestock.config.keeper
+                    or notice.status != "seen" or not notice.proposed_deadline
+                    or not notice.proposed_fresh_until or notice.proposed_deadline <= state.minute):
+                continue
+            if notice.proposed_deadline // 1440 not in {state.minute // 1440, state.minute // 1440 + 1}:
+                continue
+            next_day_plans = [plan for plan in economy.config.meal_plans
+                              if plan.id == "supper" and plan.portions > 0]
+            from npc_sim import village_livestock
+            dairy = village_livestock.requests(world, rid)
+            needs_eggs = (notice.proposed_fresh_until <= notice.proposed_deadline // 1440 * 1440 + 1140
+                          and bool(next_day_plans)
+                          and (notice.proposed_deadline // 1440 > state.minute // 1440
+                               and min(2, (next_day_plans[0].portions + 1) // 2) >= terms.quantity
+                               or notice.proposed_deadline // 1440 == state.minute // 1440
+                               and any(inputs.get("eggs", 0) >= terms.quantity for _, _, inputs in dairy))
+                          and village_economy.usable_stock(world, terms.destination, "eggs",
+                                                             notice.proposed_fresh_until) < terms.quantity)
+            if not needs_eggs:
+                response = "decline"
+                arguments = {"notice_id": notice.id, "expected_version": notice.version,
+                             "reason": "Tomorrow's supper does not need these eggs", "status": "cancelled"}
+            else:
+                arguments = {"request_id": notice.id, "changes": {
+                    "due_at": notice.proposed_deadline,
+                    "required_fresh_until": notice.proposed_fresh_until}}
+                response = "revise"
+        try:
+            channel = village_communication._intent_channel(
+                world, terms, author=notice.author if response in {"accept", "propose"} else None)
+        except village_communication.ChannelUnavailable:
+            recipient = notice.author if response in {"accept", "propose"} else livestock.config.keeper
+            box = next((key for key, owner in communication.boxes.items() if owner == recipient), None)
+            if box and world.state.entities.get(box):
+                travel = _travel_choice(world, world.state.entities[box].location,
+                                        f"supply:eggs:reach-{recipient}:{notice.id}",
+                                        "Reach the recipient's real workplace inbox with the egg request terms.", "P3")
+                if travel:
+                    choices.append(travel)
+            continue
+        if response == "decline":
+            arguments.update(channel)
+        choices.append({"task_id": f"supply:eggs:{response}:{notice.id}",
+                        "action_id": ("village_update_request" if response == "revise" else
+                                      "village_notice_close" if response == "decline" else
+                                      "village_respond_to_request"),
+                        "arguments": arguments, "priority": "P2",
+                        "reason": "Negotiate only a physically received, funded and feasible next-day egg supply."})
+    return choices
+
+
 def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
     config, state = village.context(world)
     person = state.residents[world.actor_id]
@@ -399,6 +529,9 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
     if not (config.residents[world.actor_id].wake_minute <= state.minute % 1440
             < village_life.production_closing_minute(world, world.actor_id)):
         return choices
+    if world.scenario.id == "millhaven-resilient" and world.actor_id == config.livestock.keeper:
+        choices.extend(_feed_store_choices(world))
+    choices.extend(_egg_negotiation_choices(world))
 
     # The check-in is scheduled, not triggered by privileged knowledge of a remote breakdown.
     personally_informed = any(message.get("actor_id") == config.miller and "mill drive fail" in message.get("text", "")
@@ -577,6 +710,84 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
     return choices
 
 
+def _feed_ration(world: "World") -> dict[str, int]:
+    from npc_sim import village_recycling
+
+    state = village.context(world)[1]
+    day = state.minute // 1440
+    return {"hay": int(not state.livestock.cow.fed or state.livestock.cow.day != day),
+            "grain": (village_recycling.hen_ration(world)[0]
+                      if not state.livestock.hens.fed or state.livestock.hens.day != day else 0)}
+
+
+def _feed_trip_blocker(world: "World", farm: str, store: str) -> str | None:
+    state = village.context(world)[1]
+    path = village.route(world, farm, store, known_routes=state.residents[world.actor_id].known_routes or None)
+    if path is None:
+        return "No known passable route from farm to the feed store."
+    limits = _obligation_limits(world)
+    to_farm = village.route(world, world.actor.location_id, farm,
+                            known_routes=state.residents[world.actor_id].known_routes or None)
+    if to_farm is None:
+        return "No known passable route back to the farm."
+    if limits and state.minute + 5 * (len(to_farm) + len(path) * 2) + 15 > min(limits):
+        return "Not enough time for physical carrying, unloading and return before the next meal or rest obligation."
+    return None
+
+
+def _feed_store_choices(world: "World") -> list[dict[str, Any]]:
+    from npc_sim import village_depot, village_services
+
+    config, state = village.context(world)
+    person = state.residents[world.actor_id]
+    fallback = person.fallback
+    location = world.actor.location_id
+    store = village_depot.FEED_STORE
+    farm = config.residents[world.actor_id].work
+    day = state.minute // 1440
+    ration = _feed_ration(world)
+    cargo = [item for item in person.shipments if item.depot_transfer == "deposit" and item.destination == store]
+    if cargo:
+        if location == store:
+            return [{"task_id": "feed:unload", "action_id": "village_unload_goods", "arguments": {},
+                     "priority": "P1", "reason": "Unload the real carried feed before animal care."}]
+        route = _travel_choice(world, store, "feed:deliver", "Carry the loaded feed to its real store.", "P1")
+        return [route] if route else []
+    if person.shipments or not any(ration.values()):
+        return []
+    if location == store:
+        fallback.feed_store_stock = state.stocks[store].copy()
+        fallback.feed_store_checked_day = day
+    if fallback.feed_store_checked_day != day:
+        route = _travel_choice(world, store, "feed:inspect", "Check today's feed at the physical store.", "P2")
+        return [route] if route else []
+    missing = {product: max(0, quantity - fallback.feed_store_stock.get(product, 0))
+               for product, quantity in ration.items()}
+    if not any(missing.values()):
+        return []
+    if _feed_trip_blocker(world, farm, store):
+        return []
+    if location != farm:
+        route = _travel_choice(world, farm, "feed:collect", "Collect unreserved feed at the farm.", "P2")
+        return [route] if route else []
+    capacity = village_services.foot_capacity(world, world.actor_id)
+    goods = {}
+    for product in ("hay", "grain"):
+        available = max(0, village_economy.usable_stock(world, farm, product, state.minute)
+                        - village_economy.protected_quantity(world, farm, product))
+        amount = min(missing[product], available, capacity)
+        if amount:
+            goods[product] = amount
+            capacity -= amount
+    if not goods:
+        return []
+    args = {"goods": goods}
+    if action_blocker(world, "village_store_feed", args, check_wait=False) is not None:
+        return []
+    return [{"task_id": "feed:load", "action_id": "village_store_feed", "arguments": args,
+             "priority": "P2", "reason": "Move only unreserved farm feed needed for today's cow and hens."}]
+
+
 def candidates(world: "World") -> list[dict[str, Any]]:
     config, state = village.context(world)
     resident, person = config.residents[world.actor_id], state.residents[world.actor_id]
@@ -584,10 +795,10 @@ def candidates(world: "World") -> list[dict[str, Any]]:
     if not enabled(world) or life is None or life.sleeping or life.work or person.available_at > state.minute:
         return []
     choices: list[dict[str, Any]] = []
-    if village_life.rest_due(resident, life, state.minute) or village_life.early_sleep_ready(world, world.actor_id):
+    if village_life.rest_due(resident, life, state.minute) or village_life.early_inn_close_ready(world, world.actor_id):
         if world.actor.location_id == resident.home:
             choices.append({"task_id": "need:sleep", "action_id": "village_sleep", "arguments": {},
-                            "priority": "P1", "reason": "Required sleep at your actual home."})
+                            "priority": "P1", "reason": "Sleep at your actual home; the inn may close after everyone has eaten and gone home."})
         return choices
     meal = village_life.available_meal(world, world.actor_id, include_missed=True)
     if meal and world.actor.location_id == "tavern":
@@ -843,6 +1054,32 @@ def observation(world: "World") -> dict[str, Any]:
     _, state = village.context(world)
     fallback = state.residents[world.actor_id].fallback
     revision = context_revision(world)
+    feed_plan = None
+    if world.scenario.id == "millhaven-resilient" and world.actor_id == world.scenario.village.livestock.keeper:
+        from npc_sim import village_depot
+        ration = _feed_ration(world)
+        if world.actor.location_id == village_depot.FEED_STORE:
+            fallback.feed_store_stock = state.stocks[village_depot.FEED_STORE].copy()
+            fallback.feed_store_checked_day = state.minute // 1440
+        if fallback.feed_store_checked_day != state.minute // 1440:
+            feed_plan = {"status": "check_store_in_person", "daily_ration": ration}
+        else:
+            missing = {product: max(0, quantity - fallback.feed_store_stock.get(product, 0))
+                       for product, quantity in ration.items()}
+            feed_plan = {"status": "personally_checked", "daily_ration": ration,
+                         "last_known_store_stock": fallback.feed_store_stock.copy(), "missing": missing}
+            if world.actor.location_id == world.scenario.village.residents[world.actor_id].work:
+                available = {product: max(0, village_economy.usable_stock(world, world.actor.location_id,
+                                                                            product, state.minute)
+                                           - village_economy.protected_quantity(world, world.actor.location_id,
+                                                                                product))
+                             for product in missing}
+                feed_plan["farm_unreserved"] = available
+                feed_plan["shortage"] = {product: quantity - available[product]
+                                         for product, quantity in missing.items() if quantity > available[product]}
+                if any(missing.values()):
+                    feed_plan["trip_blocker"] = _feed_trip_blocker(
+                        world, world.actor.location_id, village_depot.FEED_STORE)
     return {"fallback": {
         "context_revision": revision,
         "blocked_tasks": [{**item.model_dump(), "retry_suppressed": item.context_revision == _retry_revision(world, item.action_id)}
@@ -854,6 +1091,7 @@ def observation(world: "World") -> dict[str, Any]:
         "route_goal": fallback.route_goal.model_dump() if fallback.route_goal else None,
         "repeated_supplier_searches": repeated_supplier_searches(world),
         "eligible_candidates": candidates(world),
+        **({"feed_store_plan": feed_plan} if feed_plan is not None else {}),
         "information_check": ({"last_board_visit": fallback.board_last_checked,
                                "next_board_visit": (fallback.board_last_checked + village_extensions.policy(world).board_check_minutes
                                                     if fallback.board_last_checked >= 0 else state.minute),

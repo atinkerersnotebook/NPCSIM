@@ -63,6 +63,9 @@ class NoticeVersion(CommunicationModel):
     updated_at: Number
     responder: Text | None = None
     response: Text | None = None
+    proposed_deadline: Number | None = None
+    proposed_fresh_until: Number | None = None
+    revised_from_counteroffer: bool = False
     linked_order_id: Text | None = None
     order_snapshot: dict = Field(default_factory=dict)
     appointment: Appointment | None = None
@@ -141,6 +144,8 @@ class UpdateNotice(ChangeNotice):
 class ReplyNotice(ChangeNotice):
     response: Literal["accept", "reject", "propose"]
     reason: Text | None = None
+    proposed_deadline: Number | None = None
+    proposed_fresh_until: Number | None = None
 
 
 class TellNotice(CommunicationModel):
@@ -185,6 +190,8 @@ class RespondIntent(CommunicationModel):
     request_id: Text
     response: Literal["accept", "reject", "propose"]
     reason: Text | None = None
+    proposed_deadline: Number | None = None
+    proposed_fresh_until: Number | None = None
 
 
 class UpdateIntent(CommunicationModel):

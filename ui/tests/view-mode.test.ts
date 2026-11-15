@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { adventureStatus, canAskQuestions, canExtendBudget, canReopenAdventure, isAdminView, playerCommandVisible, simulationClock, villageClockText, villageClockTime, viewMode, viewNavigation } from "../src/view-mode.ts";
+import { adventureStatus, canAskQuestions, canExtendBudget, canReopenAdventure, dashboardTab, isAdminView, playerCommandVisible, simulationClock, villageClockText, villageClockTime, viewMode, viewNavigation } from "../src/view-mode.ts";
 import { budgetExtensionSchema, runModeSchema } from "../src/contracts.ts";
 
 test("run mode requires an explicit boolean and current run ID", () => {
@@ -126,6 +126,17 @@ test("three views are addressable without changing the adventure", () => {
     assert.ok(markup.includes('href="/?view=admin"'));
     assert.ok(markup.includes('href="/?view=world"'));
   }
+});
+
+test("dashboard tabs restore deep links and default to setup without an episode", () => {
+  assert.equal(dashboardTab("", false, false), "cast");
+  assert.equal(dashboardTab("", true, false), "cast");
+  assert.equal(dashboardTab("", false, true), "live");
+  assert.equal(dashboardTab("#story", true, true), "story");
+  assert.equal(dashboardTab("#technical", true, false), "technical");
+  assert.equal(dashboardTab("#technical", false, true), "live");
+  assert.equal(dashboardTab("#play", false, true), "live");
+  assert.equal(dashboardTab("#unknown", false, false), "cast");
 });
 
 test("player controls expose only the actions relevant to the current adventure", () => {

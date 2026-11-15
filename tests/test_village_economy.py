@@ -407,6 +407,40 @@ def test_inn_can_cook_final_two_at_1805_when_inputs_and_time_remain(world):
     assert state.stocks["tavern"]["bread"] == 0
 
 
+def test_inn_can_cook_final_odd_portion_before_service(world):
+    state = world.state.village
+    state.economy.config.meal_plans = [VillageMealPlan(
+        id="supper", use_minute=1140, portions=11, recipe_portions={"bread": 11})]
+    state.minute = 1135
+    add(world, "tavern", "meals", 10, expiry=1200, produced=1080)
+    add(world, "tavern", "bread", 1, expiry=1200, produced=1080)
+    assert economy.meal_requirements(world)[0]["unmet_recipe_portions"] == {"bread": 1}
+    result = act(world, "village_work")
+    assert result["outcome"] == "APPLIED", result
+    assert state.stocks["tavern"]["meals"] == 12
+    assert state.stocks["tavern"]["bread"] == 0
+    assert economy.production_batch_limit(world, "village_work") == 0
+    world.save()
+    restored = World(world.scenario, world.path, "economy", "elsie", "session-elsie")
+    assert restored.state.village.stocks["tavern"]["meals"] == 12
+    assert economy.production_batch_limit(restored, "village_work") == 0
+
+
+def test_readiness_counts_complete_batch_when_recipe_demand_is_odd(world):
+    state = world.state.village
+    state.economy.config.meal_plans = [VillageMealPlan(
+        id="supper", use_minute=1140, portions=12,
+        recipe_portions={"bread": 8, "fish": 4})]
+    state.minute = 1135
+    add(world, "tavern", "meals", 7, expiry=1200, produced=1080)
+    add(world, "tavern", "bread", 1, expiry=1200, produced=1080)
+    readiness = economy.meal_readiness(world)[0]
+    assert readiness["prepared_portions"] == 7
+    assert readiness["cookable_portions"] == 2
+    assert readiness["projected_unserved"] == 3
+    assert readiness["missing_inputs"] == ["fish"]
+
+
 def test_seeded_inventory_reconciles_across_seven_persisted_days(tmp_path):
     from npc_sim.storage import read_json
     from test_village_expanded import ROOT

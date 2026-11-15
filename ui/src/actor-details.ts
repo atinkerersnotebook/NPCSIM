@@ -10,6 +10,10 @@ export interface DetailActor {
   activity?: string;
 }
 
+export function siteStockText(stock: Record<string, number>): string {
+  return Object.entries(stock).map(([item, quantity]) => `${item.replaceAll("-", " ")}: ${quantity}`).join(", ") || "None";
+}
+
 export function actorDetailsMarkup(state: State, agent: DetailActor): string {
   const world = state.world;
   const village = world?.village;
@@ -42,7 +46,7 @@ export function actorDetailsMarkup(state: State, agent: DetailActor): string {
     const locationId = actor?.location_id ?? agent.locationId;
     const stock = village.stocks[locationId];
     if (stock) facts.push([`Stock at ${place} (site, not personal)`,
-      Object.entries(stock).map(([item, quantity]) => `${item.replaceAll("-", " ")}: ${quantity}`).join(", ") || "None"]);
+      siteStockText(stock)]);
     if (!agent.visitor && actor) {
       const coins = village.coins[agent.id];
       if (coins !== undefined) facts.push(["Money", `${coins} coins`]);

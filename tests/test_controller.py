@@ -24,6 +24,38 @@ SOLUTION = [
 ]
 
 
+@pytest.mark.asyncio
+async def test_generation_handoff_from_saved_midnight_is_explicit_and_reversible(configuration):
+    data, config = configuration
+    config.world.scenario = "millhaven-generations"
+    controller = Controller(ROOT, data, config)
+    await controller.start_worker()
+    try:
+        await controller.command("start", {"scenario_id": "millhaven-generations"})
+        first = controller.status()["world"]
+        assert first["village"]["legacy"]["handoff"] is None
+        await controller.command("save_episode", {
+            "run_id": controller.run["id"], "name": "Generation one checkpoint"})
+        from npc_sim import episode_saves
+        source = episode_saves.read_save(data, next((data / "saves").glob("*.json")).stem)
+        source.world.village.minute = 1440
+        source.world.village.legacy.last_day = 1
+        source.id = "a" * 32
+        source.name = "Generation one midnight"
+        episode_saves.write_save(data, source)
+        save_id = source.id
+        await controller.command("start", {"scenario_id": "millhaven-generations",
+                                           "generation_save_id": save_id})
+        next_world = controller.status()["world"]
+        assert next_world["village"]["legacy"]["lineage"]["rowan"] == ["Rowan"]
+        assert next_world["village"]["legacy"]["handoff"]["save_id"] == save_id
+        assert controller.run["agent_profiles"]["rowan"]["name"] == "Rina Woodward"
+        await controller.command("start", {"scenario_id": "millhaven-generations"})
+        assert controller.status()["world"]["village"]["legacy"]["handoff"] is None
+    finally:
+        await controller.shutdown()
+
+
 def assessment_response(messages):
     payload = json.loads(messages[1]["content"])
     passed = payload["final_verification"]["result"]["status"] == "achieved"

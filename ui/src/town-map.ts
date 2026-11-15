@@ -2,9 +2,10 @@ import { z } from "zod";
 import type { RunEvent, State } from "./contracts.ts";
 import { escape } from "./html.ts";
 import { villageClockTime } from "./view-mode.ts";
-import { actorDetailsMarkup } from "./actor-details.ts";
+import { actorDetailsMarkup, siteStockText } from "./actor-details.ts";
 
 const mapImage = new URL("./assets/millhaven.png", import.meta.url).href;
+const resilientMapImage = new URL("./assets/millhaven-next.png", import.meta.url).href;
 const bubbleDuration = 18_000;
 
 // Pixel anchors on the supplied 1024 x 768 illustration, not simulated indoor coordinates.
@@ -23,7 +24,9 @@ export const townMapAnchors: Readonly<Record<string, { x: number; y: number }>> 
   woods: { x: 908, y: 118 },
   bridge: { x: 706, y: 356 },
   riverbank: { x: 750, y: 176 },
-  "tavern-yard": { x: 672, y: 648 }
+  "tavern-yard": { x: 672, y: 648 },
+  "supply-depot": { x: 440, y: 365 },
+  "farm-feed-store": { x: 470, y: 205 }
 };
 
 export interface MapAgent {
@@ -149,13 +152,17 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
       </div>
     </div>
     <p class="town-map-help">Actual recorded locations; markers are grouped at buildings, not exact indoor positions.
-      Select a character for details. Scroll to explore; zoom for a closer look.
+      Hover or focus a location for its current site stock; select a character for details.
+      Scroll to explore; zoom for a closer look.
       Speech bubbles show confirmed spoken words for 18 seconds, never private thoughts.</p>
     <div class="town-map-scroll" tabindex="0" role="region" aria-label="Scrollable town map">
       <div class="town-map-canvas" style="width:min(${zoom * 100}%,${zoom * 103}vh);min-width:${zoom * 760}px">
-        <img src="${escape(mapImage)}" width="1024" height="768" alt="Illustrated map of Millhaven, with its village square, farms, workshops, tavern and river." draggable="false">
-        ${[...groups].map(([locationId, group]) => {
-          const anchor = townMapAnchors[locationId];
+        <img src="${escape(state.run?.scenario_id === "millhaven-resilient" ? resilientMapImage : mapImage)}" width="1024" height="768" alt="Illustrated map of Millhaven, with its village square, farms, workshops, tavern and river." draggable="false">
+        ${Object.entries(townMapAnchors).filter(([id]) => world.entities[id]?.kind === "location")
+          .map(([locationId, anchor]) => {
+          const group = groups.get(locationId) ?? [];
+          const name = world.entities[locationId].name;
+          const stock = world.village!.stocks[locationId];
           const bubbles = active.filter(line => line.locationId === locationId
             && group.some(agent => agent.id === line.actorId));
           return `<div class="town-map-place${anchor.y < 240 ? " bubbles-below" : ""}${anchor.x < 160 ? " align-left" : anchor.x > 860 ? " align-right" : ""}"
@@ -164,8 +171,13 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
             ${bubbles.length ? `<div class="town-map-bubbles" aria-live="polite">
               ${bubbles.map(line => `<div class="town-map-bubble" data-map-speech="${escape(line.id)}">${lineMarkup(line)}</div>`).join("")}
             </div>` : ""}
-            <span class="town-map-location">${escape(group[0].location)} / ${group.length}</span>
-            <div class="town-map-cast">${group.map(actorButton).join("")}</div>
+            <span class="town-map-location-wrap"><button type="button" class="town-map-location"
+              aria-label="${escape(`${name}. Current site stock`)}" aria-describedby="town-stock-${escape(locationId)}">
+              ${escape(name)}${group.length ? ` / ${group.length}` : ""}</button>
+              <span id="town-stock-${escape(locationId)}" class="actor-details-popover town-map-stock" role="tooltip">
+                <strong>${escape(name)}</strong><span>Current site stock: ${escape(stock ? siteStockText(stock) : "No stock recorded")}</span>
+              </span></span>
+            ${group.length ? `<div class="town-map-cast">${group.map(actorButton).join("")}</div>` : ""}
           </div>`;
         }).join("")}
       </div>

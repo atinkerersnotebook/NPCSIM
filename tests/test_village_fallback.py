@@ -142,7 +142,7 @@ def test_finn_preservation_requires_funded_physical_log_and_uncommitted_fish(tmp
     assert restored.state.village.stocks["riverbank"]["preserved-fish"] == 1
 
 
-def test_early_supper_is_an_eligible_action_and_sleep_follows_at_home(tmp_path):
+def test_early_supper_is_eligible_but_sleep_waits_for_bedtime(tmp_path):
     world = make_world(tmp_path, minute=1080, living=True)
     world.actor.location_id = "tavern"
     village_goods.put(world, "tavern", "bread", len(world.scenario.village.residents))
@@ -151,6 +151,9 @@ def test_early_supper_is_an_eligible_action_and_sleep_follows_at_home(tmp_path):
     assert not any(choice["action_id"] == "village_eat" for choice in village_fallback.candidates(world))
     village.advance(world, world.state.village.residents["rowan"].available_at - world.state.village.minute)
     world.actor.location_id = world.scenario.village.residents["rowan"].home
+    assert not any(choice["action_id"] == "village_sleep" for choice in village_fallback.candidates(world))
+    assert act(world, "village_sleep")["code"] == "REST_NOT_DUE"
+    village.advance(world, world.scenario.village.residents["rowan"].bed_minute - world.state.village.minute)
     assert any(choice["action_id"] == "village_sleep" for choice in village_fallback.candidates(world))
     assert act(world, "village_sleep")["code"] == "SLEEP_STARTED"
 

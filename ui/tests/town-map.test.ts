@@ -66,6 +66,43 @@ test("map anchors cover every pictured town location using the supplied illustra
   assert.equal(readFileSync(new URL("../src/assets/millhaven.png", import.meta.url)).subarray(1, 4).toString(), "PNG");
 });
 
+test("resilient scenario uses its supplied map and places depot visitors on-map", () => {
+  const state = fixture();
+  state.run!.scenario_id = "millhaven-resilient";
+  state.world!.entities["supply-depot"] = {
+    ...state.world!.entities["village-square"], name: "Communal granary and supply depot"
+  };
+  const markup = townMapMarkup(state, [{ id: "nella", name: "Nella", locationId: "supply-depot",
+    location: "Communal granary and supply depot", activity: "Counting stock", current: true, deciding: false }]);
+  assert.match(markup, /millhaven-next\.png/);
+  assert.match(markup, /data-map-location="supply-depot"/);
+  assert.ok(!markup.includes("Off map / location unverified"));
+  state.run!.scenario_id = "millhaven-living";
+  assert.match(townMapMarkup(state, []), /millhaven\.png/);
+});
+
+test("every pictured location exposes its live site stock even without a visitor", () => {
+  const state = fixture();
+  state.world!.village!.stocks["mill-shed"] = { grain: 3 };
+  state.world!.village!.stocks.forge.iron = 7;
+  const markup = townMapMarkup(state, []);
+  assert.equal((markup.match(/data-map-location=/g) ?? []).length,
+    Object.keys(townMapAnchors).filter(id => state.world!.entities[id]?.kind === "location").length);
+  assert.match(markup, /data-map-location="mill-shed"[\s\S]*?Current site stock: grain: 3/);
+  assert.match(markup, /data-map-location="forge"[\s\S]*?Current site stock: iron: 7/);
+  assert.match(markup, /data-map-location="tavern-yard"[\s\S]*?No stock recorded/);
+  assert.match(markup, /aria-describedby="town-stock-mill-shed"/);
+
+  state.world!.entities["farm-feed-store"] = {
+    name: "Feed <shed>", kind: "location", description: "" };
+  state.world!.village!.stocks["farm-feed-store"] = { "hay<script>": 2 };
+  const secondary = townMapMarkup(state, []);
+  assert.match(secondary, /data-map-location="farm-feed-store"[\s\S]*?hay&lt;script&gt;: 2/);
+  assert.ok(!secondary.includes("<script>"));
+  state.world!.village!.stocks["farm-feed-store"]["hay<script>"] = 1;
+  assert.match(townMapMarkup(state, []), /hay&lt;script&gt;: 1/);
+});
+
 test("World view renders each resident once on the map without changing state or adding simulation controls", () => {
   const state = fixture();
   const before = JSON.stringify(state);
@@ -123,10 +160,12 @@ test("NPC positions follow the authoritative world, not a stale observation or m
   const torvin = agents.find(agent => agent.id === "torvin")!;
   const markup = townMapMarkup(state, [torvin]);
   assert.ok(markup.includes('data-map-location="forge"'));
+  assert.match(markup, /data-map-location="forge"[\s\S]*?data-map-actor="torvin"/);
   state.world!.actors.torvin.location_id = "tavern";
   const moved = townMapMarkup(state, [monitoredAgents(state).find(agent => agent.id === "torvin")!]);
   assert.ok(moved.includes('data-map-location="tavern"'));
-  assert.ok(!moved.includes('data-map-location="forge"'));
+  assert.match(moved, /data-map-location="tavern"[\s\S]*?data-map-actor="torvin"/);
+  assert.equal((moved.match(/data-map-actor="torvin"/g) ?? []).length, 1);
 });
 
 test("unpictured and unverified locations stay explicitly off map and departed visitors are omitted", () => {
@@ -142,7 +181,7 @@ test("unpictured and unverified locations stay explicitly off map and departed v
   assert.ok(markup.includes("Millhaven iron mine (not pictured)"));
   assert.ok(markup.includes("(last observed / not live)"));
   assert.ok(!markup.includes('data-map-location="iron-mine"'));
-  assert.ok(!markup.includes('data-map-location="forge"'));
+  assert.ok(markup.includes('data-map-location="forge"'));
   assert.ok(markup.includes('data-map-actor="visitor"'));
   assert.ok(!markup.includes('data-map-actor="departed"'));
 });

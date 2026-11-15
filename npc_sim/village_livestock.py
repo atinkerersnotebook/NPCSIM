@@ -397,16 +397,21 @@ def apply(world, action, args):
     elif operation in {"cow", "hens"}:
         grain, scraps = village_recycling.hen_ration(world)
         resource, amount = ("hay", 1) if operation == "cow" else ("grain", grain)
-        protected = village_economy.protected_quantity(world, "farm", resource)
+        from npc_sim import village_depot
+        feed_site = village_depot.FEED_STORE if village_depot.enabled(world) else "farm"
+        protected = village_economy.protected_quantity(world, feed_site, resource)
         if resource == "hay" and town.horse_fed_day < town.minute // 1440:
             horse_stock = village_economy.usable_stock(world, base.residents[base.helper].work, "hay", town.minute)
             protected = max(protected, max(0, 1 - horse_stock))
-        if not care.fed and village_economy.usable_stock(world, "farm", resource, town.minute) - amount < protected:
+        if not care.fed and village_economy.usable_stock(world, feed_site, resource, town.minute) - amount < protected:
             return "REJECTED", "LIVESTOCK_FEED_REQUIRED", "Produce real surplus feed; horse hay and accepted grain commitments are protected.", None
         if not care.watered and state.water < 1:
             return "REJECTED", "LIVESTOCK_WATER_REQUIRED", "Draw actual well water with the bucket and carry it here.", None
         if not care.fed:
-            village_goods.take(world, "farm", resource, amount)
+            if feed_site == "farm":
+                village_goods.take(world, "farm", resource, amount)
+            else:
+                village_depot.consume_feed(world, resource, amount)
             if operation == "hens" and scraps:
                 village_goods.take(world, "farm", village_recycling.SCRAPS, scraps)
             care.fed = True
@@ -485,11 +490,15 @@ def apply(world, action, args):
 
 def observation(world):
     state = _state(world)
+    from npc_sim import village_depot
+    feed_note = (" Feed for cow and hens is consumed from the separate farm feed store; Ada must carry unreserved farm hay and grain there using village_store_feed and unload it."
+                 if village_depot.enabled(world) else "")
     return {"livestock": {"enabled": state.config.enabled, "keeper": state.config.keeper,
                          "hen_count": state.config.hens, "cow": state.cow.model_dump(), "hens": state.hens.model_dump(),
                          "bucket_water": state.water,
                          "policy": "Daily: carry the livestock bucket to the completed well, draw water (5m), carry it to farm; "
                          "cow care 15m consumes 1 hay, hen care 10m consumes ceil(hens/4) grain. Hold the bucket for care. "
+                         + feed_note + " "
                          "Unfinished care resumes today without duplicate feed; new days require new care, never backdated production. "
                          "Care earns one manure per housing only from real fed animals. Protect horse hay and funded grain. "
                          "Milk: at most 6 units each 08:00–13:00 and 13:00–18:00 (15m/session), at least four hours between starts. Eggs: at most one per hen/day (10m). "

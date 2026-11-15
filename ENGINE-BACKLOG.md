@@ -5,6 +5,142 @@ adventure and legacy scenarios are unchanged. The living-village generator
 creates a separate configured scenario; backend activation and starting a new
 adventure are separate operations.
 
+## Player and Admin UI redesign (implemented)
+
+The current live village episode produces a roughly 20,000-pixel Player page
+and 23,000-pixel Admin page at a 1,968-pixel viewport, dominated by stacked
+village tracking and team panels. Redesign navigation without removing any
+existing information, controls, or the distinction between player-visible and
+privileged data. World view remains read-only.
+
+- [x] Replace the long Player and Admin document stacks with explicit tabs:
+  Player: Play, Cast, Story; Admin: Live, Cast & setup, Story, Technical.
+  Give village tracking and team perspectives a discoverable home without
+  recreating the full-page scroll inside a single tab. Keep the active tab in
+  the URL hash so refresh and direct links restore it; default to Cast/Cast &
+  setup when there is no episode and Play/Live when one exists.
+- [x] Keep a compact masthead and command bar accessible while scrolling:
+  brand, episode title and live status, game clock, connection state, view
+  switcher, scenario picker, and applicable Play, Step,
+  Pause, Continue, Save, and Load actions. Remove the icon rail and put Archive
+  and Export JSON in the command bar. Preserve state-dependent visibility and
+  disabled states, keyboard access, and responsive layouts.
+- [x] Preserve the existing theme and fonts (the later design direction
+  supersedes the proposed broadsheet/theme toggle). Clamp long goal objectives
+  to five lines with an accessible expand/collapse control revealing full text.
+- [x] Give the technical log, self panel, proxy settings, and narrative fixed
+  layout homes instead of moving DOM nodes on each render; simplify the team
+  perspectives rendering accordingly. Preserve panel contents, focus, form
+  state, story scroll position, and live updates across tab switches.
+- [x] Keep the World view's `?budget=extend` link landing on the visible budget
+  editor in Player/Admin after tab navigation. Test no-episode defaults,
+  hash refresh/deep links, command availability, goal
+  expansion, tab accessibility, privacy boundaries, and desktop/mobile
+  scrolling. Verify each tab fits a manageable viewport-level layout without
+  hiding lengthy logs, stories, or village data behind an unbounded page.
+
+## Incremental adventure story building (future / open)
+
+The live Story feed and the readable adventure narrative currently rebuild from
+the full event history during page rendering, actor/day selection, and copying.
+Long-running episodes make opening Story and switching views too slow. Build
+and retain the story as the simulation advances instead of replaying every
+event when the page is selected. This is separate from the UI redesign above.
+
+- [ ] Maintain an ordered, incremental story projection as events are appended,
+  with per-actor and combined views. Preserve the existing observation,
+  decision, action-result pairing, team ordering, opening deduplication,
+  timeline/day labels, and final reviewed-story text. Allow a result or review
+  to revise an earlier paragraph without reprocessing unrelated history.
+- [ ] Persist a versioned projection and its last processed event sequence with
+  each run. Resume from that cursor after save/load, refresh, reconnect, or
+  process restart; detect missing, duplicate, reordered, or replaced events
+  and rebuild explicitly when the projection is stale or incompatible. Keep
+  legacy runs readable through a one-time migration/rebuild, not a rebuild on
+  every visit.
+- [ ] Serve the current story to Player/Admin from the projection and update it
+  as new events arrive. Actor/day filters and copy/export must use the same
+  canonical text, with the final completion review applied once it arrives.
+  Avoid rebuilding all team perspectives or replacing the full Story DOM for
+  each new event; retain scroll position and expanded details. Do not leak
+  privileged events into player-visible output.
+- [ ] Bound storage and memory for long episodes (for example, indexed day or
+  actor slices and paged retrieval) without dropping story history. Surface
+  projection failures explicitly and keep the original event log authoritative
+  for recovery and assessment.
+
+### Acceptance checks
+
+- A long-running, multi-actor episode's live and reviewed stories match a
+  full-history build in order, wording, day labels, and copy/export output,
+  including late action results and duplicate openings.
+- Opening Story, switching actor/day, and returning after reload do not replay
+  the entire history; measure latency against a representative long episode
+  and verify it stays bounded as the event log grows.
+- Save/load, reconnect, process restart, and an old-run migration neither lose
+  nor duplicate paragraphs; corrupt or outdated projections recover from the
+  authoritative event log with a visible error if recovery fails.
+
+## Animated town map and personalized walking NPCs (future / open)
+
+Upgrade the Millhaven World view from static, location-grouped name markers to
+an optional animated map. NPCs should walk the existing **predefined routes**
+between locations, using recognizable character-specific sprites and clothing.
+This is a presentation enhancement, not a change to NPC decisions, world travel
+rules, or the authoritative location. Keep existing map zoom, stock tooltips,
+selection/details, dialogue, visitor handling, and off-map reporting. Coordinate
+with the Player/Admin UI redesign above without making that redesign a prerequisite.
+
+- [ ] Author a versioned visual layer for each supported map image: location
+  anchors, walkable route polylines/waypoints, road/footpath distinctions,
+  crossings and draw order/occlusion. Map each segment to an actual world route
+  edge and validate endpoints/connectivity against the scenario; do not infer
+  walkable ground from the illustration or draw straight lines through buildings,
+  water, or walls. Unsupported or unmapped edges retain the current location-level
+  marker/off-map fallback, with no fabricated movement.
+- [ ] Define the minimum authoritative travel feed before animating: actor ID,
+  origin, destination/edge, route or edge ID, travel start/end village minutes,
+  completion/cancellation, and current authoritative location. If existing move
+  events only report arrival, add compatible, bounded travel metadata at the
+  world/API boundary rather than deriving a departure or duration from a later
+  snapshot. Do not expose hidden intentions, private plans or privileged data to
+  player-facing views. Preserve existing save/replay and old scenario contracts.
+- [ ] Interpolate position along the authored polyline from simulation time,
+  not elapsed wall time alone. Stop or resync on pause, speed changes, reconnect,
+  seek/replay, route closure, cancelled travel, and new authoritative snapshots;
+  late or missing events must snap to the last verified location rather than
+  guessing. Distinguish an in-transit actor from one at a site: no early arrival,
+  stock/location claims, speech bubble, or indoor interaction at the destination.
+- [ ] Add a small, locally bundled sprite set with idle and directional walk
+  frames. Use an explicit per-character appearance profile (e.g. hair, clothing
+  palette/garment, accessory), stable across runs and reloads, with a generic
+  visitor/default sprite when no profile exists. Art must be original or licensed
+  for redistribution, with provenance recorded; avoid external asset requests.
+  Keep readable names and selection targets independent of sprite artwork.
+- [ ] Implement smooth direction changes and legible walking speed while keeping
+  the map usable at all zoom levels and narrow screens. Handle overlapping
+  walkers, crossings, clustered destinations and speech without covering site
+  controls. Respect reduced-motion preferences (static location/in-transit
+  labels), provide keyboard selection and accessible status text, and keep the
+  current static map as a fallback for unsupported browsers or maps.
+- [ ] Introduce this as an opt-in view for Millhaven first; do not alter the
+  village clock, routing, travel costs, NPC knowledge or other scenarios.
+  Measure frame smoothness with the expected resident/visitor count and avoid
+  rebuilding every marker on each animation frame. Keep an easy static/animated
+  toggle without resetting the episode.
+
+### Acceptance checks
+
+- A resident taking multiple connected route edges follows the correct authored
+  path and reaches each waypoint only when the corresponding authoritative
+  travel permits it; an interrupted or blocked edge never shows a completed trip.
+- Pause, speed change, refresh, reconnect, saved-run reopen and historical replay
+  cannot make sprites drift, teleport to a guessed destination or duplicate a
+  journey. Static mode and legacy/non-village worlds retain today's behavior.
+- Two distinct residents display stable, recognizable clothing/appearances;
+  missing profiles and unpictured routes degrade visibly and safely. Selection,
+  stock, dialogue, privacy, reduced motion and keyboard use remain correct.
+
 ## Demand-driven supplier orders
 
 - [x] Add an order system so businesses request supplies based on demand instead
@@ -54,6 +190,46 @@ Elsie plans upcoming meal service and places orders with:
 - Suppliers can stop production once accepted demand and reserve targets are met.
 - Remote or sleeping-supplier order attempts create no orders or financial
   commitments; a successful in-person request records the spoken requirements.
+
+### Next-day supply negotiation (open)
+
+A same-day egg request can miss the remaining collection window. The physical
+reply API now permits a conditional next-day counteroffer, but Ada and Elsie do
+not yet reliably complete that negotiation on their own. A counteroffer is not
+an accepted order, and today's supper demand must not silently move to tomorrow.
+
+The engine now persists structured counteroffer terms, checks real next-day hen
+feed, care equipment, collection capacity and travel before offering, and gives
+Ada and Elsie physically learned fallback choices to propose, revise, decline
+or accept. Focused deterministic tests cover absent recipients, feed shortages,
+midnight persistence, and unchanged stock/funds before fulfillment. A seeded
+multi-resident autonomous model run and full service outcome remain unverified;
+do not treat these checks as a release pass.
+
+- [ ] After a personally received supply request fails its deadline/capacity
+  check, offer a specific next-day delivery and freshness time when a real
+  collection/production and transport window could support it. Use the existing
+  physical reply action, not narrated agreement or a repeated failed accept;
+  if care, feed, equipment, route or quantity makes tomorrow implausible, explain
+  the blocker instead of promising supply.
+- [ ] Let the buyer receive that counteroffer through a real conversation or
+  inbox/board check and explicitly decide whether the need remains useful the
+  next day. For today's supper, seek a feasible same-day alternative or record
+  uncovered meals; do not extend today's service deadline just to make the
+  request acceptable. If useful, revise the existing uncommitted notice's
+  deadline and freshness terms rather than posting a duplicate.
+- [ ] After the supplier receives the revised version, recheck actual stock,
+  care, freshness, reserved output, funds and travel before accepting. Keep
+  proposed, revised, accepted and expired states visible to each resident only
+  when physically learned; bound retries and wake decisions on new evidence
+  rather than repeated visits or acceptance attempts.
+- [ ] Reproduce the observed two-egg request after today's collection session
+  is unavailable: Ada proposes tomorrow, Elsie receives and either revises or
+  declines based on tomorrow's demand, and Ada accepts only a feasible revised
+  request. Test unavailable feed, occupied next-day capacity, stale/expired
+  replies, absent recipients, persistence across midnight, and conservation of
+  stock and funds. Require no automatic acceptance, duplicate order or phantom
+  eggs; verify autonomous choices in a seeded run, not only direct API calls.
 
 ## Demand-aware production and reserve targets
 
@@ -293,6 +469,84 @@ Elsie plans upcoming meal service and places orders with:
 - [x] Let the DM configure merchant visits and trade profiles through the event
   system, with explicit sources for incoming goods and funds.
 
+### Local merchant offers versus optional research (open)
+
+In a Millhaven run, Tamsin Reed asked Jory about trade at his bakery at 11:00.
+The bakery held one bread and Tamsin sought bread at three coins each, but Jory
+chose flatbread research and no trade was settled. An enquiry is not a purchase:
+the resident must deliberately use the local merchant-trade action. Improve
+that choice without making every visit a guaranteed sale or treating iron as a
+useful bakery purchase.
+
+- [ ] When a producer personally encounters a merchant with a relevant offer,
+  consider a feasible sale of *genuine surplus* before optional research,
+  leisure or idle waiting. Due meals, rest, maintenance, accepted orders,
+  protected reserves and other time-critical obligations still take precedence.
+  A purchase of imports requires a real local use or committed demand; do not
+  buy iron merely because the merchant offers it or the resident has coins.
+- [ ] Evaluate the offer using only information available at the encounter:
+  merchant presence and departure time, offered product and price, remaining
+  demand, funds and cargo capacity, local unreserved stock, and freshness through
+  journey and resale. Recheck all terms at the actual trade action; reject or
+  defer with a specific reason if any term changes. Do not infer a merchant's
+  remote whereabouts or replace the resident's choice with automatic transfer.
+- [ ] Keep the existing physical, funded, idempotent trade settlement. Bound
+  quantity by surplus and demand (one loaf in the observed example), debit the
+  merchant and credit the actual producer exactly once, move real stock, and
+  preserve unsold goods and unmet demand if the offer is declined or expires.
+- [ ] Add focused decision and end-to-end regressions: with Jory and Tamsin
+  co-located and one unreserved fresh loaf, the resident sees the offer and
+  chooses/settles a one-loaf export before optional research; with reserved or
+  stale bread, insufficient merchant funds/capacity, absent merchant, or due
+  obligations, no sale occurs. Verify that no useful demand means no speculative
+  iron import, retries do not duplicate stock/payment, and other merchants and
+  existing scenarios retain their intended behavior.
+
+## Nella's merchant downtime (open)
+
+Nella's deliveries and the visitor trade action exist, but a quiet delivery
+ledger can leave her waiting at the store. A visitor currently trades against
+stock at the encounter site; Nella cannot sell a producer's goods merely by
+meeting a traveller elsewhere. Keep random visitors occasional, and do not
+turn an idle spell into guaranteed demand or invisible commerce.
+
+- [ ] Prioritize feasible, personally known freight before optional prospecting:
+  check accepted orders, ready pickups, wagon/foot capacity, delivery deadlines,
+  payment and return time; batch compatible errands. When stock or a response
+  is missing, record the specific blocker and next meaningful check instead of
+  repeating empty trips between the square, farm and store. Count useful
+  delivery, failed travel, and genuine downtime separately.
+- [ ] Let Nella seek a *known* visitor during free work hours: learn of an
+  arrival or itinerary through a local encounter, a read notice, or a planned
+  public check-in, then walk to a plausible meeting site. Revalidate the
+  visitor's actual presence, remaining time and offers on arrival; abandon or
+  defer the search after a missed encounter rather than tracking visitors
+  remotely or walking a perpetual circuit. Routine deliveries, meals and rest
+  take precedence. An ordinary traveller may have a specific funded request,
+  but is not automatically a merchant or a buyer of all goods.
+- [ ] Make Nella a legitimate trade intermediary only through explicit terms:
+  acquire unreserved producer stock by paid purchase or authorized consignment,
+  physically carry it to the encounter, and settle the visitor's finite offer
+  from that stock. Record lot ownership, agreed commission or margin, producer
+  proceeds, merchant funds, capacity, freshness, unsold returns and cancellations
+  exactly once. Alternatively, an owner may trade directly when co-located;
+  Nella must not collect their proceeds simply for being present. Handle imports
+  with the same funded, physical route to a real buyer or store demand.
+- [ ] Offer bounded store work when no shipment or credible visitor lead is
+  feasible: reconcile the local ledger against actual lots and commitments,
+  arrange a needed procurement request through a valid physical channel, or
+  inspect/maintain the counter. Only add stocking, sorting or packaging as
+  productive work with an authorized source, real inputs, time, capacity and
+  measurable demand; no free stock, repeated no-change checks or speculative
+  research that consumes reserved grain.
+- [ ] Validate an opt-in multi-day scenario with no visitor, a missed traveller,
+  a successful consigned sale, insufficient funds/capacity, expiring cargo and
+  save/reload during a trip. Compare Nella's wait and wasted-travel minutes to
+  the same seeded baseline; require fewer avoidable idle/travel minutes without
+  losing required deliveries, meals or sleep. Reconcile stock, ownership and
+  payments across every outcome, and leave existing scenarios unchanged unless
+  the new behavior is enabled.
+
 ## Optional NPC sidequests
 
 - [x] Connect optional sidequests to personal interests, relationships, visitors,
@@ -364,18 +618,46 @@ funded transactions, one-time initial stock, and existing successful repairs,
 deliveries, maintenance, and home sleep. Do not add professions, goods, or free
 daily replenishment to meet the targets.
 
+**Verification snapshot (2026-11-15):** Focused village completion, economy,
+livestock, depot, legacy, release-evidence, communication and meal-planning tests
+passed (250 passed, 1 skipped). Additional firewood, wagon-route, scheduler,
+fallback, event and legacy tests passed (144 passed). The UI tests passed
+(214 passed), and the TypeScript production build succeeded. These are isolated
+regressions, not a matched Generation 7 replay, a completed autonomous
+12/12-service episode, or a seven-active-day stock reconciliation. Available
+local living/resilient episode summaries are cancelled, errored or paused; none
+records a successful completed village episode. The one skipped test requires
+an unavailable archived Day 3 baseline. No release checkbox below was closed
+from test counts alone. Do not modify the paused episode to manufacture evidence.
+
 ### P0: Day-one outcomes and engine correctness
 
 - [ ] Save a reproducible Generation 7 starting-state/seed fixture and capture
   time-stamped inventory, orders, meal reservations, crew sessions, cargo, and
   action diagnostics at each reported failure. Compare the same state and model
   settings where possible; do not infer a root cause from narrative logs.
+  A deterministic current `millhaven-living` baseline and offline evidence
+  capture utility now exist in `data/fixtures/generation8-baseline` and
+  `npc_sim/village_release_evidence.py`. Neither is an identified Generation 7
+  starting snapshot; no reported failure has yet been captured from a matched
+  run. Keep this gate open until those missing observations are supplied.
 - [ ] Verify 12/12 breakfast and 12/12 supper with real food, money, freshness,
   fuel, labor, and cooking capacity. Forecast ready versus cookable portions and
   uncovered diners early enough to act; count each ingredient or incoming order
   once. Allow a final valid batch to finish before service, distinguish a true
   shortage from a cooking-window or fair-allocation defect, and report exact
   blockers without creating food. Cover MEAL-01 through MEAL-06.
+  An archived day-one run shows two portions still short at 19:00, with some
+  earlier attempts marked missed before their due time despite later recovery.
+  Early unallocated supper now remains pending; the 12/12 outcome, cooking
+  window and supply chain still need matched end-to-end verification. At 18:55
+  the archived inn observation had seven meals already eaten or prepared and
+  three bread at the inn, but no fish; its readiness forecast counted only one
+  cookable portion from a whole two-portion bread batch. An isolated, persisted
+  regression confirmed that odd demand incorrectly blocked the last valid
+  batch. Batch limits and readiness now count that batch and its real inputs;
+  the archived run cannot be replayed from observation alone, and missing fish
+  and actual NPC decisions remain unverified blockers to 12/12.
 - [ ] Verify well, mill, and wagon completion. Accepted crew appointments must
   start promptly once consenting workers, supplies, and tools are at the site;
   expired notices must be supersedable, and one partner's contribution must not
@@ -440,3 +722,80 @@ daily replenishment to meet the targets.
   Include the saved fixture, rerun command, acceptance-test results, confirmed
   root causes, and prioritized remaining issues. Do not mark the release done
   solely because unit tests pass or one unconstrained NPC run differs.
+
+## Resilient Village storage and fixtures (open)
+
+The `millhaven-resilient` scenario has physical depot and feed-store transfers,
+owner-accounted lots, paid withdrawals, finite livestock feed, and a depot
+firewood limit. These tasks concern autonomous management and unimplemented
+fixtures; do not treat the presence of an action as evidence that NPCs use it
+reliably. Preserve local knowledge, real transport, reserve protection,
+freshness, and funded payments.
+
+- [ ] Add stock- and demand-aware NPC decisions for depot deposits and
+  withdrawals. Deposit only genuinely unreserved workplace surplus; withdraw
+  only useful, affordable goods for a real workplace need. Account for other
+  committed cargo and depot capacity, and avoid repeated failed trips or
+  unnecessary stock shuffling. Verify actual travel, unloading, owner payment,
+  and conservation of goods across cancellation and restart.
+- [x] Add Ada's feed-store replenishment decisions using locally available
+  grain and hay, forecast cow/hen feed needs and farm reserves. Require physical
+  carrying and unloading before the animals can consume the feed; expose a
+  shortage when supply or time is insufficient instead of creating stock.
+- [ ] Run a reproducible multi-day Resilient Village test with no daily stock
+  reset. Track opening/closing depot and feed-store quantities, each owner's
+  lots, spoilage, in-transit cargo, animal feed consumption, reserve levels,
+  payments, and stockouts. Include delayed or returned cargo and a depleted
+  feed store; fail on mismatched ownership, lost goods, or duplicate payment.
+  This complements the seven-day economy release evidence above.
+- [ ] Decide and implement the handcart as an opt-in physical transport
+  mechanic if desired: ownership, loading capacity, route access, parking,
+  unloading, and recovery must be explicit. Until then, it is only a visible
+  fixture; do not imply it carries depot shipments.
+- [ ] Decide and implement the farm cistern as an opt-in finite water source
+  if desired: filling from a real supply, storage capacity, draw/consumption,
+  and livestock-care integration must be accounted for. Until then, livestock
+  water continues to use the existing well rules.
+- [x] Update the Resilient Village README description to reflect that depot
+  withdrawals now exist, while retaining the distinction between usable
+  transfer actions and unverified autonomous store management.
+
+## Millhaven generations and village memory (open)
+
+The opt-in `millhaven-generations` scenario seeds family histories, records
+selected events in a persistent in-world chronicle, and tracks named
+non-playable arrivals/departures. Existing watermill production and finite
+merchant trading remain the only implemented mill and external-trade mechanics.
+The chronicle survives days and episode saves. A fresh adventure imports nothing
+unless started with a validated midnight generation save; selected verified
+lessons can now influence local decisions and bounded family succession.
+
+- [x] Make family inheritance an actual intergenerational mechanic: define
+  kinship, succession, births/deaths or retirement, and bounded transfer of
+  learned skills, obligations and possessions. Reconcile cast/controller
+  identities, ownership, work assignments and saves before permitting a
+  playable resident to be replaced. Do not equate seeded biographies with
+  inheritance.
+- [x] Connect village memory to decisions without granting omniscience: let
+  residents consult the square chronicle or receive physically shared stories,
+  then use verified lessons to adjust plans for recurring shortages, failed
+  deliveries and successful repairs. Record provenance and stale knowledge;
+  test that unread events cannot influence a resident's choices.
+- [ ] Extend the mill and outside trade beyond the existing grain-to-flour
+  job and temporary merchant visits only if a concrete route and demand model
+  needs it. Specify finite goods, carrier capacity, travel, lead times,
+  settlements, prices and payment reconciliation; test conservation and
+  retries across day boundaries.
+- [ ] Decide whether named newcomers become physical residents with homes,
+  meals, work and relationships. Current arrivals/departures are chronicle
+  entries and a population ledger, not actors or simulated bodies. If they
+  become playable, update scheduler, cast limits, observations, controller
+  lifecycle and save migration together.
+- [x] Design explicit continuity between separately started generations.
+  Fresh adventures currently start from the scenario's fixed founding state;
+  do not silently import a prior run's chronicle, assets, people or failures.
+  Require an opt-in handoff with provenance, validated state and a reversible
+  checkpoint, and test that unrelated runs remain isolated.
+- [x] Show the chronicle and named population in an appropriate World/Admin
+  view while respecting private resident knowledge; validate multi-day
+  behavior with a saved-and-reloaded run, not only isolated unit tests.

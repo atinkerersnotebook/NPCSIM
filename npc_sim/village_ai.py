@@ -9,12 +9,13 @@ if TYPE_CHECKING:
 
 VERBS = {"village_wait", "village_ask", "village_tell", "village_observe", "village_work",
          "village_load", "village_deliver", "village_project", "village_patrol", "village_eat", "village_sleep",
+         "village_daytime_rest",
          "village_meeting", "village_cook_fish", "village_share_route", "village_split_firewood",
          "village_execute_fuel_delivery", "village_plan_walk", "wait_until_next_relevant_event"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS
 
 
 def observation(world: "World") -> dict[str, Any]:
-    from npc_sim import village_fallback
+    from npc_sim import village_fallback, village_legacy
     village_fallback.update_supply_needs(world)
     config, state = village.context(world)
     rid = world.actor_id
@@ -37,6 +38,11 @@ def observation(world: "World") -> dict[str, Any]:
                        "occupation": config.residents[other].occupation,
                        "activity": state.residents[other].activity} for other in nearby],
         "stocks": state.stocks.get(world.actor.location_id, {}).copy(),
+        **({"stored_owners": {
+            owner: {product: sum(lot.quantity for lot in lots) for product, lots in inventory.items() if lots}
+            for owner, inventory in state.depot_lots.get(world.actor.location_id, {}).items()}
+            } if world.scenario.id == "millhaven-resilient" and
+            world.actor.location_id in {"supply-depot", "farm-feed-store"} else {}),
         "coins": state.coins[rid], "resource_inventory": person.cargo.copy(), "tasks": [],
         "events": [state.events[index].model_dump() for index in person.memories[-12:]],
         **({"notices": [notice.model_dump() for notice in state.notices if rid in notice.witnesses],
@@ -92,6 +98,11 @@ def observation(world: "World") -> dict[str, Any]:
                   "Both named project partners must be present and each must contribute village_project actions. "
                   "Gather the portable supplies at the work site or carry them there. "
                   "village_observe checks local tools; village_ask shares only the target's own knowledge. "
+                  + ("Read the square chronicle to learn its lessons; unread entries are not your knowledge. "
+                     "Share a personally read lesson only face to face. Old lessons may be stale. "
+                     + village_legacy.decision_hint(world)
+                     if state.legacy is not None else "")
+                  +
                   "Never quote internal action results, audit notes or belief-source codes as speech. "
                   "A personally posted open supply need already has a request: keep useful work or rest instead of "
                   "repeatedly searching for its supplier. Revisit only after new local evidence, a credible meeting, "
@@ -101,10 +112,11 @@ def observation(world: "World") -> dict[str, Any]:
                   "If a conversation reply opportunity is present, consider a brief acknowledgement, answer, question, "
                   "or polite departure before leaving. Hearing or replying never accepts a funded order; use the "
                   "actual order action for that. Do not prolong a conversation past urgent work, meals, or rest. "
-                  + (" Prioritize due meals and rest over interruptible work. Eat one daily meal at the tavern; Elsie serves others first and eats at 19:30. "
+                  + (" Prioritize due meals and overnight sleep over interruptible work. Breakfast and supper have separate records; supper starts at 18:00 (Elsie serves others first and eats at 19:30). "
                      "A prepared meal, bread, or fish with tea counts; tea alone does not. No imaginary home pantry. "
                      "An empty tavern records hunger but allows work; missing today's meal doubles tomorrow's work cooldown. "
                      "At your own bedtime, walk home and village_sleep; no work before actually waking. "
+                     "Elsie may close the inn and sleep from 21:00 once everyone has eaten supper and all other residents are home. "
                      "Well and repair progress survives pauses. Once a baking batch starts, wait for its timed "
                      "completion before leaving, eating or sleeping. Do not start another batch when meals or rest are due. "
                      "Repairs alone do not finish the adventure: everyone must eat supper, then be asleep at their own home."
@@ -124,6 +136,14 @@ def observation(world: "World") -> dict[str, Any]:
                         if village_communication.enabled(world)
                         else "Read the board for stocks, project progress and deadlines. ")
                      + "Fees go to the actual carrier. "
+                     + ("The shared depot and farm feed store contain only real local stock. At the depot, "
+                           "check the local owner ledger before withdrawing; purchase only affordable stock you can "
+                           "carry back to your workplace. Deposit only unreserved workplace surplus and unload it "
+                           "physically at the depot; the owner keeps title until a paid withdrawal is unloaded. "
+                           "Ada: replenish the separate feed store from unreserved farm grain and hay before the "
+                           "cow or hens run short, by carrying and unloading real feed there. "
+                        if world.scenario.id == "millhaven-resilient" else "")
+                     +
                      "Each partner must explicitly choose village_urgent_work to override bedtime until 02:00. "
                      "Hunger and tiredness slowdowns stack; tea relieves tiredness but never replaces sleep."
                      if config.expanded_rules else ""),
@@ -159,8 +179,9 @@ def actions(world: "World") -> list[dict[str, Any]]:
     add("village_wait", "Wait without controlling any other villager.",
         {"minutes": {"type": "integer", "minimum": 5, "maximum": village_life.wait_limit(world), "multipleOf": 5}})
     if config.daily_life:
-        add("village_eat", "Eat one daily meal at the tavern using real local food; supper may be early after work.", {})
-        add("village_sleep", "Sleep at your own home after supper or when rest is due; wake at the next scheduled morning.", {})
+        add("village_eat", "Eat a due breakfast or supper at the tavern using real local food.", {})
+        add("village_sleep", "Start overnight sleep at home from bedtime; Elsie may close from 21:00 after all suppers and departures.", {})
+        add("village_daytime_rest", "Rest at home for 15 minutes during the day without satisfying overnight sleep; once per day.", {})
     if nearby:
         target = {"type": "string", "enum": nearby}
         add("village_ask", "Ask a nearby resident about their own shovel knowledge, work or witnessed news.",
@@ -220,6 +241,21 @@ def actions(world: "World") -> list[dict[str, Any]]:
                        "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}},
              "destination": {"type": "string", "enum": sorted({r.work for r in config.residents.values()})}})
         add("village_unload_goods", "Unload every foot shipment for this workplace; charge actual goods and one delivery fee.", {})
+        if world.scenario.id == "millhaven-resilient":
+            depot_goods = {"grain", "flour", "timber", "firewood", "hay"}
+            add("village_depot_load", "Carry your own workplace goods to the shared depot; ownership is retained until a paid withdrawal.",
+                {"goods": {"type": "object", "minProperties": 1,
+                           "propertyNames": {"enum": sorted(depot_goods)},
+                           "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}}})
+            add("village_depot_withdraw", "Purchase available depot stock for your own workplace; the owner is paid on unloading.",
+                {"goods": {"type": "object", "minProperties": 1,
+                           "propertyNames": {"enum": sorted(depot_goods)},
+                           "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}}})
+            if rid == config.livestock.keeper:
+                add("village_store_feed", "Carry unreserved farm grain and hay to the separate livestock feed store.",
+                    {"goods": {"type": "object", "minProperties": 1,
+                               "propertyNames": {"enum": ["grain", "hay"]},
+                               "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}}})
         add("village_buy_iron", "Collect the visiting trader's iron consignment at noon; the forge pays three coins per unit on delivery.",
             {"quantity": {"type": "integer", "minimum": 1, "maximum": 3}})
         add("village_drink_tea", "Buy or use actual local tea to relieve today's tiredness, not hunger or the need to sleep.", {})
@@ -346,7 +382,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             person.available_at = until
             return done("EVENT_WAIT_STARTED", f"Waiting for the next scheduled event at {village.clock_time(until)}.")
         return done("VILLAGE_WAITED", f"Waiting {args['minutes']} minutes.")
-    if action in {"village_eat", "village_sleep"}:
+    if action in {"village_eat", "village_sleep", "village_daytime_rest"}:
         return village_life.apply(world, action)
     if action == "village_share_route":
         target, destination = args["target"], args["destination"]
@@ -483,6 +519,12 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                     and plan["remaining_portions"] - plan["covered_portions"] > outputs["meals"]
                     for plan in village_economy.meal_requirements(world))):
             interval = max(5, job.duration)
+        if state.legacy is not None:
+            from npc_sim import village_legacy
+            lessons = {state.legacy.chronicle[item.entry].lesson
+                       for item in village_legacy.active_lessons(world, rid)}
+            if "shortage" in lessons and "meals" in outputs:
+                interval = max(job.duration, interval - 5)
         person.next_work = state.minute + interval * village_life.cooldown_factor(world, rid)
         if config.daily_life and not job.interruptible:
             if person.life is None:
@@ -609,6 +651,11 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             elif session.appointment_id != plan.id:
                 return reject("CREW_RESERVED", "This project is reserved by another crew session.")
         progress[rid] = progress.get(rid, 0) + 1
+        if state.legacy is not None:
+            from npc_sim import village_legacy
+            if any(state.legacy.chronicle[item.entry].lesson == "repair"
+                   for item in village_legacy.active_lessons(world, rid)):
+                progress[rid] += 1
         if session is not None:
             session.contributions[rid] = progress[rid]
         contribute()
@@ -689,6 +736,8 @@ def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
                     world.state.entities["work-horse"].location = world.actor.location_id
         if action == "village_project":
             minutes *= village_life.cooldown_factor(world, world.actor_id)
+        if action == "village_daytime_rest":
+            minutes = 15
         if action in {"village_wait_event", "wait_until_next_relevant_event"} or (action == "village_wait" and person.fallback.wait is not None):
             minutes = max(5, person.available_at - state.minute)
         person.available_at = state.minute + minutes
