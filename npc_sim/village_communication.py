@@ -804,9 +804,31 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
                     raise
             if notice.appointment:
                 accepted = list(dict.fromkeys([*notice.appointment.accepted, actor]))
+                village_state = world.state.village
+                crew, site = _project(world, notice.appointment.project)
+                supplies = ([world.scenario.village.shovel, world.scenario.village.timber,
+                             world.scenario.village.rope] if notice.appointment.project == "dig_well"
+                            else [world.scenario.village.repair_part, world.scenario.village.hammer])
+                gathered = (request.channel == "conversation" and set(accepted) == set(crew)
+                            and all(village.resident_location(world, member) == site
+                                    and not (village_state.residents[member].life
+                                             and (village_state.residents[member].life.sleeping
+                                                  or village_state.residents[member].life.work))
+                                    and village_state.residents[member].busy_until <= minute
+                                    and (village_state.residents[member].available_at <= minute
+                                         or member == actor and village_state.residents[member].available_at == minute + 5)
+                                    for member in crew)
+                            and all(not world.state.entities[eid].hidden
+                                    and not world.state.entities[eid].broken
+                                    and world.state.entities[eid].location in {site, *crew}
+                                    for eid in supplies)
+                            and (notice.appointment.project != "repair_mill"
+                                 or village_state.breakdown and village_state.stocks.get(site, {}).get("planks", 0) >= 1))
+                due = minute if gathered else notice.appointment.due_at
                 changes["appointment"] = notice.appointment.model_copy(update={
                     "version": notice.appointment.version + 1, "accepted": accepted,
-                    "status": "confirmed" if set(accepted) == set(notice.appointment.members) else "proposed"})
+                    "status": "confirmed" if set(accepted) == set(notice.appointment.members) else "proposed",
+                    "due_at": due, "end_at": due + 60})
             changes["status"] = "accepted"
         elif request.response == "reject":
             if not request.reason:
@@ -1052,8 +1074,11 @@ def project_blocker(world: "World", project: str) -> str | None:
                 return "An actual worker is sleeping or tending a batch"
             same_job = (reserved and member in session.contributions
                         and person.current_action == "village_project")
+            appointment_notice = state.notices[plan.id.removeprefix("appointment-")][-1]
+            just_confirmed = (plan.due_at == minute and plan.due_at < appointment_notice.terms.due_at
+                              and member in plan.accepted and gathered and person.available_at == minute + 5)
             if (person.busy_until > minute or
-                    (person.available_at > minute and not (
+                    (person.available_at > minute and not just_confirmed and not (
                         member != world.actor_id and person.current_action == "village_project"
                         and (member in active and person.available_at == active[member]
                              + 5 * village_life.cooldown_factor(world, member)

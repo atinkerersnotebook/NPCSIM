@@ -9,6 +9,7 @@ import { villageSystemsMarkup } from "./village-view.ts";
 import { TownDialogue, townMapMarkup } from "./town-map.ts";
 import type { TownMapOptions } from "./town-map.ts";
 import { tradeNote } from "./trade-notes.ts";
+import { npcPortrait } from "./npc-sprite.ts";
 
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
@@ -126,7 +127,7 @@ export function worldMonitorMarkup(
     `<section class="monitor-location" aria-label="${escape(group[0].location)}">
       <h2>${escape(group[0].location)} <small>${group.length}</small></h2>
       ${group.map(agent => `<article class="monitor-agent${agent.deciding ? " deciding" : ""}" data-monitor-agent="${escape(agent.id)}">
-        <h3>${escape(agent.name)}</h3>
+        <h3>${npcPortrait(agent.id)} ${escape(agent.name)}</h3>
         ${agent.visitor ? '<span class="tag">Visitor</span>' : ""}
         ${!agent.current ? '<small class="muted">Last observed location / not live</small>' : ""}
         <p>${escape(agent.activity)}</p>

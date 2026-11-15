@@ -16,6 +16,7 @@ def test_standing_route_requires_real_confirmed_shipment(world):
         return village_wagon.apply(courier, "village_start_route", {})
 
     assert start()[0] == "REJECTED"
+    assert village_wagon.readiness(courier)["blocker"] == "NO_CONFIRMED_SHIPMENT"
     assert not wagon.automatic and wagon.driver is None
 
     order = VillageSupplierOrder(
@@ -28,6 +29,7 @@ def test_standing_route_requires_real_confirmed_shipment(world):
                       [VillageStockLot(quantity=2, produced_at=state.minute, expires_at=1000)])
     assert start()[0] == "REJECTED"
     order.status = "ready_to_collect"
+    assert village_wagon.readiness(courier)["shipments"][0]["order_id"] == order.id
     assert start()[:2] == ("APPLIED", "ROUTE_STARTED")
     assert wagon.automatic and wagon.driver == "nella"
 
@@ -60,6 +62,39 @@ def test_confirmed_order_is_carried_and_route_returns_for_horse(world):
     assert courier.state.entities["work-horse"].location == "forge"
     assert courier.actor.location_id == "forge"
     assert state.stocks["tavern"]["bread"] == 2
+    assert village_wagon.readiness(courier)["blocker"] == "NO_CONFIRMED_SHIPMENT"
+
+
+def test_unfunded_order_is_not_wagon_ready(world):
+    courier = actor(world, "nella")
+    state = courier.state.village
+    state.wagon.repaired = state.wagon.hitched = True
+    courier.actor.location_id = courier.state.entities["wagon"].location
+    state.economy.orders["unfunded"] = VillageSupplierOrder(
+        id="unfunded", request_key="unfunded", buyer="elsie", supplier="jory",
+        source="bakery", destination="tavern", product="bread", quantity=2, price=1,
+        deadline=900, required_fresh_until=850, created_at=state.minute, status="ready_to_collect")
+    village_goods.put(courier, "bakery", "bread", 2,
+                      [VillageStockLot(quantity=2, produced_at=state.minute, expires_at=1000)])
+    state.coins["elsie"] = 0
+    assert village_wagon.readiness(courier)["shipments"] == []
+    assert village_wagon.apply(courier, "village_start_route", {})[0] == "REJECTED"
+
+
+def test_order_too_late_for_physical_wagon_route_is_not_ready(world):
+    courier = actor(world, "nella")
+    state = courier.state.village
+    state.wagon.repaired = state.wagon.hitched = True
+    courier.actor.location_id = courier.state.entities["wagon"].location
+    state.economy.orders["too-late"] = VillageSupplierOrder(
+        id="too-late", request_key="too-late", buyer="elsie", supplier="jory",
+        source="bakery", destination="tavern", product="bread", quantity=1, price=1,
+        deadline=state.minute + 5, required_fresh_until=850, created_at=state.minute,
+        status="ready_to_collect")
+    village_goods.put(courier, "bakery", "bread", 1,
+                      [VillageStockLot(quantity=1, produced_at=state.minute, expires_at=1000)])
+    assert village_wagon.readiness(courier)["blocker"] == "NO_CONFIRMED_SHIPMENT"
+    assert village_wagon.apply(courier, "village_start_route", {})[0] == "REJECTED"
 
 
 def test_route_with_cargo_delivers_even_without_new_pickup(world):

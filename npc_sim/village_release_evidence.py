@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from npc_sim import village_life
+from npc_sim import village_economy, village_life
 from npc_sim.models import Scenario
 from npc_sim.storage import read_json, write_json
 from npc_sim.world import World
@@ -19,6 +19,17 @@ def capture(world: World, diagnostic: dict[str, Any] | None = None) -> dict[str,
     day = state.minute // 1440
     return {
         "minute": state.minute,
+        "day": day,
+        "repairs": {"well": state.well_dug, "mill": state.repaired,
+                    "wagon": state.wagon.repaired if state.wagon else None},
+        "research": ({"projects": {key: project.model_dump(mode="json")
+                                    for key, project in state.research.projects.items()},
+                      "known": {rid: products.copy() for rid, products in state.research.known.items()}}
+                     if state.research else None),
+        "lessons": ({rid: [lesson.model_dump(mode="json") for lesson in entries]
+                     for rid, entries in state.legacy.lessons.items()} if state.legacy else None),
+        "livestock_care": ({name: getattr(state.livestock, name).model_dump(mode="json")
+                            for name in ("cow", "hens")} if state.livestock else None),
         "stocks": {site: goods.copy() for site, goods in state.stocks.items()},
         "stock_lots": {site: {good: [lot.model_dump(mode="json") for lot in lots]
                               for good, lots in goods.items()} for site, goods in state.stock_lots.items()},
@@ -29,6 +40,11 @@ def capture(world: World, diagnostic: dict[str, Any] | None = None) -> dict[str,
                   for rid, person in state.residents.items() if person.life},
         "meal_reservations": {kind: village_life.meal_plan(world, kind, day)
                               for kind in ("breakfast", "daily")},
+        "meal_supply_forecast": village_economy.meal_supply_forecast(world),
+        "meal_readiness": village_economy.meal_readiness(world),
+        "resident_locations": {rid: world.state.actors[rid].location_id
+                               for rid in state.residents if rid in world.state.actors},
+        "recent_actions": [event.model_dump(mode="json") for event in state.events[-30:]],
         "crew_sessions": {key: session.model_dump(mode="json")
                           for key, session in state.crew_sessions.items()},
         "cargo": {rid: {"loose": person.cargo.copy(),
@@ -79,6 +95,9 @@ def capture_failure(baseline_dir: Path, world_path: Path, output: Path,
     scenario = Scenario.model_validate(read_json(scenario_path))
     if world_path.resolve() == baseline_path.resolve():
         raise ValueError("Failure state must not overwrite the baseline")
+    if output.resolve() in {world_path.resolve(), scenario_path.resolve(), baseline_path.resolve(),
+                            (baseline_dir / "evidence.json").resolve()}:
+        raise ValueError("Evidence output must not overwrite a source file")
     source = world_path.read_bytes()
     saved = read_json(world_path)
     if saved["scenario_id"] != scenario.id or saved["village"] is None:

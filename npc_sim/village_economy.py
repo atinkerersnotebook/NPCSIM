@@ -918,6 +918,89 @@ def meal_requirements(world: "World") -> list[dict[str, Any]]:
     return result
 
 
+def meal_supply_forecast(world: "World", *, personal: bool = False) -> list[dict[str, Any]]:
+    """Separate physical inputs, firm incoming orders and unconfirmed requests."""
+    policy = config(world)
+    if policy is None:
+        return []
+    base, state = village.context(world)
+    inn = base.residents[policy.innkeeper].work
+    stock: dict[str, list[dict[str, Any]]] = {}
+    local: dict[str, list[dict[str, Any]]] = {}
+    firm: dict[str, list[dict[str, Any]]] = {}
+    proposed: dict[str, list[dict[str, Any]]] = {}
+    result = []
+    orders = ([order for order in _personal_orders(world)
+               if world.actor_id in {order.buyer, order.supplier}]
+              if personal else list(state.economy.orders.values()))
+    visible_orders = {order.id for order in orders}
+    shipments = [shipment for person in state.residents.values() for shipment in person.shipments]
+    if state.wagon:
+        shipments.extend(state.wagon.loads)
+    for plan in meal_requirements(world):
+        due = plan["due"]
+        latest_delivery = due - policy.cooking_lead_minutes
+        latest_request = latest_delivery - policy.delivery_lead_minutes
+        inputs = {}
+        for product, required in plan["inputs"].items():
+            if product not in stock:
+                stock[product] = [{"quantity": lot.quantity, "available_at": state.minute,
+                                   "expires_at": lot.expires_at, "confirmed": False}
+                                  for lot in state.stock_lots.get(inn, {}).get(product, [])]
+                local[product] = _supply_buckets(world, inn, product)
+                firm[product] = _supply_buckets(world, inn, product)
+                proposed[product] = _supply_buckets(world, inn, product)
+                for order in orders:
+                    if (order.destination != inn or order.product != product or order.status not in ACTIVE
+                            or order.deadline > latest_delivery or order.required_fresh_until < due):
+                        continue
+                    quantity = order.loadable
+                    if quantity <= 0:
+                        continue
+                    bucket = {"quantity": quantity, "available_at": order.deadline,
+                              "expires_at": order.required_fresh_until + 1, "confirmed": True}
+                    if order.status in COMMITTED:
+                        firm[product].append(bucket.copy())
+                        proposed[product].append(bucket.copy())
+                    elif order.status in {"proposed", "deferred"}:
+                        proposed[product].append(bucket.copy())
+                for shipment in shipments:
+                    if (shipment.resource == product and shipment.destination == inn
+                            and shipment.order_id in visible_orders
+                            and shipment.order_id in state.economy.orders):
+                        order = state.economy.orders[shipment.order_id]
+                        if (order.status in COMMITTED and order.deadline <= latest_delivery
+                                and order.required_fresh_until >= due):
+                            for lot in shipment.lots:
+                                bucket = {"quantity": lot.quantity, "available_at": order.deadline,
+                                          "expires_at": lot.expires_at, "confirmed": True}
+                                firm[product].append(bucket.copy())
+                                proposed[product].append(bucket.copy())
+                            if not shipment.lots:
+                                bucket = {"quantity": shipment.quantity, "available_at": order.deadline,
+                                          "expires_at": None, "confirmed": True}
+                                firm[product].append(bucket.copy())
+                                proposed[product].append(bucket.copy())
+            on_hand, _ = _allocate(stock[product], required, due)
+            local_total, _ = _allocate(local[product], required, due)
+            confirmed_total, _ = _allocate(firm[product], required, due)
+            possible_total, _ = _allocate(proposed[product], required, due)
+            missing = required - confirmed_total
+            inputs[product] = {"required": required, "physical": on_hand,
+                               "scheduled_local": local_total - on_hand,
+                               "confirmed_incoming": confirmed_total - local_total,
+                               "unconfirmed": possible_total - confirmed_total,
+                               "uncovered": missing,
+                               "latest_request": latest_request,
+                               "latest_delivery": latest_delivery,
+                               "blocker": ("ORDER_WINDOW_CLOSED" if missing and state.minute > latest_request
+                                           else "SUPPLY_UNCONFIRMED" if missing and possible_total > confirmed_total
+                                           else "SUPPLY_NEEDED" if missing else None)}
+        result.append({"service": plan["id"], "due": due, "inputs": inputs,
+                       "within_request_window": state.minute <= latest_request})
+    return result
+
+
 def _personal_orders(world: "World") -> list[VillageSupplierOrder]:
     from npc_sim import village_communication
     economy = _state(world)
@@ -1008,6 +1091,9 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
                 lead = max(policy.delivery_lead_minutes, policy.cooking_lead_minutes) if (
                     _food_policy(world) and buyer == policy.innkeeper and key.endswith(":supper")
                     and product in {"bread", "fish"}) else policy.delivery_lead_minutes
+                if (_food_policy(world) and buyer == policy.innkeeper and key.endswith(":supper")
+                        and state.minute > use_at - policy.cooking_lead_minutes - policy.delivery_lead_minutes):
+                    continue
                 deadline = max(state.minute, use_at - lead)
                 result.append({"buyer": buyer, "supplier": supplier, "destination": destination,
                                "product": product, "quantity": quantity, "price": unit_price(world, product),
@@ -1575,6 +1661,7 @@ def _report(world: "World") -> dict[str, Any]:
                          "loadable": loadable_for_order(world, order), "commitment": order.commitment}
                         for order in economy.orders.values()],
             "suggestions": suggestions(world), "meal_coverage": meal_requirements(world),
+            "meal_supply_forecast": meal_supply_forecast(world),
             "delivery_runs": delivery_runs(world), "products": products, "inventory": inventory,
             "cargo": cargo, "cash": cash, "reserve_shortages": shortages,
             "production_targets": {location: production_targets(world, location) for location in state.stocks},
@@ -1602,6 +1689,8 @@ def observation(world: "World") -> dict[str, Any]:
                              "loadable": loadable_for_order(world, order),
                              "commitment": order.commitment} for order in _personal_orders(world)]
         report["suggestions"] = suggestions(world, personal=True)
+        report["meal_supply_forecast"] = (meal_supply_forecast(world, personal=True)
+                                          if rid == policy.innkeeper else [])
         report["delivery_runs"] = []
         report["production_targets"] = {}
         report["overproduction"] = []
@@ -1625,6 +1714,7 @@ def observation(world: "World") -> dict[str, Any]:
     report["overproduction"] = [item for item in report["overproduction"] if item["location"] in locations]
     if rid != policy.innkeeper:
         report["meal_coverage"] = []
+        report["meal_supply_forecast"] = []
     else:
         if world.actor.location_id == base.residents[rid].work:
             report["meal_readiness"] = meal_readiness(world)

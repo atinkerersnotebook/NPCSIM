@@ -1,5 +1,6 @@
 import type { RunEvent, State, VillageLife, VillageObservation, VillageResearchView, VillageCommunication } from "./contracts";
 import { villageClockText } from "./view-mode.ts";
+import { npcPortrait } from "./npc-sprite.ts";
 
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
@@ -166,7 +167,7 @@ export function villageMarkup(village: VillageObservation): string {
         `<p>${label(place)}: ${stock(goods)}</p>`).join("")}</details>` : ""}
     <h3>People nearby</h3>
     <div class="village-residents">${village.residents.map(person =>
-      `<article class="village-card"><strong>${escape(person.name)}</strong>
+      `<article class="village-card"><strong>${npcPortrait(person.id)} ${escape(person.name)}</strong>
         <span class="tag">${escape(person.occupation)}</span><p>${escape(villageClockText(person.activity))}</p></article>`).join("")
       || '<p class="muted">Nobody nearby. Explore a workplace or meet the villagers at the tavern in the evening.</p>'}</div>
     <h3>Local resource stock</h3><div>${stock(village.stocks)}</div>
@@ -216,7 +217,7 @@ export function villageDashboardMarkup(state: State, events: RunEvent[]): string
     const person = village.residents[id];
     if (!person) throw new Error(`Missing tracked village resident: ${id}`);
     if (!actor) return `<article class="village-card" data-village-resident="${escape(id)}">
-      <strong>${named(id)}</strong><span class="tag">${escape(resident.occupation)}</span>
+      <strong>${npcPortrait(id)} ${named(id)}</strong><span class="tag">${escape(resident.occupation)}</span>
       <p>Initializing actor: awaiting world binding.</p></article>`;
     const saved = state.run?.agents?.[id];
     const memory = state.observation?.self.actor_id === id ? state.memory : saved?.memory;
@@ -229,7 +230,7 @@ export function villageDashboardMarkup(state: State, events: RunEvent[]): string
       && typeof lastResult.explanation === "string" ? lastResult.explanation : "";
     const active = state.run?.actor_id === id && (state.run.status === "running" || state.in_flight);
     return `<article class="village-card${active ? " taking-turn" : ""}" data-village-resident="${escape(id)}">
-      <strong>${named(id)}</strong><span class="tag">${escape(resident.occupation)}</span>
+      <strong>${npcPortrait(id)} ${named(id)}</strong><span class="tag">${escape(resident.occupation)}</span>
       ${active ? '<span class="tag green">Current turn</span>' : ""}
       <p><b>Location:</b> ${named(actor.location_id)}</p>
       <p><b>Activity:</b> ${escape(villageClockText(person.activity))}</p>

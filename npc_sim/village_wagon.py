@@ -86,12 +86,41 @@ def ready_orders(world: "World") -> list[VillageSupplierOrder]:
     state = village.context(world)[1]
     if state.economy is None:
         return []
+    wagon_location = world.state.entities["wagon"].location
+
+    def can_arrive(order: VillageSupplierOrder) -> bool:
+        pickup = village.route(world, wagon_location, order.source, road_only=True)
+        delivery = village.route(world, order.source, order.destination, road_only=True)
+        return (pickup is not None and delivery is not None
+                and state.minute + 5 * (len(pickup) + len(delivery)) + 10 <= order.deadline)
+
     return sorted((order for order in state.economy.orders.values()
                    if order.status in village_economy.LOADABLE and order.loadable > 0
                    and order.source in ROUTE and order.destination in ROUTE
+                   and can_arrive(order)
                    and village_economy.loadable_for_order(world, order) > 0
+                   and state.coins.get(order.buyer, 0) >= village_economy.commitments(world, order.buyer)
                    and village_communication.can_use_order(world, order)),
                   key=lambda order: (order.deadline, order.id))
+
+
+def readiness(world: "World") -> dict[str, Any]:
+    config, state = village.context(world)
+    wagon = state.wagon
+    if wagon is None:
+        return {"ready": False, "blocker": "NO_WAGON", "shipments": []}
+    shipments = [{"order_id": order.id, "source": order.source, "destination": order.destination,
+                  "product": order.product, "quantity": min(order.loadable, village_economy.loadable_for_order(world, order))}
+                 for order in ready_orders(world)]
+    blocker = ("WAGON_REPAIR_REQUIRED" if not wagon.repaired else
+               "HORSE_HITCH_REQUIRED" if config.expanded_rules and not wagon.hitched else
+               "NO_CONFIRMED_SHIPMENT" if not shipments and not wagon.loads else None)
+    driver = state.residents[world.actor_id]
+    driver_available = (not (driver.life and (driver.life.sleeping or driver.life.work))
+                        and driver.busy_until <= state.minute)
+    return {"ready": blocker is None and driver_available, "blocker": blocker or (
+                "DRIVER_UNAVAILABLE" if not driver_available else None), "shipments": shipments,
+            "loaded": [item.model_dump(mode="json") for item in wagon.loads]}
 
 
 def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, str, None]:
@@ -144,9 +173,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     if not wagon.repaired:
         return reject("Torvin must finish fitting the wagon parts before the wagon can be used.")
     if action == "village_start_route":
-        if config.expanded_rules and state.economy is not None and not wagon.loads:
-            if not ready_orders(world):
-                return reject("No confirmed shipment is ready on the standing circuit; wait for a real pickup.")
+        if config.expanded_rules and state.economy is not None and not readiness(world)["ready"]:
+            return reject("No confirmed, funded shipment is ready on the standing circuit; wait for a real pickup.")
         wagon.driver, wagon.automatic = rid, True
         wagon.route_index, wagon.phase = 0, "travel"
         wagon.next_event_at, wagon.blocker = state.minute + 5, None

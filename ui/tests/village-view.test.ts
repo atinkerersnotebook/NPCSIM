@@ -557,7 +557,7 @@ test("NPC known research escapes every proposal string and policy in both views"
     quests: [], visitors: [], incidents: [], time_use: {}
   };
   for (const markup of [villageMarkup(village), villageSystemsMarkup(state)]) {
-    assert.ok(!markup.includes("<img"));
+    assert.ok(!markup.includes(payload));
     assert.ok(markup.includes("&lt;img src=x onerror=&quot;bad()&quot;&gt;&amp;&#39;"));
     assert.equal(markup.match(/&lt;img/g)?.length, markup.includes("Your known research") ? 9 : 8);
   }
@@ -688,7 +688,7 @@ test("village markup escapes dialogue and names rather than trusting generated c
   village.residents[0].name = '<img src=x onerror="alert(1)">';
   village.events[0].result = "<script>bad()</script>";
   const markup = villageMarkup(village);
-  assert.ok(!markup.includes("<img"));
+  assert.ok(!markup.includes('<img src=x onerror="alert(1)">'));
   assert.ok(!markup.includes("<script>"));
   assert.ok(markup.includes("&lt;script&gt;"));
 });
@@ -950,7 +950,7 @@ test("dashboard resolves custom member names and escapes beliefs and memories", 
   });
   state.world!.village!.residents.torvin.memories.push(0);
   const markup = villageDashboardMarkup(state, []);
-  assert.ok(!markup.includes("<img") && !markup.includes("<script>"));
+  assert.ok(!markup.includes('<img src=x onerror="bad()">') && !markup.includes("<script>"));
   assert.ok(markup.includes("&lt;img") && markup.includes("&lt;script&gt;memory"));
 });
 

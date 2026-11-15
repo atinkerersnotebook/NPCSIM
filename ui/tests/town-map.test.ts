@@ -7,6 +7,7 @@ import { TownDialogue, townMapAnchors, townMapMarkup } from "../src/town-map.ts"
 import { monitoredAgents, worldMonitorMarkup } from "../src/world-monitor.ts";
 import type { MapAgent } from "../src/town-map.ts";
 import { actorDetailsMarkup } from "../src/actor-details.ts";
+import { npcPortrait, npcSprite } from "../src/npc-sprite.ts";
 
 function fixture() {
   const scenario = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "millhaven-expanded.json"), "utf8"));
@@ -114,6 +115,28 @@ test("World view renders each resident once on the map without changing state or
   assert.ok(markup.includes('data-map-zoom="fit"'));
   assert.ok(!markup.includes("data-command"));
   assert.equal(JSON.stringify(state), before);
+});
+
+test("each resident has distinct artwork across the map and world view", () => {
+  const state = fixture();
+  const ids = Object.keys(state.world!.village!.roster);
+  assert.equal(new Set(ids.map(npcSprite)).size, ids.length);
+  assert.equal(new Set(ids.map(npcPortrait)).size, ids.length);
+  const markup = worldMonitorMarkup(state);
+  for (const id of ids) {
+    assert.match(markup, new RegExp(`data-map-actor="${id}"[\\s\\S]*?data-sprite="${id}"`), id);
+    assert.ok(markup.includes(`data-portrait="${id}"`), id);
+  }
+  assert.match(townMapMarkup(state, monitoredAgents(state), { selectedActorId: ids[0] }),
+    new RegExp(`aria-label="Selected character"[\\s\\S]*?data-portrait="${ids[0]}"`));
+  assert.match(npcPortrait("torvin"), /<img class="npc-portrait npc-portrait-image" src="[^"]*torvin-portrait\.png" alt="" aria-hidden="true"/);
+  assert.match(npcSprite("torvin"), /<img class="npc-sprite npc-sprite-image" src="[^"]*torvin\.png" alt="" aria-hidden="true"/);
+  assert.match(npcPortrait("bren"), /viewBox="0 0 40 48"/);
+  assert.match(npcSprite("bren"), /viewBox="0 0 20 30"/);
+  assert.match(npcSprite('<img src=x>'), /data-sprite="&lt;img src=x&gt;"/);
+  assert.match(npcPortrait('<img src=x>'), /data-portrait="&lt;img src=x&gt;"/);
+  assert.ok(!npcSprite('<img src=x>').includes('<img'));
+  assert.ok(!npcPortrait('<img src=x>').includes('<img'));
 });
 
 test("town actor hover and selection show actual location stock and money without private fields", () => {

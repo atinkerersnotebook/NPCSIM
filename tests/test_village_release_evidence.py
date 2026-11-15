@@ -2,8 +2,10 @@ import hashlib
 
 import pytest
 
+from npc_sim import village, village_economy
+from npc_sim.models import Scenario
 from npc_sim.storage import read_json, write_json
-from npc_sim.village_release_evidence import capture_failure, create_baseline
+from npc_sim.village_release_evidence import capture, capture_failure, create_baseline
 from npc_sim.world import World
 from test_village_expanded import scenario
 
@@ -48,6 +50,9 @@ def test_failure_capture_preserves_timestamped_state_and_inputs(tmp_path):
     assert result["state"]["minute"] == value.village.start_minute + 5
     assert result["state"]["stocks"]["tavern"]["bread"] == 1
     assert result["state"]["meal_reservations"]["daily"]["prepared"] >= 1
+    assert "meal_supply_forecast" in result["state"]
+    assert "meal_readiness" in result["state"]
+    assert result["state"]["resident_locations"]["elsie"] == "tavern"
     assert result["state"]["diagnostic"] == diagnostic
     assert read_json(tmp_path / "failure.json") == result
     with pytest.raises(FileExistsError):
@@ -55,3 +60,27 @@ def test_failure_capture_preserves_timestamped_state_and_inputs(tmp_path):
     (baseline / "scenario.json").write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="hash mismatch"):
         capture_failure(baseline, world_path, tmp_path / "other.json", diagnostic)
+
+
+def test_day_two_snapshot_preserves_progress_without_reseeding(tmp_path):
+    from test_village_expanded import ROOT
+
+    value = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-living.json"))
+    path = tmp_path / "day-two.json"
+    world = World(value, path, "day-two", "elsie", "session-elsie")
+    state = world.state.village
+    state.well_dug = state.repaired = state.wagon.repaired = True
+    state.research.known["elsie"] = ["crisp-flatbread"]
+    opening = state.stocks["tavern"].get("bread", 0)
+    if opening:
+        from npc_sim import village_goods
+        village_goods.take(world, "tavern", "bread", 1)
+    village.advance(world, 1440 - state.minute)
+    world.save()
+    restored = World(value, path, "day-two", "elsie", "session-elsie")
+    after = restored.state.village
+    assert after.minute == 1440
+    assert capture(restored)["repairs"] == {"well": True, "mill": True, "wagon": True}
+    assert capture(restored)["research"]["known"]["elsie"] == ["crisp-flatbread"]
+    assert after.stocks["tavern"].get("bread", 0) <= opening
+    assert village_economy.reconcile_inventory(restored) == []

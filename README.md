@@ -189,6 +189,22 @@ hashes and writes a timestamped state summary without changing either source.
 Keep the frozen scenario and baseline together when comparing failures; record
 the run's actual model/settings separately. Never point the output at an
 existing file or the live world.
+Capture distinct saved-world copies at 09:00, each order change and supper,
+using a new output file and the corresponding action-result JSON for each.
+The evidence includes site stock and lots, orders, meals, actor locations,
+recent actions, cargo, recipe readiness and the meal supply forecast. The
+forecast distinguishes physical inputs, scheduled local work, confirmed incoming supply and
+unconfirmed orders; its latest-request and latest-delivery times identify
+when a missing input can no longer be ordered for that service. It does not
+reserve food or assert that an order will actually arrive.
+The operator snapshot also records completed repairs, discovered recipes,
+personally learned lessons and day-keyed animal care so a saved Day Two can be
+compared against Day One without resetting stock. The resident's fallback view
+lists current commitments, completed daily tasks and known blockers; private
+unread orders are not surfaced. Equipped workers who both accept a meeting at
+the site may begin immediately. Nella's personal wagon readiness lists only
+funded, confirmed and loadable pickups; a route is not started for an empty
+or unfunded circuit.
 
 **Millhaven - A Village That Remembers** (`millhaven-generations`) is an opt-in
 scenario with inherited family histories and obligations for the twelve AI

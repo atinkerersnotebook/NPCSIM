@@ -3,6 +3,7 @@ import type { RunEvent, State } from "./contracts.ts";
 import { escape } from "./html.ts";
 import { villageClockTime } from "./view-mode.ts";
 import { actorDetailsMarkup, siteStockText } from "./actor-details.ts";
+import { npcPortrait, npcSprite } from "./npc-sprite.ts";
 
 const mapImage = new URL("./assets/millhaven.png", import.meta.url).href;
 const resilientMapImage = new URL("./assets/millhaven-next.png", import.meta.url).href;
@@ -131,7 +132,7 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
     class="town-map-actor${agent.deciding ? " deciding" : ""}${agent.visitor ? " visitor" : ""}"
     data-map-actor="${escape(agent.id)}" aria-pressed="${agent.id === options.selectedActorId}"
     aria-label="${escape(`${agent.name}, ${agent.location}. Select for details`)}" aria-describedby="town-actor-${escape(agent.id)}">
-    <span class="town-map-avatar" aria-hidden="true">${escape(agent.name.slice(0, 1))}</span>
+    ${npcSprite(agent.id)}
     <span>${escape(agent.name)}</span></button><span id="town-actor-${escape(agent.id)}" class="actor-details-popover" role="tooltip">
       <strong>${escape(agent.name)}${agent.visitor ? " / Visitor" : ""}</strong>
       ${actorDetailsMarkup(state, agent)}</span></span>`;
@@ -187,7 +188,7 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
       ${offMap.map(agent => `<div>${actorButton(agent)} <span>${escape(agent.location)}${!agent.current ? " (last observed / not live)" : " (not pictured)"}</span></div>`).join("")}
     </div>` : ""}
     ${selected ? `<section class="town-map-selection" aria-label="Selected character">
-      <h3>${escape(selected.name)}${selected.visitor ? " / Visitor" : ""}</h3>
+      <h3>${npcPortrait(selected.id)} ${escape(selected.name)}${selected.visitor ? " / Visitor" : ""}</h3>
       ${actorDetailsMarkup(state, selected)}
       ${selectedLine ? `<p class="town-map-last-speech"><strong>Last spoken words:</strong> ${escape(selectedLine.text)}</p>` : ""}
     </section>` : ""}

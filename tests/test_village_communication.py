@@ -397,6 +397,26 @@ def test_physically_gathered_accepted_crew_can_work_without_paper_confirmation(w
     assert village_ai.apply(partner, "village_project", {"project": "dig_well"})[0] == "APPLIED"
 
 
+def test_equipped_crew_accepts_face_to_face_and_starts_before_future_meeting(world):
+    base = world.scenario.village
+    lead = actor(world, base.smith, base.well_site)
+    partner = actor(world, base.helper, base.well_site)
+    ready(world)
+    for eid in (base.shovel, base.timber, base.rope):
+        world.state.entities[eid].location = base.well_site
+        world.state.entities[eid].hidden = False
+    nid = post(lead, {"type": "meeting", "subject": "dig_well", "description": "Work now",
+                      "recipients": [partner.actor_id], "destination": base.well_site,
+                      "due_at": 700, "project": "dig_well"}, channel="conversation", listener=partner.actor_id)
+    ready(world)
+    assert latest(world, nid).appointment.due_at == 700
+    response = comm.apply(partner, "village_respond_to_request", {"request_id": nid, "response": "accept"})
+    assert response[:2] == ("APPLIED", "NOTICE_UPDATED"), response
+    assert latest(world, nid).appointment.due_at == world.state.village.minute
+    assert comm.project_blocker(lead, "dig_well") is None
+    assert village_ai.apply(lead, "village_project", {"project": "dig_well"})[0] == "APPLIED"
+
+
 def test_uninformed_partner_does_not_learn_appointment_merely_by_gathering(world):
     lead = actor(world, world.scenario.village.smith, "village-square")
     ready(world)

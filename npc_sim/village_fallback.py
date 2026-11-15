@@ -153,6 +153,58 @@ def update_supply_needs(world: "World") -> None:
             blocker=None)
 
 
+def current_tasks(world: "World") -> dict[str, list[dict[str, Any]]]:
+    """Summarize only the actor's commitments and observed daily progress."""
+    _, state = village.context(world)
+    person = state.residents[world.actor_id]
+    day = state.minute // 1440
+    commitments: list[dict[str, Any]] = []
+    completed: list[dict[str, Any]] = []
+    blockers: list[dict[str, Any]] = []
+    if person.life:
+        if person.life.work:
+            commitments.append({"task": "work", "due": person.life.work.finishes_at})
+        for key, meal in person.life.meals.items():
+            if key.startswith(f"{day}:"):
+                target = completed if meal.status == "eaten" else commitments if meal.status == "pending" else blockers
+                target.append({"task": key, "status": meal.status, "due": meal.due})
+    for need in person.fallback.supply_needs.values():
+        if need.status in {"delivered", "rejected", "expired", "cancelled"} and need.last_material_change // 1440 < day:
+            continue
+        item = {"task": need.notice_id or f"supply:{need.good}", "status": need.status,
+                "good": need.good, "supplier": need.supplier_id}
+        target = (completed if need.status == "delivered" else blockers if need.status in
+                  {"rejected", "expired", "cancelled", "blocked"} else commitments)
+        target.append(item)
+    if state.economy:
+        from npc_sim import village_communication
+        for order in state.economy.orders.values():
+            if world.actor_id not in {order.buyer, order.supplier}:
+                continue
+            status = order.status
+            if village_communication.enabled(world) and order.coordination_notice_id:
+                memory = state.communication.knowledge.get(world.actor_id, {}).get(order.coordination_notice_id)
+                if memory is None or memory.snapshot.order_snapshot is None:
+                    continue
+                status = memory.snapshot.order_snapshot["status"]
+            if status in {"fulfilled", "failed", "cancelled", "rejected", "expired", "declined"} and order.deadline // 1440 < day:
+                continue
+            item = {"task": order.id, "status": status, "product": order.product,
+                    "deadline": order.deadline}
+            target = (completed if status == "fulfilled" else blockers if status in
+                      {"failed", "cancelled", "rejected", "expired", "declined"} else commitments)
+            target.append(item)
+    if state.livestock and world.actor_id == state.livestock.config.keeper:
+        for name in ("cow", "hens"):
+            care = getattr(state.livestock, name)
+            (completed if care.day == day and care.cleaned else commitments).append(
+                {"task": f"care:{name}", "day": day})
+    for blocked in person.fallback.blocked.values():
+        blockers.append({"task": blocked.action_id, "reason": blocked.reason_code,
+                         "blocked_at": blocked.blocked_at})
+    return {"commitments": commitments, "completed": completed, "blockers": blockers}
+
+
 def _supplier_evidence(world: "World", need: VillageSupplyNeed) -> str:
     _, state = village.context(world)
     known = state.communication.knowledge.get(world.actor_id, {}) if state.communication else {}
@@ -1085,6 +1137,7 @@ def observation(world: "World") -> dict[str, Any]:
         "blocked_tasks": [{**item.model_dump(), "retry_suppressed": item.context_revision == _retry_revision(world, item.action_id)}
                           for item in fallback.blocked.values()],
         "supply_needs": [need.model_dump() for need in fallback.supply_needs.values()],
+        "current_tasks": current_tasks(world),
         "communication_blocker": (state.communication.recent_blockers.get(world.actor_id)
                                   if purposeful(world) and state.communication else None),
         "recent_locations": [step.model_dump() for step in fallback.recent_locations],

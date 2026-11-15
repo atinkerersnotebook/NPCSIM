@@ -71,6 +71,7 @@ def observation(world: "World") -> dict[str, Any]:
                 "deadlines": public_deadlines}
                if config.expanded_rules else {}),
             "deliveries": [entry.model_dump() for entry in config.deliveries] if rid == config.courier else [],
+            "wagon_readiness": village_wagon.readiness(world) if rid == config.courier and state.wagon else None,
             "active_delivery": person.delivery,
             **village_life.personal(world),
         },

@@ -42,7 +42,16 @@
 .gantt-name-anchor:focus-visible { outline: 2px solid var(--teal); }
 .gantt-name-anchor .actor-details-popover { left: calc(100% + 12px); top: -12px; }
 .world-gantt:has(.gantt-name-anchor:hover), .world-gantt:has(.gantt-name-anchor:focus) { overflow: visible; }
-.town-map-avatar { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #c9ab6a; color: #182b29; flex: none; font-size: 11px; }
+.npc-sprite, .npc-portrait { flex: none; image-rendering: pixelated; shape-rendering: crispEdges; filter: drop-shadow(0 2px 2px #0009); vertical-align: middle; }
+.npc-sprite { width: 40px; height: 60px; }
+.town-map-actor .npc-sprite { width: 24px; height: 36px; }
+.npc-portrait { width: 80px; height: 96px; }
+.npc-portrait-image { height: 120px; object-fit: cover; object-position: center 38%; border: 2px solid #718378; background: #263b3b; box-sizing: border-box; }
+.npc-sprite-image { object-fit: contain; border-radius: 2px; }
+.town-map-selection .npc-portrait { width: 60px; height: 72px; }
+.town-map-selection .npc-portrait-image { height: 90px; }
+.monitor-agent h3, .town-map-selection h3 { display: flex; align-items: center; gap: 8px; }
+.village-card > strong:has(.npc-portrait) { display: inline-flex; align-items: center; gap: 8px; }
 .town-map-actor.deciding, .town-map-actor[aria-pressed=true] { border-color: #9ffff0; background: #255a51; }
 .town-map-actor.visitor { border-style: dashed; }
 .town-map-actor:focus-visible, .town-map-scroll:focus-visible { outline: 3px solid var(--teal); outline-offset: -2px; }
