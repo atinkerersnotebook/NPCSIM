@@ -358,8 +358,15 @@ def _obligation_limits(world: "World") -> list[int]:
         if due > state.minute:
             path = village.route(world, world.actor.location_id, destination)
             if path is not None:
-                limits.append(due if not path else due - 5 * len(path) - 5)
+                journal = (5 if destination == resident.home and state.legacy is not None
+                           and not _journal_written(world) else 0)
+                limits.append(due - (5 * len(path) + 5 if path else 0) - journal)
     return limits
+
+
+def _journal_written(world: "World") -> bool:
+    from npc_sim import village_legacy
+    return village_legacy.journal_written(world, world.actor_id)
 
 
 def next_review(world: "World") -> int:
@@ -922,7 +929,20 @@ def candidates(world: "World") -> list[dict[str, Any]]:
     config, state = village.context(world)
     resident, person = config.residents[world.actor_id], state.residents[world.actor_id]
     life = person.life
-    if not enabled(world) or life is None or life.sleeping or life.work or person.available_at > state.minute:
+    if life is None or life.sleeping or life.work or person.available_at > state.minute:
+        return []
+    if state.legacy is not None:
+        from npc_sim import village_legacy
+        if village_legacy.history_pending(world):
+            return [{"task_id": "legacy:read", "action_id": "village_read_history", "arguments": {},
+                     "priority": "P0", "reason": "Read inherited history before starting this generation."}]
+        if (world.actor.location_id == resident.home and not village_legacy.journal_written(world, world.actor_id)
+                and (village_life.rest_due(resident, life, state.minute)
+                     or village_life.early_inn_close_ready(world, world.actor_id))):
+            return [{"task_id": "legacy:journal", "action_id": "village_write_diary",
+                     "arguments": {}, "requires_input": ["text"], "priority": "P0",
+                     "reason": "Write today's personal journal before sleeping; include a firsthand note and optionally problems and suggestions."}]
+    if not enabled(world):
         return []
     choices: list[dict[str, Any]] = []
     if village_life.rest_due(resident, life, state.minute) or village_life.early_inn_close_ready(world, world.actor_id):
@@ -969,8 +989,15 @@ def candidates(world: "World") -> list[dict[str, Any]]:
         blocked = village_life.action_blocker(world, action_id, personal=True)
         if blocked is None and village_ai.production_ready(world, action_id) is None:
             if action_blocker(world, action_id, {}, check_wait=False) is None:
+                economy_policy = village_economy.config(world)
+                cooking = (economy_policy is not None and world.actor_id == economy_policy.innkeeper
+                           and action_id in {"village_work", "village_cook_fish"}
+                           and any(item["cookable_portions"] and item["planned_portions"] > item["prepared_portions"]
+                                   for item in village_economy.meal_readiness(world)))
                 choices.append({"task_id": f"occupation:{action_id}", "action_id": action_id, "arguments": {},
-                                "priority": "P3", "reason": "Your real occupation work is currently eligible."})
+                                "priority": "P1" if cooking else "P3",
+                                "reason": ("Cook real portions for the next service while inputs, fuel and time permit."
+                                           if cooking else "Your real occupation work is currently eligible.")})
     if purposeful(world):
         choices.extend(_purposeful_choices(world))
         choices.sort(key=lambda choice: choice["priority"])
@@ -1179,7 +1206,8 @@ def advance(world: "World") -> None:
 
 def observation(world: "World") -> dict[str, Any]:
     if not enabled(world):
-        return {}
+        _, state = village.context(world)
+        return {"fallback": {"eligible_candidates": candidates(world)}} if state.legacy is not None else {}
     update_supply_needs(world)
     _, state = village.context(world)
     fallback = state.residents[world.actor_id].fallback

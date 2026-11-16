@@ -136,7 +136,7 @@ function namedVoice(text: string, name: string): string {
       `I ${{"don't": "do not", "can't": "cannot", "won't": "will not"}[verb]}`)
     .replace(/\bI ([a-z]+)\b/g, (_, verb: string) => `${name} ${verbs.get(verb) ?? verb}`)
     .replace(/\bI\b|\bme\b/g, () => name)
-    .replace(/\b[Mm]y\b|\bmine\b/g, () => `${name}'s`)
+    .replace(/\b[Mm]y\b/g, () => `${name}'s`)
     .replace(/\bmyself\b/g, () => name)
     .replace(new RegExp(`(^|[.!?]\\s+)${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"),
       (_, prefix: string) => prefix + name));

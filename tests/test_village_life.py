@@ -83,9 +83,10 @@ def test_early_tavern_meal_does_not_allow_daytime_sleep(cast):
     walk(cast, "iona", "square-cottages", "square-tavern")
     advance_to(cast, 1080)
     state = cast["iona"].state.village
+    state.stocks["tavern"]["bread"] += 1
     stock_before = state.stocks["tavern"]["bread"]
     assert do(cast, "iona", "village_eat")["code"] == "MEAL_EATEN"
-    assert life(cast, "iona").meals["0:daily"].due == 1140
+    assert life(cast, "iona").meals["0:daytime"].status == "eaten"
     assert state.stocks["tavern"]["bread"] == stock_before - 1
     advance_to(cast, state.residents["iona"].available_at)
     assert act(cast["iona"], "village_eat")["code"] == "NO_MEAL_DUE"
@@ -93,8 +94,12 @@ def test_early_tavern_meal_does_not_allow_daytime_sleep(cast):
     advance_to(cast, state.residents["iona"].available_at)
     assert act(cast["iona"], "village_sleep")["code"] == "REST_NOT_DUE"
     advance_to(cast, 1140)
+    assert life(cast, "iona").meals["0:daily"].status == "pending"
+    walk(cast, "iona", "square-cottages", "square-tavern")
+    assert do(cast, "iona", "village_eat")["code"] == "MEAL_EATEN"
     assert life(cast, "iona").meals["0:daily"].status == "eaten"
     assert not life(cast, "iona").sleeping
+    walk(cast, "iona", "square-tavern", "square-cottages")
     advance_to(cast, cast["iona"].scenario.village.residents["iona"].bed_minute)
     assert do(cast, "iona", "village_sleep")["code"] == "SLEEP_STARTED"
     resident = cast["iona"].scenario.village.residents["iona"]

@@ -262,6 +262,86 @@ def test_funded_milk_order_can_commit_before_real_daily_care(tmp_path):
     assert state.coins["nella"] == balances["nella"] + 1
 
 
+def test_funded_egg_order_plans_care_and_requires_real_collection_and_receipt(tmp_path):
+    world = make_world(tmp_path)
+    state = world.state.village
+    state.well_dug = True
+    inn = world.bind("elsie", "session-elsie")
+    inn.actor.location_id = "farm"
+    perform(inn, "village_propose_order", supplier="ada", product="eggs", quantity=2,
+            deadline=800, required_fresh_until=840)
+    order = next(iter(state.economy.orders.values()))
+    accepted = perform(world, "village_accept_order", order_id=order.id)
+    assert accepted["code"] == "ORDER_ACCEPTED_PLANNED"
+    assert order.production_plan["requires_care"] == 1
+    assert state.stocks["farm"]["eggs"] == state.stocks["tavern"]["eggs"] == 0
+    assert village_economy.meal_supply_forecast(world)[0]["inputs"].get("eggs") is None
+    water(world)
+    perform(world, "village_care_hens", minutes=10)
+    assert state.stocks["farm"]["eggs"] == 0
+    perform(world, "village_collect_eggs", minutes=10)
+    assert state.stocks["farm"]["eggs"] == 2 and state.stocks["tavern"]["eggs"] == 0
+    courier = world.bind("nella", "session-nella")
+    courier.actor.location_id = "farm"
+    perform(courier, "village_load_goods", goods={"eggs": 2}, destination="tavern")
+    assert state.stocks["tavern"]["eggs"] == 0
+    courier.actor.location_id = "tavern"
+    perform(courier, "village_unload_goods")
+    assert order.status == "fulfilled" and state.stocks["tavern"]["eggs"] == 2
+
+
+def test_egg_order_cannot_commit_without_real_care_inputs_or_time(tmp_path):
+    world = make_world(tmp_path)
+    state = world.state.village
+    state.well_dug = True
+    inn = world.bind("elsie", "session-elsie")
+    inn.actor.location_id = "farm"
+    perform(inn, "village_propose_order", supplier="ada", product="eggs", quantity=1,
+            deadline=800, required_fresh_until=840)
+    order = next(iter(state.economy.orders.values()))
+    village_goods.take(world, "farm", "grain", 8)
+    rejected = act(world, "village_accept_order", order_id=order.id)
+    assert rejected["code"] == "SUPPLY_NOT_READY"
+    assert order.status == "deferred" and not order.production_plan
+    assert state.stocks["tavern"]["eggs"] == 0
+
+
+def test_egg_order_care_and_transport_must_fit_before_delivery_deadline(tmp_path):
+    world = make_world(tmp_path)
+    state = world.state.village
+    state.well_dug = True
+    state.minute = 730
+    inn = world.bind("elsie", "session-elsie")
+    inn.actor.location_id = "farm"
+    perform(inn, "village_propose_order", supplier="ada", product="eggs", quantity=1,
+            deadline=760, required_fresh_until=1140)
+    order = next(iter(state.economy.orders.values()))
+    result = act(world, "village_accept_order", order_id=order.id)
+    assert result["code"] == "SUPPLY_NOT_READY"
+    assert order.status == "deferred" and not order.production_plan
+    assert state.stocks["tavern"]["eggs"] == 0
+
+
+def test_milk_and_eggs_can_be_committed_for_same_morning_without_claiming_delivery(tmp_path):
+    world = make_world(tmp_path)
+    state = world.state.village
+    state.well_dug = True
+    inn = world.bind("elsie", "session-elsie")
+    inn.actor.location_id = "farm"
+    for product in ("milk", "eggs"):
+        perform(inn, "village_propose_order", supplier="ada", product=product, quantity=1,
+                deadline=900, required_fresh_until=1140)
+        order = list(state.economy.orders.values())[-1]
+        assert perform(world, "village_accept_order", order_id=order.id)["code"] == "ORDER_ACCEPTED_PLANNED"
+    assert state.stocks["tavern"]["milk"] == state.stocks["tavern"]["eggs"] == 0
+    assert all(order.delivered_quantity == 0 for order in state.economy.orders.values())
+    care(world)
+    perform(world, "village_milk_cow", minutes=15)
+    perform(world, "village_collect_eggs", minutes=10)
+    assert state.stocks["farm"]["milk"] >= 1 and state.stocks["farm"]["eggs"] >= 1
+    assert state.stocks["tavern"]["milk"] == state.stocks["tavern"]["eggs"] == 0
+
+
 def test_real_bucket_and_water_source_interruption_cannot_create_water(tmp_path):
     world = make_world(tmp_path)
     perform(world, "take", target=village_livestock.BUCKET)

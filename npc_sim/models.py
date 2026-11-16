@@ -458,6 +458,15 @@ class VillageLegacyLesson(StrictModel):
     source: str
 
 
+class VillageDiaryEntry(StrictModel):
+    author: str = Field(min_length=1)
+    written_at: int = Field(ge=0)
+    text: str = Field(min_length=20, max_length=500)
+    problems: str | None = Field(default=None, min_length=20, max_length=1000)
+    suggestions: str | None = Field(default=None, min_length=20, max_length=1000)
+    origin_world_id: str
+
+
 class VillageLegacyState(StrictModel):
     chronicle: list[VillageLegacyEntry] = Field(default_factory=list)
     newcomers: dict[str, VillageLegacyArrival] = Field(default_factory=dict)
@@ -465,6 +474,8 @@ class VillageLegacyState(StrictModel):
     last_day: int = Field(default=0, ge=0)
     learned: dict[str, list[int]] = Field(default_factory=dict)
     lessons: dict[str, list[VillageLegacyLesson]] = Field(default_factory=dict)
+    diaries: dict[str, list[VillageDiaryEntry]] = Field(default_factory=dict)
+    history_read: list[str] = Field(default_factory=list)
     lineage: dict[str, list[str]] = Field(default_factory=dict)
     retired: dict[str, list[str]] = Field(default_factory=dict)
     current: dict[str, str] = Field(default_factory=dict)
@@ -726,7 +737,7 @@ class VillageConfig(VillageDayPolicy):
 
 
 class VillageMeal(StrictModel):
-    kind: Literal["daily", "breakfast"]
+    kind: Literal["daily", "breakfast", "daytime"]
     due: int = Field(ge=0)
     status: Literal["pending", "eaten", "missed"] = "pending"
     source: str | None = None
@@ -856,6 +867,7 @@ class VillageWalkingPlan(StrictModel):
     meal_due: bool = False
     rest_due: bool = False
     routine_location: str = ""
+    known_notice_versions: dict[str, int] = Field(default_factory=dict)
 
 
 class VillagePersonState(StrictModel):

@@ -509,60 +509,35 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
             return {}, "Real animals and usable collection equipment are required"
         care_today = care.day == day
         cared = care_today and care.fed and care.watered and care.cleaned
-        care_finish = earliest + len(approach) * 5
-        if operation == "milk" and not cared:
-            cow = livestock.cow
-            from npc_sim import village_depot
-            feed_site = village_depot.FEED_STORE if village_depot.enabled(world) else "farm"
-            hay = usable_stock(world, feed_site, "hay", state.minute)
-            if not (care_today and cow.fed) and hay - 1 < protected_quantity(world, feed_site, "hay"):
-                return {}, "Cow care needs one real hay unit above protected reserves"
-            if not (care_today and cow.watered) and livestock.water < 1:
-                well = world.state.entities.get(base.well_site)
-                water_route = village.route(world, "farm", base.well_site)
-                if (not state.well_dug or well is None or well.hidden or well.broken
-                        or water_route is None):
-                    return {}, "Cow care needs a usable well and a real route from the farm"
-                bucket = world.state.entities.get(village_livestock.BUCKET)
-                if (bucket is None or bucket.hidden or bucket.broken
-                        or (bucket.location != "farm" and village_livestock.BUCKET not in inventory)):
-                    return {}, "Cow care needs the real livestock bucket"
-                if village_livestock.BUCKET not in inventory:
-                    care_finish += 5
-                care_finish += len(water_route) * 10 + 5 * village_life.cooldown_factor(world, supplier)
-            if not (care_today and cow.cleaned):
-                brush = world.state.entities.get(village_livestock.BRUSH)
-                stall = world.state.entities.get("cow-stall")
-                if any(entity is None or entity.hidden or entity.broken
-                       or (entity.location != "farm" and key not in inventory)
-                       for key, entity in ((village_livestock.BRUSH, brush), ("cow-stall", stall))):
-                    return {}, "Cow care needs the real usable brush and stall at the farm"
-                care_finish += max(5, 15 * village_life.cooldown_factor(world, supplier)
-                                   - (cow.progress if care_today else 0))
-        elif not cared:
-            if day == state.minute // 1440:
-                return {}, "Egg collection requires completed real hen care"
+        factor = village_life.cooldown_factor(world, supplier)
+        care_finish = max(earliest, day * 1440 + resident.wake_minute) + len(approach) * 5
+        if not cared:
             from npc_sim import village_depot, village_recycling
             feed_site = village_depot.FEED_STORE if village_depot.enabled(world) else "farm"
-            grain, _ = village_recycling.hen_ration(world)
-            if usable_stock(world, feed_site, "grain", day * 1440 + resident.wake_minute) - grain < protected_quantity(world, feed_site, "grain"):
-                return {}, "Tomorrow's hen care needs real unreserved feed"
-            if livestock.water < 1:
+            resource, amount = ("hay", 1) if operation == "milk" else ("grain", village_recycling.hen_ration(world)[0])
+            if not (care_today and care.fed) and (usable_stock(world, feed_site, resource, care_finish) - amount
+                                                  < protected_quantity(world, feed_site, resource)):
+                return {}, f"{operation} care needs real unreserved {resource} feed"
+            bucket = world.state.entities.get(village_livestock.BUCKET)
+            if (bucket is None or bucket.hidden or bucket.broken
+                    or bucket.location != "farm" and village_livestock.BUCKET not in inventory):
+                return {}, f"{operation} care needs the real livestock bucket"
+            if not (care_today and care.watered) and livestock.water < 1:
                 well = world.state.entities.get(base.well_site)
-                bucket = world.state.entities.get(village_livestock.BUCKET)
-                if (not state.well_dug or well is None or well.hidden or well.broken
-                        or village.route(world, "farm", base.well_site) is None
-                        or bucket is None or bucket.hidden or bucket.broken
-                        or bucket.location != "farm" and village_livestock.BUCKET not in inventory):
-                    return {}, "Tomorrow's hen care needs real well water and a bucket"
-            brush = world.state.entities.get(village_livestock.BRUSH)
-            coop = world.state.entities.get("hen-coop")
-            if any(entity is None or entity.hidden or entity.broken
-                   or entity.location != "farm" and key not in inventory
-                   for key, entity in ((village_livestock.BRUSH, brush), ("hen-coop", coop))):
-                return {}, "Tomorrow's hen care needs usable hen equipment"
-            care_finish = max(care_finish, day * 1440 + resident.wake_minute
-                              + 10 * village_life.cooldown_factor(world, supplier))
+                water_route = village.route(world, "farm", base.well_site)
+                if not state.well_dug or well is None or well.hidden or well.broken or water_route is None:
+                    return {}, f"{operation} care needs a usable well and a real route from the farm"
+                if village_livestock.BUCKET not in inventory:
+                    care_finish += 5
+                care_finish += len(water_route) * 10 + 5 * factor
+            housing = "cow-stall" if operation == "milk" else "hen-coop"
+            for key in (village_livestock.BRUSH, housing):
+                entity = world.state.entities.get(key)
+                if entity is None or entity.hidden or entity.broken or entity.location != "farm" and key not in inventory:
+                    return {}, f"{operation} care needs real usable cleaning equipment at the farm"
+            if not (care_today and care.cleaned):
+                care_finish += max(5, (15 if operation == "milk" else 10) * factor
+                                   - (care.progress if care_today else 0))
         reserved_output = sum(other.production_plan.get("output", 0) for other in pending
                               if other.product == order.product
                               and other.production_plan.get("finish", 0) // 1440 == day)
@@ -582,7 +557,8 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
                 at = max(at, previous.start + 240)
             if ((operation == "milk" and care_today and session in care.milk_sessions)
                     or (operation == "eggs" and care_today and care.eggs)
-                    or any(other.production_plan.get("session") == (1 if session == "morning" else 2)
+                    or any(other.product == order.product
+                           and other.production_plan.get("session") == (1 if session == "morning" else 2)
                            and other.production_plan.get("finish", 0) // 1440 == day for other in pending)):
                 continue
             if at + duration <= min(end, latest_start, closing):
@@ -639,9 +615,11 @@ def meal_readiness(world: "World") -> list[dict[str, Any]]:
     base, state = village.context(world)
     inn = base.residents[policy.innkeeper].work
     forecasts = []
+    supply = {item["service"]: item for item in meal_supply_forecast(world)}
     spent: dict[str, int] = {}
     for plan in meal_requirements(world):
         due = plan["due"]
+        ready_by = due - policy.cooking_lead_minutes
         outstanding = max(0, plan["remaining_portions"] - plan["covered_portions"])
         fuel_needed = sum(ceil(portions / policy.recipes[name].portions)
                           for name, portions in plan["unmet_recipe_portions"].items()) if village_firewood.enabled(world) else 0
@@ -665,13 +643,26 @@ def meal_readiness(world: "World") -> list[dict[str, Any]]:
             if fuel_needed:
                 spent["firewood"] = spent.get("firewood", 0) + batches
             projected += batches * recipe.portions
+        incoming = {product: details["confirmed_incoming"] for product, details in
+                    supply[plan["id"]]["inputs"].items() if details["confirmed_incoming"]}
+        requests = {product: details["unconfirmed"] for product, details in
+                    supply[plan["id"]]["inputs"].items() if details["unconfirmed"]}
+        order_window_closed = any(details["blocker"] == "ORDER_WINDOW_CLOSED" for details in
+                                  supply[plan["id"]]["inputs"].values())
+        blocker = ("COOKING_WINDOW_CLOSED" if outstanding and state.minute > due else
+                   "FUEL_MISSING" if outstanding and fuel_on_hand < fuel_needed else
+                   "ORDER_WINDOW_CLOSED" if outstanding and missing_inputs and order_window_closed else
+                   "INGREDIENTS_MISSING" if outstanding and missing_inputs else
+                   "COOKING_REQUIRED" if outstanding and projected else None)
         forecasts.append({"service": plan["id"], "due": due,
-                          "ready_by": due - policy.cooking_lead_minutes,
+                          "ready_by": ready_by,
                           "planned_portions": plan["remaining_portions"],
                           "prepared_portions": plan["covered_portions"],
                           "cookable_portions": min(outstanding, projected),
                           "projected_unserved": max(0, outstanding - projected),
                           "fuel_needed": fuel_needed, "fuel_on_hand": fuel_on_hand,
+                          "confirmed_incoming": incoming, "unconfirmed_requests": requests,
+                          "blocker": blocker,
                           "missing_inputs": sorted(missing_inputs),
                           "reason_code": ("ingredients_missing" if missing_inputs else
                                           "fuel_missing" if fuel_on_hand < fuel_needed else
@@ -1106,7 +1097,11 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
                 lead = max(policy.delivery_lead_minutes, policy.cooking_lead_minutes) if (
                     _food_policy(world) and buyer == policy.innkeeper and key.endswith(":supper")
                     and product in {"bread", "fish"}) else policy.delivery_lead_minutes
-                if (_food_policy(world) and buyer == policy.innkeeper and key.endswith(":supper")
+                if buyer == policy.innkeeper and product in {"milk", "eggs"}:
+                    lead = max(lead, policy.cooking_lead_minutes)
+                if (buyer == policy.innkeeper
+                        and ((_food_policy(world) and key.endswith(":supper") and product in {"bread", "fish"})
+                             or product in {"milk", "eggs"})
                         and state.minute > use_at - policy.cooking_lead_minutes - policy.delivery_lead_minutes):
                     continue
                 deadline = max(state.minute, use_at - lead)
@@ -1188,6 +1183,11 @@ def _propose(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]
             or isinstance(fresh, bool) or not isinstance(fresh, int)
             or deadline < state.minute or fresh < deadline):
         return "REJECTED", "INVALID_ORDER", "Choose real supplier, product, quantity and future deadline/use.", None
+    policy = config(world)
+    if (policy and buyer == policy.innkeeper and product in {"milk", "eggs"}
+            and fresh // 1440 == state.minute // 1440
+            and state.minute > fresh - policy.cooking_lead_minutes - policy.delivery_lead_minutes):
+        return "REJECTED", "ORDER_WINDOW_CLOSED", "Milk and eggs need physical delivery and cooking time before service.", None
     blocked = _contact_attempt(world, supplier)
     if blocked:
         return "REJECTED", blocked[0], blocked[1], None

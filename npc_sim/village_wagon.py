@@ -229,13 +229,54 @@ def advance(world: "World") -> None:
         pause("The driver cannot currently move and handle the wagon.")
         return
     wagon.next_event_at = person.available_at = state.minute + 5
-    if config.expanded_rules and state.economy is not None and not wagon.loads and not ready_orders(world):
+    orders = ready_orders(world) if config.expanded_rules and state.economy is not None else []
+    if config.expanded_rules and state.economy is not None and not wagon.loads and not orders:
         if driver.location_id == config.residents[config.smith].work:
             pause("No confirmed shipment is ready; the wagon and horse are back at the forge for unhitching.")
             return
         destination = config.residents[config.smith].work
+    elif config.expanded_rules and state.economy is not None:
+        destination = wagon.loads[0].destination if wagon.loads else orders[0].source
     else:
         destination = ROUTE[wagon.route_index]
+    if config.expanded_rules and state.economy is not None:
+        location = driver.location_id
+        if location != destination:
+            path = village.route(world, location, destination, road_only=True)
+            if not path:
+                pause(f"No passable route from {world.state.entities[location].name} to "
+                      f"{world.state.entities[destination].name}.")
+                return
+            driver.location_id = path[0]
+            village.remember_step(world, rid, location, path[0])
+            world.state.entities["wagon"].location = path[0]
+            world.state.entities["work-horse"].location = path[0]
+            if path[0] not in driver.visited_locations:
+                driver.visited_locations.append(path[0])
+            person.activity = f"Driving to {world.state.entities[path[0]].name}."
+            village.event(world, rid, "wagon_drive", path[0], person.activity, path[0])
+            village.observe_local(world, rid)
+            return
+        if wagon.loads:
+            reason = unload(world)
+            if reason:
+                pause(reason)
+                return
+            person.activity = "Unloaded the wagon and settled the delivery."
+            village.event(world, rid, "wagon_unload", location, person.activity, location)
+            return
+        order = next((order for order in ready_orders(world) if order.source == location), None)
+        if order is None:
+            return
+        amount = min(order.loadable, village_economy.loadable_for_order(world, order), 6)
+        if amount:
+            reason = load(world, {order.product: amount}, order.destination)
+            if reason:
+                pause(reason)
+                return
+            person.activity = f"Loaded {amount} {order.product} in one action."
+            village.event(world, rid, "wagon_load", location, person.activity, location)
+        return
     for _ in range(4):
         location = driver.location_id
         if location != destination:
@@ -275,32 +316,17 @@ def advance(world: "World") -> None:
         wagon.phase = "travel"
         wagon.route_index = (wagon.route_index + 1) % len(ROUTE)
         destination = ROUTE[wagon.route_index]
-        if config.expanded_rules and state.economy is not None:
-            orders = [order for order in ready_orders(world) if order.source == location]
-            if orders:
-                order = orders[0]
-                amount = min(order.loadable, village_economy.loadable_for_order(world, order),
-                             6 - sum(item.quantity for item in wagon.loads))
-                if amount:
-                    reason = load(world, {order.product: amount}, order.destination)
-                    if reason:
-                        pause(reason)
-                        return
-                    person.activity = f"Loaded {amount} {order.product} in one action."
-                    village.event(world, rid, "wagon_load", location, person.activity, location)
-                    return
-        else:
-            route = next((route for route in config.deliveries if route.source == location), None)
-            if not route:
-                continue
-            amount = min(state.stocks.get(location, {}).get(route.resource, 0),
-                         6 - sum(item.quantity for item in wagon.loads))
-            if amount:
-                reason = load(world, {route.resource: amount}, route.destination)
-                if reason:
-                    pause(reason)
-                    return
-                person.activity = f"Loaded {amount} {route.resource} in one action."
-                village.event(world, rid, "wagon_load", location, person.activity, location)
+        route = next((route for route in config.deliveries if route.source == location), None)
+        if not route:
+            continue
+        amount = min(state.stocks.get(location, {}).get(route.resource, 0),
+                     6 - sum(item.quantity for item in wagon.loads))
+        if amount:
+            reason = load(world, {route.resource: amount}, route.destination)
+            if reason:
+                pause(reason)
                 return
+            person.activity = f"Loaded {amount} {route.resource} in one action."
+            village.event(world, rid, "wagon_load", location, person.activity, location)
+            return
     raise ValueError("The wagon route made no progress")

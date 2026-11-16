@@ -198,12 +198,15 @@ def test_finn_preservation_requires_funded_physical_log_and_uncommitted_fish(tmp
     assert restored.state.village.stocks["riverbank"]["preserved-fish"] == 1
 
 
-def test_early_supper_is_eligible_but_sleep_waits_for_bedtime(tmp_path):
+def test_daytime_food_requires_surplus_and_sleep_waits_for_bedtime(tmp_path):
     world = make_world(tmp_path, minute=1080, living=True)
     world.actor.location_id = "tavern"
     village_goods.put(world, "tavern", "bread", len(world.scenario.village.residents))
+    assert not any(choice["action_id"] == "village_eat" for choice in village_fallback.candidates(world))
+    village_goods.put(world, "tavern", "bread", 1)
     assert any(choice["action_id"] == "village_eat" for choice in village_fallback.candidates(world))
     assert act(world, "village_eat")["code"] == "MEAL_EATEN"
+    assert world.state.village.residents["rowan"].life.meals[f"{world.state.village.minute // 1440}:daytime"].status == "eaten"
     assert not any(choice["action_id"] == "village_eat" for choice in village_fallback.candidates(world))
     village.advance(world, world.state.village.residents["rowan"].available_at - world.state.village.minute)
     world.actor.location_id = world.scenario.village.residents["rowan"].home

@@ -441,6 +441,36 @@ def test_readiness_counts_complete_batch_when_recipe_demand_is_odd(world):
     assert readiness["missing_inputs"] == ["fish"]
 
 
+def test_readiness_separates_cookable_stock_from_confirmed_and_requested_supply(world):
+    state = world.state.village
+    state.minute = 900
+    add(world, "tavern", "bread", 1, expiry=1200)
+    add(world, "bakery", "bread", 3, expiry=1200)
+    confirmed = propose(world, quantity=2, deadline=1080)
+    requested = propose(world, quantity=1, deadline=1080, request_key="second")
+    accept(world, confirmed)
+    readiness = economy.meal_readiness(world)[0]
+    assert readiness["cookable_portions"] == 2
+    assert readiness["confirmed_incoming"]["bread"] == 2
+    assert readiness["unconfirmed_requests"]["bread"] == 1
+    assert readiness["projected_unserved"] > 0
+    assert readiness["blocker"] == "INGREDIENTS_MISSING"
+    assert world.state.village.economy.orders[requested.id].status == "proposed"
+    state.minute = 1145
+    assert all(item["service"] != "0:supper" for item in economy.meal_readiness(world))
+
+
+def test_readiness_reports_closed_order_window_without_counting_request(world):
+    state = world.state.village
+    state.minute = 1055
+    add(world, "bakery", "bread", 3, expiry=1200)
+    forecast = economy.meal_readiness(world)[0]
+    assert forecast["service"] == "0:supper"
+    assert forecast["projected_unserved"] == 12
+    assert forecast["confirmed_incoming"] == {}
+    assert forecast["blocker"] == "ORDER_WINDOW_CLOSED"
+
+
 def test_seeded_inventory_reconciles_across_seven_persisted_days(tmp_path):
     from npc_sim.storage import read_json
     from test_village_expanded import ROOT
@@ -665,6 +695,38 @@ def test_late_supper_request_is_not_offered_as_deliverable(world):
     assert economy.meal_supply_forecast(world)[0]["inputs"]["bread"]["blocker"] == "ORDER_WINDOW_CLOSED"
     assert not [request for request in economy.suggestions(world)
                 if request["product"] == "bread" and request["request_key"].startswith("0:")]
+
+
+def test_dairy_orders_need_time_for_delivery_and_cooking(world):
+    from npc_sim import village_livestock
+
+    village_livestock.configure(world, {"keeper": "ada"})
+    state = world.state.village
+    state.minute = 900
+    early = [request for request in economy.suggestions(world)
+             if request["product"] in {"milk", "eggs"} and request["request_key"].startswith("0:")]
+    assert {request["product"] for request in early} == {"milk", "eggs"}
+    assert all(request["deadline"] <= 1140 - state.economy.config.cooking_lead_minutes
+               for request in early)
+    state.minute = 1140 - state.economy.config.cooking_lead_minutes - state.economy.config.delivery_lead_minutes + 5
+    assert not [request for request in economy.suggestions(world)
+                if request["product"] in {"milk", "eggs"} and request["request_key"].startswith("0:")]
+
+
+def test_late_manual_dairy_order_is_rejected_without_reserving_funds(world):
+    from npc_sim import village_livestock
+
+    village_livestock.configure(world, {"keeper": "ada"})
+    state = world.state.village
+    state.minute = 1055
+    buyer = actor(world, "elsie", "farm")
+    before = state.coins.copy()
+    for product in ("milk", "eggs"):
+        result = economy.apply(buyer, "village_propose_order", {
+            "product": product, "quantity": 1, "supplier": "ada",
+            "deadline": 1080, "required_fresh_until": 1140})
+        assert result[:2] == ("REJECTED", "ORDER_WINDOW_CLOSED"), result
+    assert state.economy.orders == {} and state.coins == before
 
 
 def test_in_transit_bread_is_counted_once_and_expiry_is_respected(world):

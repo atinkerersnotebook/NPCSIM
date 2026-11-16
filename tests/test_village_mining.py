@@ -190,10 +190,24 @@ def test_configuring_existing_town_only_adds_empty_mine_and_preserves_progress(t
     loaded = World(world.scenario, world.path, "mining", "torvin", "session-torvin")
     assert loaded.state.village.mining == world.state.village.mining
     assert loaded.state.entities["iron-mine"].kind == "location"
+    assert loaded.state.entities["iron-mine"].name == "Torvin's Iron Mine"
     before = loaded.state.model_dump(mode="json")
     with pytest.raises(ValueError):
         village_extensions.configure(loaded, "bad-miner", loaded.revision(), {"mining": {"miner": "jory"}})
     assert loaded.state.model_dump(mode="json") == before
+
+
+def test_generated_mine_routes_and_saved_identity_are_stable(tmp_path):
+    world = make_world(tmp_path)
+    mine = village_mining.MINE
+    assert world.scenario.entities[mine].name == "Torvin's Iron Mine"
+    assert world.state.entities[mine].name == "Torvin's Iron Mine"
+    assert world.state.entities["square-mine"].destination == mine
+    assert world.state.entities["mine-square"].location == mine
+    assert village.route(world, "village-square", mine)
+    world.save()
+    restored = World(world.scenario, world.path, "mining", "torvin", "session-torvin")
+    assert restored.state.entities[mine].name == "Torvin's Iron Mine"
 
 
 def test_mining_reservations_survive_reload_and_meals_keep_priority(tmp_path):

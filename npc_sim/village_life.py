@@ -214,9 +214,16 @@ def available_meal(world: "World", rid: str, *, include_missed: bool = False) ->
             or policy.breakfast and (state.minute % 1440 < resident.wake_minute + policy.breakfast_delay
                                      or breakfast is None or breakfast.status not in {"eaten", "missed"})):
         return None
-    daily = life.meals.get(f"{day}:daily")
-    return daily if daily and daily.status == "pending" else (
-        VillageMeal(kind="daily", due=day * 1440 + daily_meal_minute(resident)) if daily is None else None)
+    if f"{day}:daytime" in life.meals or f"{day}:daily" in life.meals:
+        return None
+    # Daytime food must not spend a portion needed for the evening service.
+    stock = state.stocks.get("tavern", {})
+    available = sum(max(0, stock.get(item, 0)) for item in ("meals", "bread")) + min(
+        max(0, stock.get("fish", 0)), max(0, stock.get("tea", 0)))
+    supper = meal_plan(world)
+    if available <= supper["expected"] - supper["consumed"]:
+        return None
+    return VillageMeal(kind="daytime", due=state.minute)
 
 
 def state_for(world: "World", rid: str) -> VillageLifeState | None:
@@ -237,6 +244,12 @@ def action_blocker(world: "World", action: str, rid: str | None = None, *,
         return None
     config, state = village.context(world)
     from npc_sim import village_extensions, village_economy
+    if state.legacy is not None:
+        from npc_sim import village_legacy
+        if village_legacy.history_pending(world) and not life.sleeping and action != "village_read_history":
+            return "HISTORY_DUE", "Read your inherited history before starting this generation."
+        if action == "village_sleep" and not village_legacy.journal_written(world, rid):
+            return "JOURNAL_DUE", "Write today's personal journal before going to sleep."
     if state.livestock is not None:
         from npc_sim import village_livestock
         blocked = village_livestock.action_blocker(world, action, rid)
@@ -389,19 +402,28 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
     if not inn_open(world):
         return reject("INN_NOT_OPEN", "The innkeeper must be awake and at the inn before meals can be served.")
     stock = state.stocks.setdefault("tavern", {})
-    if (meal.status != "missed" and rid in meal_plan(world, meal.kind, meal.due // 1440)["unfunded"]):
+    if (meal.status != "missed" and rid in meal_plan(world, "daily" if meal.kind == "daytime" else meal.kind,
+                                                     meal.due // 1440)["unfunded"]):
+        if meal.kind == "daytime":
+            return reject("MEAL_UNAFFORDABLE", "Daytime food is not funded; supper remains due.")
         if config.expanded_rules and state.economy is None:
             miss_meal(world, rid, meal)
             return done("MEAL_MISSED", f"Cannot pay {config.meal_price} coin for the meal; going hungry without consuming food.")
         miss_meal(world, rid, meal)
         return done("MEAL_MISSED", "The meal or its configured subsidy is not funded; no food was consumed.")
     in_grace = state.minute <= meal.due + village_extensions.policy(world).meal_window
-    if in_grace and not meal_allocation(world, rid, meal):
+    if meal.kind == "daytime" and sum(max(0, stock.get(item, 0)) for item in ("meals", "bread")) + min(
+            max(0, stock.get("fish", 0)), max(0, stock.get("tea", 0))) <= (
+            meal_plan(world)["expected"] - meal_plan(world)["consumed"]):
+        return reject("MEAL_UNALLOCATED", "Daytime food cannot spend a reserved supper portion.")
+    if meal.kind != "daytime" and in_grace and not meal_allocation(world, rid, meal):
         if meal.status == "missed" or state.minute < meal.due:
             return reject("MEAL_UNALLOCATED", "No portion is allocated to this diner yet; try again when food arrives or service begins.")
         miss_meal(world, rid, meal)
         return done("MEAL_MISSED", "No portion is allocated to this diner; real food is reserved for the fair queue.")
     if config.expanded_rules and state.economy is None and state.coins[rid] < config.meal_price:
+        if meal.kind == "daytime":
+            return reject("MEAL_UNAFFORDABLE", "Daytime food is not funded; supper remains due.")
         if meal.status == "missed":
             return reject("MEAL_UNAFFORDABLE", "You still cannot afford the tavern meal.")
         miss_meal(world, rid, meal)
@@ -411,6 +433,8 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
     if state.economy is not None and (resource is not None or (stock.get("fish", 0) > 0 and stock.get("tea", 0) > 0)):
         from npc_sim import village_economy
         if not village_economy.meal_charge(world, rid):
+            if meal.kind == "daytime":
+                return reject("MEAL_UNAFFORDABLE", "Daytime food is not funded; supper remains due.")
             if meal.status == "missed":
                 return reject("MEAL_UNAFFORDABLE", "The meal or its configured subsidy is not funded.")
             miss_meal(world, rid, meal)
@@ -423,6 +447,8 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
         village_goods.take(world, "tavern", "tea", 1)
         source = "tavern:fish+tea"
     else:
+        if meal.kind == "daytime":
+            return reject("NO_FOOD", "No surplus daytime food remains; supper remains due.")
         if meal.status == "missed":
             return reject("NO_FOOD", "The tavern still has no food. This missed meal is already recorded.")
         miss_meal(world, rid, meal)
@@ -434,6 +460,8 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
         state.coins[rid] -= config.meal_price
         state.coins["elsie"] += config.meal_price
     meal.status, meal.source = "eaten", source
+    if meal.kind == "daytime":
+        life.meals[f"{state.minute // 1440}:daytime"] = meal
     life.hungry = meal_due(life, state.minute) is not None
     return done("MEAL_EATEN", f"Ate the {meal.kind} meal from {source}; real food consumed.")
 

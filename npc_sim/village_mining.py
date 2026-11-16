@@ -26,7 +26,7 @@ def fixtures(scenario: Scenario) -> dict[str, Entity]:
         raise ValueError("Mining requires a village")
     forge = scenario.village.residents[scenario.village.smith].work
     return {
-        MINE: Entity(name="Millhaven iron mine", kind="location",
+        MINE: Entity(name="Torvin's Iron Mine", kind="location",
                      description="A renewable iron seam. Ore must be mined with a real pick, hauled and smelted; no finished iron lies here."),
         "square-mine": Entity(name="Mine road", kind="door", description="The square's road to the iron mine.",
                               location="village-square", destination=MINE, open=True, health=None),
@@ -44,10 +44,13 @@ def install_scenario(scenario: Scenario) -> None:
     if base is None:
         raise ValueError("Mining requires a village")
     base.mining = example_config(scenario)
-    for key, entity in fixtures(scenario).items():
+    mine_fixtures = fixtures(scenario)
+    for key, entity in mine_fixtures.items():
         if key in scenario.entities and scenario.entities[key].kind != entity.kind:
             raise ValueError(f"Mining fixture identity conflicts with an existing object: {key}")
         scenario.entities.setdefault(key, entity)
+    if scenario.entities[MINE].name == "Millhaven iron mine":
+        scenario.entities[MINE].name = mine_fixtures[MINE].name
     base.prices.setdefault(ORE, 1)
     base.stocks.setdefault(MINE, {}).setdefault(ORE, 0)
     base.owners.setdefault(PICK, base.smith)
@@ -86,12 +89,15 @@ def configure(world: "World", value: dict[str, Any]) -> None:
         raise ValueError("Only the actual smith may be assigned this mining/smelting workflow")
     if state.mining and any(chunk.status == "active" for chunk in state.mining.chunks):
         raise ValueError("Pause active mining/smelting before reconfiguring it")
-    for key, entity in fixtures(world.scenario).items():
+    mine_fixtures = fixtures(world.scenario)
+    for key, entity in mine_fixtures.items():
         previous = world.state.entities.get(key)
         if previous and (previous.kind != entity.kind or previous.kind == "door"
                          and (previous.location != entity.location or previous.destination != entity.destination)):
             raise ValueError(f"Mining fixture conflicts with an existing world object: {key}")
         world.state.entities.setdefault(key, entity)
+    if state.mining is None and world.state.entities[MINE].name == "Millhaven iron mine":
+        world.state.entities[MINE].name = mine_fixtures[MINE].name
     state.stocks.setdefault(MINE, {}).setdefault(ORE, 0)
     state.stock_lots.setdefault(MINE, {}).setdefault(ORE, [])
     state.mining = VillageMiningState(config=config, chunks=state.mining.chunks if state.mining else [])

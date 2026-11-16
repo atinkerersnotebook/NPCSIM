@@ -344,7 +344,7 @@ def delivery_plan(world: "World", carrier: str | None = None) -> VillageFuelDeli
             amount = min(inventory, order.loadable,
                          village_economy.loadable_for_order(world, order),
                          max(0, (available if available is not None else inventory) - inbound))
-            if path is not None and amount and arrival + len(path) * 5 <= order.deadline:
+            if path is not None and amount and arrival + 5 * (len(path) + 2) <= order.deadline:
                 choices.append((len(path), order.deadline, order.id, path, amount, order))
         if not choices:
             break
@@ -352,7 +352,7 @@ def delivery_plan(world: "World", carrier: str | None = None) -> VillageFuelDeli
         stops.append(VillageFuelStop(destination=order.destination, order_id=order.id,
                                      quantity=amount, delivered_before=order.delivered_quantity,
                                      reason_for_stop="accepted funded fuel demand", path=path))
-        arrival += steps * 5
+        arrival += 5 * (steps + 2)
         inventory -= amount
         location = order.destination
         orders = [item for item in orders if item.destination != order.destination]

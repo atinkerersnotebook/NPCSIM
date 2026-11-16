@@ -101,6 +101,11 @@ def observation(world: "World") -> dict[str, Any]:
                   "village_observe checks local tools; village_ask shares only the target's own knowledge. "
                   + ("Read the square chronicle to learn its lessons; unread entries are not your knowledge. "
                      "Share a personally read lesson only face to face. Old lessons may be stale. "
+                     "After a generation handoff, first read your inherited history at home with village_read_history. "
+                     "Your private diary then contains attributed notes from earlier residents; treat them as guidance, "
+                     "not current-world evidence. Every waking day, before sleeping, write a journal note about "
+                     "what you personally learned. Optionally detail observed problems and actionable suggestions "
+                     "for the next resident; distinguish what happened from advice. "
                      + village_legacy.decision_hint(world)
                      if state.legacy is not None else "")
                   +
@@ -108,12 +113,15 @@ def observation(world: "World") -> dict[str, Any]:
                   "A personally posted open supply need already has a request: keep useful work or rest instead of "
                   "repeatedly searching for its supplier. Revisit only after new local evidence, a credible meeting, "
                   "an urgent deadline, or rejection/expiry. Check physical messages when a response is expected, "
-                  "not on every short turn; never infer a remote reply from authoritative records. "
+                  "not on every short turn; do not make a trip solely to recheck a paper version already read. "
+                  "Use a locally accessible inbox or board only when its version has changed; never infer a remote reply from authoritative records. "
                   "Say I and my for yourself, and you and your for the person addressed. Use their actual occupation. "
                   "If a conversation reply opportunity is present, consider a brief acknowledgement, answer, question, "
                   "or polite departure before leaving. Hearing or replying never accepts a funded order; use the "
                   "actual order action for that. Do not prolong a conversation past urgent work, meals, or rest. "
                   + (" Prioritize due meals and overnight sleep over interruptible work. Breakfast and supper have separate records; supper starts at 18:00 (Elsie serves others first and eats at 19:30). "
+                     "Daytime food is separate and never counts as supper; eat supper in the evening service window. "
+                     "At the inn, use meal_readiness to distinguish physical prepared and cookable portions from funded incoming orders and unconfirmed requests; cook before service and report a shortage blocker when supply cannot arrive in time. "
                      "A prepared meal, bread, or fish with tea counts; tea alone does not. No imaginary home pantry. "
                      "An empty tavern records hunger but allows work; missing today's meal doubles tomorrow's work cooldown. "
                      "At your own bedtime, walk home and village_sleep; no work before actually waking. "

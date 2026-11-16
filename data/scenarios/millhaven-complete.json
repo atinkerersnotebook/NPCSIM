@@ -3869,7 +3869,7 @@
       "village_road": true
     },
     "iron-mine": {
-      "name": "Millhaven iron mine",
+      "name": "Torvin's Iron Mine",
       "kind": "location",
       "description": "A renewable iron seam. Ore must be mined with a real pick, hauled and smelted; no finished iron lies here.",
       "location": null,

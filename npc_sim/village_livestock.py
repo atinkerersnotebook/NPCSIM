@@ -239,8 +239,11 @@ def requests(world, actor):
     policy = village_economy.config(world)
     if policy and actor == policy.innkeeper:
         due = town.minute // 1440 * 1440 + 1140
+        if town.minute > due - policy.cooking_lead_minutes - policy.delivery_lead_minutes:
+            return []
         plans = village_economy.meal_requirements(world)
-        portions = sum(plan["remaining_portions"] for plan in plans if plan["due"] == due)
+        portions = sum(max(0, plan["remaining_portions"] - plan["covered_portions"])
+                       for plan in plans if plan["due"] == due)
         # A modest alternative, not a replacement for existing funded bread/fish orders.
         batches = min(2, ceil(portions / 2))
         return [(f"{town.minute // 1440}:dairy", due, {"milk": batches, "eggs": batches})] if batches else []

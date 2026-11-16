@@ -41,6 +41,11 @@ async def test_generation_handoff_from_saved_midnight_is_explicit_and_reversible
         source = episode_saves.read_save(data, next((data / "saves").glob("*.json")).stem)
         source.world.village.minute = 1440
         source.world.village.legacy.last_day = 1
+        from npc_sim.models import VillageDiaryEntry
+        source.world.village.legacy.diaries["rowan"] = [VillageDiaryEntry(
+            author="Rowan", written_at=1320,
+            text="I learned to check the woodlot before promising logs to neighbours.",
+            origin_world_id=source.world.world_id)]
         source.id = "a" * 32
         source.name = "Generation one midnight"
         episode_saves.write_save(data, source)
@@ -50,9 +55,12 @@ async def test_generation_handoff_from_saved_midnight_is_explicit_and_reversible
         next_world = controller.status()["world"]
         assert next_world["village"]["legacy"]["lineage"]["rowan"] == ["Rowan"]
         assert next_world["village"]["legacy"]["handoff"]["save_id"] == save_id
+        assert controller.agents["rowan"]["observation"]["village"]["legacy"]["history_pending"] is True
+        assert controller.agents["rowan"]["observation"]["village"]["legacy"]["diary"] == []
         assert controller.run["agent_profiles"]["rowan"]["name"] == "Rina Woodward"
         await controller.command("start", {"scenario_id": scenario_id})
         assert controller.status()["world"]["village"]["legacy"]["handoff"] is None
+        assert controller.agents["rowan"]["observation"]["village"]["legacy"]["diary"] == []
     finally:
         await controller.shutdown()
 

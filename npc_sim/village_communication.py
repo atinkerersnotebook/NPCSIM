@@ -195,6 +195,12 @@ def _validate_terms(world: "World", terms: NoticeTerms, author: str) -> None:
         if (terms.unit_price != village_economy.unit_price(world, terms.subject)
                 or terms.delivery_fee != village_economy.delivery_fee(world)):
             raise ValueError("The published price/fee no longer matches policy; the author must publish new terms")
+        policy = village_economy.config(world)
+        if (policy and author == policy.innkeeper and terms.subject in {"milk", "eggs"}
+                and terms.required_fresh_until // 1440 == state.minute // 1440
+                and state.minute > terms.required_fresh_until - policy.cooking_lead_minutes
+                - policy.delivery_lead_minutes):
+            raise ValueError("ORDER_WINDOW_CLOSED: milk and eggs need physical delivery and cooking before service")
         cost = terms.quantity * (village_economy.unit_price(world, terms.subject)
                                  + village_economy.delivery_fee(world))
         if state.coins[author] - village_economy.commitments(world, author) < cost:
@@ -951,60 +957,6 @@ def confirmed_project_plan(world: "World", project: str) -> Appointment | None:
     return None
 
 
-def _renew_gathered_crew(world: "World", project: str) -> None:
-    base, village_state = village.context(world)
-    state = _state(world)
-    if village_state is None:
-        return
-    if (village_state.well_dug if project == "dig_well" else village_state.repaired):
-        return
-    crew, site = _project(world, project)
-    if any(village.resident_location(world, member) != site
-           or (life := village_state.residents[member].life) is not None and life.sleeping
-           for member in crew):
-        return
-    supplies = ([base.shovel, base.timber, base.rope] if project == "dig_well"
-                else [base.repair_part, base.hammer])
-    if (any(world.state.entities[eid].location not in {site, *crew}
-            or world.state.entities[eid].hidden or world.state.entities[eid].broken
-            for eid in supplies)
-            or project == "repair_mill" and village_state.stocks.get(site, {}).get("planks", 0) < 1):
-        return
-    session = village_state.crew_sessions.get(project)
-    if session is not None:
-        return
-    if any(history[-1].appointment and history[-1].terms.project == project
-           and history[-1].status not in TERMINAL for history in state.notices.values()):
-        return
-    for history in reversed(list(state.notices.values())):
-        expired = history[-1]
-        if (expired.status != "expired" or expired.appointment is None
-                or expired.appointment.project != project or len(history) < 2):
-            continue
-        previous = history[-2]
-        if (previous.appointment is None or previous.appointment.status != "confirmed"
-                or set(previous.appointment.accepted) != set(crew)
-                or any(village_state.residents[member].busy_until > village_state.minute
-                       or (life := village_state.residents[member].life) is not None and life.work
-                       for member in crew)):
-            continue
-        if not any((memory := state.knowledge.get(member, {}).get(expired.id)) is not None
-                   and memory.snapshot.appointment is not None
-                   and memory.snapshot.appointment.status == "confirmed" for member in crew):
-            continue
-        minute = village_state.minute
-        renewed = _new_version(world, expired, status="accepted",
-                               terms=expired.terms.model_copy(update={"due_at": minute, "expires_at": None}),
-                               appointment=expired.appointment.model_copy(update={
-                                   "version": expired.appointment.version + 1, "status": "confirmed",
-                                   "due_at": minute, "end_at": minute + 60}))
-        for member in crew:
-            _receive(world, member, renewed, "conversation", world.actor_id)
-        _emit(world, "appointment_renewed", renewed, listeners=crew,
-              text="The accepted crew renewed its appointment together at the work site.")
-        return
-
-
 def _active_project_work(world: "World", plan: Appointment) -> dict[str, int]:
     village_state = world.state.village
     recent: dict[str, int] = {}
@@ -1029,8 +981,6 @@ def _active_project_work(world: "World", plan: Appointment) -> dict[str, int]:
 def project_blocker(world: "World", project: str) -> str | None:
     if not enabled(world):
         return None
-    if confirmed_project_plan(world, project) is None:
-        _renew_gathered_crew(world, project)
     state, minute = _state(world), world.state.village.minute
     plans = [versions[-1].appointment for versions in state.notices.values()
              if versions[-1].appointment and versions[-1].terms.project == project]

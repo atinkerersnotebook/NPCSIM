@@ -145,6 +145,28 @@ feed-store reliability have not been verified. The cistern,
 handcart, home cooking and market-day/seasonal systems are not yet usable
 mechanics; livestock water and deliveries still follow the existing well and
 transport rules.
+
+For Generation 11 P2 continuity evidence, save an opening world before the
+first midnight and the same world's next three consecutive midnight states.
+Capture a read-only, hash-linked ledger without replacing any saved world:
+
+```powershell
+.\.venv\Scripts\python.exe -m npc_sim.village_release_evidence --scenario data\scenarios\millhaven-resilient.json --checkpoints data\opening.json data\midnight-1.json data\midnight-2.json data\midnight-3.json --output data\continuity-evidence.json
+```
+
+Use the episode's *frozen* scenario, not a regenerated scenario. The ledger
+includes site/product stock flows, scheduled imports, payments, funds, cargo,
+orders, depot owners, feed/care, maintenance and per-resident meals. Its
+`engine_continuity_pass` requires balanced stock and recorded resident actions
+on all three days; the output deliberately sets `autonomous_release_verified`
+to false. Scheduled fuel use, spoilage and visitor trade alone do not count as
+resident activity.
+World snapshots alone cannot prove model calls, failed attempts, policy,
+unlogged external payments, or uninterrupted autonomous play. Preserve the
+episode run log and settings separately and compare meal, repair, movement,
+fuel and shipment outcomes against `GENERATION-11-BASELINE.md`; distinguish
+physical shortages from scheduling failures. The seven-day release gate stays
+open, and the decorative cistern is not a water service.
 Existing `millhaven-living` runs and their frozen scenarios are unchanged.
 
 For both sets of features in one new adventure, select **Millhaven - Complete
@@ -249,6 +271,28 @@ stable. The existing mill and visitors still use real goods and coins. World/Adm
 shows the chronicle and named population without sharing private reading history.
 Saves retain the chronicle and current population. These fictional
 backstories do not retell the history of Millhaven, Ontario.
+
+In legacy-enabled runs, a resident can use `village_write_diary` once per day
+to leave a private 20-500 character note of firsthand experience for the next
+iteration of their role. The action optionally accepts separate `problems` and
+`suggestions` (20-1000 characters each), for a more detailed account of observed
+blockers and actionable advice. Older notes without these fields still load.
+The three most recent notes retain their author, time and origin world through
+saves and an explicit same-scenario midnight handoff.
+Only that role's next resident sees the diary in their personal observation;
+this includes roles without a named successor, provided another role has a
+configured successor to permit the handoff. It is advice, not evidence of the
+new world's stock, orders or conditions. A normal new adventure imports no
+diary. Earlier actions cannot be turned into NPC-authored notes retroactively;
+after restarting with the updated engine, a continued eligible run can write
+new entries. In a legacy-enabled episode, sleep requires that waking day's
+journal entry; the resident writes it as a five-minute action before sleeping.
+The resident supplies the text; the engine does not invent a summary. At a successor
+handoff, each role must first use `village_read_history` after waking, at home,
+before other actions; this unlocks its inherited diary and the source-marked
+chronicle entries. The old account is guidance, not knowledge of present stock
+or active orders. The nightly journal requirement does not alter non-legacy
+scenarios or retrospectively fill gaps in earlier saves.
 
 The engine supports opt-in supplier orders, demand-limited production,
 breakfast, funded meal pricing/subsidies, reserve and freshness forecasts,
@@ -802,6 +846,14 @@ meal grace window; a missed diner can still recover when food or funds arrive.
 Before a diner's supper due time, an unallocated attempt remains pending rather
 than recording a premature missed meal; stock arriving before service can still
 be allocated. A real shortage at service still records a missed meal.
+Daytime eating uses only stock surplus to the remaining supper demand and has
+its own record; it cannot complete or spend a reserved supper portion.
+Fuel routes budget a real load and unload action at every stop in addition to
+walking time; accepted orders still require physical delivery and settlement.
+Milk and egg requests for the current supper close early enough to allow both
+delivery and cooking; a posted request alone is not delivered stock. Generated
+mines use the stable `iron-mine` ID and **Torvin's Iron Mine** display name;
+existing saved-world labels are retained.
 After grace, an arriving diner may still eat unclaimed, fresh, funded tavern food
 before the inn closes at 22:00; no reservation or extra portion is created.
 The tavern cook prioritizes feasible meal preparation over optional research.
@@ -844,7 +896,8 @@ location and concrete purpose before taking a `go` step. The resident's personal
 `walking_plan` records the origin, destination, ordered doors and stops along the
 shortest traversable route (fewest door crossings). Intermediate stops do
 not reset the plan: the next `go` must follow the next door, preventing reversals
-like a store–square–store loop. A newly received message, due meal, rest,
+like a store–square–store loop. A newly received message or personally received
+new notice version, due meal, rest,
 schedule change or blocked door permits replanning; arrival clears the plan.
 Walking itineraries persist in episode saves and do not replace automatic wagon
 or timber routes. Residents use the public village road and footpath map to plan ordinary walks;
@@ -1121,9 +1174,9 @@ stocks and the event ledger. This is operator knowledge, not shared NPC input.
   makes two meals; Elsie can also use `village_cook_fish` with the same yield.
   Opening stock includes six grain at the mill, six flour and four bread at the
   bakery, and twelve bread at the tavern.
-- `village_eat` consumes **one daily meal at the tavern**. Once work is
-  finished, a diner already at the inn may eat before the 19:00 gathering if
-  real food is available; their portion still counts toward that day's supper.
+- `village_eat` consumes a real tavern meal. Before the 19:00 supper gathering,
+  a diner at the inn may eat once from stock surplus to the remaining supper
+  demand. This separate daytime meal does not satisfy the evening supper.
   Elsie serves the others first and eats at 19:30; the meal plan reserves one
   real portion for her when stock permits, without creating food or waiving payment.
   The inn serves meals only while Elsie is awake and physically at the tavern;

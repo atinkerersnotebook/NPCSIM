@@ -113,6 +113,131 @@ def test_explicit_handoff_preserves_only_bounded_family_assets(world, tmp_path):
     assert unrelated.state.village.legacy.current["rowan"] == "Rowan"
 
 
+def test_private_diary_survives_reload_and_reaches_only_successor(world, tmp_path):
+    state = world.state.village
+    note = "I found that checking the woodlot before accepting orders saves a wasted trip."
+    state.minute = 480
+    state.residents["rowan"].life.sleeping = False
+    assert "village_write_diary" in {item["id"] for item in world.actions()}
+    assert act(world, "village_write_diary", text=note)["code"] == "DIARY_WRITTEN"
+    assert village_legacy.apply(world, "village_write_diary", {"text": note})[1] == "DIARY_ALREADY_WRITTEN"
+    assert len(state.legacy.diaries["rowan"]) == 1
+    assert village_legacy.observation(world)["legacy"]["diary"][0]["text"] == note
+    mara = world.bind("mara", "mara-session")
+    assert village_legacy.observation(mara)["legacy"]["diary"] == []
+    world.save()
+    restored = World(world.scenario, world.path, "legacy", "rowan", "session-rowan")
+    assert restored.state.village.legacy.diaries["rowan"][0].text == note
+    restored.state.village.minute = 1440
+    village_legacy.advance(restored)
+    target = World(world.scenario, tmp_path / "next.json", "next", "rowan", "next-rowan")
+    village_legacy.successor_state(restored.scenario, restored.state, target, "a" * 32)
+    assert village_legacy.observation(target)["legacy"]["history_pending"] is True
+    target.state.village.residents["rowan"].life.sleeping = False
+    assert village_legacy.apply(target, "village_read_history", {})[1] == "HISTORY_READ"
+    diary = village_legacy.observation(target)["legacy"]["diary"]
+    assert diary[0]["author"] == "Rowan"
+    assert diary[0]["text"] == note
+    assert diary[0]["origin_world_id"] == "legacy"
+    assert village_legacy.observation(target.bind("mara", "next-mara"))["legacy"]["diary"] == []
+    assert target.state.village.stocks == target.scenario.village.stocks
+
+
+def test_handoff_carries_each_role_diary_without_sharing_it(world, tmp_path):
+    state = world.state.village
+    mara = world.bind("mara", "mara-session")
+    state.minute = 480
+    problems = "The mill grain was reserved for orders, so I could not mill the next batch."
+    suggestions = "Check unreserved grain and order deadlines before committing to milling."
+    assert village_legacy.apply(mara, "village_write_diary", {
+        "text": "I learned to check grain reserves before scheduling milling work.",
+        "problems": problems, "suggestions": suggestions,
+    })[1] == "DIARY_WRITTEN"
+    world.save()
+    restored = World(world.scenario, world.path, "legacy", "rowan", "session-rowan")
+    assert restored.state.village.legacy.diaries["mara"][0].problems == problems
+    state.minute = 1440
+    village_legacy.advance(world)
+    target = World(world.scenario, tmp_path / "next.json", "next", "rowan", "next-rowan")
+    village_legacy.successor_state(world.scenario, world.state, target, "a" * 32)
+    assert target.state.village.legacy.current["mara"] == "Mara"
+    target.state.village.residents["mara"].life.sleeping = False
+    assert village_legacy.apply(target.bind("mara", "next-mara"), "village_read_history", {})[1] == "HISTORY_READ"
+    inherited = village_legacy.observation(target.bind("mara", "next-mara"))["legacy"]["diary"][0]
+    assert inherited["author"] == "Mara"
+    assert inherited["problems"] == problems
+    assert inherited["suggestions"] == suggestions
+    assert village_legacy.observation(target)["legacy"]["diary"] == []
+
+
+def test_diary_notes_are_bounded_and_not_inherited_without_handoff(world, tmp_path):
+    state = world.state.village
+    assert village_legacy.apply(world, "village_write_diary", {"text": "too short"})[1] == "INVALID_DIARY"
+    assert village_legacy.apply(world, "village_write_diary", {
+        "text": "A sufficiently detailed short diary note.", "problems": "too short"
+    })[1] == "INVALID_DIARY"
+    assert village_legacy.apply(world, "village_write_diary", {
+        "text": "A sufficiently detailed short diary note.", "suggestions": "x" * 1001
+    })[1] == "INVALID_DIARY"
+    assert state.legacy.diaries == {}
+    for day in range(4):
+        state.minute = day * 1440 + 300
+        state.residents["rowan"].life.last_woke = state.minute
+        assert village_legacy.apply(world, "village_write_diary", {
+            "text": f"Day {day}: I checked the woodlot and confirmed which logs were available."
+        })[1] == "DIARY_WRITTEN"
+    assert len(state.legacy.diaries["rowan"]) == village_legacy.DIARY_LIMIT
+    assert "Day 0" not in state.legacy.diaries["rowan"][0].text
+    assert state.legacy.diaries["rowan"][0].problems is None
+    assert state.legacy.diaries["rowan"][0].suggestions is None
+    fresh = World(world.scenario, tmp_path / "fresh.json", "fresh", "rowan", "fresh-rowan")
+    assert village_legacy.observation(fresh)["legacy"]["diary"] == []
+
+
+def test_sleep_requires_journal_for_each_waking_day(world):
+    state = world.state.village
+    life = state.residents["rowan"].life
+    state.minute = 1320
+    life.sleeping = False
+    life.last_woke = 480
+    from npc_sim import village_fallback
+    assert village_fallback.candidates(world)[0]["action_id"] == "village_write_diary"
+    assert act(world, "village_sleep")["code"] == "JOURNAL_DUE"
+    assert state.residents["rowan"].life.sleeping is False
+    assert village_legacy.apply(world, "village_write_diary", {
+        "text": "Today I checked the woodlot and found the remaining logs uncommitted."
+    })[1] == "DIARY_WRITTEN"
+    assert act(world, "village_sleep")["code"] == "SLEEP_STARTED"
+    state.minute = 1920
+    from npc_sim import village_life
+    village_life.advance(world)
+    assert not village_legacy.journal_written(world, "rowan")
+    state.minute = 2760
+    assert act(world, "village_sleep")["code"] == "JOURNAL_DUE"
+
+
+def test_successor_must_read_history_before_other_actions(world, tmp_path):
+    state = world.state.village
+    state.minute = 1440
+    village_legacy.advance(world)
+    target = World(world.scenario, tmp_path / "next.json", "next", "rowan", "next-rowan")
+    village_legacy.successor_state(world.scenario, world.state, target, "a" * 32)
+    successor = target.state.village.residents["rowan"].life
+    successor.sleeping = False
+    target.state.village.minute = 480
+    successor.last_woke = 480
+    assert village_legacy.observation(target)["legacy"]["history_pending"] is True
+    assert act(target, "village_observe")["code"] == "HISTORY_DUE"
+    assert target.observe()["village"]["fallback"]["eligible_candidates"][0]["action_id"] == "village_read_history"
+    assert act(target, "village_read_history")["code"] == "HISTORY_READ"
+    assert village_legacy.observation(target)["legacy"]["history_pending"] is False
+    target.save()
+    reloaded = World(world.scenario, target.path, "next", "rowan", "next-rowan")
+    assert village_legacy.observation(reloaded)["legacy"]["history_pending"] is False
+    assert act(target, "village_read_history")["code"] == "ACTION_UNAVAILABLE"
+    assert "HISTORY_DUE" != act(target, "village_observe")["code"]
+
+
 def test_handoff_rejects_carried_property_without_mutating_target(world, tmp_path):
     state = world.state.village
     state.minute = 1440

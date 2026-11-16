@@ -1,4 +1,6 @@
 from npc_sim import village_walking
+from npc_sim.village_communication_models import (NoticeKnowledge, NoticeTerms, NoticeVersion,
+                                                 VillageCommunicationConfig, VillageCommunicationState)
 
 
 def step(world, action, **args):
@@ -74,6 +76,27 @@ def test_fresh_task_message_permits_reroute(tmp_path):
     assert world.state.village.residents["nella"].walking_plan.doors == ["square-store"]
     assert world.state.village.residents["nella"].walking_plan.next_step == 0
     assert step(world, "go", target="square-store")["outcome"] == "APPLIED"
+
+
+def test_personally_received_notice_version_permits_reroute_without_remote_knowledge(tmp_path):
+    world = make_world(tmp_path)
+    person = world.state.village.residents["nella"]
+    person.known_routes = ["square-store", "square-tavern"]
+    world.state.village.communication = VillageCommunicationState(config=VillageCommunicationConfig())
+    assert step(world, "village_plan_walk", destination="tavern", purpose="Visit tavern")["code"] == "ROUTE_PLANNED"
+    notice = NoticeVersion(id="notice-1", version=1, author="elsie",
+                           terms=NoticeTerms(type="work_request", subject="bread", description="Need bread"),
+                           created_at=world.state.village.minute, updated_at=world.state.village.minute)
+    world.state.village.communication.notices[notice.id] = [notice]
+    assert village_walking.check_plan(world, "village-square")[0] == "ROUTE_COMMITTED"
+    world.state.village.communication.knowledge["nella"] = {
+        notice.id: NoticeKnowledge(snapshot=notice, heard_at=world.state.village.minute,
+                                   source_type="conversation")}
+    assert step(world, "village_plan_walk", destination="village-square", purpose="Answer new request")["code"] == "ROUTE_PLANNED"
+    assert person.walking_plan.known_notice_versions == {notice.id: 1}
+    world.save()
+    restored = World(world.scenario, world.path, "walking", "nella", "session-nella")
+    assert restored.state.village.residents["nella"].walking_plan.known_notice_versions == {notice.id: 1}
 
 
 def test_blocked_edge_allows_detour_without_moving_through_it(tmp_path):

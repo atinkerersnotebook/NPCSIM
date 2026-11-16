@@ -28,6 +28,12 @@ def _status(world: "World") -> tuple[str, bool, bool, str]:
             routine.location)
 
 
+def _known_notice_versions(world: "World") -> dict[str, int]:
+    communication = world.state.village.communication
+    return ({key: memory.snapshot.version for key, memory in
+             communication.knowledge.get(world.actor_id, {}).items()} if communication else {})
+
+
 def _path(world: "World", destination: str) -> tuple[list[str], list[str]] | None:
     origin = world.actor.location_id
     state = world.state.village
@@ -61,7 +67,9 @@ def _path(world: "World", destination: str) -> tuple[list[str], list[str]] | Non
 def _interruption(world: "World", plan: VillageWalkingPlan) -> bool:
     message, meal, rest, routine = _status(world)
     return (message != plan.last_message and bool(message) or meal and not plan.meal_due
-            or rest and not plan.rest_due or routine != plan.routine_location)
+            or rest and not plan.rest_due or routine != plan.routine_location
+            or any(version > plan.known_notice_versions.get(key, 0)
+                   for key, version in _known_notice_versions(world).items()))
 
 
 def _blocked_step(world: "World", plan: VillageWalkingPlan) -> bool:
@@ -98,7 +106,8 @@ def plan(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]:
     state.residents[world.actor_id].walking_plan = VillageWalkingPlan(
         origin=origin, destination=destination, locations=locations, doors=doors,
         purpose=args["purpose"], last_message=message, meal_due=meal,
-        rest_due=rest, routine_location=routine)
+        rest_due=rest, routine_location=routine,
+        known_notice_versions=_known_notice_versions(world))
     itinerary = " -> ".join([origin, *locations])
     village.event(world, world.actor_id, "village_plan_walk", destination,
                   f"Planned walk for {args['purpose']}: {itinerary}.")

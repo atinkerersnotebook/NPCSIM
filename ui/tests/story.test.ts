@@ -259,6 +259,14 @@ test("team speech retains I and you while surrounding narration uses member name
   assert.match(buildNarrative(events, undefined, undefined, members).at(-1)!.text, /"I have the shovel\. Are you ready/);
 });
 
+test("team narration keeps the mine as a place rather than assigning it to the speaker", () => {
+  const events = [event(1, "observation", { ...observation([]), role: "A villager.",
+    narrative: "The mine road leads past the iron mine to Torvin's Iron Mine. My tools are here." }, "elsie")];
+  const text = buildNarrative(events, undefined, undefined, { elsie: { name: "Elsie" } })[0].text;
+  assert.match(text, /mine road leads past the iron mine to Torvin's Iron Mine/);
+  assert.doesNotMatch(text, /iron Elsie's|Elsie's road/);
+});
+
 test("game time and member name survive live, reviewed and copied narratives", async () => {
   const events = [
     { ...event(1, "observation", observation([]), "torvin"), village_minute: 1925, actor_name: "Torvin" },

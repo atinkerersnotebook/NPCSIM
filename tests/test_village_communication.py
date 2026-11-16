@@ -326,6 +326,23 @@ def test_schedule_crew_intent_requires_actual_partner_confirmation(world):
     assert known(world, crew[0], nid).source_type == "conversation"
 
 
+def test_late_physical_dairy_request_does_not_create_notice_or_order(world):
+    from npc_sim import village_livestock
+
+    village_livestock.configure(world, {"keeper": "ada"})
+    inn = actor(world, "elsie", "village-square")
+    ready(world, 1055)
+    before = len(world.state.village.communication.notices)
+    result = comm.apply(inn, "village_request_supply", {
+        "good": "milk", "quantity": 1, "preferred_supplier_id": "ada",
+        "purpose": "Current supper", "deadline": 1080,
+        "required_fresh_until": 1140})
+    assert result[:2] == ("REJECTED", "COMMUNICATION_INVALID"), result
+    assert "ORDER_WINDOW_CLOSED" in result[2]
+    assert len(world.state.village.communication.notices) == before
+    assert not world.state.village.economy.orders
+
+
 def test_schedule_crew_accepts_earliest_start_and_replaces_expired_identical_notice(world):
     lead = actor(world, world.scenario.village.smith, "village-square")
     ready(world)
@@ -345,6 +362,46 @@ def test_schedule_crew_accepts_earliest_start_and_replaces_expired_identical_not
     assert latest(world, new_id).supersedes_notice_id == old_id
     assert comm.apply(lead, "village_schedule_crew", {**intent, "earliest_start": 650})[1] == "NOTICE_UNCHANGED"
     assert len(world.state.village.communication.notices) == 2
+
+
+@pytest.mark.parametrize("project", ["dig_well", "repair_mill"])
+def test_expired_crew_booking_needs_independent_replacement_confirmation(world, project):
+    crew, site = comm._project(world, project)
+    lead = actor(world, crew[0], site)
+    partner = actor(world, crew[1], site)
+    ready(world)
+    if project == "repair_mill":
+        world.state.village.breakdown = True
+        world.state.village.stocks[site]["planks"] = 1
+    supplies = ([world.scenario.village.shovel, world.scenario.village.timber,
+                 world.scenario.village.rope] if project == "dig_well" else
+                [world.scenario.village.repair_part, world.scenario.village.hammer])
+    for eid in supplies:
+        world.state.entities[eid].location = site
+        world.state.entities[eid].hidden = False
+    old = post(lead, {"type": "meeting", "subject": project, "description": "Old booking",
+                      "recipients": [partner.actor_id], "project": project,
+                      "destination": site, "due_at": 500},
+               channel="conversation", listener=partner.actor_id)
+    ready(world, 565)
+    comm.advance(world)
+    assert latest(world, old).status == "expired"
+    assert comm.project_blocker(lead, project) is not None
+    ready(world)
+    result = comm.apply(lead, "village_schedule_crew", {
+        "project": project, "earliest_start": 600, "participant_ids": crew})
+    assert result[:2] == ("APPLIED", "NOTICE_POSTED"), result
+    replacement = next(reversed(world.state.village.communication.notices))
+    assert latest(world, replacement).supersedes_notice_id == old
+    assert comm.project_blocker(lead, project) is not None
+    ready(world)
+    assert comm.apply(partner, "village_respond_to_request", {
+        "request_id": replacement, "response": "accept"})[0] == "APPLIED"
+    assert latest(world, replacement).appointment.status == "confirmed"
+    assert comm.project_blocker(lead, project) is None
+    world.save()
+    restored = World(world.scenario, world.path, "communication", lead.actor_id, f"session-{lead.actor_id}")
+    assert comm.project_blocker(restored, project) is None
 
 
 def test_schedule_crew_rejects_wrong_participants_without_spreading_knowledge(world):
@@ -1436,7 +1493,7 @@ def test_appointment_version_change_revokes_old_signature_and_cannot_auto_travel
     assert world.state.actors == positions
 
 
-def test_expired_mill_appointment_renews_only_for_accepted_gathered_equipped_crew(world):
+def test_expired_mill_appointment_requires_new_confirmation_even_when_equipped(world):
     lead, partner, nid = meeting(world, "repair_mill")
     _, site = comm._project(world, "repair_mill")
     ready(world, 605)
@@ -1450,12 +1507,18 @@ def test_expired_mill_appointment_renews_only_for_accepted_gathered_equipped_cre
         world.state.entities[eid].location = site
         world.state.entities[eid].hidden = False
     goods.put(world, site, "planks", 1)
+    assert comm.project_blocker(lead, "repair_mill") is not None
+    assert latest(world, nid).status == "expired"
+    ready(world)
+    result = comm.apply(lead, "village_schedule_crew", {
+        "project": "repair_mill", "earliest_start": 650,
+        "participant_ids": [lead.actor_id, partner.actor_id]})
+    assert result[:2] == ("APPLIED", "NOTICE_POSTED"), result
+    replacement = next(reversed(world.state.village.communication.notices))
+    ready(world)
+    assert comm.apply(partner, "village_respond_to_request", {
+        "request_id": replacement, "response": "accept"})[0] == "APPLIED"
     assert comm.project_blocker(lead, "repair_mill") is None
-    renewed = latest(world, nid)
-    assert renewed.appointment.status == "confirmed"
-    assert renewed.appointment.due_at == 605
-    assert known(world, lead.actor_id, nid).snapshot.version == renewed.version
-    assert known(world, partner.actor_id, nid).snapshot.version == renewed.version
     assert village_ai.apply(lead, "village_project", {"project": "repair_mill"})[0] == "APPLIED"
     for member in [partner, lead, partner, lead, partner]:
         ready(world, world.state.village.minute + 5)

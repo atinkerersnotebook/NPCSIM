@@ -58,6 +58,9 @@ test("map anchors cover every town location using the extended illustration's bo
   const state = fixture();
   for (const scenarioId of ["millhaven-expanded", "millhaven-living", "millhaven-resilient", "millhaven-complete"]) {
     const scenario = JSON.parse(readFileSync(resolve("..", "data", "scenarios", `${scenarioId}.json`), "utf8"));
+    if (scenarioId !== "millhaven-expanded") {
+      assert.equal(scenario.entities["iron-mine"].name, "Torvin's Iron Mine");
+    }
     for (const [id, entity] of Object.entries(scenario.entities) as [string, { kind: string }][]) {
       if (entity.kind === "location") assert.ok(townMapAnchors[id], `${scenarioId}: ${id}`);
     }
@@ -67,6 +70,8 @@ test("map anchors cover every town location using the extended illustration's bo
     assert.ok(anchor.y > 0 && anchor.y < 768);
   }
   assert.ok(townMapAnchors["iron-mine"]);
+  const generations = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "millhaven-generations.json"), "utf8"));
+  assert.equal(generations.entities["iron-mine"].name, "Torvin's Iron Mine");
   assert.deepEqual(townMapAnchors["village-square"], { x: 552, y: 443 });
   assert.ok(townMapAnchors["herbal-workshop"].x !== townMapAnchors.cottages.x);
   assert.deepEqual(townMapAnchors["supply-depot"], { x: 737, y: 378 });

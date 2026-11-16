@@ -633,6 +633,56 @@ def test_fuel_delivery_plan_groups_only_confirmed_feasible_stops(tmp_path):
                              for index, stop in enumerate(blocked.stops))
 
 
+def test_fuel_plan_accounts_for_loading_and_unloading_at_each_stop(tmp_path):
+    world = make_world(tmp_path)
+    goods.put(world, "woods", "firewood", 12)
+    buyer = actor(world, "jory", "woods")
+    path = village.route(world, "woods", "bakery")
+    deadline = world.state.village.minute + 5 * len(path)
+    assert economy.apply(buyer, "village_propose_order", {
+        "product": "firewood", "quantity": 1, "supplier": "rowan",
+        "deadline": deadline, "required_fresh_until": deadline + 60})[0] == "APPLIED"
+    order = next(iter(world.state.village.economy.orders.values()))
+    order.status = "ready_to_collect"
+    assert fuel.delivery_plan(world) is None
+
+
+def test_split_and_deliver_three_funded_fuel_units_in_two_stops(tmp_path):
+    world = make_world(tmp_path)
+    goods.put(world, "woods", "logs", 1)
+    assert act(world, fuel.SPLIT)["code"] == "BATCH_STARTED"
+    village.advance(world, 15)
+    assert world.state.village.stocks["woods"]["firewood"] == 4
+    for buyer_id, amount in (("iona", 2), ("jory", 1)):
+        buyer = actor(world, buyer_id, "woods")
+        buyer.state.village.coins[buyer_id] = 50
+        result = economy.apply(buyer, "village_propose_order", {
+            "product": "firewood", "quantity": amount, "supplier": "rowan",
+            "deadline": 1000, "required_fresh_until": 1080})
+        assert result[0] == "APPLIED", result
+        order = next(item for item in world.state.village.economy.orders.values() if item.buyer == buyer_id)
+        assert economy.apply(world, "village_accept_order", {"order_id": order.id})[0] == "APPLIED"
+    plan = fuel.save_delivery_plan(world)
+    assert plan is not None and len(plan.stops) == 2 and plan.load_plan == {"firewood": 3}
+    for _ in range(32):
+        if plan.status == "completed":
+            break
+        result = act(world, "village_execute_fuel_delivery", route_id=plan.route_id)
+        assert result["outcome"] == "APPLIED", result
+        village.advance(world, 5)
+    assert plan.status == "completed"
+    assert world.state.village.stocks["cottages"]["firewood"] == 2
+    assert world.state.village.stocks["bakery"]["firewood"] == 1
+    assert world.state.village.stocks["woods"]["logs"] == 4
+    for stop in plan.stops:
+        order = world.state.village.economy.orders[stop.order_id]
+        assert order.status == "fulfilled" and order.delivered_quantity == stop.quantity
+        assert order.paid == stop.quantity * order.price and order.fees_paid == order.delivery_fee
+    paid = len(world.state.village.economy.payments)
+    assert act(world, "village_execute_fuel_delivery", route_id=plan.route_id)["outcome"] == "REJECTED"
+    assert len(world.state.village.economy.payments) == paid
+
+
 def test_blocked_fuel_commitment_uses_newly_split_stock_for_real_route(tmp_path):
     world = make_world(tmp_path)
     goods.put(world, "woods", "firewood", 4)

@@ -2,14 +2,15 @@
 
 from typing import TYPE_CHECKING, Any
 
-from npc_sim.models import Scenario, WorldState, VillageLegacyEntry, VillageLegacyLesson, VillageLegacyState
+from npc_sim.models import Scenario, WorldState, VillageDiaryEntry, VillageLegacyEntry, VillageLegacyLesson, VillageLegacyState
 from npc_sim import village
 
 if TYPE_CHECKING:
     from npc_sim.world import World
 
 
-VERBS = {"village_read_chronicle", "village_share_chronicle"}
+VERBS = {"village_read_chronicle", "village_share_chronicle", "village_write_diary", "village_read_history"}
+DIARY_LIMIT = 3
 RECORDED = {
     "breakdown", "project_completed", "deadline_completed", "deadline_overdue",
     "missed_meal", "visitor_arrived", "visitor_departed", "village_merchant_trade",
@@ -104,12 +105,14 @@ def observation(world: "World") -> dict[str, Any]:
     current = legacy.current.get(rid, rid.replace("-", " ").title())
     return {"legacy": {
         "family": family.model_dump(),
-        "chronicle": [legacy.chronicle[index].model_dump() for index in known],
+        "chronicle": [legacy.chronicle[index].model_dump() for index in known] if history_ready(world) else [],
         "lessons": [{**legacy.chronicle[item.entry].model_dump(), "source": item.source,
-                     "learned_at": item.learned_at} for item in lessons],
-        "lineage": legacy.lineage.get(rid, []),
+                     "learned_at": item.learned_at} for item in lessons] if history_ready(world) else [],
+        "lineage": legacy.lineage.get(rid, []) if history_ready(world) else [],
         "current": current,
         "inherited_coins": legacy.inherited_coins.get(rid, 0),
+        "diary": [entry.model_dump() for entry in legacy.diaries.get(rid, [])] if history_ready(world) else [],
+        "history_pending": history_pending(world),
         "newcomers_here": [person.name for person in legacy.newcomers.values()
                            if person.home == world.actor.location_id],
     }}
@@ -126,6 +129,21 @@ def actions(world: "World") -> list[dict[str, Any]]:
     _, state = village.context(world)
     legacy = state.legacy
     if legacy is not None:
+        if history_pending(world):
+            result.append({"id": "village_read_history",
+                           "description": "Read your inherited family journal and village history before starting this generation (five minutes).",
+                           "targets": [], "arguments_schema": {"type": "object", "properties": {},
+                                                          "additionalProperties": False},
+                           "availability": "available", "reason": None})
+        if not journal_written(world, world.actor_id):
+            result.append({"id": "village_write_diary",
+                           "description": "Write one personal note today for the next resident in your role. Optionally detail observed problems and suggestions; advice is not proof of current conditions (five minutes).",
+                           "targets": [], "arguments_schema": {"type": "object", "properties": {
+                               "text": {"type": "string", "minLength": 20, "maxLength": 500},
+                               "problems": {"type": "string", "minLength": 20, "maxLength": 1000},
+                               "suggestions": {"type": "string", "minLength": 20, "maxLength": 1000}},
+                               "required": ["text"], "additionalProperties": False},
+                           "availability": "available", "reason": None})
         nearby = [rid for rid in village.local_residents(world, world.actor.location_id)
                   if rid != world.actor_id]
         known = [index for index in legacy.learned.get(world.actor_id, [])
@@ -146,6 +164,39 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     legacy = state.legacy
     if legacy is None:
         raise ValueError("Village legacy is not enabled")
+    if action == "village_read_history":
+        if not history_pending(world):
+            return "REJECTED", "HISTORY_ALREADY_READ", "This generation's inherited history has already been read.", None
+        if world.actor.location_id != world.scenario.village.residents[world.actor_id].home:
+            return "REJECTED", "NOT_AT_HOME", "Read your inherited history at home before setting out.", None
+        if state.residents[world.actor_id].life and state.residents[world.actor_id].life.sleeping:
+            return "REJECTED", "ASLEEP", "Wake before reading your inherited history.", None
+        for index, entry in enumerate(legacy.chronicle):
+            if entry.origin_world_id and index not in legacy.learned.get(world.actor_id, []):
+                learn(world, world.actor_id, index, "inherited chronicle")
+        legacy.history_read.append(world.actor_id)
+        text = "Read the inherited family journal and village chronicle; old accounts may not describe today's world."
+        village.event(world, world.actor_id, action, world.actor.location_id, text)
+        return "APPLIED", "HISTORY_READ", text, None
+    if action == "village_write_diary":
+        text, problems, suggestions = args.get("text"), args.get("problems"), args.get("suggestions")
+        if (set(args) - {"text", "problems", "suggestions"}
+                or not isinstance(text, str) or not 20 <= len(text.strip()) <= 500
+                or any(value is not None and (not isinstance(value, str) or not 20 <= len(value.strip()) <= 1000)
+                       for value in (problems, suggestions))):
+            return "REJECTED", "INVALID_DIARY", "Write a 20-500 character note; optional problems and suggestions must each be 20-1000 characters.", None
+        diary = legacy.diaries.setdefault(world.actor_id, [])
+        if journal_written(world, world.actor_id):
+            return "REJECTED", "DIARY_ALREADY_WRITTEN", "You have already written today's diary note.", None
+        diary.append(VillageDiaryEntry(author=village.resident_name(world, world.actor_id),
+                                       written_at=state.minute, text=text.strip(),
+                                       problems=problems.strip() if problems is not None else None,
+                                       suggestions=suggestions.strip() if suggestions is not None else None,
+                                       origin_world_id=world.state.world_id))
+        legacy.diaries[world.actor_id] = diary[-DIARY_LIMIT:]
+        result = "Wrote a private diary note for a future successor."
+        village.event(world, world.actor_id, action, world.actor.location_id, result)
+        return "APPLIED", "DIARY_WRITTEN", result, None
     if action == "village_share_chronicle":
         target, index = args["target"], args["entry"]
         if (target == world.actor_id or target not in village.local_residents(world, world.actor.location_id)
@@ -173,6 +224,24 @@ def monitor(world: "World") -> dict[str, Any]:
     return {}
 
 
+def history_pending(world: "World") -> bool:
+    _, state = village.context(world)
+    return bool(state.legacy and state.legacy.handoff and world.actor_id not in state.legacy.history_read)
+
+
+def history_ready(world: "World") -> bool:
+    return not history_pending(world)
+
+
+def journal_written(world: "World", rid: str) -> bool:
+    _, state = village.context(world)
+    if state.legacy is None or state.residents[rid].life is None:
+        return False
+    return any(entry.origin_world_id == world.state.world_id
+               and entry.written_at >= state.residents[rid].life.last_woke
+               for entry in state.legacy.diaries.get(rid, []))
+
+
 def learn(world: "World", rid: str, index: int, source: str) -> None:
     _, state = village.context(world)
     legacy = state.legacy
@@ -187,7 +256,7 @@ def learn(world: "World", rid: str, index: int, source: str) -> None:
 def active_lessons(world: "World", rid: str) -> list[VillageLegacyLesson]:
     _, state = village.context(world)
     legacy = state.legacy
-    if legacy is None:
+    if legacy is None or history_pending(world):
         return []
     return [lesson for lesson in legacy.lessons.get(rid, [])
             if 0 <= lesson.entry < len(legacy.chronicle)
@@ -294,6 +363,8 @@ def successor_state(source_scenario: Scenario, source: WorldState, target: "Worl
         "lesson": entry.lesson if old.minute - entry.minute <= LESSON_DAYS * 1440 else None})
         for entry in old.legacy.chronicle[-100:]] + new.legacy.chronicle
     new.legacy.recorded_events = 0
+    new.legacy.diaries = {rid: list(old.legacy.diaries.get(rid, [])[-DIARY_LIMIT:])
+                          for rid in target.scenario.village.residents if old.legacy.diaries.get(rid)}
     for rid, family in successors.items():
         if not family.successor:
             continue
@@ -316,4 +387,5 @@ def successor_state(source_scenario: Scenario, source: WorldState, target: "Worl
         new.legacy.chronicle.append(VillageLegacyEntry(
             minute=new.minute, kind="succession",
             text=f"{previous} retired; {family.successor} succeeded to the {rid} household and {inherited} coins."))
+    new.legacy.history_read = []
     new.legacy.handoff = {"save_id": save_id, "source_world_id": source.world_id}

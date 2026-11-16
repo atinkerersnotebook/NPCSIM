@@ -59,11 +59,12 @@ def test_unallocated_early_supper_is_pending_until_service(cast):
     outside = next(rid for rid in plan["diners"] if rid not in plan["reserved"])
     result = act(cast[outside], "village_eat")
     assert result["outcome"] == "REJECTED"
-    assert result["code"] == "MEAL_UNALLOCATED"
-    assert world.state.village.residents[outside].life.meals["0:daily"].status == "pending"
+    assert result["code"] == "NO_MEAL_DUE"
+    assert "0:daily" not in world.state.village.residents[outside].life.meals
     assert world.state.village.residents[outside].life.missed_meals == 0
     assert world.state.village.stocks["tavern"]["meals"] == 1
     village_goods.put(world, "tavern", "meals", 1)
+    village.advance(world, 1140 - world.state.village.minute)
     assert act(cast[outside], "village_eat")["code"] == "MEAL_EATEN"
 
 
@@ -209,3 +210,37 @@ def test_overdue_breakfast_cannot_consume_supper_portion(cast):
     assert breakfast.status == "missed"
     assert mara.state.village.stocks["tavern"]["meals"] == before
     assert mara.state.village.residents["mara"].life.meals["0:daily"].status == "pending"
+
+
+def test_daytime_food_uses_only_surplus_and_does_not_discharge_supper(cast):
+    world = cast["elsie"]
+    village.advance(world, 1080 - world.state.village.minute)
+    assert act(cast["mara"], "village_eat")["code"] == "NO_MEAL_DUE"
+    village_goods.put(world, "tavern", "bread", 4)
+    assert act(cast["mara"], "village_eat")["code"] == "MEAL_EATEN"
+    assert world.state.village.residents["mara"].life.meals["0:daytime"].status == "eaten"
+    assert village_life.meal_plan(world)["consumed"] == 0
+    village.advance(world, 5)
+    assert act(cast["mara"], "village_eat")["code"] == "NO_MEAL_DUE"
+    village.advance(world, 1140 - world.state.village.minute)
+    assert act(cast["mara"], "village_eat")["code"] == "MEAL_EATEN"
+    assert world.state.village.residents["mara"].life.meals["0:daily"].status == "eaten"
+
+
+def test_twelve_actual_suppers_survive_midnight_after_daytime_food(cast):
+    world = cast["elsie"]
+    village.advance(world, 1080 - world.state.village.minute)
+    village_goods.put(world, "tavern", "bread", 4)
+    assert act(cast["mara"], "village_eat")["code"] == "MEAL_EATEN"
+    village.advance(world, 1140 - world.state.village.minute)
+    for rid in village_life.meal_plan(world)["diners"]:
+        if rid != "elsie":
+            assert act(cast[rid], "village_eat")["code"] == "MEAL_EATEN"
+    village.advance(world, 1170 - world.state.village.minute)
+    assert act(world, "village_eat")["code"] == "MEAL_EATEN"
+    assert village_life.meal_plan(world)["consumed"] == 12
+    assert world.state.village.stocks["tavern"]["bread"] == 0
+    village.advance(world, 1440 - world.state.village.minute)
+    assert all(person.life.meals["0:daily"].status == "eaten"
+               for person in world.state.village.residents.values())
+    assert world.state.village.residents["mara"].life.meals["0:daytime"].status == "eaten"

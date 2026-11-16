@@ -91,6 +91,11 @@ passing unit test is not a verified multi-day NPC outcome. In particular,
 12/12 meal service and autonomous depot trading have not been established by
 the available evidence.
 
+The [Generation 11 Day 1 assessment baseline](GENERATION-11-BASELINE.md)
+records improved deliveries and 10/12 daily meals, but only six evening meals,
+delayed crew bookings and no recorded firewood delivery. It is a comparison
+record, not a frozen replay fixture or evidence of multi-day reliability.
+
 ## Reproducible evidence and existing checks
 
 - Record scenario ID and frozen JSON/hash, baseline world and seed if present,
@@ -104,6 +109,12 @@ the available evidence.
   README's **Living Millhaven** section; the supplied Generation 8 baseline is
   a deterministic *current-engine* starting point, not an archived Generation 7
   run or a real-model replay.
+- For an intermediate three-day continuity check, use four saved checkpoints
+  (opening plus three consecutive midnights) with the offline
+  `npc_sim.village_release_evidence --checkpoints` command documented in the
+  README. Its stock/activity result is engine evidence, not proof of autonomous
+  play or the seven-day release gate; retain the run log and effective model
+  settings for that comparison.
 - Focused regression entry points: `tests/test_village_completion.py`,
   `tests/test_village_economy.py`, `tests/test_village_livestock.py`,
   `tests/test_village_depot.py`, `tests/test_village_legacy.py`, and

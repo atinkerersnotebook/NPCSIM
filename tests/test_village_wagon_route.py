@@ -1,7 +1,8 @@
-from npc_sim import village_goods, village_wagon
+from npc_sim import village, village_goods, village_services, village_wagon
 from npc_sim.models import VillageStockLot
 from npc_sim.village_economy_models import VillageSupplierOrder
 from test_village_economy import actor, world  # noqa: F401
+from test_world import act
 
 
 def test_standing_route_requires_real_confirmed_shipment(world):
@@ -153,3 +154,101 @@ def test_route_uses_order_destination_not_legacy_delivery(world):
     assert order.delivered_quantity == 1
     assert state.stocks["bakery"]["grain"] == 1
     assert state.stocks["watermill"].get("grain", 0) == 0
+
+
+def test_funded_farm_to_mill_wagon_delivery_survives_reload_and_settles_once(world):
+    courier = actor(world, "nella")
+    state = courier.state.village
+    wagon = state.wagon
+    wagon.repaired = wagon.hitched = True
+    courier.actor.location_id = courier.state.entities["wagon"].location
+    order = VillageSupplierOrder(
+        id="farm-mill", request_key="farm-mill", buyer="mara", supplier="ada",
+        source="farm", destination="watermill", product="grain", quantity=3, price=1,
+        deadline=900, required_fresh_until=850, created_at=state.minute,
+        status="ready_to_collect")
+    state.economy.orders[order.id] = order
+    village_goods.put(courier, "farm", "grain", 3,
+                      [VillageStockLot(quantity=3, produced_at=state.minute, expires_at=1000)])
+    balances = state.coins.copy()
+    assert village_wagon.apply(courier, "village_start_route", {})[:2] == ("APPLIED", "ROUTE_STARTED")
+    for _ in range(60):
+        if not wagon.automatic:
+            break
+        state.minute = wagon.next_event_at
+        village_wagon.advance(courier)
+    assert not wagon.automatic and wagon.driver is None and not wagon.loads
+    assert order.status == "fulfilled" and order.delivered_quantity == 3
+    assert state.stocks["watermill"]["grain"] == 3
+    assert state.coins["mara"] == balances["mara"] - order.paid
+    assert state.coins["ada"] == balances["ada"] + order.paid
+    assert courier.state.entities["wagon"].location == "forge"
+    assert courier.state.entities["work-horse"].location == "forge"
+    courier.save()
+    from npc_sim.world import World
+    restored = World(courier.scenario, courier.path, courier.state.world_id, "nella", "session-nella")
+    assert restored.state.village.economy.orders[order.id].delivered_quantity == 3
+    assert village_wagon.apply(restored, "village_unload_wagon", {})[0] == "REJECTED"
+    assert restored.state.village.coins == state.coins
+    handler = actor(restored, "bren", "forge")
+    state = restored.state.village
+    assert village_services.apply(handler, "village_unhitch", {})[:2] == ("APPLIED", "HORSE_UNHITCHED")
+    path = village.route(handler, "forge", "stable")
+    assert path is not None
+    for location in path:
+        door = next(eid for eid, entity in handler.state.entities.items()
+                    if entity.kind == "door" and {entity.location, entity.destination}
+                    == {handler.actor.location_id, location})
+        state.minute = max(state.minute, state.residents["bren"].available_at)
+        result = act(handler, "go", target=door)
+        assert result["outcome"] == "APPLIED", result
+        assert handler.state.entities["work-horse"].location == location
+    state.minute = max(state.minute, state.residents["bren"].available_at)
+    assert village_services.apply(handler, "village_release_horse", {})[:2] == ("APPLIED", "HORSE_STABLED")
+    assert not restored.state.village.wagon.hitched and restored.state.village.horse_leader is None
+
+
+def test_route_goes_to_funded_pickup_without_empty_circuit_and_resumes_loaded_cargo(world):
+    courier = actor(world, "nella")
+    state = courier.state.village
+    wagon = state.wagon
+    wagon.repaired = wagon.hitched = True
+    courier.actor.location_id = courier.state.entities["wagon"].location
+    order = VillageSupplierOrder(
+        id="bakery-pickup", request_key="bakery-pickup", buyer="elsie", supplier="jory",
+        source="bakery", destination="tavern", product="bread", quantity=2, price=1,
+        deadline=900, required_fresh_until=850, created_at=state.minute,
+        status="ready_to_collect")
+    state.economy.orders[order.id] = order
+    village_goods.put(courier, "bakery", "bread", 2,
+                      [VillageStockLot(quantity=2, produced_at=state.minute, expires_at=1000)])
+    origin = courier.actor.location_id
+    assert village_wagon.apply(courier, "village_start_route", {})[0] == "APPLIED"
+    state.minute = wagon.next_event_at
+    village_wagon.advance(courier)
+    assert courier.actor.location_id == village.route(courier, origin, "bakery", road_only=True)[0]
+    assert courier.state.entities["work-horse"].location == courier.actor.location_id
+    for _ in range(20):
+        if wagon.loads:
+            break
+        state.minute = wagon.next_event_at
+        village_wagon.advance(courier)
+    assert len(wagon.loads) == 1 and order.in_transit == 2
+    assert state.stocks["bakery"]["bread"] == 0
+    courier.save()
+    from npc_sim.world import World
+    restored = World(courier.scenario, courier.path, courier.state.world_id, "nella", "session-nella")
+    state = restored.state.village
+    wagon = state.wagon
+    for _ in range(30):
+        if not wagon.automatic:
+            break
+        state.minute = wagon.next_event_at
+        village_wagon.advance(restored)
+    assert not wagon.automatic and not wagon.loads
+    assert state.economy.orders[order.id].delivered_quantity == 2
+    assert state.stocks["tavern"]["bread"] == 2
+    coins = state.coins.copy()
+    assert village_wagon.apply(restored, "village_start_route", {})[0] == "REJECTED"
+    assert village_wagon.apply(restored, "village_unload_wagon", {})[0] == "REJECTED"
+    assert state.coins == coins
