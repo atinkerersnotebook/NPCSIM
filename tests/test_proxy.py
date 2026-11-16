@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from npc_sim.models import ProxyConfig
-from npc_sim.proxy import Proxy
+from npc_sim.proxy import EmptyModelResponse, Proxy
 
 
 @pytest.mark.asyncio
@@ -78,6 +78,32 @@ async def test_completion_review_uses_the_same_local_proxy_and_structured_reason
     assert review.verdict == "fail"
     assert review.findings[0].evidence_ids == ["run:1"]
     assert len(seen) == 1
+
+
+def test_long_completion_story_keeps_start_recent_events_and_valid_evidence_ids():
+    proxy = Proxy(ProxyConfig())
+    story = [{"id": f"event:{index}", "text": "A confirmed result. " * 20}
+             for index in range(5103)]
+    payload = {"objective": "Complete the village day.", "story": story,
+               "final_verification": {"event_id": "verification:1", "result": {"status": "active"}}}
+    messages = proxy.completion_context(payload)
+    supplied = json.loads(messages[1]["content"])
+    assert len(messages[1]["content"]) < 50000
+    assert supplied["story"][0]["id"] == "event:0"
+    assert supplied["story"][-1]["id"] == "event:5102"
+    assert len(supplied["story"]) == 80
+    assert supplied["final_verification"] == payload["final_verification"]
+    assert len(payload["story"]) == 5103
+
+
+@pytest.mark.asyncio
+async def test_empty_completion_review_is_reported_explicitly(monkeypatch):
+    original = httpx.AsyncClient
+    transport = httpx.MockTransport(lambda request: httpx.Response(
+        200, json={"choices": [{"message": {"content": ""}}]}))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(**kwargs, transport=transport))
+    with pytest.raises(EmptyModelResponse, match="empty completion review"):
+        await Proxy(ProxyConfig()).assess("local-model", [], "request", 5)
 
 
 def test_missing_token_environment_is_explicit(monkeypatch):

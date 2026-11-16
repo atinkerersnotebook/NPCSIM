@@ -26,6 +26,43 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "dc1ecba9cdd04c6d8854e4bcd5e7973c",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-16T13:44:48.560511+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: every resident contributed, everyone fed, everyone home, everyone asleep, resource reserves ready.",
+          "evidence_ids": [
+            "dc1ecba9cdd04c6d8854e4bcd5e7973c:47081"
+          ]
+        },
+        {
+          "reason": "Most residents had not eaten the required daily meals; the final check marks everyone_fed false.",
+          "evidence_ids": [
+            "dc1ecba9cdd04c6d8854e4bcd5e7973c:47081"
+          ]
+        },
+        {
+          "reason": "The final check marks everyone_home and everyone_asleep false.",
+          "evidence_ids": [
+            "dc1ecba9cdd04c6d8854e4bcd5e7973c:47081"
+          ]
+        },
+        {
+          "reason": "The grain reserve was below its configured level, and the final check marks resource_reserves_ready false.",
+          "evidence_ids": [
+            "dc1ecba9cdd04c6d8854e4bcd5e7973c:47081"
+          ]
+        },
+        {
+          "reason": "The required resident contributions were incomplete; the final check marks every_resident_contributed false.",
+          "evidence_ids": [
+            "dc1ecba9cdd04c6d8854e4bcd5e7973c:47081"
+          ]
+        }
+      ]
     }
   ]
 }

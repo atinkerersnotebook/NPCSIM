@@ -7,18 +7,20 @@ DEPOT = "supply-depot"
 FEED_STORE = "farm-feed-store"
 PRODUCTS = {"grain", "flour", "timber", "firewood", "hay"}
 FUEL_CAPACITY = 16
+MANAGED_SCENARIOS = {"millhaven-resilient", "millhaven-complete"}
 
 
 def enabled(world) -> bool:
-    return (world.scenario.id == "millhaven-resilient" and DEPOT in world.state.entities
+    return (world.scenario.id in MANAGED_SCENARIOS and DEPOT in world.state.entities
             and FEED_STORE in world.state.entities and world.state.village is not None)
 
 
 def validate_config(scenario) -> None:
-    if scenario.id != "millhaven-resilient":
+    if scenario.id not in MANAGED_SCENARIOS:
         return
     base = scenario.village
-    if FEED_STORE not in scenario.entities and base is not None and FEED_STORE not in base.stocks:
+    if (scenario.id == "millhaven-resilient" and FEED_STORE not in scenario.entities
+            and base is not None and FEED_STORE not in base.stocks):
         # Older frozen resilient episodes predate the physical feed store.
         return
     if base is None or base.livestock is None or base.economy is None or not base.economy.require_orders:
@@ -135,6 +137,12 @@ def load(world, goods: dict[str, int], withdrawal: bool, *, feed: bool = False) 
         return "FEED_STORE_AUTHORITY: Only the farmer may restock feed from the farm."
     source = store if withdrawal else config.residents[actor].work
     destination = config.residents[actor].work if withdrawal else store
+    if (not feed and config.firewood and actor == config.firewood.household_buyer and set(goods) == {"firewood"}
+            and config.firewood.household_location):
+        if withdrawal:
+            destination = config.firewood.household_location
+        else:
+            source = config.firewood.household_location
     if world.actor.location_id != source or source == destination:
         return "DEPOT_WRONG_SITE: Deposit at your workplace or withdraw at the depot."
     if not goods or any(product not in PRODUCTS or type(quantity) is not int or quantity < 1

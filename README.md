@@ -62,6 +62,10 @@ limits against the actual accumulated usage. Changing it does not start play.
 Budget-exhausted saved local adventures can enable it and reopen paused.
 The operator API is `POST /api/adventure/run-mode` with
 `{"run_id":"current-run-id","run_until_complete":true}` (use false to disable).
+For a paused timed village, add `"stop_after_days":2` to continue across the
+next midnight and pause at the second midnight instead. Then POST
+`/api/control/resume` with `{}`. The stop is saved with the run; it does not
+fast-forward or relax non-progress safeguards.
 
 **Add budget** in Player or Admin view adds model calls, action
 attempts, or active real-time minutes to the current adventure's frozen limits,
@@ -101,15 +105,21 @@ normal edge padding and responsive layouts rather than a fixed maximum width.
 
 ### Live town map
 
-World view displays the supplied Millhaven illustration with named residents and
+World view displays the extended Millhaven illustration with named residents and
 present visitors grouped at their authoritative building/location. Select a marker
 for activity details; use the map zoom buttons and scroll to explore. Placement is
 location-level, not precise indoor coordinates or continuous walking. Locations
 including secondary sites remain marked even when empty; hover or focus a location
 label to read its current site stock (or whether no stock is recorded).
-Locations not pictured (such as the iron mine) and unverified positions are explicitly listed
-off map. On wider screens the World timeline sits to the right of the town map;
-on narrower screens it stacks below. Other, non-village adventures retain their existing World view.
+Torvin's iron mine is mapped west of the village; secondary sites are marked near
+their associated buildings. Unverified positions are explicitly listed off map.
+Location hover cards also show outstanding incoming orders, posted supply requests,
+and production linked to orders at that site. Due times are deadlines, not promised
+arrival times; unaccepted requests are not scheduled production. Planned output and
+reserved inputs appear only when recorded by the economy, while blocked orders show
+their recorded reason and requested output shows its recipe inputs and current site stock.
+The World timeline sits below the town map at every screen width. Other,
+non-village adventures retain their existing World view.
 
 Confirmed successful `say` actions appear as speech bubbles for 18 real-time seconds,
 with a recent spoken-dialogue panel below the map. Requested/rejected actions,
@@ -117,6 +127,8 @@ private questions, memories and model reasoning never become bubbles. Historical
 events populate recent dialogue without replaying on initial load or reconnect.
 Bubbles expire even while paused and stop following a speaker who changes location.
 The map uses a bundled local image; no external mapping service is required.
+Iona's Herbal Workshop is a separate walkable home and workplace beside the
+cottages in new Millhaven adventures; existing saves retain their frozen map.
 
 Select **Millhaven Living - Resilient Village** (`millhaven-resilient`) for the supplied
 updated map and a separate living-village setup. It adds a walkable communal depot,
@@ -134,6 +146,16 @@ handcart, home cooking and market-day/seasonal systems are not yet usable
 mechanics; livestock water and deliveries still follow the existing well and
 transport rules.
 Existing `millhaven-living` runs and their frozen scenarios are unchanged.
+
+For both sets of features in one new adventure, select **Millhaven - Complete
+Living Village** (`millhaven-complete`). It uses the resilient village's physical
+depot, feed store, maintenance and purposeful work together with the remembering
+village's inherited histories, square chronicle and optional successor handoffs.
+To start a successor generation, save this scenario at a resumable midnight and
+start a new `millhaven-complete` adventure with that save's `generation_save_id`;
+handoffs cannot import a save from a different scenario. Existing adventures
+keep their frozen scenario, and the unverified autonomous depot and multi-day
+feed-store limitations above still apply.
 
 ### Named episode save points
 
@@ -346,6 +368,9 @@ enabled on a restored/current run.
 Living Millhaven has two real iron supply routes:
 
 - **Daily imports:** the iron trader walks in from the mine road (or bridge in the expanded scenario) just before noon, brings four units to the square at noon, and walks out at 18:00 with unsold stock.
+  While at the square, the trader makes one recorded offer to each available resident
+  encountered there (retrying when someone is busy). These enquiries appear separately
+  from NPC speech in the World map; they do not themselves transfer goods or funds.
   With mandatory orders enabled, the smith
   uses `village_buy_iron` face-to-face to create a funded, accepted consignment
   and collect actual cargo. Carry it to the forge and unload to pay; ordering
@@ -787,6 +812,13 @@ Empty-meal retries depend on the meal, food and funding, not unrelated chatter o
 tool observations. An empty/unfunded attempt can mark a meal missed, and a
 later real, paid meal can recover that outcome. Meal preparation now has a
 configurable cutoff; the forecast never creates stock or guarantees attendance.
+From 15:00, the economy also forecasts tomorrow's meal services using expiring
+stock and remaining funds. In purposeful villages, the innkeeper can bring a
+funded bread or fish request to a real conversation or physical board; suppliers
+must still learn, accept, produce and deliver it. Breakfast claims close at the
+configured meal window and cannot consume food intended for supper. Empty model
+decisions receive one bounded retry, then pause without dispatching an action.
+These safeguards do not establish a successful autonomous multi-day meal run.
 
 Useful inspections are limited until visible conditions change or the configured
 review interval passes. With anti-idle enabled, an idle resident away from their
@@ -853,9 +885,11 @@ Timed worlds also show a live **World timeline** Gantt chart: one row per agent,
 location-coloured bands, taller rounded action/availability tiles, free-action diamonds, sleeping
 and wagon-route bands, public milestones, and a current-time line. The 64-pixel-high
 tiles show an activity icon, duration, clock range, and a recorded-result summary as space
-allows; zoom in to reveal more detail in shorter activities. Hover or focus a tile
+allows; zoom in to reveal more detail in shorter activities. Hover or focus a tile or instant-event diamond
 for a rounded white detail card showing the agent, activity, status (when recorded),
-time range, duration, location, and any distinct recorded result.
+time range, duration, location, any distinct recorded result, and the agent's recorded
+reason for choosing the action when available. Older or automatic events without a
+recorded decision do not invent a reason.
 Collapse the Town map to give the timeline the full available width, and show it again when needed. Unknown history stays blank;
 scheduled intentions are never drawn as completed work. The chart follows the
 latest activity until you scroll back, and keeps agent names visible while you
@@ -888,6 +922,9 @@ Player and Admin views include **Ask an NPC** and **Dungeon Master intervention*
   observation, own goal and own memory, and remembers the exchange. Other NPCs do
   not receive it. Questions are communication, not verified world facts, and cannot
   execute actions or grant skills.
+- Travellers with recorded visits are also selectable. Their private answers use
+  their own visit, location and conversation history, not a resident's memories;
+  departed travellers can answer follow-up questions after the adventure ends.
 - Describe a world change in plain English, then choose **Preview change**.
   Review the summary, added objects, placement, concealment, spare-key bindings
   and full configuration. Nothing changes until **Approve change**.

@@ -25,13 +25,14 @@ SOLUTION = [
 
 
 @pytest.mark.asyncio
-async def test_generation_handoff_from_saved_midnight_is_explicit_and_reversible(configuration):
+@pytest.mark.parametrize("scenario_id", ["millhaven-generations", "millhaven-complete"])
+async def test_generation_handoff_from_saved_midnight_is_explicit_and_reversible(configuration, scenario_id):
     data, config = configuration
-    config.world.scenario = "millhaven-generations"
+    config.world.scenario = scenario_id
     controller = Controller(ROOT, data, config)
     await controller.start_worker()
     try:
-        await controller.command("start", {"scenario_id": "millhaven-generations"})
+        await controller.command("start", {"scenario_id": scenario_id})
         first = controller.status()["world"]
         assert first["village"]["legacy"]["handoff"] is None
         await controller.command("save_episode", {
@@ -44,13 +45,13 @@ async def test_generation_handoff_from_saved_midnight_is_explicit_and_reversible
         source.name = "Generation one midnight"
         episode_saves.write_save(data, source)
         save_id = source.id
-        await controller.command("start", {"scenario_id": "millhaven-generations",
+        await controller.command("start", {"scenario_id": scenario_id,
                                            "generation_save_id": save_id})
         next_world = controller.status()["world"]
         assert next_world["village"]["legacy"]["lineage"]["rowan"] == ["Rowan"]
         assert next_world["village"]["legacy"]["handoff"]["save_id"] == save_id
         assert controller.run["agent_profiles"]["rowan"]["name"] == "Rina Woodward"
-        await controller.command("start", {"scenario_id": "millhaven-generations"})
+        await controller.command("start", {"scenario_id": scenario_id})
         assert controller.status()["world"]["village"]["legacy"]["handoff"] is None
     finally:
         await controller.shutdown()
@@ -323,6 +324,31 @@ async def test_invalid_decision_repair_never_dispatches(configuration):
         assert controller.run["actions"] == 0
     finally:
         await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_empty_decisions_pause_at_action_boundary(configuration):
+    from npc_sim.proxy import EmptyModelResponse
+
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+
+    class EmptyProxy(TestProxy):
+        async def choose(self, *args, **kwargs):
+            raise EmptyModelResponse("Model returned an empty decision")
+
+    controller.proxy = EmptyProxy(controller.proxy, [])
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        await controller.command("step")
+        assert controller.run["status"] == "paused"
+        assert controller.run["actions"] == 0
+        assert controller.run["model_calls"] == 2
+        assert "empty model decisions" in controller.run["reason"]
+        assert read_json(controller.events.directory / "run.json")["status"] == "paused"
+    finally:
+        await controller.shutdown(preserve_paused=True)
 
 
 @pytest.mark.asyncio

@@ -630,6 +630,140 @@ records a successful completed village episode. The one skipped test requires
 an unavailable archived Day 3 baseline. No release checkbox below was closed
 from test counts alone. Do not modify the paused episode to manufacture evidence.
 
+### Observed Resilient Village food failure (2026-11-16; open)
+
+Run `dc1ecba9cdd04c6d8854e4bcd5e7973c` reached minute 4060: two complete
+days and day 3 through 19:40, **not** the requested second midnight at 4320.
+Its persisted world and movement/order ledgers show a supply-chain failure,
+not an absence of all food or a completed three-day success. Breakfasts eaten
+were 12/12, 4/12 and 6/12; suppers eaten were 4/12, 0/12 and 1/12 (day 3
+partial). On day 1 the tavern consumed its initial 12 bread and three delivered
+loaves; only two cooked meals were produced. No bread was produced or delivered
+on days 2-3. Two fish reached the tavern each of those days, yielding four
+meals on day 2 and contributing to eight cooked meals on day 3. Day-2 meals
+were all eaten as breakfast; of the seven day-3 cooked portions consumed by
+19:40, six went to breakfast and only Elsie ate supper. Three loaves elsewhere
+spoiled on day 3. At the stop the tavern had one meal, no bread or fish, and
+the general store held three grain against a reserve of four.
+
+Jory's day-1 bread orders were fulfilled and not renewed. At minute 3975 he
+reported that his two flour could not justify another bread batch because
+accepted demand and reserves were already covered; he had asked Elsie for a
+new funded order. Mara reported awaiting grain despite flour still held at
+the mill and bakery. The demand-limited producer and physical order workflow
+therefore did not turn the inn's next service forecast into an accepted,
+delivered supply commitment. The run nevertheless completed all eight daily
+maintenance jobs and cow/hen care on each observed day; the well, mill and
+wagon were repaired. These successes must survive food-chain corrections.
+There were 401, 944 and 646 `NO_ELIGIBLE_WORK` waits on days 1-3, even as
+meals went uncovered. Finally, two empty/invalid model decisions ended the
+run in `error` at 4060. That reliability failure is separate from the food
+shortage; it prevented observing the intended second midnight.
+
+The following tasks make the existing meal, communication, wait and economy
+gates concrete for this run. They are **open** despite checked-off component
+features above; do not silently replenish food, create remote knowledge, or
+mark a forecast as a meal eaten.
+
+- [ ] **Renew funded next-day food demand before its real cutoff.** At the
+  evening handoff or next morning, Elsie should plan both services for all
+  twelve residents from fresh on-hand portions, firm incoming orders, usable
+  bread/flour/grain and fish, cook batches, fuel, labor, lead times and finite
+  funds. Convert an uncovered forecast into a *new* personally communicated
+  request, in-person agreement and accepted bakery/fish order; never assume a
+  fulfilled yesterday-order carries forward. Jory, Mara and a carrier should
+  see only personally learned commitments and have enough time to produce,
+  load, travel and settle them. Escalate a refused, unanswered, stale or
+  impossible order while another source is still feasible, or report exactly
+  which service cannot be covered. Protect animal feed and location reserves;
+  never count speculative output as confirmed delivery. Test the day-1-to-day-2
+  handoff with two flour at the bakery and no accepted bread order: a funded
+  physical order is either fulfilled in time or an explicit shortage is
+  recorded, rather than `DEMAND_MET`/idle waiting while the tavern is empty.
+- [ ] **Keep breakfast and supper allocations distinct and time-bound.** The
+  day-2 and day-3 cooking ledger produced portions near supper, but late
+  breakfast claims consumed them. Allocate fresh portions to each service
+  once, honor the configured breakfast window and supper deadline, and expose
+  an explicit policy decision if an emergency breakfast would displace a
+  reserved supper. Do not retroactively label a diner fed from another
+  service, duplicate a lot, or declare an early unallocated diner missed while
+  a feasible batch can finish. Test limited stock, simultaneous arrivals,
+  late breakfast, partially cooked batches and midnight: twelve supper
+  portions reserved for supper cannot disappear into overdue breakfasts.
+- [ ] **Make the meal forecast actionable and deadline-honest.** Connect the
+  existing stock-backed readiness and delivery forecasts to the innkeeper's
+  own available order, route and cooking actions. At each meaningful change,
+  show ready, cookable, committed, delivered, eaten and uncovered portions
+  separately, with the specific blocker (request, producer, input, stock
+  freshness, money, carrier, route, fuel, labor or cutoff). Prefer a feasible
+  food-chain action over optional research, leisure or repeated no-change
+  travel; wake a waiting participant only when personally observable evidence
+  changes. Distinguish next-day recoverability from today's irreversible meal
+  miss. Test both a recoverable early shortage and an impossible late one,
+  without bypassing prices, physical movement or legitimate rest.
+- [ ] **Replay and measure the actual multi-day outcome.** Capture a bounded,
+  day-keyed ledger of opening stock, production, transfers, spoilage, meal
+  allocation, cooking, consumption, missed deadlines, funds, feed and closing
+  reserves. Preserve the authoritative event/world ledgers and privacy of
+  personal knowledge. Use a reproducible saved starting state and run through
+  at least the second midnight, asserting 12/12 *actual* breakfasts and
+  suppers when provisioned, all three days of care and maintenance, inventory
+  and payment conservation, no expired lots counted, and explicit honest
+  shortage outcomes when provision is insufficient. Report per-day waits,
+  rejected actions and wasted travel alongside usable service capacity;
+  compare before/after without treating a unit-test pass as an autonomous
+  village success. This supplements the seven-day economy gate below.
+- [ ] **Keep long autonomous runs recoverable after empty model output.**
+  Diagnose the two empty responses at minute 4060 separately from a genuinely
+  invalid, nonempty decision. Retry transient empty responses within a bounded
+  budget with visible cause and backoff; if still unavailable, pause safely at
+  the last confirmed action boundary with a resumable checkpoint and the
+  configured minute-4320 stop intact. Never synthesize an NPC action or replay
+  an uncertain request. Test repeated empty responses, invalid JSON, process
+  restart, and explicit resume; no duplicated action, payment or world advance.
+
+### Spoilage recovery and farm recycling (open)
+
+In the same run, two fish spoiled at the riverbank and three bread at the
+bakery/general store. The existing spoilage rule correctly converted these
+five units to `compost-material` at their original sites, but none was loaded
+or delivered to the farm. The farm therefore did not benefit from that waste.
+Expired food must **not** become animal feed: the current livestock rules
+permit only fresh, proven plant-only surplus as supplemental hen scraps, with
+balanced grain still required; cow hay is not replaceable. Spoiled bread or
+fish is compost input, not a safe ration. The desired loop is to divert eligible
+fresh surplus *before* expiry, then physically collect already spoiled material
+for compost at the farm rather than leaving it stranded at its source.
+
+- [ ] **Plan safe, time-aware surplus diversion.** When a resident personally
+  knows an uncommitted plant-food lot will expire before its next feasible
+  human use, offer a real conversion and delivery of still-fresh plant scraps
+  to the farm. Respect human meal reservations, accepted orders, provenance,
+  shelf life, ownership/permission, carrying capacity and the feed store's
+  existing limits. Never convert fish, dairy, eggs, mixed/unknown ingredients
+  or already expired goods into feed. Ada may use delivered scraps only within
+  the existing supplemental hen ration; grain and cow hay remain necessary.
+  Show an explicit blocker when freshness, permission or travel time fails.
+- [ ] **Collect spoiled material for farm compost, not feed.** Expose locally
+  discovered compost-material at the bakery, store and riverbank as a bounded
+  pickup task. Arrange a permitted carrier, physical load, route and farm
+  unload with finite capacity, ownership and any configured payment; then use
+  the existing farm compost pile, real work time and required inputs to turn
+  it into finite fertilizer. A spoiled lot remains at its actual site until
+  collected. Keep fish-origin compost material out of all feed pathways; do
+  not teleport expired products or count a promised collection as completed.
+  Prioritize meals, animal care, accepted deliveries and bedtime over waste
+  hauling; avoid repeated trips when the pile is empty or the route is blocked.
+- [ ] **Verify the closed loop across days and saves.** Replay spoilage of
+  plant food and fish at separate sites, a fresh-plant diversion before its
+  expiry, a missed pickup, and a successful compost-material pickup and farm
+  conversion. Assert provenance, freshness and input/output conservation at
+  every physical transfer; no rotten feed, duplicated fertilizer, free grain,
+  double payment or lost cargo after retries/restart. Report site-level waste,
+  farm arrivals, compost production/use and truly consumed supplemental feed
+  separately. Recheck that residents can still meet funded meals and balanced
+  cow/hen care without relying on recovered material.
+
 ### P0: Day-one outcomes and engine correctness
 
 - [ ] Save a reproducible Generation 7 starting-state/seed fixture and capture

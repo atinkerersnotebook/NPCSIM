@@ -886,17 +886,18 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         if (not getattr(village_extensions.policy(world), "purposeful_downtime", False)
                 or "herb-garden-care" not in config.activities or rid != "iona"):
             return reject("GARDEN_UNAVAILABLE", "The herb garden must be opted in for its gardener.")
+        garden = config.activities["herb-garden-care"].location
         if _active(social, rid):
             return reject("SOCIAL_COMMITTED", "Finish the current activity first.")
         if social.manure_cargo.get(rid):
-            if world.actor.location_id != "cottages":
+            if world.actor.location_id != garden:
                 return reject("NOT_PRESENT", "Carry the real manure to the herbal plot.")
-            problem = _guard(world, rid, "cottages", state.minute + 5)
+            problem = _guard(world, rid, garden, state.minute + 5)
             if problem:
                 return reject(*problem)
             from npc_sim.models import VillageStockLot
             lots = [VillageStockLot.model_validate(lot) for lot in social.manure_cargo[rid]]
-            village_goods.put(world, "cottages", "manure", 1, lots, kind="delivered")
+            village_goods.put(world, garden, "manure", 1, lots, kind="delivered")
             del social.manure_cargo[rid]
             state.residents[rid].available_at = state.minute + 5
             return done("MANURE_DELIVERED", "Deposited the carried farm manure at the herbal plot.")
@@ -912,7 +913,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         if state.stocks.get("farm", {}).get("manure", 0) - village_economy.protected_quantity(
             world, "farm", "manure") < 1:
             return reject("NO_SURPLUS", "Farm manure is absent or reserved for another commitment.")
-        if not village.route(world, "farm", "cottages"):
+        if not village.route(world, "farm", garden):
             return reject("NO_ROUTE", "The plot must be reachable by an actual passable route.")
         problem = _guard(world, rid, "farm", state.minute + 5)
         if problem:
@@ -926,20 +927,21 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         return done("MANURE_COLLECTED", "Collected one unreserved, cared-for hen manure lot for the garden.")
     if action == "village_garden_harvest":
         from npc_sim import village_extensions
+        garden = config.activities["herb-garden-care"].location if "herb-garden-care" in config.activities else None
         if (not getattr(village_extensions.policy(world), "purposeful_downtime", False)
                 or "herb-garden-care" not in config.activities or rid != "iona"
-                or world.actor.location_id != "cottages"):
+                or world.actor.location_id != garden):
             return reject("GARDEN_UNAVAILABLE", "The authorized gardener must be at the opted-in plot.")
-        ready = social.garden_yields.get("cottages")
+        ready = social.garden_yields.get(garden)
         if ready is None or state.minute < ready:
             return reject("GARDEN_NOT_READY", "Tending has no immediate yield; wait for growth.")
-        problem = _guard(world, rid, "cottages", state.minute + 5)
+        problem = _guard(world, rid, garden, state.minute + 5)
         if problem:
             return reject(*problem)
-        if not _equipment_access(world, rid, "herb-garden-plot", "cottages", config):
+        if not _equipment_access(world, rid, "herb-garden-plot", garden, config):
             return reject("NO_PLOT", "The physical herb garden is inaccessible.")
-        village_goods.put(world, "cottages", "herbs", 1, ingredients=["herb-garden-plot"])
-        del social.garden_yields["cottages"]
+        village_goods.put(world, garden, "herbs", 1, ingredients=["herb-garden-plot"])
+        del social.garden_yields[garden]
         state.residents[rid].available_at = state.minute + 5
         return done("GARDEN_HARVESTED", "Collected one delayed, finite herb yield from the tended plot.")
     if action == "village_social_cancel":
@@ -1203,7 +1205,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
     if rid == "iona" and "herb-garden-care" in config.activities:
         add("village_garden_manure", "Carry one actual, unreserved hen manure lot from farm to the plot.", {})
     if (rid == "iona" and "herb-garden-care" in config.activities
-            and social.garden_yields.get("cottages", state.minute + 1) <= state.minute):
+            and social.garden_yields.get(config.activities["herb-garden-care"].location, state.minute + 1) <= state.minute):
         add("village_garden_harvest", "Harvest one delayed, real herb from the tended plot.", {})
     if config.activities:
         add("village_leisure", "Commit a real timed solo activity, protecting supplies, meals and the route home.",
@@ -1436,7 +1438,7 @@ def install_optional_goods(scenario) -> None:
     if "gardening" not in agent.body.capabilities:
         agent.body.capabilities.append("gardening")
     fixtures = {
-        "herb-garden-plot": ("Herbal garden plot", "cottages"),
+        "herb-garden-plot": ("Herbal garden plot", gardener.work),
         "fish-smoker": ("Fish smoker", "riverbank"),
     }
     for eid, (name, location) in fixtures.items():
@@ -1446,7 +1448,7 @@ def install_optional_goods(scenario) -> None:
     base.spoil_after["preserved-fish"] = 2880
     for site, resources in {
         "workshop": ("furniture",), "riverbank": ("timber", "iron", "logs", "tackle", "preserved-fish"),
-        "cottages": ("manure",),
+        gardener.work: ("manure",),
     }.items():
         for resource in resources:
             base.stocks.setdefault(site, {}).setdefault(resource, 0)
@@ -1462,7 +1464,7 @@ def install_optional_goods(scenario) -> None:
         "fish-smoking": {"kind": "crafting", "location": "riverbank", "duration": 45,
                          "recipe": "smoked_fish", "supplies": {"fish": 2, "logs": 1},
                          "equipment": ["fish-smoker"], "interests": ["rivers"]},
-        "herb-garden-care": {"kind": "gardening", "location": "cottages", "duration": 25,
+        "herb-garden-care": {"kind": "gardening", "location": gardener.work, "duration": 25,
                              "recipe": "herb_garden", "supplies": {"manure": 1},
                              "equipment": ["herb-garden-plot"], "interests": ["plants"], "skill": "gardening"},
     }

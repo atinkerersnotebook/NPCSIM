@@ -57,6 +57,29 @@ def test_daily_imports_create_real_funded_in_person_orders_and_delivery(tmp_path
     assert world.state.village.stocks["village-square"]["iron"] == 4
 
 
+def test_iron_trader_asks_available_residents_once_and_retries_busy_residents(tmp_path):
+    world = make_world(tmp_path, mining=False)
+    state = world.state.village
+    world.state.actors["torvin"].location_id = "village-square"
+    world.state.actors["nella"].location_id = "village-square"
+    state.residents["nella"].busy_until = 735
+    village.advance(world, 120)
+    enquiries = [event for event in state.events if event.action == "visitor_trade_enquiry"
+                 and event.actor == "iron-trader"]
+    assert [event.target for event in enquiries] == ["torvin"]
+    assert "4 iron at three coins each" in enquiries[0].result
+    assert "torvin" in enquiries[0].witnesses
+    village.advance(world, 15)
+    enquiries = [event for event in state.events if event.action == "visitor_trade_enquiry"
+                 and event.actor == "iron-trader"]
+    assert [event.target for event in enquiries] == ["torvin", "nella"]
+    village.advance(world, 30)
+    assert len([event for event in state.events if event.action == "visitor_trade_enquiry"
+                and event.actor == "iron-trader"]) == 2
+    assert state.stocks["village-square"]["iron"] == 4
+    assert not state.economy.orders
+
+
 def test_imports_preserve_funds_stock_capacity_and_buyer_authority(tmp_path):
     world = make_world(tmp_path)
     village.advance(world, 120)

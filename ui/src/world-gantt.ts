@@ -30,6 +30,7 @@ const observedSchema = timeSchema.extend({
 const requestSchema = z.object({
   request_id: z.string(), action_id: z.string(), arguments: z.record(z.string(), z.unknown())
 });
+const decisionSchema = z.object({ action_id: z.string(), justification: z.string() });
 const resultSchema = z.object({
   request_id: z.string(), outcome: z.string(), code: z.string().optional(), explanation: z.string(),
   observation: observedSchema
@@ -40,6 +41,7 @@ const timeOf = (value: z.infer<typeof timeSchema>) => value.village?.minute
 
 export function timelineEventProjection(event: RunEvent): RunEvent | null {
   const payload = event.kind === "observation" ? observedSchema.parse(event.payload)
+    : event.kind === "decision" ? decisionSchema.parse(event.payload)
     : event.kind === "action_request" ? requestSchema.parse(event.payload)
     : event.kind === "action_result" ? resultSchema.parse(event.payload)
     : event.kind === "control" ? objectSchema.parse(event.payload) : null;
@@ -70,6 +72,7 @@ export interface GanttSpan {
   location: string;
   label: string;
   detail: string;
+  reasoning?: string;
   status?: string;
   kind: "action" | "travel" | "wait" | "sleep" | "route" | "free" | "rejected" | "event";
 }
@@ -149,7 +152,8 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
     spans: [] as GanttSpan[]
   }));
   const byId = new Map(rows.map(row => [row.id, row]));
-  const requests = new Map<string, { event: RunEvent; request: z.infer<typeof requestSchema> }>();
+  const requests = new Map<string, { event: RunEvent; request: z.infer<typeof requestSchema>; reasoning?: string }>();
+  const decisions = new Map<string, z.infer<typeof decisionSchema>>();
   const walkingPlans = new Map<string, { destination: string; purpose: string }>();
   const milestones: Milestone[] = [];
   const routeChanges: { at: number; actor: string; active: boolean }[] = [];
@@ -165,9 +169,14 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
     .sort((a, b) => a.sequence - b.sequence);
   const completedRequests = new Set<string>();
   for (const event of source) {
-    if (event.kind === "action_request") {
+    if (event.kind === "decision") {
+      decisions.set(event.actor_id, decisionSchema.parse(event.payload));
+    } else if (event.kind === "action_request") {
       const request = requestSchema.parse(event.payload);
-      requests.set(request.request_id, { event, request });
+      const decision = decisions.get(event.actor_id);
+      requests.set(request.request_id, { event, request,
+        ...(decision?.action_id === request.action_id ? { reasoning: decision.justification } : {}) });
+      decisions.delete(event.actor_id);
     } else if (event.kind === "observation") {
       recordObservation(observedSchema.parse(event.payload), event.sequence);
     } else if (event.kind === "action_result") {
@@ -227,7 +236,8 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           : research ? `${researchDetail(research)} ${villageClockText(result.explanation)}`
           : planForTile
           ? `Purpose: ${planForTile.purpose}${/[.!?]$/.test(planForTile.purpose) ? "" : "."} ${villageClockText(result.explanation)}`
-          : villageClockText(result.explanation), status: result.outcome, kind
+          : villageClockText(result.explanation), status: result.outcome, kind,
+        ...(linked.reasoning?.trim() ? { reasoning: linked.reasoning.trim() } : {})
       });
       if (walkingPlan && result.observation.self.location_id === walkingPlan.destination) {
         walkingPlans.delete(event.actor_id);
@@ -429,7 +439,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const iconWidth = 24;
       const characters = tileWidth >= 48 ? Math.floor((tileWidth - 16 - iconWidth) / 7) : 0;
       const detailCharacters = Math.floor((tileWidth - 16) / 6);
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail)}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.detail)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}">
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail + (item.reasoning ? ` Reason: ${item.reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.detail)}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}">
         <clipPath id="${id}"><rect x="${x(item.start) + inset + 6}" y="${y + 19}" width="${Math.max(0, tileWidth - 12)}" height="64"/></clipPath>
         <rect x="${x(item.start) + inset}" y="${y + 19}" width="${tileWidth}" height="64" rx="7"/>
         ${tileWidth >= 28 ? `<text x="${x(item.start) + inset + 7}" y="${y + 37}" class="gantt-cell-icon" clip-path="url(#${id})">${icon}</text>` : ""}
@@ -445,8 +455,9 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     }
     const dots = [...markers].map(([at, items]) => {
       const detail = `${row.name} / ${format(chart.turns ? at + 1 : at)} / ${items.map(item => `${item.label}: ${item.detail}`).join("; ")}`;
-      return `<g tabindex="0" role="img" aria-label="${escape(detail)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}">
-        ${tooltip(detail)}<path d="M ${x(at)} ${y + 88} l 4 4 l -4 4 l -4 -4 Z"/>
+      const reasoning = items.map(item => item.reasoning).filter(Boolean).join("; ");
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:marker:${at}`)}" aria-label="${escape(detail + (reasoning ? ` Reason: ${reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(items.length === 1 ? items[0].label : `${items.length} events`)}" data-gantt-icon="●" data-gantt-status="${escape(items.some(item => item.kind === "rejected") ? "REJECTED" : "Recorded")}" data-gantt-range="${escape(format(chart.turns ? at + 1 : at))}" data-gantt-place="${escape(items[0].location ? placeName(items[0].location) : "")}" data-gantt-detail="${escape(items.map(item => `${item.label}: ${item.detail}`).join("\n"))}" data-gantt-reasoning="${escape(reasoning)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}">
+        <path d="M ${x(at)} ${y + 88} l 4 4 l -4 4 l -4 -4 Z"/>
         ${items.length > 1 ? `<text x="${x(at) + 6}" y="${y + 95}">${items.length}</text>` : ""}</g>`;
     }).join("");
     return `<g data-gantt-agent="${escape(row.id)}"><line x1="0" x2="${width}" y1="${y + rowHeight}" y2="${y + rowHeight}" class="gantt-gridline"/>${locations}${bars}${dots}</g>`;

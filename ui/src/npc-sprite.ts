@@ -24,8 +24,24 @@ const suppliedArt: Record<string, { head: string; portrait: string }> = {
   iona: { head: new URL("./assets/iona-head.png", import.meta.url).href,
     portrait: new URL("./assets/iona-torso.png", import.meta.url).href },
   finn: { head: new URL("./assets/finn-head.png", import.meta.url).href,
-    portrait: new URL("./assets/finn-torso.png", import.meta.url).href }
+    portrait: new URL("./assets/finn-torso.png", import.meta.url).href },
+  "iron-trader": { head: new URL("./assets/iron-trader-head.png", import.meta.url).href,
+    portrait: new URL("./assets/iron-trader-torso.png", import.meta.url).href },
+  "general-trader": { head: new URL("./assets/general-trader-head.png", import.meta.url).href,
+    portrait: new URL("./assets/general-trader-torso.png", import.meta.url).href },
+  "pack-trader": { head: new URL("./assets/pack-trader-head.png", import.meta.url).href,
+    portrait: new URL("./assets/pack-trader-torso.png", import.meta.url).href },
+  "visitor-man": { head: new URL("./assets/visitor-man-head.png", import.meta.url).href,
+    portrait: new URL("./assets/visitor-man-torso.png", import.meta.url).href },
+  "visitor-woman": { head: new URL("./assets/visitor-woman-head.png", import.meta.url).href,
+    portrait: new URL("./assets/visitor-woman-torso.png", import.meta.url).href }
 };
+
+function artFor(id: string) {
+  if (id.startsWith("visitor:visiting-merchant:")) return suppliedArt["general-trader"];
+  if (id.startsWith("visitor:passing-traveller:")) return suppliedArt["visitor-woman"];
+  return suppliedArt[id];
+}
 
 type Palette = { hair: string; coat: string; trim: string; skin: string; accessory: string; style: number };
 
@@ -62,7 +78,7 @@ function tint(color: string, toward: string, fraction: number): string {
 }
 
 export function npcSprite(id: string): string {
-  const head = suppliedArt[id]?.head;
+  const head = artFor(id)?.head;
   if (head) {
     return `<img class="npc-sprite npc-sprite-image" src="${head}" alt="" aria-hidden="true" data-sprite="${escape(id)}">`;
   }
@@ -111,7 +127,7 @@ export function npcSprite(id: string): string {
 }
 
 export function npcPortrait(id: string): string {
-  const portrait = suppliedArt[id]?.portrait;
+  const portrait = artFor(id)?.portrait;
   if (portrait) {
     return `<img class="npc-portrait npc-portrait-image" src="${portrait}" alt="" aria-hidden="true" data-portrait="${escape(id)}">`;
   }

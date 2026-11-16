@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any
 
-from npc_sim import handling, village, village_goods, village_life, village_services, village_wagon, village_extensions, village_communication
+from npc_sim import handling, village, village_goods, village_life, village_services, village_wagon, village_extensions, village_communication, village_depot
 from npc_sim.models import VillageCommittedWork, VillageCrewSession, VillageJob
 
 if TYPE_CHECKING:
@@ -41,7 +41,7 @@ def observation(world: "World") -> dict[str, Any]:
         **({"stored_owners": {
             owner: {product: sum(lot.quantity for lot in lots) for product, lots in inventory.items() if lots}
             for owner, inventory in state.depot_lots.get(world.actor.location_id, {}).items()}
-            } if world.scenario.id == "millhaven-resilient" and
+            } if village_depot.enabled(world) and
             world.actor.location_id in {"supply-depot", "farm-feed-store"} else {}),
         "coins": state.coins[rid], "resource_inventory": person.cargo.copy(), "tasks": [],
         "events": [state.events[index].model_dump() for index in person.memories[-12:]],
@@ -143,7 +143,7 @@ def observation(world: "World") -> dict[str, Any]:
                            "physically at the depot; the owner keeps title until a paid withdrawal is unloaded. "
                            "Ada: replenish the separate feed store from unreserved farm grain and hay before the "
                            "cow or hens run short, by carrying and unloading real feed there. "
-                        if world.scenario.id == "millhaven-resilient" else "")
+                        if village_depot.enabled(world) else "")
                      +
                      "Each partner must explicitly choose village_urgent_work to override bedtime until 02:00. "
                      "Hunger and tiredness slowdowns stack; tea relieves tiredness but never replaces sleep."
@@ -242,7 +242,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
                        "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}},
              "destination": {"type": "string", "enum": sorted({r.work for r in config.residents.values()})}})
         add("village_unload_goods", "Unload every foot shipment for this workplace; charge actual goods and one delivery fee.", {})
-        if world.scenario.id == "millhaven-resilient":
+        if village_depot.enabled(world):
             depot_goods = {"grain", "flour", "timber", "firewood", "hay"}
             add("village_depot_load", "Carry your own workplace goods to the shared depot; ownership is retained until a paid withdrawal.",
                 {"goods": {"type": "object", "minProperties": 1,

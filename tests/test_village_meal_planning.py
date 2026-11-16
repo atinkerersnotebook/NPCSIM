@@ -194,3 +194,18 @@ def test_new_stock_recalculates_shortfall_without_phantom_portions(cast):
     assert len(plan["reserved"]) == 12
     world.state.village.stocks["tavern"]["bread"] = 0
     assert village_life.meal_plan(world)["shortfall"] == 3
+
+
+def test_overdue_breakfast_cannot_consume_supper_portion(cast):
+    world = cast["elsie"]
+    world.scenario.village.breakfast = True
+    world.state.village.stocks["tavern"] = {"meals": 1, "bread": 0}
+    village.advance(world, 1140 - world.state.village.minute)
+    mara = cast["mara"]
+    breakfast = mara.state.village.residents["mara"].life.meals["0:breakfast"]
+    breakfast.status = "pending"
+    before = mara.state.village.stocks["tavern"]["meals"]
+    assert act(mara, "village_eat")["code"] == "BREAKFAST_CLOSED"
+    assert breakfast.status == "missed"
+    assert mara.state.village.stocks["tavern"]["meals"] == before
+    assert mara.state.village.residents["mara"].life.meals["0:daily"].status == "pending"

@@ -404,6 +404,7 @@ def advance(world: "World") -> None:
                 and village.route(world, entry, "village-square") == ["village-square"]):
             trader.location = entry
             state.trader_activities = []
+            state.trader_asked = []
             state.trader_activities.append(VillageActivityView(
                 actor="iron-trader", label="Arrival travel", location=entry,
                 start=state.minute, end=state.minute + 5, status="completed"))
@@ -417,6 +418,18 @@ def advance(world: "World") -> None:
                     start=state.minute, end=day * 1440 + 1080, status="active"))
                 village.announce(world, "iron-trader", "trader_arrived", "iron",
                                  "The visiting trader offers four fresh iron units at the square, three coins each.")
+        if 720 <= clock < 1080 and trader.location == "village-square" and state.trader_day == day:
+            for rid in village.local_residents(world, "village-square"):
+                person = state.residents[rid]
+                if (rid in state.trader_asked or person.life and person.life.sleeping
+                        or person.busy_until > state.minute or person.life and person.life.work):
+                    continue
+                state.trader_asked.append(rid)
+                available = state.stocks.get("village-square", {}).get("iron", 0)
+                village.event(world, "iron-trader", "visitor_trade_enquiry", rid,
+                              f"The iron trader asks {village.resident_name(world, rid)} whether they need iron. "
+                              f"Offering {available} iron at three coins each; a funded in-person purchase "
+                              "and physical delivery are still required.", "village-square")
         if 1080 <= clock < 1440 and trader.location == "village-square" and state.trader_day == day:
             if village.route(world, "village-square", entry) == [entry]:
                 unsold = state.stocks.get("village-square", {}).get("iron", 0)

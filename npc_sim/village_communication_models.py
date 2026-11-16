@@ -222,6 +222,7 @@ class CommunicationNoticeView(CommunicationModel):
     version: Positive
     author: str
     recipients: list[str]
+    recipient_ids: list[str] = Field(default_factory=list)
     subject: str
     description: str
     type: NoticeType
@@ -230,6 +231,7 @@ class CommunicationNoticeView(CommunicationModel):
     unit_price: Positive | None = None
     delivery_fee: Number | None = None
     destination: str | None
+    destination_id: str | None = None
     due_at: Number | None
     updated_at: Number
     private: bool

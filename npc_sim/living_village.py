@@ -136,7 +136,50 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
                "to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer "
                "without inventing manure." if livestock else "")
         )
+    separate_herbal_workshop(scenario)
     return Scenario.model_validate(scenario.model_dump(mode="json"))
+
+
+def separate_herbal_workshop(scenario: Scenario) -> None:
+    config = scenario.village
+    healer = config.residents["iona"]
+    if healer.home != "cottages" or healer.work != "cottages" or "herbal-workshop" in scenario.entities:
+        raise ValueError("Expected Iona's workshop to be part of the cottages")
+    scenario.entities["cottages"].description = "Shared courtyards and modest homes."
+    scenario.entities["herbal-workshop"] = Entity(
+        name="Herbal Workshop", kind="location",
+        description="Iona lives and prepares herbal tea here, with a small garden outside.")
+    scenario.entities["cottages-herbal-workshop"] = Entity(
+        name="Herbal workshop path", kind="door", location="cottages", destination="herbal-workshop",
+        description="A short walk from the cottages to Iona's workshop.", open=True)
+    healer.home = healer.work = healer.job.location = "herbal-workshop"
+    for entry in healer.schedule:
+        if entry.location == "cottages":
+            entry.location = "herbal-workshop"
+    next(agent for agent in scenario.agents if agent.id == "iona").start_location = "herbal-workshop"
+    for item in ("herb-pouch", "mortar", "workplace-inbox-iona", "plant-notes", "herb-garden-plot"):
+        if item in scenario.entities:
+            scenario.entities[item].location = "herbal-workshop"
+    stock = config.stocks["cottages"]
+    config.stocks["herbal-workshop"] = {key: stock.pop(key) for key in ("herbs", "tea", "manure") if key in stock}
+    for key in ("plant-scraps", "compost-material", "compost"):
+        if key in stock:
+            config.stocks["herbal-workshop"][key] = 0
+    if config.economy and "cottages" in config.economy.reserve_targets:
+        config.economy.reserve_targets["herbal-workshop"] = config.economy.reserve_targets.pop("cottages")
+    if config.social:
+        for activity in config.social.activities.values():
+            if activity.location == "cottages" and (activity.project == "iona-herbal-book"
+                    or "plant-notes" in activity.equipment or activity.recipe == "herb_garden"):
+                activity.location = "herbal-workshop"
+    if config.firewood:
+        config.firewood.household_location = "cottages"
+        for members in config.firewood.households.values():
+            if "iona" in members:
+                members.remove("iona")
+    scenario.opening_narrative = scenario.opening_narrative.replace(
+        "All twelve villagers are asleep in their homes along the cottage row, including Elsie.",
+        "The villagers are asleep at home, including Iona in her herbal workshop and Elsie at the tavern.")
 
 
 def main() -> None:

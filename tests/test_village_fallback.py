@@ -53,6 +53,34 @@ def inspect_then_wait(world):
     return world.state.village.residents["rowan"].fallback.wait
 
 
+def test_innkeeper_can_request_tomorrow_food_at_physical_board(tmp_path):
+    value = build_scenario(scenario(), purposeful_downtime=True)
+    value.village.start_minute = 1200
+    value.village.events = None
+    for agent in value.agents:
+        agent.start_location = value.village.residents[agent.id].work
+    world = World(value, tmp_path / "food.json", "food", "elsie", "session-elsie")
+    for agent in value.agents:
+        world.bind(agent.id, f"session-{agent.id}")
+    state = world.state.village
+    state.coins["elsie"] = 1000
+    for site, stock in state.stocks.items():
+        for product in stock:
+            stock[product] = 0
+    state.stock_lots = {}
+    village_goods.put(world, "bakery", "flour", 2)
+    board = state.communication.config.board_id
+    world.actor.location_id = world.state.entities[board].location
+    request = next(choice for choice in village_fallback.candidates(world)
+                   if choice["action_id"] == "village_request_supply"
+                   and choice["arguments"]["good"] == "bread")
+    assert request["arguments"]["deadline"] // 1440 == 1
+    assert act(world, request["action_id"], **request["arguments"])["outcome"] == "APPLIED"
+    assert not any(choice["action_id"] == "village_request_supply"
+                   and choice["arguments"]["good"] == "bread"
+                   for choice in village_fallback.candidates(world))
+
+
 def test_current_tasks_skips_order_not_yet_known_to_buyer(tmp_path):
     world = make_world(tmp_path)
     buyer = world.bind("finn", "session-finn")

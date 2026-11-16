@@ -266,8 +266,8 @@ def route_blocker(world: "World", args: dict[str, Any]) -> tuple[str, str] | Non
 def record_location_transition(world: "World", origin: str, destination: str) -> None:
     config, state = village.context(world)
     fallback = state.residents[world.actor_id].fallback
-    if world.scenario.id == "millhaven-resilient" and world.actor_id == config.livestock.keeper:
-        from npc_sim import village_depot
+    from npc_sim import village_depot
+    if village_depot.enabled(world) and world.actor_id == config.livestock.keeper:
         if destination == village_depot.FEED_STORE:
             fallback.feed_store_stock = state.stocks[destination].copy()
             fallback.feed_store_checked_day = state.minute // 1440
@@ -581,9 +581,87 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
     if not (config.residents[world.actor_id].wake_minute <= state.minute % 1440
             < village_life.production_closing_minute(world, world.actor_id)):
         return choices
-    if world.scenario.id == "millhaven-resilient" and world.actor_id == config.livestock.keeper:
+    from npc_sim import village_depot
+    if village_depot.enabled(world) and world.actor_id == config.livestock.keeper:
         choices.extend(_feed_store_choices(world))
     choices.extend(_egg_negotiation_choices(world))
+    if world.actor_id in {"jory", "finn"} and state.communication:
+        from npc_sim import village_communication
+        for memory in state.communication.knowledge.get(world.actor_id, {}).values():
+            notice = memory.snapshot
+            terms = notice.terms
+            if (memory.confidence != "direct" or terms.type != "supply_request"
+                    or terms.subject != ("bread" if world.actor_id == "jory" else "fish")
+                    or terms.recipients != [world.actor_id] or notice.status not in {"posted", "seen"}
+                    or terms.due_at is None or terms.due_at <= state.minute
+                    or terms.required_fresh_until is None or terms.quantity is None
+                    or terms.unit_price is None or terms.delivery_fee is None):
+                continue
+            from npc_sim.village_economy_models import VillageSupplierOrder
+            order = VillageSupplierOrder(
+                id=f"candidate-{notice.id}", request_key=f"notice:{notice.id}",
+                buyer=notice.author, supplier=world.actor_id, source=config.residents[world.actor_id].work,
+                destination=terms.destination, product=terms.subject, quantity=terms.quantity,
+                price=terms.unit_price, delivery_fee=terms.delivery_fee,
+                deadline=terms.due_at, required_fresh_until=terms.required_fresh_until,
+                created_at=state.minute)
+            feasible, _ = village_economy.order_feasibility(world, order)
+            plan, _ = ({}, "") if feasible else village_economy.production_plan(world, order)
+            if not feasible and not plan:
+                continue
+            try:
+                channel = village_communication._intent_channel(world, terms, author=notice.author)
+            except village_communication.ChannelUnavailable:
+                box = next((box for box, owner in state.communication.boxes.items()
+                            if owner == notice.author), None)
+                target = world.state.entities[box].location if box else None
+                travel = _travel_choice(world, target, f"food:reply:{notice.id}",
+                                        "Reach the buyer's real inbox to accept a feasible food request.", "P2") if target else None
+                if travel:
+                    choices.append(travel)
+                continue
+            choices.append({"task_id": f"food:reply:{notice.id}",
+                            "action_id": "village_respond_to_request",
+                            "arguments": {"request_id": notice.id, "response": "accept"},
+                            "priority": "P1", "reason": "Accept a personally learned, feasible funded food order."})
+            break
+    if world.actor_id == village_economy.config(world).innkeeper and state.communication:
+        from npc_sim import village_communication
+        for request in village_economy.suggestions(world, personal=True):
+            if request["product"] not in {"bread", "fish"} or request["deadline"] <= state.minute:
+                continue
+            terms = village_communication.NoticeTerms(
+                type="supply_request", subject=request["product"],
+                description=f"Food for {request['request_key']}",
+                recipients=[request["supplier"]], quantity=request["quantity"],
+                destination=request["destination"], due_at=request["deadline"],
+                required_fresh_until=request["required_fresh_until"])
+            open_need = any(history[-1].author == world.actor_id
+                            and village_communication._need_key(world.actor_id, history[-1].terms)
+                            == village_communication._need_key(world.actor_id, terms)
+                            and history[-1].status not in village_communication.TERMINAL
+                            for history in state.communication.notices.values())
+            if open_need:
+                continue
+            try:
+                village_communication._intent_channel(world, terms)
+            except village_communication.ChannelUnavailable:
+                board = state.communication.config.board_id
+                target = world.state.entities[board].location
+                travel = _travel_choice(world, target, f"food:request:{request['request_key']}",
+                                        "Reach the physical board to request funded food before its cutoff.", "P1")
+                if travel:
+                    choices.append(travel)
+                continue
+            args = {"good": request["product"], "quantity": request["quantity"],
+                    "purpose": terms.description, "deadline": request["deadline"],
+                    "required_fresh_until": request["required_fresh_until"],
+                    "preferred_supplier_id": request["supplier"]}
+            if action_blocker(world, "village_request_supply", args, check_wait=False) is None:
+                choices.append({"task_id": f"food:request:{request['request_key']}",
+                                "action_id": "village_request_supply", "arguments": args,
+                                "priority": "P1", "reason": "Fund a new physical order for uncovered food service."})
+            break
 
     # The check-in is scheduled, not triggered by privileged knowledge of a remote breakdown.
     personally_informed = any(message.get("actor_id") == config.miller and "mill drive fail" in message.get("text", "")
@@ -1107,8 +1185,8 @@ def observation(world: "World") -> dict[str, Any]:
     fallback = state.residents[world.actor_id].fallback
     revision = context_revision(world)
     feed_plan = None
-    if world.scenario.id == "millhaven-resilient" and world.actor_id == world.scenario.village.livestock.keeper:
-        from npc_sim import village_depot
+    from npc_sim import village_depot
+    if village_depot.enabled(world) and world.actor_id == world.scenario.village.livestock.keeper:
         ration = _feed_ration(world)
         if world.actor.location_id == village_depot.FEED_STORE:
             fallback.feed_store_stock = state.stocks[village_depot.FEED_STORE].copy()

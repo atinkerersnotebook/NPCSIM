@@ -54,6 +54,15 @@ def world(workspace):
     return create_world(workspace / "world.json")
 
 
+def test_operator_notices_include_destination_and_recipient_ids_for_map_matching(world):
+    actor(world, "jory", "village-square")
+    post(world)
+    notice = comm.monitor(world)["communication"]["notices"][0]
+    assert notice["destination_id"] == "bakery"
+    assert notice["recipient_ids"] == ["mara"]
+    assert notice["destination"] == world.state.entities["bakery"].name
+
+
 def actor(world, rid, location=None):
     result = world.bind(rid, f"session-{rid}")
     if location:

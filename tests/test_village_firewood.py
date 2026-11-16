@@ -36,6 +36,34 @@ def test_living_scenario_has_physical_shared_hearths_and_enabled_fuel():
         assert all(f"cottage-{hearth}" in value.entities for hearth in policy.households)
 
 
+def test_iona_lives_and_works_at_separate_herbal_workshop_with_cottage_fuel(tmp_path):
+    root = Path(__file__).resolve().parents[1] / "data" / "scenarios"
+    for name in ("millhaven-living", "millhaven-resilient", "millhaven-generations", "millhaven-complete"):
+        value = Scenario.model_validate(read_json(root / f"{name}.json"))
+        healer = value.village.residents["iona"]
+        assert healer.home == healer.work == healer.job.location == "herbal-workshop"
+        assert next(agent for agent in value.agents if agent.id == "iona").start_location == healer.home
+        assert value.entities["herbal-workshop"].kind == "location"
+        assert value.entities["cottages-herbal-workshop"].destination == healer.home
+        assert {entry.location for entry in healer.schedule if entry.activity == "Sleeping"} == {healer.home}
+        assert value.entities["workplace-inbox-iona"].location == healer.home
+        assert value.entities["herb-pouch"].location == healer.home
+        assert value.entities["mortar"].location == healer.home
+        assert value.village.stocks[healer.home]["herbs"] == 10
+        assert value.village.economy.reserve_targets[healer.home]["herbs"] == 2
+        assert value.village.social.activities["herb-notes"].location == healer.home
+        if value.village.firewood:
+            assert value.village.firewood.household_location == "cottages"
+            assert "iona" not in {rid for group in value.village.firewood.households.values() for rid in group}
+            assert value.village.stocks["cottages"]["firewood"] == 24
+
+    value = Scenario.model_validate(read_json(root / "millhaven-complete.json"))
+    world = World(value, tmp_path / "workshop.json", "workshop", "iona", "session-iona")
+    assert village.route(world, "cottages", "herbal-workshop")
+    assert world.actor.location_id == "herbal-workshop"
+    assert fuel._household_location(world) == "cottages"
+
+
 def make_world(tmp_path, *, minute=600, enabled=True, communication=False, livestock=False):
     value = scenario()
     value.village.start_minute = minute

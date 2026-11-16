@@ -54,20 +54,42 @@ function speak(dialogue: TownDialogue, sequence = 1, live = true, now = 1_000,
   }, actorId), live, now);
 }
 
-test("map anchors cover every pictured town location using the supplied illustration's bounds", () => {
+test("map anchors cover every town location using the extended illustration's bounds", () => {
   const state = fixture();
-  for (const [id, entity] of Object.entries(state.world!.entities)) {
-    if (entity.kind === "location" && id !== "iron-mine") assert.ok(townMapAnchors[id], id);
+  for (const scenarioId of ["millhaven-expanded", "millhaven-living", "millhaven-resilient", "millhaven-complete"]) {
+    const scenario = JSON.parse(readFileSync(resolve("..", "data", "scenarios", `${scenarioId}.json`), "utf8"));
+    for (const [id, entity] of Object.entries(scenario.entities) as [string, { kind: string }][]) {
+      if (entity.kind === "location") assert.ok(townMapAnchors[id], `${scenarioId}: ${id}`);
+    }
   }
   for (const anchor of Object.values(townMapAnchors)) {
-    assert.ok(anchor.x > 0 && anchor.x < 1024);
+    assert.ok(anchor.x > 0 && anchor.x < 1123);
     assert.ok(anchor.y > 0 && anchor.y < 768);
   }
-  assert.equal(Object.hasOwn(townMapAnchors, "iron-mine"), false);
-  assert.equal(readFileSync(new URL("../src/assets/millhaven.png", import.meta.url)).subarray(1, 4).toString(), "PNG");
+  assert.ok(townMapAnchors["iron-mine"]);
+  assert.deepEqual(townMapAnchors["village-square"], { x: 552, y: 443 });
+  assert.ok(townMapAnchors["herbal-workshop"].x !== townMapAnchors.cottages.x);
+  assert.deepEqual(townMapAnchors["supply-depot"], { x: 737, y: 378 });
+  assert.deepEqual(townMapAnchors.woods, { x: 1015, y: 190 });
+  const image = readFileSync(new URL("../src/assets/millhaven-extended.png", import.meta.url));
+  assert.equal(image.subarray(1, 4).toString(), "PNG");
+  assert.equal(image.readUInt32BE(16), 1123);
+  assert.equal(image.readUInt32BE(20), 768);
+  assert.match(townMapMarkup(state, []), /width="1123" height="768"/);
 });
 
-test("resilient scenario uses its supplied map and places depot visitors on-map", () => {
+test("Iona appears at her distinct workshop on a new living village map", () => {
+  const state = fixture();
+  const scenario = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "millhaven-complete.json"), "utf8"));
+  state.world!.entities = scenario.entities;
+  state.world!.village!.stocks = scenario.village.stocks;
+  const markup = townMapMarkup(state, [{ id: "iona", name: "Iona", locationId: "herbal-workshop",
+    location: "Herbal Workshop", activity: "Preparing tea", current: true, deciding: false }]);
+  assert.match(markup, /data-map-location="herbal-workshop"[\s\S]*?Iona/);
+  assert.match(markup, /data-map-location="cottages"/);
+});
+
+test("resilient and living scenarios use the extended map and place depot visitors on-map", () => {
   const state = fixture();
   state.run!.scenario_id = "millhaven-resilient";
   state.world!.entities["supply-depot"] = {
@@ -75,11 +97,11 @@ test("resilient scenario uses its supplied map and places depot visitors on-map"
   };
   const markup = townMapMarkup(state, [{ id: "nella", name: "Nella", locationId: "supply-depot",
     location: "Communal granary and supply depot", activity: "Counting stock", current: true, deciding: false }]);
-  assert.match(markup, /millhaven-next\.png/);
+  assert.match(markup, /millhaven-extended\.png/);
   assert.match(markup, /data-map-location="supply-depot"/);
   assert.ok(!markup.includes("Off map / location unverified"));
   state.run!.scenario_id = "millhaven-living";
-  assert.match(townMapMarkup(state, []), /millhaven\.png/);
+  assert.match(townMapMarkup(state, []), /millhaven-extended\.png/);
 });
 
 test("every pictured location exposes its live site stock even without a visitor", () => {
@@ -102,6 +124,49 @@ test("every pictured location exposes its live site stock even without a visitor
   assert.ok(!secondary.includes("<script>"));
   state.world!.village!.stocks["farm-feed-store"]["hay<script>"] = 1;
   assert.match(townMapMarkup(state, []), /hay&lt;script&gt;: 1/);
+});
+
+test("location hover separates requested supplies, accepted deliveries and unscheduled production", () => {
+  const state = fixture();
+  const village = state.world!.village!;
+  village.dashboard = {
+    orders: [
+      { id: "order-1", buyer: "jory", seller: "mara", source: "watermill", destination: "bakery",
+        product: "flour", quantity: 3, delivered: 1, status: "accepted_planned", deadline: 750,
+        production_plan: { finish: 700, output: 2, "input:grain": 2 } },
+      { id: "order-2", buyer: "elsie", seller: "jory", source: "bakery", destination: "tavern",
+        product: "bread", quantity: 2, delivered: 0, status: "blocked", deadline: 900,
+        reason: "Insufficient uncommitted flour inputs above reserves" },
+      { id: "order-3", buyer: "elsie", seller: "jory", source: "bakery", destination: "tavern",
+        product: "bread", quantity: 1, delivered: 1, status: "fulfilled", deadline: 700 }
+    ],
+    communication: { enabled: true, scope: "operator", policy: "", boxes: [], share_candidates: [],
+      notices: [{ id: "notice-1", version: 1, author: "Elsie", recipients: ["Jory"],
+        subject: "bread", description: "Request more bread", type: "supply_request", status: "posted",
+        quantity: 2, unit_price: null, delivery_fee: null, destination: "Elsie's tavern", due_at: 870,
+        updated_at: 480, private: false, response: null, source: "operator world state", learned_at: null,
+        confidence: null, hops: 0, source_chain: [], freshness: "Authoritative", appointment: null,
+        commitment: null }] }
+  } as typeof village.dashboard;
+  const markup = townMapMarkup(state, []);
+  const bakery = markup.split('data-map-location="bakery"')[1].split('data-map-location="cottages"')[0];
+  assert.match(bakery, /Outstanding orders \/ not guaranteed arrivals/);
+  assert.match(bakery, /2 flour from Mara \/ accepted planned \/ due 12:30/);
+  assert.match(bakery, /2 bread requested by Elsie \/ not accepted or scheduled/);
+  assert.match(bakery, /flour per batch \(on site:/);
+  assert.match(bakery, /flour per batch \(on site: 6\)/);
+  const tavern = markup.split('data-map-location="tavern"')[1].split('data-map-location="bakery"')[0];
+  assert.match(tavern, /2 bread from Jory \/ blocked \/ due 15:00/);
+  assert.match(tavern, /2 bread from Jory \/ Elsie requested \/ due 14:30/);
+  assert.doesNotMatch(tavern, /1 bread from Jory \/ fulfilled/);
+  assert.match(bakery, /Insufficient uncommitted flour inputs above reserves/);
+  assert.doesNotMatch(markup, /guaranteed arrival at/);
+  village.stocks.bakery.flour = 0;
+  const short = townMapMarkup(state, []).split('data-map-location="bakery"')[1].split('data-map-location="cottages"')[0];
+  assert.match(short, /flour per batch \(on site: 0, short\)/);
+  village.dashboard.orders[0].status = "fulfilled";
+  const completed = townMapMarkup(state, []).split('data-map-location="bakery"')[1].split('data-map-location="cottages"')[0];
+  assert.doesNotMatch(completed, /Outstanding orders \/ not guaranteed arrivals/);
 });
 
 test("World view renders each resident once on the map without changing state or adding simulation controls", () => {
@@ -134,6 +199,16 @@ test("each resident has distinct artwork across the map and world view", () => {
   for (const id of ["bren", "mara", "elsie", "hobb", "jory", "ada", "nella", "rowan", "garrick", "iona", "finn"]) {
     assert.match(npcPortrait(id), new RegExp(`src="[^"]*${id}-torso\\.png"`));
     assert.match(npcSprite(id), new RegExp(`src="[^"]*${id}-head\\.png"`));
+  }
+  for (const [id, artwork] of [
+    ["iron-trader", "iron-trader"],
+    ["visitor:visiting-merchant:735", "general-trader"],
+    ["visitor:passing-traveller:540", "visitor-woman"],
+    ["pack-trader", "pack-trader"],
+    ["visitor-man", "visitor-man"]
+  ]) {
+    assert.match(npcPortrait(id), new RegExp(`src="[^"]*${artwork}-torso\\.png"`));
+    assert.match(npcSprite(id), new RegExp(`src="[^"]*${artwork}-head\\.png"`));
   }
   assert.match(npcPortrait("visitor"), /viewBox="0 0 40 48"/);
   assert.match(npcSprite("visitor"), /viewBox="0 0 20 30"/);
@@ -195,8 +270,10 @@ test("NPC positions follow the authoritative world, not a stale observation or m
   assert.equal((moved.match(/data-map-actor="torvin"/g) ?? []).length, 1);
 });
 
-test("unpictured and unverified locations stay explicitly off map and departed visitors are omitted", () => {
+test("Torvin's mine is on-map while unverified locations stay off map and departed visitors are omitted", () => {
   const state = fixture();
+  const living = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "millhaven-living.json"), "utf8"));
+  state.world!.entities["iron-mine"] = living.entities["iron-mine"];
   const torvin = monitoredAgents(state)[0];
   const agents: MapAgent[] = [
     { ...torvin, locationId: "iron-mine", location: "Millhaven iron mine" },
@@ -205,9 +282,9 @@ test("unpictured and unverified locations stay explicitly off map and departed v
     { ...torvin, id: "departed", visitor: true, current: false }
   ];
   const markup = townMapMarkup(state, agents);
-  assert.ok(markup.includes("Millhaven iron mine (not pictured)"));
+  assert.match(markup, /data-map-location="iron-mine"[\s\S]*?data-map-actor="torvin"/);
   assert.ok(markup.includes("(last observed / not live)"));
-  assert.ok(!markup.includes('data-map-location="iron-mine"'));
+  assert.ok(!markup.includes("Millhaven iron mine (not pictured)"));
   assert.ok(markup.includes('data-map-location="forge"'));
   assert.ok(markup.includes('data-map-actor="visitor"'));
   assert.ok(!markup.includes('data-map-actor="departed"'));
@@ -280,6 +357,18 @@ test("speech stays at its confirmed location and disappears when its speaker mov
   assert.ok(!townMapMarkup(state, monitoredAgents(state), { dialogue, now: 19_000 }).includes("data-map-speech="));
 });
 
+test("iron trader enquiries show as recorded trade invitations, not NPC speech or sales", () => {
+  const state = fixture();
+  state.world!.village!.events.push({ minute: 725, actor: "iron-trader",
+    action: "visitor_trade_enquiry", target: "torvin",
+    result: 'The iron trader asks Torvin about <iron>. A purchase is still required.', witnesses: ["torvin"] });
+  const markup = townMapMarkup(state, []);
+  assert.match(markup, /Iron trader enquiries/);
+  assert.match(markup, /asks Torvin about &lt;iron&gt;/);
+  assert.match(markup, /Last 0 confirmed speech actions/);
+  assert.doesNotMatch(markup, /data-map-speech=/);
+});
+
 test("dialogue is bounded and duplicate results do not duplicate speech", () => {
   const dialogue = new TownDialogue();
   for (let i = 1; i < 100; i += 2) speak(dialogue, i);
@@ -318,7 +407,7 @@ test("map, bubble and selection text is escaped and only public speech is expose
   assert.ok(markup.includes("&lt;img src=x onerror=&quot;evil&quot;&gt;"));
   assert.ok(markup.includes('aria-label="Selected character"'));
   assert.ok(markup.includes('aria-pressed="true"'));
-  assert.ok(markup.includes('style="width:min(200%,206vh);min-width:1520px"'));
+  assert.ok(markup.includes('style="width:min(200%,226vh);min-width:1668px"'));
   assert.ok(!markup.includes("<script>"));
   assert.ok(!markup.includes("<img src=x"));
   assert.ok(!markup.includes("PRIVATE PLAN"));

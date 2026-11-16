@@ -375,11 +375,15 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
     meal = available_meal(world, rid, include_missed=True)
     if meal is None:
         return reject("NO_MEAL_DUE", "No configured meal is available yet, or today's meal was already eaten.")
+    from npc_sim import village_extensions
+    if meal.kind == "breakfast" and state.minute > meal.due + village_extensions.policy(world).meal_window:
+        if meal.status == "pending":
+            miss_meal(world, rid, meal)
+        return reject("BREAKFAST_CLOSED", "Breakfast service has ended; food is reserved for supper.")
     if meal.kind == "daily" and f"{state.minute // 1440}:daily" not in life.meals:
         life.meals[f"{state.minute // 1440}:daily"] = meal
     if world.actor.location_id != "tavern":
         return reject("TRY_TAVERN", "Walk to the tavern for the daily meal; no remote food consumption.")
-    from npc_sim import village_extensions
     if meal.kind == "daily" and state.minute % 1440 >= village_extensions.policy(world).inn_closing_minute:
         return reject("INN_CLOSED", "The inn has closed for the night; supper must be eaten before closing.")
     if not inn_open(world):
@@ -391,7 +395,6 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
             return done("MEAL_MISSED", f"Cannot pay {config.meal_price} coin for the meal; going hungry without consuming food.")
         miss_meal(world, rid, meal)
         return done("MEAL_MISSED", "The meal or its configured subsidy is not funded; no food was consumed.")
-    from npc_sim import village_extensions
     in_grace = state.minute <= meal.due + village_extensions.policy(world).meal_window
     if in_grace and not meal_allocation(world, rid, meal):
         if meal.status == "missed" or state.minute < meal.due:

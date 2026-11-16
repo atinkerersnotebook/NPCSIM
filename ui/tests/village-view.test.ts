@@ -1104,6 +1104,44 @@ function timelineObservation(minute: number, location = "cottages", available = 
     village: { minute, personal: { available_at: available } } };
 }
 
+test("timeline panels show recorded decision reasons for both instant and timed actions", () => {
+  const state = expanded();
+  state.world!.village!.minute = 510;
+  const events = [
+    timelineEvent(1, "observation", 480, timelineObservation(480)),
+    timelineEvent(2, "decision", 485, { action_id: "search", justification: "Find the <shovel> in the stable." }),
+    timelineEvent(3, "action_request", 485, { request_id: "search", action_id: "search", arguments: { target: "stable" } }),
+    timelineEvent(4, "action_result", 485, { request_id: "search", outcome: "UNCHANGED",
+      explanation: "Nothing concealed.", observation: timelineObservation(485) }),
+    timelineEvent(5, "decision", 490, { action_id: "go", justification: "Visit Bren to ask about the shovel." }),
+    timelineEvent(6, "action_request", 490, { request_id: "walk", action_id: "go", arguments: { target: "square-cottages" } }),
+    timelineEvent(7, "action_result", 495, { request_id: "walk", outcome: "APPLIED",
+      explanation: "Walked.", observation: timelineObservation(495, "village-square", 500) })
+  ];
+  const projected = events.map(timelineEventProjection).filter(event => event !== null);
+  const spans = buildWorldTimeline(state, projected, monitoredAgents(state))!.rows.find(row => row.id === "torvin")!.spans;
+  assert.equal(spans.find(span => span.label === "search")!.reasoning, "Find the <shovel> in the stable.");
+  assert.equal(spans.find(span => span.kind === "travel")!.reasoning, "Visit Bren to ask about the shovel.");
+  const markup = worldGanttMarkup(state, projected, monitoredAgents(state));
+  assert.match(markup, /class="gantt-marker[^\"]*"/);
+  assert.match(markup, /data-gantt-reasoning="Find the &lt;shovel&gt; in the stable\."/);
+  assert.match(markup, /data-gantt-reasoning="Visit Bren to ask about the shovel\."/);
+  assert.doesNotMatch(markup, /<title>Torvin \/ 08:05 \/ search/);
+});
+
+test("timeline does not attribute a different or absent decision to an action", () => {
+  const state = expanded();
+  state.world!.village!.minute = 500;
+  const events = [
+    timelineEvent(1, "decision", 480, { action_id: "look", justification: "Inspect the forge." }),
+    timelineEvent(2, "action_request", 480, { request_id: "search", action_id: "search", arguments: {} }),
+    timelineEvent(3, "action_result", 480, { request_id: "search", outcome: "UNCHANGED",
+      explanation: "Nothing concealed.", observation: timelineObservation(480) })
+  ];
+  const row = buildWorldTimeline(state, events, monitoredAgents(state))!.rows.find(row => row.id === "torvin")!;
+  assert.equal(row.spans[0].reasoning, undefined);
+});
+
 test("Gantt reconstructs real positions and action durations rather than scheduled workplaces", () => {
   const state = expanded();
   state.world!.village!.minute = 500;

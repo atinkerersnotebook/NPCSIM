@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from npc_sim.contracts import action_result, goal_result, observation
 from npc_sim.mcp_client import WorldClient
 from npc_sim.models import AppConfig, BudgetExtension, Budgets, ClockMode, ClockRequest, Decision, EpisodeLoadRequest, EpisodeSave, EpisodeSaveRequest, ReopenRequest, RunModeRequest, Scenario, SkillMode, WorldState
-from npc_sim.proxy import Proxy
+from npc_sim.proxy import EmptyModelResponse, Proxy
 from npc_sim.prompt_context import REVIEW_EVENTS
 from npc_sim.storage import EventStore, read_json, write_json
 from npc_sim.world_storage import WorldStorage, read_world_state
@@ -513,6 +513,11 @@ class Controller:
             raise ValueError("The adventure changed. Refresh before changing its run mode.")
         if self.run["status"] not in {"ready", "running", "paused", "budget_exceeded"}:
             raise ValueError("Only active or budget-exhausted adventures can change run mode.")
+        if request.stop_after_days is not None and (
+                not request.run_until_complete or self.run["status"] == "running"):
+            raise ValueError("A multi-day stop requires a paused timed village in run-until-complete mode.")
+        if request.stop_after_days is not None and (not self.world or not self.world.manifest.get("village_scheduler")):
+            raise ValueError("A multi-day stop requires a connected timed village.")
         reopening = self.run["status"] == "budget_exceeded"
         if reopening and not request.run_until_complete:
             raise ValueError("Enable run until complete or extend the exhausted budgets before continuing.")
@@ -526,6 +531,9 @@ class Controller:
         if self.run_until_complete and not request.run_until_complete:
             self.run.pop("village_stop_minute", None)
         self.run["run_until_complete"] = request.run_until_complete
+        if request.stop_after_days is not None:
+            self.run["village_stop_minute"] = (
+                self.run["village_minute"] // 1440 + request.stop_after_days) * 1440
         self._arm_cycle_boundary()
         self.emit("run_mode_changed", request.model_dump(exclude={"run_id"}))
         self.checkpoint()
@@ -1143,6 +1151,7 @@ class Controller:
             self.run["model"] = models[0]
         repair: str | None = None
         decision: Decision | None = None
+        empty_attempts = 0
         for attempt in range(2):
             if (not self.run_until_complete and self.run["model_calls"] >= self.budgets.max_model_calls) or self.remaining() <= 0:
                 if not await self.verify(final=True):
@@ -1169,6 +1178,13 @@ class Controller:
                 validate(decision.arguments, descriptor["arguments_schema"])
                 self.emit("validation", {"valid": True, "action_id": decision.action_id})
                 break
+            except EmptyModelResponse as error:
+                empty_attempts += 1
+                self.emit("validation", {"valid": False, "error": str(error), "attempt": attempt + 1})
+                if empty_attempts == 2:
+                    raise LLMUnavailable("Two empty model decisions; no action was dispatched", "decision") from error
+                repair = str(error)
+                await asyncio.sleep(0.5)
             except (ValidationError, SchemaError, ValueError, KeyError, IndexError) as error:
                 repair = self.safe_error(error)
                 self.emit("validation", {"valid": False, "error": repair, "attempt": attempt + 1})

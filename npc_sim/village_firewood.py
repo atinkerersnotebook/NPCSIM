@@ -76,10 +76,13 @@ def _validate(scenario: Scenario, config: VillageFirewoodConfig) -> None:
     if axe is None or axe.location != supplier.work or AXE not in base.owners or base.owners[AXE] != config.supplier:
         raise ValueError("The forester must own the actual axe at the woodlot")
     buyer = base.residents.get(config.household_buyer)
-    if buyer is None or buyer.work != buyer.home:
-        raise ValueError("The cottage custodian must work at the communal household stock location")
+    if buyer is None:
+        raise ValueError("The cottage custodian must be a resident")
+    household_location = config.household_location or buyer.home
+    if household_location not in scenario.entities or scenario.entities[household_location].kind != "location":
+        raise ValueError("The household stock location must exist")
     members = [rid for group in config.households.values() for rid in group]
-    cottage_residents = {rid for rid, resident in base.residents.items() if resident.home == buyer.home}
+    cottage_residents = {rid for rid, resident in base.residents.items() if resident.home == household_location}
     if (set(members) != cottage_residents or len(members) != len(set(members))
             or any(not group for group in config.households.values())
             or any(not re.fullmatch(r"[a-z0-9][a-z0-9-]*", key) for key in config.households)):
@@ -92,7 +95,7 @@ def _validate(scenario: Scenario, config: VillageFirewoodConfig) -> None:
         if resident.job and resident.job.equipment == "oven"}
     if not required <= set(config.businesses):
         raise ValueError("Firewood must cover the smith, innkeeper and all bakers")
-    sites = {buyer.work, supplier.work, *(base.residents[rid].work for rid in config.businesses)}
+    sites = {household_location, supplier.work, *(base.residents[rid].work for rid in config.businesses)}
     if any(site not in base.stocks for site in sites):
         raise ValueError("Firewood requires actual stock locations")
     if (set(config.site_capacities) != sites
@@ -111,7 +114,7 @@ def _validate(scenario: Scenario, config: VillageFirewoodConfig) -> None:
 
 
 def fixtures(scenario: Scenario, config: VillageFirewoodConfig) -> dict[str, Entity]:
-    location = scenario.village.residents[config.household_buyer].home
+    location = config.household_location or scenario.village.residents[config.household_buyer].home
     return {f"cottage-{key}": Entity(
         name=f"Shared cottage {key.replace('-', ' ')}", kind="fixture", location=location,
         description="A shared household hearth, supplied from the communal cottage firewood pile.")
@@ -153,7 +156,7 @@ def configure(world: "World", values: dict[str, Any]) -> None:
     _validate(scenario, config)
     state = world.state.village
     if state.firewood:
-        identity = {"supplier", "household_buyer", "households", "businesses"}
+        identity = {"supplier", "household_buyer", "household_location", "households", "businesses"}
         if any(state.stocks.get(site, {}).get("firewood", 0) > limit
                for site, limit in config.site_capacities.items()):
             raise ValueError("Existing physical fuel stocks exceed the proposed storage capacity")
@@ -255,7 +258,7 @@ def _heating_now(world: "World") -> bool:
 
 def _household_location(world: "World") -> str:
     config = world.state.village.firewood.config
-    return world.scenario.village.residents[config.household_buyer].home
+    return config.household_location or world.scenario.village.residents[config.household_buyer].home
 
 
 def consumer_target(world: "World", buyer: str) -> int:
@@ -268,7 +271,7 @@ def consumer_target(world: "World", buyer: str) -> int:
         target += config.reserve + sum(
             ceil(max(0, end - max(start, world.state.village.firewood.warm_until.get(key, 0))) / burn)
             for key in config.households)
-    location = world.scenario.village.residents[buyer].work
+    location = _household_location(world) if buyer == config.household_buyer else world.scenario.village.residents[buyer].work
     if buyer in config.businesses:
         target = max(target, config.reserve * config.business_buffer_days)
     target = max(target, getattr(config, "site_reserve_targets", {}).get(location, 0))
@@ -281,7 +284,7 @@ def requests(world: "World", actor: str) -> list[tuple[str, int, dict[str, int]]
     config = world.state.village.firewood.config
     if actor not in {*config.businesses, config.household_buyer}:
         return []
-    location = world.scenario.village.residents[actor].work
+    location = _household_location(world) if actor == config.household_buyer else world.scenario.village.residents[actor].work
     if world.actor_id == actor and world.actor.location_id != location:
         return []
     target = consumer_target(world, actor)
@@ -923,14 +926,14 @@ def _view(world: "World", *, local: bool) -> dict[str, Any]:
     config = world.state.village.firewood.config
     base, state = village.context(world)
     buyers = list(dict.fromkeys([*config.businesses, config.household_buyer]))
-    sites = [{"location": base.residents[buyer].work, "buyer": buyer,
+    sites = [{"location": (location := _household_location(world) if buyer == config.household_buyer else base.residents[buyer].work), "buyer": buyer,
               "stock": (stock := village_economy.usable_stock(
-                  world, base.residents[buyer].work, "firewood", state.minute)),
+                  world, location, "firewood", state.minute)),
               "reserve": consumer_target(world, buyer),
-              "capacity": config.site_capacities[base.residents[buyer].work],
+              "capacity": config.site_capacities[location],
               "status": "out" if stock == 0 else "low" if stock <= config.reorder_point else "normal",
-              "consumed": state.firewood.consumed.get(base.residents[buyer].work, 0)}
-             for buyer in buyers if not local or base.residents[buyer].work == world.actor.location_id]
+              "consumed": state.firewood.consumed.get(location, 0)}
+             for buyer in buyers if not local or (_household_location(world) if buyer == config.household_buyer else base.residents[buyer].work) == world.actor.location_id]
     households = [_hearth(world, key, members) for key, members in config.households.items()
                   if not local or _household_location(world) == world.actor.location_id]
     return {"enabled": config.enabled, "season": config.season, "supplier": config.supplier,

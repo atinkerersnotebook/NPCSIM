@@ -1180,10 +1180,12 @@ def _view(world: "World", notice: NoticeVersion, knowledge: NoticeKnowledge | No
         "id": notice.id, "version": notice.version, "author": names[notice.author],
         "supersedes_notice_id": notice.supersedes_notice_id,
         "recipients": [names[rid] for rid in terms.recipients],
+        "recipient_ids": list(terms.recipients),
         "subject": terms.subject, "description": terms.description, "type": terms.type,
         "status": notice.status, "quantity": terms.quantity,
         "unit_price": terms.unit_price, "delivery_fee": terms.delivery_fee,
         "destination": places.get(terms.destination) if terms.destination else None,
+        "destination_id": terms.destination,
         "due_at": terms.due_at, "updated_at": notice.updated_at,
         "private": terms.private, "response": notice.response,
         "source": (knowledge.source_type + (f": {names.get(knowledge.source_actor, knowledge.source_actor)}"

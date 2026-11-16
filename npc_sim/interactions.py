@@ -207,6 +207,39 @@ async def model(controller: "Controller", *, followup: bool = False) -> str:
     return selected
 
 
+def visitor_context(snapshot: dict[str, Any], actor_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    village = snapshot.get("village") or {}
+    incidents = village.get("incidents") or {}
+    visitor = (incidents.get("visitors") or {}).get(actor_id)
+    if visitor is not None:
+        instance = (incidents.get("instances") or {}).get(visitor["incident"])
+        if instance is None:
+            raise ValueError("The traveller's visit is unavailable.")
+        goal = {"objective": instance["template"]["title"], "revealed": True}
+        details = {"status": visitor["status"], "activity": visitor["activity"],
+                   "coins": visitor["coins"], "stock": visitor["stock"], "plan": visitor["plan"]}
+    else:
+        dashboard = village.get("dashboard") or {}
+        visitor = next((item for item in dashboard.get("visitors", [])
+                        if item["id"] == actor_id and actor_id == "iron-trader"), None)
+        if visitor is None:
+            raise ValueError("Unknown traveller.")
+        goal = {"objective": "Visit the village to trade", "revealed": True}
+        details = {"status": visitor["status"], "activity": visitor["activities"][-1]["label"]
+                   if visitor["activities"] else "Visiting", "activities": visitor["activities"][-6:]}
+        stocks = village.get("stocks") or {}
+        if "iron-trader" in stocks:
+            details["stock"] = stocks["iron-trader"]
+        if "iron-trader" in (village.get("coins") or {}):
+            details["coins"] = village["coins"]["iron-trader"]
+    location = visitor["location"]
+    place = snapshot["entities"].get(location)
+    description = place["description"] if place else "Outside the mapped village"
+    return ({"self": {"actor_id": actor_id, "name": visitor["name"], "role": "traveller"},
+             "location": {"id": location, "description": description},
+             "village": {"minute": village["minute"], "visitor": details}}, goal)
+
+
 async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> None:
     request = (ChatRequest.model_validate(args) if name == "npc_chat" else
                EditRequest.model_validate(args) if name == "propose_edit" else ApprovalRequest.model_validate(args))
@@ -224,7 +257,22 @@ async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> N
         if isinstance(request, ChatRequest):
             from npc_sim.contracts import observation
             saved = controller.agents.get(request.actor_id)
-            if followup:
+            snapshot = controller.status()["world"] if saved is None and (
+                request.actor_id.startswith("visitor:") or request.actor_id == "iron-trader") else None
+            village = (snapshot or {}).get("village") or {}
+            incidents = village.get("incidents") or {}
+            visitor = (incidents.get("visitors") or {}).get(request.actor_id)
+            if visitor is None and request.actor_id == "iron-trader":
+                dashboard = village.get("dashboard") or {}
+                visitor = next((item for item in dashboard.get("visitors", [])
+                                if item["id"] == request.actor_id), None)
+            if visitor is not None:
+                fresh, goal = visitor_context(snapshot, request.actor_id)
+                if visitor["status"] == "departed" and not followup:
+                    raise ValueError("This traveller has departed.")
+                memory = run.setdefault("visitor_memories", {}).setdefault(request.actor_id, {
+                    "schema_version": "1.0", "operator_conversation": []})
+            elif followup:
                 if request.actor_id not in (controller.agents or {run["actor_id"]: None}):
                     raise ValueError("Unknown NPC.")
                 final = saved.get("observation") if saved else controller.observation
@@ -237,8 +285,9 @@ async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> N
                 if request.actor_id not in world.manifest.get("actor_sessions", {}):
                     raise ValueError("Unknown NPC.")
                 fresh = observation(await world.select_actor(request.actor_id), world.session_id)
-            memory = saved["memory"] if saved else controller.memory
-            goal = saved["goal"] if saved else run["goal"]
+            if visitor is None:
+                memory = saved["memory"] if saved else controller.memory
+                goal = saved["goal"] if saved else run["goal"]
             controller.emit("npc_chat_request", {"question": request.question}, request.actor_id)
             question_memory = {**memory, "episode_outcome": {
                 "status": run["status"], "reason": run["reason"]}} if followup else memory

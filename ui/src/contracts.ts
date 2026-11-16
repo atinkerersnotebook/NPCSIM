@@ -189,11 +189,13 @@ export const communicationSchema = z.object({
   enabled: z.boolean(), scope: z.string(), policy: z.string(),
   notices: z.array(z.object({
     id: z.string(), version: z.number().int().positive(), author: z.string(),
-    recipients: z.array(z.string()), subject: z.string(), description: z.string(),
+    recipients: z.array(z.string()), recipient_ids: z.array(z.string()).optional(),
+    subject: z.string(), description: z.string(),
     type: z.string(), status: z.string(), quantity: z.number().int().positive().nullable(),
     unit_price: z.number().int().positive().nullable().default(null),
     delivery_fee: z.number().int().nonnegative().nullable().default(null),
-    destination: z.string().nullable(), due_at: z.number().int().nonnegative().nullable(),
+    destination: z.string().nullable(), destination_id: z.string().nullable().optional(),
+    due_at: z.number().int().nonnegative().nullable(),
     updated_at: z.number().int().nonnegative(), private: z.boolean(), response: z.string().nullable(),
     source: z.string(), learned_at: z.number().int().nonnegative().nullable(),
     last_verified_at: z.number().int().nonnegative().nullable().default(null),
@@ -301,7 +303,9 @@ const villageDashboardSchema = z.object({
   orders: z.array(z.object({
     id: z.string(), buyer: z.string(), seller: z.string(), product: z.string(),
     quantity: z.number().int().nonnegative(), delivered: z.number().int().nonnegative(),
-    status: z.string(), deadline: z.number().int().nonnegative()
+    status: z.string(), deadline: z.number().int().nonnegative(),
+    source: z.string().optional(), destination: z.string().optional(),
+    production_plan: z.record(z.string(), z.number().int()).optional(), reason: z.string().nullable().optional()
   })).default([]),
   products: z.array(z.object({
     location: z.string(), product: z.string(), quantity: z.number().int().nonnegative(),

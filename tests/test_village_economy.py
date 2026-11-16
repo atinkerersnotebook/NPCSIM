@@ -663,7 +663,8 @@ def test_late_supper_request_is_not_offered_as_deliverable(world):
     add(world, "bakery", "bread", 3, expiry=1200)
     world.state.village.minute = 1055
     assert economy.meal_supply_forecast(world)[0]["inputs"]["bread"]["blocker"] == "ORDER_WINDOW_CLOSED"
-    assert not [request for request in economy.suggestions(world) if request["product"] == "bread"]
+    assert not [request for request in economy.suggestions(world)
+                if request["product"] == "bread" and request["request_key"].startswith("0:")]
 
 
 def test_in_transit_bread_is_counted_once_and_expiry_is_respected(world):
@@ -781,7 +782,9 @@ def test_external_cash_is_ledger_only_and_monitor_shape_is_flat(world):
     report = economy.monitor(world)
     assert report["orders"][0] == {"id": order.id, "buyer": "elsie", "seller": "jory",
                                   "product": "bread", "quantity": 2, "delivered": 0,
-                                  "status": "proposed", "deadline": 1110}
+                                  "status": "proposed", "deadline": 1110,
+                                  "source": order.source, "destination": order.destination,
+                                  "production_plan": {}, "reason": None}
     bread = next(item for item in report["products"] if item["location"] == "bakery" and item["product"] == "bread")
     assert bread == {"location": "bakery", "product": "bread", "quantity": 2, "usable": 2,
                      "expiring": 0, "reserve": 0}
@@ -798,8 +801,40 @@ def test_already_served_diners_do_not_create_replacement_demand(world):
     coverage = economy.meal_requirements(world)[0]
     assert coverage["remaining_portions"] == 4 and coverage["eaten_portions"] == 8
     requests = economy.suggestions(world)
-    assert all(request["product"] != "bread" for request in requests)
-    assert next(request for request in requests if request["product"] == "fish")["quantity"] == 2
+    today = [request for request in requests if request["request_key"].startswith("0:")]
+    assert all(request["product"] != "bread" for request in today)
+    assert next(request for request in today if request["product"] == "fish")["quantity"] == 2
+
+
+def test_evening_forecast_renews_funded_next_day_bread_without_reusing_spent_stock(world):
+    world.state.village.minute = 1200
+    add(world, "bakery", "flour", 2)
+    plans = economy.meal_requirements(world)
+    assert [plan["id"] for plan in plans] == ["1:supper"]
+    requests = [request for request in economy.suggestions(world)
+                if request["product"] == "bread"]
+    assert requests and all(request["request_key"].startswith("1:") for request in requests)
+    assert all(request["deadline"] > world.state.village.minute for request in requests)
+    assert all(request["commitment"] <= world.state.village.coins["elsie"] for request in requests)
+
+
+def test_next_day_bread_order_can_plan_real_bakery_batch(world):
+    world.state.village.minute = 1200
+    add(world, "bakery", "flour", 2)
+    order = propose(world, quantity=2, deadline=2520, fresh=2580,
+                    request_key="1:supper:elsie:bread")
+    accept(world, order)
+    assert order.status == "accepted_planned"
+    assert order.production_plan["input:flour"] == 2
+    assert 1440 < order.production_plan["finish"] < order.deadline
+    baker = actor(world, "jory", "bakery")
+    world.state.village.minute = 1440 + world.scenario.village.residents["jory"].wake_minute
+    baker.state.village.residents["jory"].life.last_woke = baker.state.village.minute
+    result = act(baker, "village_work")
+    assert result["outcome"] == "APPLIED", result
+    if baker.state.village.residents["jory"].life.work:
+        village.advance(baker, baker.state.village.residents["jory"].life.work.finishes_at - baker.state.village.minute)
+    assert baker.state.village.stocks["bakery"]["bread"] > 0
 
 
 def test_delivery_recovery_preserves_exactly_once_cash_and_remaining_quantity(world):

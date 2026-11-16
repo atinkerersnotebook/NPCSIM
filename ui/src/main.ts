@@ -182,8 +182,8 @@ app.innerHTML = `
           <div id="completion-analysis" aria-live="polite"></div>
         </section>
         <section class="panel interaction-panel" aria-labelledby="npc-chat-heading">
-          <h2 id="npc-chat-heading">Ask an NPC</h2>
-          <p>Private conversation, including after the adventure ends or a save point is loaded. Only the selected NPC remembers it and answers from its own knowledge. Follow-up questions do not restart the world or change its result; loaded-copy questions use separate calls until you resume.</p>
+          <h2 id="npc-chat-heading">Ask an NPC or traveller</h2>
+          <p>Private conversation, including after the adventure ends or a save point is loaded. Only the selected person remembers it and answers from their own knowledge. Follow-up questions do not restart the world or change its result; loaded-copy questions use separate calls until you resume.</p>
           <form id="npc-chat-form">
             <label for="chat-actor">Speak privately with</label>
             <select id="chat-actor"></select>
@@ -641,11 +641,16 @@ function renderInteractions(): void {
   const chatDisabled = !chatEnabled || busy || interactionBusy || Boolean(state?.in_flight);
   const selector = element<HTMLSelectElement>("chat-actor");
   const selected = selector.value || run?.actor_id || "";
-  const options = Object.keys(state?.world?.actors ?? run?.agents ??
+  const residents = Object.keys(state?.world?.actors ?? run?.agents ??
     (run ? { [run.actor_id]: {} } : {})).map(id => {
     const name = run?.agent_profiles?.[id]?.name ?? slotLabel(id);
     return `<option value="${escape(id)}">${escape(name)}</option>`;
   }).join("");
+  const travellers = (state?.world?.village?.dashboard?.visitors ?? []).filter(visitor =>
+    (visitor.id.startsWith("visitor:") || visitor.id === "iron-trader") && (visitor.departure === null ||
+      (run?.status && !["ready", "paused", "running"].includes(run.status)))).map(visitor =>
+    `<option value="${escape(visitor.id)}">${escape(visitor.name)} (traveller)</option>`).join("");
+  const options = residents + travellers;
   if (options !== chatOptions) {
     selector.innerHTML = options;
     chatOptions = options;

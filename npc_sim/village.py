@@ -142,7 +142,7 @@ def initial_state(scenario: Scenario) -> VillageState:
     from npc_sim import village_communication, village_firewood, village_legacy
     from npc_sim import village_depot
     feed_lots = {}
-    if scenario.id == "millhaven-resilient" and village_depot.FEED_STORE in scenario.entities:
+    if scenario.id in village_depot.MANAGED_SCENARIOS and village_depot.FEED_STORE in scenario.entities:
         if config.livestock is None:
             raise ValueError("Resilient Millhaven needs a livestock keeper")
         keeper = config.livestock.keeper

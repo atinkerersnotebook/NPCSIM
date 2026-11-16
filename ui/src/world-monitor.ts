@@ -223,7 +223,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
           const target = focused ? [...scroll.querySelectorAll<SVGElement>("[data-gantt-focus]")]
             .find(element => element.getAttribute("data-gantt-focus") === focused) : undefined;
           (target ?? scroll).focus({ preventScroll: true });
-          if (target?.classList.contains("gantt-bar")) showGanttTooltip(target);
+          if (target?.matches(".gantt-bar, .gantt-marker")) showGanttTooltip(target);
         }
       }
       if (zoomFocus) {
@@ -232,7 +232,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
           ?.focus({ preventScroll: true });
       }
       if (pointerPosition) {
-        const hovered = document.elementFromPoint(pointerPosition.x, pointerPosition.y)?.closest(".gantt-bar");
+        const hovered = document.elementFromPoint(pointerPosition.x, pointerPosition.y)?.closest(".gantt-bar, .gantt-marker");
         if (hovered) showGanttTooltip(hovered);
       }
       renderedZoom = zoom;
@@ -302,6 +302,11 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       result.append(element("small", "", "Recorded detail"), element("p", "", detail));
       bubble.append(result);
     }
+    if (text("reasoning")) {
+      const reasoning = element("div", "gantt-tooltip-result", "");
+      reasoning.append(element("small", "", "Why this action"), element("p", "", text("reasoning")));
+      bubble.append(reasoning);
+    }
     bubble.hidden = false;
     const bounds = bar.getBoundingClientRect();
     const { width, height } = bubble.getBoundingClientRect();
@@ -315,7 +320,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   };
   content.addEventListener("pointerover", event => {
     if (event.target instanceof Element) {
-      const bar = event.target.closest(".gantt-bar");
+      const bar = event.target.closest(".gantt-bar, .gantt-marker");
       if (bar) {
         pointerPosition = { x: event.clientX, y: event.clientY };
         showGanttTooltip(bar);
@@ -323,22 +328,22 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     }
   });
   content.addEventListener("pointermove", event => {
-    pointerPosition = event.target instanceof Element && event.target.closest(".gantt-bar")
+    pointerPosition = event.target instanceof Element && event.target.closest(".gantt-bar, .gantt-marker")
       ? { x: event.clientX, y: event.clientY } : null;
   });
   content.addEventListener("pointerout", event => {
     if (!(event.target instanceof Element)) return;
-    const bar = event.target.closest(".gantt-bar");
+    const bar = event.target.closest(".gantt-bar, .gantt-marker");
     if (bar && !(event.relatedTarget instanceof Element && bar.contains(event.relatedTarget))) {
       pointerPosition = null;
       hideGanttTooltip();
     }
   });
   content.addEventListener("focusin", event => {
-    if (event.target instanceof Element && event.target.matches(".gantt-bar")) showGanttTooltip(event.target);
+    if (event.target instanceof Element && event.target.matches(".gantt-bar, .gantt-marker")) showGanttTooltip(event.target);
   });
   content.addEventListener("focusout", event => {
-    if (event.target instanceof Element && event.target.matches(".gantt-bar")) hideGanttTooltip();
+    if (event.target instanceof Element && event.target.matches(".gantt-bar, .gantt-marker")) hideGanttTooltip();
   });
   content.addEventListener("scroll", hideGanttTooltip, true);
   content.addEventListener("click", event => {

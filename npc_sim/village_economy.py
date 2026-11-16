@@ -415,7 +415,10 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
     earliest = max(state.minute, state.residents[order.supplier].next_work)
     if shelf:
         earliest = max(earliest, order.required_fresh_until - shelf + 1)
-    closing = state.minute // 1440 * 1440 + min(
+    production_day = state.minute // 1440
+    if order.deadline - transport >= (production_day + 1) * 1440 + resident.wake_minute:
+        production_day += 1
+    closing = production_day * 1440 + min(
         village_life.production_closing_minute(world, order.supplier), resident.bed_minute)
     pending = [other for other in state.economy.orders.values() if other.id != order.id
                and other.status in COMMITTED and other.supplier == order.supplier
@@ -437,6 +440,8 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
         batches = ceil(missing / job.outputs[order.product])
         interval = max(5, job.interval, job.duration) * village_life.cooldown_factor(world, order.supplier)
         earliest = max(earliest, max((other.production_plan.get("finish", 0) for other in pending), default=0))
+        if production_day > state.minute // 1440:
+            earliest = max(earliest, production_day * 1440 + resident.wake_minute)
         finish = earliest + batches * interval
         if finish > min(latest_start, closing):
             return {}, "No free production slot before the deadline and closing time"
@@ -740,9 +745,11 @@ def meal_delivery_actions(world: "World") -> list[dict[str, Any]]:
     rid, location = world.actor_id, world.actor.location_id
     inn = base.residents[policy.innkeeper].work
     plans = meal_requirements(world)
-    cutoff = min((plan["due"] - policy.cooking_lead_minutes for plan in plans), default=state.minute)
-    if state.minute > cutoff:
+    deadlines = [plan["due"] - policy.cooking_lead_minutes for plan in plans
+                 if plan["due"] - policy.cooking_lead_minutes >= state.minute]
+    if not deadlines:
         return []
+    cutoff = min(deadlines)
     steps = []
     cargo = state.residents[rid].shipments
     for shipment in cargo:
@@ -883,38 +890,42 @@ def meal_requirements(world: "World") -> list[dict[str, Any]]:
     # Allocate existing portions once, chronologically, rather than covering both
     # breakfast and supper with the same physical meals.
     meals = _supply_buckets(world, location, "meals")
-    for plan in sorted(policy.meal_plans, key=lambda plan: plan.use_minute):
-        due = day * 1440 + plan.use_minute
-        if due < state.minute:
-            continue
-        meal_kind = "breakfast" if plan.id == "breakfast" else "daily"
-        eaten = sum(1 for person in state.residents.values() if person.life
-                    for meal in person.life.meals.values()
-                    if meal.kind == meal_kind and meal.due // 1440 == day and meal.status == "eaten")
-        remaining_portions = max(0, plan.portions - eaten)
-        covered, _ = _allocate(meals, remaining_portions, due)
-        inputs: dict[str, int] = {}
-        unmet_recipes: dict[str, int] = {}
-        remaining_covered = covered + eaten
-        for name, portions in plan.recipe_portions.items():
-            recipe = policy.recipes[name]
-            reused = min(portions, remaining_covered)
-            remaining_covered -= reused
-            unmet_recipes[name] = portions - reused
-            batches = ceil((portions - reused) / recipe.portions)
-            for product, amount in recipe.inputs.items():
-                inputs[product] = inputs.get(product, 0) + batches * amount
-        if plan.bread_service:
-            inputs["bread"] = inputs.get("bread", 0) + max(0, plan.bread_service - eaten)
-        if plan.tea_portions:
-            inputs["tea"] = inputs.get("tea", 0) + max(0, plan.tea_portions - eaten)
-        inputs = {product: amount + policy.stock_buffer.get(product, 0)
-                  for product, amount in inputs.items() if amount or policy.stock_buffer.get(product, 0)}
-        result.append({"id": f"{day}:{plan.id}", "due": due, "portions": plan.portions,
-                       "eaten_portions": eaten, "remaining_portions": remaining_portions,
-                       "covered_portions": covered, "inputs": inputs,
-                       "unmet_recipe_portions": unmet_recipes,
-                       "recipe_portions": plan.recipe_portions.copy()})
+    # Open tomorrow's ordering window while suppliers can still prepare and
+    # communicate; never treat yesterday's fulfilled order as tomorrow's stock.
+    days = (day, day + 1) if state.minute % 1440 >= 900 else (day,)
+    for service_day in days:
+        for plan in sorted(policy.meal_plans, key=lambda plan: plan.use_minute):
+            due = service_day * 1440 + plan.use_minute
+            if due < state.minute:
+                continue
+            meal_kind = "breakfast" if plan.id == "breakfast" else "daily"
+            eaten = sum(1 for person in state.residents.values() if person.life
+                        for meal in person.life.meals.values()
+                        if meal.kind == meal_kind and meal.due // 1440 == service_day and meal.status == "eaten")
+            remaining_portions = max(0, plan.portions - eaten)
+            covered, _ = _allocate(meals, remaining_portions, due)
+            inputs: dict[str, int] = {}
+            unmet_recipes: dict[str, int] = {}
+            remaining_covered = covered + eaten
+            for name, portions in plan.recipe_portions.items():
+                recipe = policy.recipes[name]
+                reused = min(portions, remaining_covered)
+                remaining_covered -= reused
+                unmet_recipes[name] = portions - reused
+                batches = ceil((portions - reused) / recipe.portions)
+                for product, amount in recipe.inputs.items():
+                    inputs[product] = inputs.get(product, 0) + batches * amount
+            if plan.bread_service:
+                inputs["bread"] = inputs.get("bread", 0) + max(0, plan.bread_service - eaten)
+            if plan.tea_portions:
+                inputs["tea"] = inputs.get("tea", 0) + max(0, plan.tea_portions - eaten)
+            inputs = {product: amount + policy.stock_buffer.get(product, 0)
+                      for product, amount in inputs.items() if amount or policy.stock_buffer.get(product, 0)}
+            result.append({"id": f"{service_day}:{plan.id}", "due": due, "portions": plan.portions,
+                           "eaten_portions": eaten, "remaining_portions": remaining_portions,
+                           "covered_portions": covered, "inputs": inputs,
+                           "unmet_recipe_portions": unmet_recipes,
+                           "recipe_portions": plan.recipe_portions.copy()})
     return result
 
 
@@ -1067,10 +1078,14 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
     result = []
     supplies: dict[str, list[dict[str, Any]]] = {}
     existing: dict[str, list[dict[str, Any]]] = {}
+    budget = max(0, state.coins.get(buyer, 0) - commitments(world, buyer))
     for key, use_at, inputs in requests:
         for product, required in inputs.items():
-            stock = existing.setdefault(product, _supply_buckets(world, destination, product))
-            supply = supplies.setdefault(product, _supply_buckets(world, destination, product, include_orders=True,
+            delivery_site = (base.firewood.household_location if product == "firewood" and base.firewood
+                             and buyer == base.firewood.household_buyer and base.firewood.household_location
+                             else destination)
+            stock = existing.setdefault(product, _supply_buckets(world, delivery_site, product))
+            supply = supplies.setdefault(product, _supply_buckets(world, delivery_site, product, include_orders=True,
                                                                  personal=personal))
             available, _ = _allocate(stock, required, use_at)
             covered, incoming = _allocate(supply, required, use_at)
@@ -1078,14 +1093,14 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
             if product == "firewood" and village_firewood.enabled(world):
                 cost = unit_price(world, product) + delivery_fee(world)
                 quantity = min(quantity, max(0, state.coins[buyer] - commitments(world, buyer)) // cost)
-            supplier = _supplier(world, product, destination)
+            supplier = _supplier(world, product, delivery_site)
             if quantity and supplier:
                 if (_food_policy(world) and not personal and buyer == policy.innkeeper
                         and key.endswith(":supper") and product in {"bread", "fish"}):
                     source = base.residents[supplier].work
-                    quantity = min(quantity, available_for_order(world, source, product, use_at),
-                                   max(0, state.coins.get(buyer, 0) - commitments(world, buyer))
-                                   // (unit_price(world, product) + delivery_fee(world)))
+                    available_source = available_for_order(world, source, product, use_at)
+                    if use_at // 1440 == state.minute // 1440:
+                        quantity = min(quantity, available_source)
                 if not quantity:
                     continue
                 lead = max(policy.delivery_lead_minutes, policy.cooking_lead_minutes) if (
@@ -1095,12 +1110,19 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
                         and state.minute > use_at - policy.cooking_lead_minutes - policy.delivery_lead_minutes):
                     continue
                 deadline = max(state.minute, use_at - lead)
-                result.append({"buyer": buyer, "supplier": supplier, "destination": destination,
+                if buyer == policy.innkeeper:
+                    quantity = min(quantity, budget // (unit_price(world, product) + delivery_fee(world)))
+                if not quantity:
+                    continue
+                commitment = quantity * (unit_price(world, product) + delivery_fee(world))
+                if buyer == policy.innkeeper:
+                    budget -= commitment
+                result.append({"buyer": buyer, "supplier": supplier, "destination": delivery_site,
                                "product": product, "quantity": quantity, "price": unit_price(world, product),
                                "deadline": deadline, "required_fresh_until": use_at,
                                "request_key": f"{key}:{buyer}:{product}", "usable": available,
                                "confirmed_incoming": incoming,
-                               "commitment": quantity * (unit_price(world, product) + delivery_fee(world))})
+                               "commitment": commitment})
     return result
 
 
@@ -1170,6 +1192,8 @@ def _propose(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]
     if blocked:
         return "REJECTED", blocked[0], blocked[1], None
     destination = base.residents[buyer].work
+    if product == "firewood" and base.firewood and buyer == base.firewood.household_buyer and base.firewood.household_location:
+        destination = base.firewood.household_location
     key = args.get("request_key", f"manual:{buyer}:{supplier}:{product}:{deadline}:{fresh}")
     existing = next((order for order in economy.orders.values()
                      if order.request_key == key and order.status not in {"cancelled", "failed", "rejected"}), None)
@@ -1432,7 +1456,8 @@ def production_targets(world: "World", location: str, *, personal: bool = False)
     if firewood_source:
         targets["firewood"] = max(targets["firewood"], village_firewood.source_reserve(world))
     for order in _personal_orders(world) if personal else economy.orders.values():
-        if order.status in LOADABLE and order.source == location:
+        if (order.status in LOADABLE and order.source == location
+                and order.required_fresh_until >= state.minute):
             targets[order.product] = targets.get(order.product, 0) + order.loadable
     if (_food_policy(world) and location == "riverbank" and "fish-smoking" in
             (state.social.config.activities if state.social else {})
@@ -1748,9 +1773,11 @@ def monitor(world: "World") -> dict[str, Any]:
     policy = config(world)
     state = world.state.village
     orders = [{"id": order["id"], "buyer": order["buyer"], "seller": order["supplier"],
+               "source": order["source"], "destination": order["destination"],
                "product": order["product"], "quantity": order["quantity"],
                "delivered": order["delivered_quantity"], "status": order["status"],
-               "deadline": order["deadline"]} for order in report["orders"]]
+               "deadline": order["deadline"], "production_plan": order["production_plan"],
+               "reason": order["reason"]} for order in report["orders"]]
     products = [{"location": location, "product": product, "quantity": values["remaining"],
                  "usable": values["usable_now"], "expiring": values["expires_before_next_service"],
                  "reserve": policy.reserve_targets.get(location, {}).get(product, 0)}

@@ -587,6 +587,7 @@ class VillageFirewoodConfig(StrictModel):
     enabled: bool = True
     supplier: str
     household_buyer: str
+    household_location: str | None = None
     households: dict[str, list[str]] = Field(min_length=1)
     businesses: list[str] = Field(min_length=1)
     season: Literal["spring", "summer", "autumn", "winter"] = "autumn"
@@ -997,11 +998,15 @@ class VillageOrderView(StrictModel):
     id: str
     buyer: str
     seller: str
+    source: str | None = None
+    destination: str | None = None
     product: str
     quantity: int = Field(ge=0)
     delivered: int = Field(ge=0)
     status: str
     deadline: int = Field(ge=0)
+    production_plan: dict[str, int] = Field(default_factory=dict)
+    reason: str | None = None
 
 
 class VillageProductView(StrictModel):
@@ -1140,6 +1145,7 @@ class VillageState(StrictModel):
     horse_fed_day: int = -1
     trader_day: int = -1
     trader_activities: list[VillageActivityView] = Field(default_factory=list)
+    trader_asked: list[str] = Field(default_factory=list)
     economy: VillageEconomyState | None = None
     social: VillageSocialState | None = None
     incidents: VillageEventsState | None = None
@@ -1582,6 +1588,7 @@ class ReopenRequest(StrictModel):
 class RunModeRequest(StrictModel):
     run_id: str = Field(min_length=1)
     run_until_complete: bool = Field(strict=True)
+    stop_after_days: int | None = Field(default=None, ge=1, strict=True)
 
 
 class EpisodeSaveRequest(StrictModel):

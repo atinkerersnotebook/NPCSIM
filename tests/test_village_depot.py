@@ -29,6 +29,37 @@ def applied(world, action, **args):
     return result
 
 
+def test_complete_scenario_combines_legacy_and_managed_storage(tmp_path):
+    scenario = Scenario.model_validate(json.loads(
+        (ROOT / "data" / "scenarios" / "millhaven-complete.json").read_text(encoding="utf-8")))
+    assert scenario.village.legacy is not None
+    scenario.village.start_minute = 600
+    scenario.village.breakfast = False
+    for agent in scenario.agents:
+        agent.start_location = scenario.village.residents[agent.id].work
+    world = World(scenario, tmp_path / "complete.json", "complete", "ada", "session-ada")
+    for agent in scenario.agents:
+        world.bind(agent.id, f"session-{agent.id}")
+    assert village_depot.enabled(world)
+    assert world.state.village.legacy is not None
+    assert world.state.village.depot_lots["farm-feed-store"]["ada"]["grain"][0].quantity == 4
+    assert {"village_store_feed", "village_depot_load", "village_read_chronicle"} <= {
+        action["id"] for action in world.actions()}
+    applied(world, "village_store_feed", goods={"hay": 1})
+    world.actor.location_id = "farm-feed-store"
+    village.advance(world, 5)
+    applied(world, "village_unload_goods")
+    assert world.state.village.stocks["farm-feed-store"]["hay"] == 4
+    assert village_ai.observation(world)["village"]["stored_owners"]["ada"]["hay"] == 4
+    world.actor.location_id = "village-square"
+    village.advance(world, world.state.village.residents["ada"].available_at - world.state.village.minute)
+    assert applied(world, "village_read_chronicle")["code"] == "CHRONICLE_READ"
+    world.save()
+    restored = World(scenario, world.path, "complete", "ada", "session-ada")
+    assert restored.state.village.depot_lots == world.state.village.depot_lots
+    assert restored.state.village.legacy.learned["ada"] == world.state.village.legacy.learned["ada"]
+
+
 def walk_to(world, destination):
     while world.actor.location_id != destination:
         wait = world.state.village.residents[world.actor_id].available_at - world.state.village.minute

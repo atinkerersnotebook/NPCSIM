@@ -255,6 +255,86 @@ async def test_chat_is_private_remembered_and_restores_actor_even_on_failure(con
 
 
 @pytest.mark.asyncio
+async def test_traveller_chat_uses_own_visit_and_persists_private_memory(configuration, monkeypatch):
+    data, config = configuration
+    config.world.scenario = "millhaven-expanded"
+    controller = Controller(ROOT, data, config)
+    proxy = InteractionProxy(controller.proxy)
+    controller.proxy = proxy
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        original_status = controller.status
+        visitor_id = "visitor:passing-traveller:600"
+        def visitor_status():
+            result = original_status()
+            snapshot = result["world"]
+            if snapshot is None:
+                return result
+            snapshot["village"]["incidents"] = snapshot["village"]["incidents"] or {
+                "visitors": {}, "instances": {}}
+            snapshot["village"]["incidents"]["visitors"][visitor_id] = {
+                "id": visitor_id, "incident": "passing-traveller:600", "name": "Mira",
+                "location": "village-square", "status": "present", "activity": "Visiting",
+                "coins": 12, "stock": {}, "plan": {"destination": "tavern"}}
+            snapshot["village"]["incidents"]["instances"]["passing-traveller:600"] = {
+                "template": {"title": "A traveller visits the village"}}
+            return result
+        monkeypatch.setattr(controller, "status", visitor_status)
+        request = {"run_id": controller.run["id"], "actor_id": visitor_id, "question": "Where are you headed?"}
+        before = controller.run["model_calls"]
+        await controller.command("npc_chat", request)
+        payload = json.loads(proxy.questions[-1][1]["content"])
+        assert payload["observation"]["self"] == {
+            "actor_id": visitor_id, "name": "Mira", "role": "traveller"}
+        assert payload["observation"]["village"]["visitor"]["plan"]["destination"] == "tavern"
+        assert "residents" not in payload["observation"]["village"]
+        assert controller.run["model_calls"] == before + 1
+        assert controller.run["visitor_memories"][visitor_id]["operator_conversation"][0]["question"] == request["question"]
+        await controller.command("npc_chat", {**request, "question": "And after that?"})
+        assert json.loads(proxy.questions[-1][1]["content"])["memory"]["operator_conversation"][0]["question"] == request["question"]
+        assert controller.events.events[-1]["actor_id"] == visitor_id
+        assert controller.run["actor_id"] != visitor_id
+        controller.finish("cancelled", "Ended test episode.")
+        await controller.command("npc_chat", {**request, "question": "What happened?"})
+        assert controller.run["followup_model_calls"] == 1
+        assert controller.run["visitor_memories"][visitor_id]["operator_conversation"][-1]["question"] == "What happened?"
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_iron_trader_can_answer_private_questions(configuration, monkeypatch):
+    data, config = configuration
+    config.world.scenario = "millhaven-expanded"
+    controller = Controller(ROOT, data, config)
+    proxy = InteractionProxy(controller.proxy)
+    controller.proxy = proxy
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        original_status = controller.status
+        def trader_status():
+            result = original_status()
+            snapshot = result["world"]
+            if snapshot is not None:
+                snapshot["village"]["dashboard"] = snapshot["village"]["dashboard"] or {"visitors": []}
+                snapshot["village"]["dashboard"]["visitors"].append({
+                    "id": "iron-trader", "name": "Iron trader", "location": "village-square",
+                    "status": "present", "activities": []})
+            return result
+        monkeypatch.setattr(controller, "status", trader_status)
+        await controller.command("npc_chat", {
+            "run_id": controller.run["id"], "actor_id": "iron-trader", "question": "What brings you here?"})
+        payload = json.loads(proxy.questions[-1][1]["content"])
+        assert payload["observation"]["self"]["actor_id"] == "iron-trader"
+        assert payload["observation"]["village"]["visitor"]["status"] == "present"
+        assert controller.run["visitor_memories"]["iron-trader"]["operator_conversation"]
+    finally:
+        await controller.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_chat_pauses_running_adventure_and_enforces_budget(configuration):
     data, config = configuration
     controller = Controller(ROOT, data, config)

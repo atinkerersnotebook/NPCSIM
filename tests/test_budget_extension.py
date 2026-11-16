@@ -19,6 +19,8 @@ from test_controller import ROOT, SOLUTION, TestProxy, assessment_response, conf
     {}, {"run_id": "run"}, {"run_id": "", "run_until_complete": True},
     {"run_id": "run", "run_until_complete": "true"},
     {"run_id": "run", "run_until_complete": 1},
+    {"run_id": "run", "run_until_complete": True, "stop_after_days": 0},
+    {"run_id": "run", "run_until_complete": True, "stop_after_days": 1.5},
 ])
 def test_run_mode_requires_explicit_valid_choice(body):
     with pytest.raises(ValidationError):
@@ -117,6 +119,38 @@ async def test_unlimited_village_cycle_pauses_at_exact_midnight_and_rearms(confi
         assert controller.run["village_stop_minute"] == 2880
         await controller.command("run_mode", {"run_id": controller.run["id"], "run_until_complete": False})
         assert "village_stop_minute" not in controller.run
+    finally:
+        await controller.shutdown(preserve_paused=True)
+
+
+@pytest.mark.asyncio
+async def test_unlimited_village_cycle_can_cross_midnight_before_two_day_stop(configuration):
+    data, config = configuration
+    config.world.scenario = "millhaven-expanded"
+    controller = Controller(ROOT, data, config)
+    controller.proxy = TestProxy(controller.proxy, [])
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        controller.run["status"] = "paused"
+        controller.run["village_minute"] = 1440
+        run_id = controller.run["id"]
+        await controller.command("run_mode", {
+            "run_id": run_id, "run_until_complete": True, "stop_after_days": 2,
+        })
+        assert controller.run["village_stop_minute"] == 4320
+        assert read_json(controller.events.directory / "run.json")["village_stop_minute"] == 4320
+        with pytest.raises(ValueError, match="paused timed village"):
+            await controller.command("run_mode", {
+                "run_id": run_id, "run_until_complete": False, "stop_after_days": 2,
+            })
+        controller.world.call = AsyncMock(return_value={"actor_id": "elsie", "minute": 2880})
+        controller.world.select_actor = AsyncMock(return_value={
+            **controller.observation, "session_id": controller.agents["elsie"]["session_id"],
+        })
+        assert await controller._select_turn() is True
+        assert controller.run["village_stop_minute"] == 4320
+        controller.world.call.assert_awaited_once_with("world_next_village_actor", {"stop_at_minute": 4320})
     finally:
         await controller.shutdown(preserve_paused=True)
 
