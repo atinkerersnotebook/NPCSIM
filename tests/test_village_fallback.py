@@ -7,7 +7,9 @@ from npc_sim import (village, village_communication, village_economy, village_ex
 from npc_sim.contracts import observation
 from npc_sim.living_village import build_scenario
 from npc_sim.models import Scenario, VillageDayPolicy, VillageEconomyConfig
-from npc_sim.village_communication_models import NoticeTerms, NoticeVersion
+from npc_sim.village_communication_models import (NoticeKnowledge, NoticeTerms, NoticeVersion,
+                                                 VillageCommunicationConfig, VillageCommunicationState)
+from npc_sim.village_economy_models import VillageSupplierOrder
 from npc_sim.world import World
 from test_village_expanded import scenario
 from test_world import act
@@ -49,6 +51,32 @@ def inspect_then_wait(world):
     result = act(world, "village_wait_event")
     assert result["code"] == "EVENT_WAIT_STARTED", result
     return world.state.village.residents["rowan"].fallback.wait
+
+
+def test_current_tasks_skips_order_not_yet_known_to_buyer(tmp_path):
+    world = make_world(tmp_path)
+    buyer = world.bind("finn", "session-finn")
+    state = world.state.village
+    state.communication = VillageCommunicationState(config=VillageCommunicationConfig())
+    order = VillageSupplierOrder(
+        id="order-1", request_key="notice:notice-1", buyer="finn", supplier="rowan",
+        source="woods", destination="riverbank", product="logs", quantity=1,
+        price=1, deadline=state.minute + 60, required_fresh_until=state.minute + 60,
+        created_at=state.minute, status="accepted", coordination_notice_id="notice-1")
+    state.economy.orders[order.id] = order
+    notice = NoticeVersion(
+        id="notice-1", version=1, author="finn", created_at=state.minute,
+        updated_at=state.minute, terms=NoticeTerms(
+            type="supply_request", subject="logs", description="Need logs",
+            recipients=["rowan"]))
+    state.communication.knowledge.setdefault("finn", {})[notice.id] = NoticeKnowledge(
+        snapshot=notice, heard_at=state.minute, source_type="author")
+
+    assert not any(item["task"] == order.id for items in village_fallback.current_tasks(buyer).values()
+                   for item in items)
+    state.communication.knowledge["finn"][notice.id].snapshot.order_snapshot = order.model_dump(mode="json")
+    assert any(item["task"] == order.id and item["status"] == "accepted"
+               for item in village_fallback.current_tasks(buyer)["commitments"])
 
 
 def test_finn_preservation_requires_funded_physical_log_and_uncommitted_fish(tmp_path):

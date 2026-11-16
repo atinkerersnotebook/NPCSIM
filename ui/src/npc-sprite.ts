@@ -1,7 +1,31 @@
 import { escape } from "./html.ts";
 
-const torvinImage = new URL("./assets/torvin.png", import.meta.url).href;
-const torvinPortrait = new URL("./assets/torvin-portrait.png", import.meta.url).href;
+const suppliedArt: Record<string, { head: string; portrait: string }> = {
+  torvin: { head: new URL("./assets/torvin-head.png", import.meta.url).href,
+    portrait: new URL("./assets/torvin-torso.png", import.meta.url).href },
+  bren: { head: new URL("./assets/bren-head.png", import.meta.url).href,
+    portrait: new URL("./assets/bren-torso.png", import.meta.url).href },
+  mara: { head: new URL("./assets/mara-head.png", import.meta.url).href,
+    portrait: new URL("./assets/mara-torso.png", import.meta.url).href },
+  elsie: { head: new URL("./assets/elsie-head.png", import.meta.url).href,
+    portrait: new URL("./assets/elsie-torso.png", import.meta.url).href },
+  hobb: { head: new URL("./assets/hobb-head.png", import.meta.url).href,
+    portrait: new URL("./assets/hobb-torso.png", import.meta.url).href },
+  jory: { head: new URL("./assets/jory-head.png", import.meta.url).href,
+    portrait: new URL("./assets/jory-torso.png", import.meta.url).href },
+  ada: { head: new URL("./assets/ada-head.png", import.meta.url).href,
+    portrait: new URL("./assets/ada-torso.png", import.meta.url).href },
+  nella: { head: new URL("./assets/nella-head.png", import.meta.url).href,
+    portrait: new URL("./assets/nella-torso.png", import.meta.url).href },
+  rowan: { head: new URL("./assets/rowan-head.png", import.meta.url).href,
+    portrait: new URL("./assets/rowan-torso.png", import.meta.url).href },
+  garrick: { head: new URL("./assets/garrick-head.png", import.meta.url).href,
+    portrait: new URL("./assets/garrick-torso.png", import.meta.url).href },
+  iona: { head: new URL("./assets/iona-head.png", import.meta.url).href,
+    portrait: new URL("./assets/iona-torso.png", import.meta.url).href },
+  finn: { head: new URL("./assets/finn-head.png", import.meta.url).href,
+    portrait: new URL("./assets/finn-torso.png", import.meta.url).href }
+};
 
 type Palette = { hair: string; coat: string; trim: string; skin: string; accessory: string; style: number };
 
@@ -38,8 +62,9 @@ function tint(color: string, toward: string, fraction: number): string {
 }
 
 export function npcSprite(id: string): string {
-  if (id === "torvin") {
-    return `<img class="npc-sprite npc-sprite-image" src="${torvinImage}" alt="" aria-hidden="true" data-sprite="torvin">`;
+  const head = suppliedArt[id]?.head;
+  if (head) {
+    return `<img class="npc-sprite npc-sprite-image" src="${head}" alt="" aria-hidden="true" data-sprite="${escape(id)}">`;
   }
   const { hair, coat, trim, skin, accessory, style } = paletteFor(id);
   const outline = "#292832";
@@ -86,8 +111,9 @@ export function npcSprite(id: string): string {
 }
 
 export function npcPortrait(id: string): string {
-  if (id === "torvin") {
-    return `<img class="npc-portrait npc-portrait-image" src="${torvinPortrait}" alt="" aria-hidden="true" data-portrait="torvin">`;
+  const portrait = suppliedArt[id]?.portrait;
+  if (portrait) {
+    return `<img class="npc-portrait npc-portrait-image" src="${portrait}" alt="" aria-hidden="true" data-portrait="${escape(id)}">`;
   }
   const { hair, coat, trim, skin, accessory, style } = paletteFor(id);
   const outline = "#292832";

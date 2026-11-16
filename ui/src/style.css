@@ -46,8 +46,9 @@
 .npc-sprite { width: 40px; height: 60px; }
 .town-map-actor .npc-sprite { width: 24px; height: 36px; }
 .npc-portrait { width: 80px; height: 96px; }
-.npc-portrait-image { height: 120px; object-fit: cover; object-position: center 38%; border: 2px solid #718378; background: #263b3b; box-sizing: border-box; }
+.npc-portrait-image { height: 120px; object-fit: contain; border: 2px solid #718378; background: #263b3b; box-sizing: border-box; }
 .npc-sprite-image { object-fit: contain; border-radius: 2px; }
+.town-map-actor .npc-sprite-image { width: 32px; height: 32px; }
 .town-map-selection .npc-portrait { width: 60px; height: 72px; }
 .town-map-selection .npc-portrait-image { height: 90px; }
 .monitor-agent h3, .town-map-selection h3 { display: flex; align-items: center; gap: 8px; }

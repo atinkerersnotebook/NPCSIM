@@ -184,7 +184,7 @@ def current_tasks(world: "World") -> dict[str, list[dict[str, Any]]]:
             status = order.status
             if village_communication.enabled(world) and order.coordination_notice_id:
                 memory = state.communication.knowledge.get(world.actor_id, {}).get(order.coordination_notice_id)
-                if memory is None or memory.snapshot.order_snapshot is None:
+                if memory is None or not memory.snapshot.order_snapshot:
                     continue
                 status = memory.snapshot.order_snapshot["status"]
             if status in {"fulfilled", "failed", "cancelled", "rejected", "expired", "declined"} and order.deadline // 1440 < day:

@@ -129,10 +129,14 @@ test("each resident has distinct artwork across the map and world view", () => {
   }
   assert.match(townMapMarkup(state, monitoredAgents(state), { selectedActorId: ids[0] }),
     new RegExp(`aria-label="Selected character"[\\s\\S]*?data-portrait="${ids[0]}"`));
-  assert.match(npcPortrait("torvin"), /<img class="npc-portrait npc-portrait-image" src="[^"]*torvin-portrait\.png" alt="" aria-hidden="true"/);
-  assert.match(npcSprite("torvin"), /<img class="npc-sprite npc-sprite-image" src="[^"]*torvin\.png" alt="" aria-hidden="true"/);
-  assert.match(npcPortrait("bren"), /viewBox="0 0 40 48"/);
-  assert.match(npcSprite("bren"), /viewBox="0 0 20 30"/);
+  assert.match(npcPortrait("torvin"), /<img class="npc-portrait npc-portrait-image" src="[^"]*torvin-torso\.png" alt="" aria-hidden="true"/);
+  assert.match(npcSprite("torvin"), /<img class="npc-sprite npc-sprite-image" src="[^"]*torvin-head\.png" alt="" aria-hidden="true"/);
+  for (const id of ["bren", "mara", "elsie", "hobb", "jory", "ada", "nella", "rowan", "garrick", "iona", "finn"]) {
+    assert.match(npcPortrait(id), new RegExp(`src="[^"]*${id}-torso\\.png"`));
+    assert.match(npcSprite(id), new RegExp(`src="[^"]*${id}-head\\.png"`));
+  }
+  assert.match(npcPortrait("visitor"), /viewBox="0 0 40 48"/);
+  assert.match(npcSprite("visitor"), /viewBox="0 0 20 30"/);
   assert.match(npcSprite('<img src=x>'), /data-sprite="&lt;img src=x&gt;"/);
   assert.match(npcPortrait('<img src=x>'), /data-portrait="&lt;img src=x&gt;"/);
   assert.ok(!npcSprite('<img src=x>').includes('<img'));

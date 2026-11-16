@@ -651,6 +651,10 @@ class Controller:
                      and "visitors.0.stock" in self.run.get("reason", "")
                      and "visitors.0.coins" in self.run.get("reason", "")))
         )
+        actor_selection_recovery = (
+            previous_status == "error"
+            and self.run.get("reason") ==
+            "MCP tool world_select_actor failed: Error executing tool world_select_actor: 'status'")
         premature = (previous_status == "succeeded" and analysis.get("status") == "completed"
                      and analysis.get("verdict") == "fail")
         last_ruling = next((event["payload"] for event in reversed(self.events.events)
@@ -660,7 +664,8 @@ class Controller:
                                  and last_ruling.get("source") == "ai"
                                  and last_ruling.get("verdict") == "defeat")
         if self.run["goal"]["type"] != "village_restored" or not (
-                premature or timeout_recovery or scheduler_recovery or daily_defeat_recovery):
+                premature or timeout_recovery or scheduler_recovery or actor_selection_recovery
+                or daily_defeat_recovery):
             raise ValueError("Only a prematurely completed village adventure, a recoverable daily-village AI defeat, "
                              "or a confirmed recoverable world error can be reopened.")
         config = AppConfig.model_validate(self.run["config"]).world
@@ -669,13 +674,27 @@ class Controller:
         retry_actor = None
         stop_at_minute = None
         recovered_action = None
-        if timeout_recovery or scheduler_recovery or request.until_midnight:
+        if timeout_recovery or scheduler_recovery or actor_selection_recovery or request.until_midnight:
             state_path = self.data / "worlds" / self.run["world_id"] / "world-state.json"
             saved_world = WorldState.model_validate(read_json(state_path))
             if saved_world.world_id != self.run["world_id"] or saved_world.village is None:
                 raise ValueError("The saved village identity does not match this adventure.")
             if request.until_midnight:
                 stop_at_minute = (saved_world.village.minute // 1440 + 1) * 1440
+            if actor_selection_recovery:
+                results = {event["payload"]["request_id"] for event in self.events.events
+                           if event["kind"] == "action_result"}
+                pending = any(event["payload"]["request_id"] not in results for event in self.events.events
+                              if event["kind"] == "action_request")
+                last_action = next((event for event in reversed(self.events.events)
+                                    if event["kind"] == "action_result"), None)
+                retry_actor = saved_world.village.last_scheduled_actor
+                if (pending or last_action is None or last_action["cycle"] != self.run["cycles"]
+                        or last_action["actor_id"] != self.run["actor_id"]
+                        or saved_world.village.free_turn_actor is not None
+                        or retry_actor not in self.agents
+                        or retry_actor == self.run["actor_id"]):
+                    raise ValueError("The failed actor selection is not at a confirmed durable turn boundary.")
             if scheduler_recovery:
                 from npc_sim import village_turns
                 from npc_sim.world import World
@@ -772,7 +791,7 @@ class Controller:
                 "request_id": event["payload"]["request_id"], "request_event_id": event["id"],
                 "source": "durable_world_retry_history", "action_replayed": False})
         self._reopen_attempt("Saved village recovered. Continue when ready."
-                             if timeout_recovery or scheduler_recovery else
+                             if timeout_recovery or scheduler_recovery or actor_selection_recovery else
                              "Daily routines are unfinished. Continue when ready.", reset_achieved=True)
         self.run["verification"] = verification
         if stop_at_minute is not None:

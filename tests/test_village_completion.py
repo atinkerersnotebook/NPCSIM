@@ -176,6 +176,37 @@ async def test_reopen_recoverable_daily_ai_defeat_preserves_progress(configurati
 
 
 @pytest.mark.asyncio
+async def test_reopen_failed_actor_selection_retries_confirmed_next_actor(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.proxy = TestProxy(controller.proxy, [("village_wait", {"minutes": 5})])
+    await controller.start_worker()
+    try:
+        await controller.command("start", {"scenario_id": "millhaven-living"})
+        await controller.command("step")
+        last_action = next(event for event in reversed(controller.events.events)
+                           if event["kind"] == "action_result")
+        assert last_action["actor_id"] == controller.run["actor_id"]
+        retry_actor = next(actor for actor in controller.agents if actor != controller.run["actor_id"])
+        state_path = data / "worlds" / controller.run["world_id"] / "world-state.json"
+        saved = read_json(state_path)
+        saved["village"]["last_scheduled_actor"] = retry_actor
+        write_json(state_path, saved)
+        reason = "MCP tool world_select_actor failed: Error executing tool world_select_actor: 'status'"
+        controller.finish("error", reason)
+        before = copy.deepcopy(controller.run)
+        await controller.shutdown()
+        controller = Controller(ROOT, data, config)
+        await controller.start_worker()
+        await controller.command("reopen", {"run_id": before["id"]})
+        assert controller.run["status"] == "paused"
+        assert controller.run["pending_actor_id"] == retry_actor
+        assert controller.run["actions"] == before["actions"]
+    finally:
+        await controller.shutdown(preserve_paused=True)
+
+
+@pytest.mark.asyncio
 async def test_reopen_does_not_override_authoritative_world_defeat(configuration):
     data, config = configuration
     controller = Controller(ROOT, data, config)
