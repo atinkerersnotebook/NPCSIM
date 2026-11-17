@@ -15,7 +15,7 @@ from npc_sim import (
     village_extensions, village_goods as goods, village_life, village_services,
 )
 from npc_sim.living_village import build_scenario
-from npc_sim.models import Entity, Scenario, VillageCommittedWork, VillageDayPolicy, VillageEconomyConfig, VillageStockLot, WorldState
+from npc_sim.models import Entity, Scenario, VillageCommittedWork, VillageCrewSession, VillageDayPolicy, VillageEconomyConfig, VillageStockLot, WorldState
 from npc_sim.prompt_context import observation_context
 from npc_sim.storage import read_json
 from npc_sim.village_communication_models import VillageCommunicationConfig
@@ -1524,6 +1524,94 @@ def test_expired_mill_appointment_requires_new_confirmation_even_when_equipped(w
         ready(world, world.state.village.minute + 5)
         assert village_ai.apply(member, "village_project", {"project": "repair_mill"})[0] == "APPLIED"
     assert world.state.village.repaired
+
+
+def test_mill_retry_after_missed_window_without_notice_tick(world):
+    lead = actor(world, world.scenario.village.carpenter, "village-square")
+    partner = actor(world, world.scenario.village.miller, "village-square")
+    ready(world)
+    old = post(lead, {"type": "meeting", "subject": "repair_mill", "description": "Morning repair",
+                      "recipients": [partner.actor_id], "project": "repair_mill",
+                      "destination": world.scenario.village.mill, "due_at": 540})
+    read(partner)
+    respond(partner, old)
+    ready(world, 610)  # The crew missed 10:00; no notice advance ran between actions.
+    assert comm.project_blocker(lead, "repair_mill") is not None
+    assert comm.confirmed_project_plan(lead, "repair_mill") is not None
+    result = comm.apply(lead, "village_schedule_crew", {
+        "project": "repair_mill", "earliest_start": 650,
+        "participant_ids": [lead.actor_id, partner.actor_id]})
+    assert result[:2] == ("APPLIED", "NOTICE_POSTED"), result
+    replacement = next(reversed(world.state.village.communication.notices))
+    assert latest(world, old).status == "expired"
+    assert latest(world, replacement).supersedes_notice_id == old
+    assert latest(world, replacement).appointment.accepted == [lead.actor_id]
+    assert comm.project_blocker(lead, "repair_mill") is not None
+    retry = comm.apply(lead, "village_schedule_crew", {
+        "project": "repair_mill", "earliest_start": 700,
+        "participant_ids": [lead.actor_id, partner.actor_id]})
+    assert retry[1] == "EXISTING_NEED"
+    assert len(world.state.village.communication.notices) == 2
+
+
+def test_mill_open_accepted_booking_needs_cancellation_not_duplicate(world):
+    lead = actor(world, world.scenario.village.carpenter, "village-square")
+    partner = actor(world, world.scenario.village.miller, "village-square")
+    ready(world)
+    old = post(lead, {"type": "meeting", "subject": "repair_mill", "description": "Repair",
+                      "recipients": [partner.actor_id], "project": "repair_mill",
+                      "destination": world.scenario.village.mill, "due_at": 650})
+    read(partner)
+    respond(partner, old)
+    ready(world, 600)
+    result = comm.apply(lead, "village_schedule_crew", {
+        "project": "repair_mill", "earliest_start": 700,
+        "participant_ids": [lead.actor_id, partner.actor_id]})
+    assert result[:2] == ("APPLIED", "EXISTING_NEED"), result
+    assert "cancel" in result[2].lower()
+    assert len(world.state.village.communication.notices) == 1
+
+
+def test_mill_open_proposal_requires_partner_consent_and_real_channel(world):
+    lead = actor(world, world.scenario.village.carpenter, "village-square")
+    partner = actor(world, world.scenario.village.miller, "village-square")
+    ready(world)
+    old = post(lead, {"type": "meeting", "subject": "repair_mill", "description": "Repair",
+                      "recipients": [partner.actor_id], "project": "repair_mill",
+                      "destination": world.scenario.village.mill, "due_at": 650})
+    ready(world, 600)
+    assert "receive and accept" in comm.project_blocker(lead, "repair_mill")
+    result = comm.apply(lead, "village_schedule_crew", {
+        "project": "repair_mill", "earliest_start": 700,
+        "participant_ids": [lead.actor_id, partner.actor_id]})
+    assert result[1] == "EXISTING_NEED"
+    assert len(world.state.village.communication.notices) == 1
+    partner.actor.location_id = "watermill"
+    assert comm.apply(partner, "village_respond_to_request", {
+        "request_id": old, "response": "accept"})[0] == "REJECTED"
+    assert latest(world, old).appointment.accepted == [lead.actor_id]
+    partner.actor.location_id = "village-square"
+    read(partner)
+    ready(world)
+    assert comm.apply(partner, "village_respond_to_request", {
+        "request_id": old, "response": "accept"})[0] == "APPLIED"
+    assert latest(world, old).appointment.status == "confirmed"
+
+
+def test_active_mill_crew_cannot_be_rebooked_after_original_window(world):
+    lead, partner, old = meeting(world, "repair_mill")
+    plan = latest(world, old).appointment
+    world.state.village.crew_sessions["repair_mill"] = VillageCrewSession(
+        appointment_id=plan.id, project="repair_mill", workers=plan.members,
+        site=plan.place, supplies=[], starts_at=540, work_window_end=plan.end_at)
+    ready(world, 610)
+    result = comm.apply(lead, "village_schedule_crew", {
+        "project": "repair_mill", "earliest_start": 650,
+        "participant_ids": [lead.actor_id, partner.actor_id]})
+    assert result[:2] == ("REJECTED", "COMMUNICATION_INVALID"), result
+    assert "actively working" in result[2]
+    assert latest(world, old).status == "accepted"
+    assert len(world.state.village.communication.notices) == 1
 
 
 def test_work_continues_while_waiting_and_failed_contacts_deduplicate(world):

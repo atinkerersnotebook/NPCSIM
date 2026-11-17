@@ -12,7 +12,7 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
     if scenario.village is None or not scenario.village.expanded_rules:
         raise ValueError("The living village requires an expanded timed village")
     scenario.id = "millhaven-living"
-    scenario.title = "Millhaven Living - Work, Friends and Visitors"
+    scenario.title = "Millhaven III - Work, Friends and Visitors"
     config = scenario.village
     for rid, resident in config.residents.items():
         wake = 330 if rid == "elsie" else 420 if resident.wake_minute == 480 else resident.wake_minute

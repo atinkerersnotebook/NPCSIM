@@ -611,7 +611,7 @@ def meal_readiness(world: "World") -> list[dict[str, Any]]:
     policy = config(world)
     if policy is None:
         return []
-    from npc_sim import village_firewood
+    from npc_sim import village_firewood, village_life
     base, state = village.context(world)
     inn = base.residents[policy.innkeeper].work
     forecasts = []
@@ -628,11 +628,15 @@ def meal_readiness(world: "World") -> list[dict[str, Any]]:
         missing_inputs: set[str] = set()
         for name, portions in plan["unmet_recipe_portions"].items():
             recipe = policy.recipes[name]
-            possible = min((max(0, usable_stock(world, inn, product, due) - spent.get(product, 0)) // quantity
+            possible = min((max(0, (village_life.supper_bread_available(world, due)
+                                    if product == "bread" and plan["id"].endswith(":supper")
+                                    else usable_stock(world, inn, product, due)) - spent.get(product, 0)) // quantity
                             for product, quantity in recipe.inputs.items()), default=0)
             if possible < ceil(portions / recipe.portions):
                 missing_inputs.update(product for product, quantity in recipe.inputs.items()
-                                      if max(0, usable_stock(world, inn, product, due)
+                                      if max(0, (village_life.supper_bread_available(world, due)
+                                                 if product == "bread" and plan["id"].endswith(":supper")
+                                                 else usable_stock(world, inn, product, due))
                                              - spent.get(product, 0)) // quantity < ceil(portions / recipe.portions))
             if fuel_needed:
                 possible = min(possible, max(0, usable_stock(world, inn, "firewood", due)

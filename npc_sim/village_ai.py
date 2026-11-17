@@ -98,6 +98,11 @@ def observation(world: "World") -> dict[str, Any]:
                   +
                   "Both named project partners must be present and each must contribute village_project actions. "
                   "Gather the portable supplies at the work site or carry them there. "
+                  "For a broken mill, schedule the real 60-minute crew window while both partners can respond and "
+                  "work before closing; bring the plank, beam and hammer. An open proposal needs the other worker's "
+                  "physical acceptance; an accepted booking needs both workers at the site for confirmation. "
+                  "Do not duplicate an open booking: cancel a missed plan through a real channel or reschedule "
+                  "after expiry, then obtain fresh consent. A posted notice is not completed repair work. "
                   "village_observe checks local tools; village_ask shares only the target's own knowledge. "
                   + ("Read the square chronicle to learn its lessons; unread entries are not your knowledge. "
                      "Share a personally read lesson only face to face. Old lessons may be stale. "

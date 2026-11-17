@@ -1,6 +1,7 @@
 import pytest
 
 from npc_sim import village, village_fallback, village_goods, village_life
+from npc_sim.models import VillageStockLot
 from npc_sim.world import World
 from test_village_expanded import scenario
 from test_world import act
@@ -188,12 +189,13 @@ def test_meal_cooking_outranks_optional_research_while_feasible(cast):
 
 def test_new_stock_recalculates_shortfall_without_phantom_portions(cast):
     world = cast["elsie"]
-    world.state.village.stocks["tavern"]["bread"] = 3
+    village_goods.put(world, "tavern", "bread", 3, lots=[VillageStockLot(
+        quantity=3, produced_at=world.state.village.minute, expires_at=1500)])
     plan = village_life.meal_plan(world)
     assert plan["prepared"] == 12
     assert plan["shortfall"] == 0
     assert len(plan["reserved"]) == 12
-    world.state.village.stocks["tavern"]["bread"] = 0
+    village_goods.take(world, "tavern", "bread", 3)
     assert village_life.meal_plan(world)["shortfall"] == 3
 
 

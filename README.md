@@ -130,7 +130,7 @@ The map uses a bundled local image; no external mapping service is required.
 Iona's Herbal Workshop is a separate walkable home and workplace beside the
 cottages in new Millhaven adventures; existing saves retain their frozen map.
 
-Select **Millhaven Living - Resilient Village** (`millhaven-resilient`) for the supplied
+Select **Millhaven IV - Resilient Village** (`millhaven-resilient`) for the supplied
 updated map and a separate living-village setup. It adds a walkable communal depot,
 physical woodsheds, a farm cistern and handcart as visible fixtures, plus assigned
 bridge, road, millrace and fence upkeep. The depot starts empty; fuel remains limited
@@ -172,7 +172,7 @@ physical shortages from scheduling failures. The seven-day release gate stays
 open, and the decorative cistern is not a water service.
 Existing `millhaven-living` runs and their frozen scenarios are unchanged.
 
-For both sets of features in one new adventure, select **Millhaven - Complete
+For both sets of features in one new adventure, select **Millhaven VI - Complete
 Living Village** (`millhaven-complete`). It uses the resilient village's physical
 depot, feed store, maintenance and purposeful work together with the remembering
 village's inherited histories, square chronicle and optional successor handoffs.
@@ -181,6 +181,20 @@ start a new `millhaven-complete` adventure with that save's `generation_save_id`
 handoffs cannot import a save from a different scenario. Existing adventures
 keep their frozen scenario, and the unverified autonomous depot and multi-day
 feed-store limitations above still apply.
+Verified research discoveries and their readable recipes also carry into an
+explicit same-scenario generation handoff when research is enabled in both
+generations. Unfinished experiments, work in progress, physical goods and
+personal recipe knowledge do not carry over. Successors can read inherited
+discoveries at their actual sites or learn the recipes in person; production
+still requires the right skill, equipment, ingredients and work time. Separate
+worlds and saved episodes are not automatically merged into a common catalog.
+In the local data directory, verified Millhaven discoveries are also archived
+across worlds. Starting a new research-enabled Millhaven world imports the
+archived recipes; existing world snapshots are backfilled on startup. A recipe
+still has to be read at its site before a resident knows it, and missing tools
+must be supplied before it can be produced. This local archive is stored in
+`data\research-archive.sqlite3`; back up that file or the original world
+snapshots when moving installations. Non-Millhaven worlds do not import it.
 
 ### Named episode save points
 
@@ -253,7 +267,7 @@ the site may begin immediately. Nella's personal wagon readiness lists only
 funded, confirmed and loadable pickups; a route is not started for an empty
 or unfunded circuit.
 
-**Millhaven - A Village That Remembers** (`millhaven-generations`) is an opt-in
+**Millhaven V - A Village That Remembers** (`millhaven-generations`) is an opt-in
 scenario with inherited family histories and obligations for the twelve AI
 residents. The square's readable chronicle records significant mill production,
 trade, successes and setbacks across days. Only residents who read it learn its
@@ -313,7 +327,7 @@ temporary visitors, and bounded merchant imports/exports. Existing scenarios
 and frozen adventures keep their previous behavior.
 
 Generate the configured living variant before starting a backend with the new
-code, then select **Millhaven Living - Work, Friends and Visitors** for a new
+code, then select **Millhaven III - Work, Friends and Visitors** for a new
 adventure:
 
 ```powershell
@@ -1048,7 +1062,7 @@ is unchanged; this is a separate, explicitly operator-approved channel.
 
 ### Millhaven: living-village adventure
 
-Choose **Millhaven - A Village That Carries On**, then **New adventure** and
+Choose **Millhaven I - A Village That Carries On**, then **New adventure** and
 **Play**. The visiting agent (Avery by default) cooperates with **12 persistent
 residents**, across **15 connected places**, with **53 tracked physical objects**
 and 12 occupations. The village panel shows game time, nearby residents, local
@@ -1144,7 +1158,7 @@ demand and in the full JSON export. Reconnecting does not resend history already
 loaded by the page. Unchanged world files are cached for inspection, and unchanged
 snapshots are not repeatedly sent to the browser.
 
-Choose **Millhaven Expanded - Twelve Lives**, then **New adventure**. This is a
+Choose **Millhaven II - Twelve Lives**, then **New adventure**. This is a
 separate scenario; the original visiting-helper adventure is unchanged. Torvin,
 Bren, Mara, Elsie, Hobb, Jory, Ada, Nella, Rowan, Garrick, Iona and Finn are all real
 cast members, with separate AI turns, bodies, inventories, private observations,

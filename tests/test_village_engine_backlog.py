@@ -264,6 +264,7 @@ def test_living_scenario_enables_every_system_without_changing_legacy(tmp_path):
     value = build_scenario(base)
     assert base.model_dump(mode="json") == before
     assert value.id == "millhaven-living"
+    assert value.title == "Millhaven III - Work, Friends and Visitors"
     assert value.village.breakfast and value.village.event_driven_waits
     assert value.village.economy.meal_price == 2
     assert value.village.economy.subsidy_per_meal == 0

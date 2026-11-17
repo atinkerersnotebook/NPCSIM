@@ -479,6 +479,13 @@ def _intent_request(world: "World", action: str, request: Any) -> tuple[str, str
                                 recipients=[rid for rid in crew if rid != actor], project=project,
                                 destination=site, due_at=start)
         _validate_terms(world, terms, actor)
+        if terms.type == "meeting":
+            session = world.state.village.crew_sessions.get(terms.project)
+            if session is not None and session.status == "active":
+                raise ValueError("A crew is already actively working this project; finish that session first")
+            for history in state.notices.values():
+                if history[-1].terms.project == terms.project:
+                    _expire_missed_appointment(world, history[-1])
         previous = next((history[-1] for history in state.notices.values()
                          if history[-1].author == actor and history[-1].terms == terms
                          and history[-1].status not in TERMINAL), None)
@@ -488,6 +495,10 @@ def _intent_request(world: "World", action: str, request: Any) -> tuple[str, str
                           if history[-1].author == actor and history[-1].status not in TERMINAL
                           and _need_key(actor, history[-1].terms) == _need_key(actor, terms)), None)
         if duplicate:
+            if duplicate.appointment and duplicate.status == "accepted":
+                return "EXISTING_NEED", (f"Open accepted booking {duplicate.id}; gather both accepting workers "
+                                         "at the site for confirmation, or cancel it through a physical channel "
+                                         "before scheduling a replacement.")
             fixture = next((fixture for fixture, papers in state.placements.items()
                             if papers.get(duplicate.id) == duplicate.version
                             and world.state.entities[fixture].location == world.actor.location_id), None)
@@ -681,6 +692,13 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
         terms = _priced_terms(world, request.notice)
         _validate_terms(world, terms, actor)
         fixture = _channel(world, request, terms, actor)
+        if terms.type == "meeting":
+            session = world.state.village.crew_sessions.get(terms.project)
+            if session is not None and session.status == "active":
+                raise ValueError("A crew is already actively working this project; finish that session first")
+            for history in state.notices.values():
+                if history[-1].terms.project == terms.project:
+                    _expire_missed_appointment(world, history[-1])
         previous = [versions[-1] for versions in state.notices.values()
                     if _need_key(versions[-1].author, versions[-1].terms) == _need_key(actor, terms)]
         if any(notice.status not in TERMINAL for notice in previous):
@@ -1039,6 +1057,16 @@ def project_blocker(world: "World", project: str) -> str | None:
             if village_extensions.blocked_until(world, member) is not None:
                 return "An actual worker is occupied with another physical task"
         return None
+    open_notice = next((history[-1] for history in reversed(list(state.notices.values()))
+                        if history[-1].terms.project == project and history[-1].status not in TERMINAL), None)
+    if open_notice is not None and open_notice.appointment:
+        plan = open_notice.appointment
+        if minute > min(plan.end_at, open_notice.terms.expires_at or plan.end_at):
+            return "The crew missed this window; schedule a new appointment through a physical channel"
+        if plan.status == "proposed":
+            return "The other worker must receive and accept this open appointment through a physical channel before confirmation"
+        if minute < plan.due_at:
+            return "The confirmed crew appointment is not due yet; gather both workers at the site at its due time"
     return "Propose and confirm a real appointment, receive the confirmation, and attend at its due time"
 
 
@@ -1070,6 +1098,22 @@ def sync_order(world: "World", order: Any, event: str, location: str) -> None:
     _emit(world, event, value, listeners=witnesses, include_actor=False)
 
 
+def _expire_missed_appointment(world: "World", notice: NoticeVersion) -> bool:
+    plan = notice.appointment
+    if not plan or notice.status in TERMINAL:
+        return False
+    limit = min(plan.end_at, notice.terms.expires_at) if notice.terms.expires_at is not None else plan.end_at
+    session = world.state.village.crew_sessions.get(plan.project)
+    if (world.state.village.minute <= limit or plan.status == "confirmed" and (
+            _active_project_work(world, plan) or session is not None and session.status == "active"
+            and session.appointment_id == plan.id)):
+        return False
+    value = _new_version(world, notice, status="expired", appointment=plan.model_copy(update={
+        "version": plan.version + 1, "status": "expired"}))
+    _emit(world, "notice_expired", value, include_actor=False)
+    return True
+
+
 def advance(world: "World") -> None:
     if not enabled(world):
         return
@@ -1094,6 +1138,8 @@ def advance(world: "World") -> None:
                                  if village.resident_location(world, rid) == value.appointment.place
                                  and not (village_state.residents[rid].life
                                           and village_state.residents[rid].life.sleeping)])
+                continue
+            if _expire_missed_appointment(world, notice):
                 continue
         limit = (min(notice.appointment.end_at, notice.terms.expires_at)
                  if notice.appointment and notice.terms.expires_at is not None else

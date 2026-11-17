@@ -41,6 +41,18 @@ async def test_generation_handoff_from_saved_midnight_is_explicit_and_reversible
         source = episode_saves.read_save(data, next((data / "saves").glob("*.json")).stem)
         source.world.village.minute = 1440
         source.world.village.legacy.last_day = 1
+        from npc_sim.models import Entity
+        from npc_sim.village_research_models import ResearchProject, ResearchProposal
+        key = "discovery-inherited"
+        proposal = ResearchProposal(title="Seasoned timber braces", description="Prepare real logs for durable braces.",
+                                    skill="forestry", kind="material", inputs={"logs": 1}, duration=60)
+        source.world.village.research.projects[key] = ResearchProject(
+            owner="rowan", location="woods", proposal=proposal, product=key,
+            required_minutes=240, required_successes=3, worked_minutes=240,
+            attempts=4, successes=3, discovered_at=700)
+        source.world.entities[key] = Entity(name=proposal.title, kind="discovery", location="woods",
+                                            description=proposal.description,
+                                            readable_text="Verified material: one log makes one brace.")
         from npc_sim.models import VillageDiaryEntry
         source.world.village.legacy.diaries["rowan"] = [VillageDiaryEntry(
             author="Rowan", written_at=1320,
@@ -55,11 +67,14 @@ async def test_generation_handoff_from_saved_midnight_is_explicit_and_reversible
         next_world = controller.status()["world"]
         assert next_world["village"]["legacy"]["lineage"]["rowan"] == ["Rowan"]
         assert next_world["village"]["legacy"]["handoff"]["save_id"] == save_id
+        assert next_world["village"]["research"]["projects"][key]["proposal"]["title"] == proposal.title
+        assert next_world["entities"][key]["readable_text"] == source.world.entities[key].readable_text
         assert controller.agents["rowan"]["observation"]["village"]["legacy"]["history_pending"] is True
         assert controller.agents["rowan"]["observation"]["village"]["legacy"]["diary"] == []
         assert controller.run["agent_profiles"]["rowan"]["name"] == "Rina Woodward"
         await controller.command("start", {"scenario_id": scenario_id})
         assert controller.status()["world"]["village"]["legacy"]["handoff"] is None
+        assert not controller.status()["world"]["village"]["research"]["projects"]
         assert controller.agents["rowan"]["observation"]["village"]["legacy"]["diary"] == []
     finally:
         await controller.shutdown()

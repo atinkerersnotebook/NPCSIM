@@ -88,6 +88,31 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "570307993a35409ebe8ae3cba2b77fdd",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-17T13:37:58.422858+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: every resident contributed, everyone fed.",
+          "evidence_ids": [
+            "570307993a35409ebe8ae3cba2b77fdd:33340"
+          ]
+        },
+        {
+          "reason": "The required meal check failed: eight residents missed daily meals.",
+          "evidence_ids": [
+            "570307993a35409ebe8ae3cba2b77fdd:33340"
+          ]
+        },
+        {
+          "reason": "The required contribution check failed; Nella and Iona have no recorded role contributions.",
+          "evidence_ids": [
+            "570307993a35409ebe8ae3cba2b77fdd:33340"
+          ]
+        }
+      ]
     }
   ]
 }

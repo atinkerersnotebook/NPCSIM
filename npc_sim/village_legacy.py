@@ -1,5 +1,6 @@
 """Opt-in inherited stories and a physical, persistent village chronicle."""
 
+import copy
 from typing import TYPE_CHECKING, Any
 
 from npc_sim.models import Scenario, WorldState, VillageDiaryEntry, VillageLegacyEntry, VillageLegacyLesson, VillageLegacyState
@@ -406,6 +407,21 @@ def successor_state(source_scenario: Scenario, source: WorldState, target: "Worl
     if old.wagon and old.wagon.driver in {
             rid for rid, family in successors.items() if family.successor}:
         raise ValueError("Park the wagon before its driver retires")
+    old_research, new_research = old.research, new.research
+    discoveries = {key: project for key, project in old_research.projects.items()
+                   if project.discovered_at is not None} if old_research else {}
+    if discoveries and new_research is None:
+        raise ValueError("The successor generation must enable research to inherit discoveries")
+    for key in discoveries:
+        entity = source.entities.get(key)
+        if (entity is None or entity.kind != "discovery" or entity.location != discoveries[key].location
+                or not entity.readable_text or key in target.state.entities
+                or new_research is not None and key in new_research.projects):
+            raise ValueError(f"Invalid inherited discovery: {key}")
+        if (discoveries[key].owner not in target.scenario.village.residents
+                or discoveries[key].location not in target.state.entities
+                or any(tool not in target.state.entities for tool in discoveries[key].proposal.equipment)):
+            raise ValueError(f"Incompatible inherited discovery: {key}")
     new.legacy.chronicle = [entry.model_copy(update={
         "minute": new.minute,
         "origin_world_id": entry.origin_world_id or source.world_id,
@@ -415,6 +431,12 @@ def successor_state(source_scenario: Scenario, source: WorldState, target: "Worl
     new.legacy.recorded_events = 0
     new.legacy.diaries = {rid: [entry.model_copy(deep=True) for entry in old.legacy.diaries.get(rid, [])]
                           for rid in target.scenario.village.residents if old.legacy.diaries.get(rid)}
+    if new_research is not None:
+        for key, project in discoveries.items():
+            new_research.projects[key] = project.model_copy(deep=True, update={
+                "discovered_at": 0, "chunks": [], "trial_materials_consumed": False,
+                "origin_world_id": project.origin_world_id or source.world_id})
+            target.state.entities[key] = copy.deepcopy(source.entities[key])
     for rid, family in successors.items():
         if not family.successor:
             continue

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "id": "millhaven-expanded",
-  "title": "Millhaven Expanded - Twelve Lives",
+  "title": "Millhaven II - Twelve Lives",
   "start_location": "cottages",
   "exit_location": "village-square",
   "goal_type": "village_restored",

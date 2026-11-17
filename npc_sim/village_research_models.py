@@ -44,6 +44,7 @@ class ResearchProject(ResearchModel):
     location: str
     proposal: ResearchProposal
     product: str
+    origin_world_id: str | None = None
     required_minutes: int
     required_successes: int
     worked_minutes: int = 0

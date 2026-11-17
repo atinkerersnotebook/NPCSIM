@@ -2,9 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from npc_sim import village, village_legacy
-from npc_sim.models import Scenario
+from npc_sim import village, village_legacy, village_research
+from npc_sim.models import Entity, Scenario
 from npc_sim.storage import read_json
+from npc_sim.village_research_models import ResearchProject, ResearchProposal
 from npc_sim.world import World
 from test_world import act
 
@@ -111,6 +112,60 @@ def test_explicit_handoff_preserves_only_bounded_family_assets(world, tmp_path):
     unrelated = World(world.scenario, tmp_path / "unrelated.json", "unrelated", "rowan", "unrelated-rowan")
     assert unrelated.state.village.legacy.handoff is None
     assert unrelated.state.village.legacy.current["rowan"] == "Rowan"
+
+
+def test_handoff_archives_only_discoveries_as_readable_recipes(world, tmp_path):
+    state = world.state.village
+    key = "discovery-inherited"
+    unfinished = "discovery-unfinished"
+    proposal = ResearchProposal(title="Seasoned timber braces", description="Prepare real logs for durable braces.",
+                                skill="forestry", kind="material", inputs={"logs": 1},
+                                equipment=[], duration=60)
+    project = ResearchProject(owner="rowan", location="woods", proposal=proposal, product=key,
+                              required_minutes=240, required_successes=3, worked_minutes=240,
+                              successes=3, attempts=4, discovered_at=700)
+    state.research.projects[key] = project
+    state.research.projects[unfinished] = project.model_copy(deep=True, update={
+        "product": unfinished, "discovered_at": None, "worked_minutes": 60, "successes": 0})
+    state.research.known["rowan"] = [key, unfinished]
+    world.state.entities[key] = Entity(name=proposal.title, kind="discovery", location="woods",
+                                       description=proposal.description,
+                                       readable_text="Verified material: one log makes one brace.")
+    state.minute = 1440
+    village_legacy.advance(world)
+    target = World(world.scenario, tmp_path / "next.json", "next", "rowan", "next-rowan")
+    village_legacy.successor_state(world.scenario, world.state, target, "a" * 32)
+    inherited = target.state.village.research
+    assert list(inherited.projects) == [key]
+    assert inherited.projects[key].discovered_at == 0
+    assert inherited.projects[key].chunks == []
+    assert inherited.known == {}
+    assert target.state.entities[key].readable_text == world.state.entities[key].readable_text
+    assert key in village_research.discoveries(target)
+    assert key in village_research.prices(target)
+    assert target.state.village.stocks == target.scenario.village.stocks
+    target.save()
+    restored = World(world.scenario, target.path, "next", "rowan", "next-rowan")
+    assert key in village_research.discoveries(restored)
+    assert restored.state.village.research.known == {}
+    assert village_research.apply(restored, "village_research_make", {"project": key})[1] == "DISCOVERY_NOT_KNOWN"
+    restored.actor.location_id = "woods"
+    restored.actor.read_entities.append(key)
+    village_research.record_action(restored, "read", {"target": key})
+    assert restored.state.village.research.known["rowan"] == [key]
+    assert village_research.apply(restored, "village_research", {"project": key})[1] == "DISCOVERY_REQUIRED"
+    unrelated = World(world.scenario, tmp_path / "unrelated.json", "unrelated", "rowan", "unrelated-rowan")
+    assert key not in unrelated.state.village.research.projects
+    restored.actor.location_id = world.scenario.village.residents["rowan"].home
+    restored.state.village.minute = 1440
+    village_legacy.advance(restored)
+    third_scenario = world.scenario.model_copy(deep=True)
+    third_scenario.village.legacy.families["rowan"].successor = "Rhea Woodward"
+    third = World(third_scenario, tmp_path / "third.json", "third", "rowan", "third-rowan")
+    village_legacy.successor_state(world.scenario, restored.state, third, "b" * 32)
+    assert key in village_research.discoveries(third)
+    assert third.state.entities[key].readable_text == world.state.entities[key].readable_text
+    assert third.state.village.research.known == {}
 
 
 def test_private_diary_survives_reload_and_reaches_only_successor(world, tmp_path):

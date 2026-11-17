@@ -74,9 +74,11 @@ def meal_plan(world: "World", kind: str = "daily", day: int | None = None) -> di
                    else day * 1440 + config.residents[rid].wake_minute + policy.breakfast_delay)
              for rid in diners}
     grace = policy.meal_window
-    stock = state.stocks.get("tavern", {})
-    available = sum(max(0, stock.get(item, 0)) for item in ("meals", "bread")) + min(
-        max(0, stock.get("fish", 0)), max(0, stock.get("tea", 0)))
+    available = (village_economy.usable_stock(world, "tavern", "meals", due or state.minute)
+                 + (supper_bread_available(world, due) if kind == "daily" else
+                    village_economy.usable_stock(world, "tavern", "bread", state.minute))
+                 + min(village_economy.usable_stock(world, "tavern", "fish", due or state.minute),
+                       village_economy.usable_stock(world, "tavern", "tea", due or state.minute)))
     eaten = [rid for rid in diners if (meal := state.residents[rid].life.meals.get(f"{day}:{kind}"))
              and meal.status == "eaten"]
     unfunded = []
@@ -132,6 +134,15 @@ def overnight_breakfast_bread_reserve(world: "World") -> tuple[int, int]:
                    - village_economy.config(world).stock_buffer.get("bread", 0))
     fresh = village_economy.usable_stock(world, "tavern", "bread", breakfast["due"])
     return required, fresh
+
+
+def supper_bread_available(world: "World", use_at: int | None = None) -> int:
+    """Count bread usable at service without spending next breakfast's fresh loaves."""
+    _, state = village.context(world)
+    from npc_sim import village_economy
+    required, fresh = overnight_breakfast_bread_reserve(world)
+    usable = village_economy.usable_stock(world, "tavern", "bread", use_at or state.minute)
+    return max(0, usable - min(required, fresh))
 
 
 def overnight_bread_protected(world: "World") -> bool:
@@ -457,6 +468,10 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
             meal_plan(world)["expected"] - meal_plan(world)["consumed"]):
         return reject("MEAL_UNALLOCATED", "Daytime food cannot spend a reserved supper portion.")
     if meal.kind != "daytime" and in_grace and not meal_allocation(world, rid, meal):
+        if (meal.kind == "daily" and stock.get("bread", 0) > 0
+                and overnight_bread_protected(world) and not stock.get("meals", 0)):
+            return reject("BREAKFAST_BREAD_RESERVED",
+                          "Only bread reserved for tomorrow's breakfast remains; no other food is available.")
         if meal.status == "missed" or state.minute < meal.due:
             return reject("MEAL_UNALLOCATED", "No portion is allocated to this diner yet; try again when food arrives or service begins.")
         miss_meal(world, rid, meal)
@@ -468,7 +483,7 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
             return reject("MEAL_UNAFFORDABLE", "You still cannot afford the tavern meal.")
         miss_meal(world, rid, meal)
         return done("MEAL_MISSED", f"Cannot pay {config.meal_price} coin for the meal; going hungry without consuming food.")
-    choices = ("bread", "meals") if meal.kind == "breakfast" else ("meals", "bread")
+    choices = ("meals", "bread")
     resource = next((name for name in choices if stock.get(name, 0) > 0), None)
     protected_bread = False
     if resource == "bread" and meal.kind != "breakfast":

@@ -947,6 +947,13 @@ class Controller:
                                            initial, generation_save.id)
             initial.save()
             self.run["generation_handoff"] = initial.state.village.legacy.handoff
+        if scenario.village and scenario.village.research and scenario.id.startswith("millhaven-"):
+            from npc_sim import village_research_archive
+            from npc_sim.world import World
+            village_research_archive.backfill(self.data)
+            initial = World(scenario, state_path, world_id, actor_id, session_id)
+            village_research_archive.import_into(self.data, initial)
+            initial.save()
         self.world = WorldClient(world_config, self.root, frozen_scenario, state_path,
                                  world_id, actor_id, session_id)
         await self.world.connect()

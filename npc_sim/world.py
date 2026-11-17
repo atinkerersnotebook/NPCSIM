@@ -116,6 +116,9 @@ class World:
     def save(self) -> None:
         if not self._owner._defer_save:
             self._owner._storage.save(self.state)
+            if self.path.parent.parent.name == "worlds" and self.path.name == "world-state.json":
+                from npc_sim import village_research_archive
+                village_research_archive.record(self.path.parent.parent.parent, self.state)
 
     def get_request(self, identity: str) -> dict[str, Any] | None:
         return self._owner._storage.get_request(self.state, identity)
