@@ -31,6 +31,101 @@ def test_live_event_projection_keeps_original_details_available(monkeypatch):
     assert client.get("/api/events?compact=true&after=1").json()["events"] == []
 
 
+def test_recorded_story_pages_and_resumable_backfill(tmp_path, monkeypatch):
+    from npc_sim.storage import StoryStore, write_json
+    from types import SimpleNamespace
+
+    run_id = "a" * 32
+    directory = tmp_path / "runs" / run_id
+    write_json(directory / "run.json", {"id": run_id, "actor_id": "otter"})
+    observed = {"narrative": "A courtyard.", "self": {"location_id": "yard", "body": {
+        "carrying": {"rule": "item_count", "limit": 2}}}, "visible_entities": []}
+    raw = [("observation", observed, 1439),
+           ("decision", {"action_id": "look", "justification": "I should look."}, 1439),
+           ("action_request", {"action_id": "look", "arguments": {}}, 1439),
+           ("action_result", {"outcome": "REJECTED", "explanation": "Nothing changes.",
+                              "observation": observed}, 1440),
+           ("finished", {"status": "blocked", "reason": "Time ran out."}, 1440)]
+    events = []
+    for index, (kind, payload, minute) in enumerate(raw, 1):
+        event = {"id": f"{run_id}:{index}", "sequence": index, "actor_id": "otter", "cycle": 1,
+                 "kind": kind, "payload": payload, "village_minute": minute}
+        write_json(directory / "events" / f"{index:06}.json", event)
+        events.append(event)
+    monkeypatch.setattr(application, "DATA", tmp_path)
+    monkeypatch.setattr(application.app.state, "controller", SimpleNamespace(run=None), raising=False)
+    client = TestClient(application.app)
+    store = StoryStore(directory, run_id)
+    store.append(events[0])
+    assert store.page()["cursor"] == 1
+    import asyncio
+    asyncio.run(application._backfill_story(store, directory))
+    asyncio.run(application._backfill_story(store, directory))
+    page = client.get(f"/api/story/{run_id}", params={"limit": 1}).json()
+    assert page["backfilling"] is False and page["error"] is None
+    assert page["days"] == [1, 2]
+    paragraphs = []
+    cursor = 0
+    while True:
+        page = client.get(f"/api/story/{run_id}", params={"limit": 1, "after": cursor}).json()
+        paragraphs.extend(page["paragraphs"])
+        if page["next"] is None:
+            break
+        assert page["next"] > cursor
+        cursor = page["next"]
+    assert len({p["id"] for p in paragraphs}) == len(paragraphs)
+    assert [p["sequence"] for p in paragraphs] == [1, 3, 4, 5]
+    assert "I should look" in paragraphs[1]["text"]
+    assert "Nothing changes" in paragraphs[2]["text"]
+    assert client.get(f"/api/story/{run_id}", params={"day": 2}).json()["paragraphs"][0]["sequence"] == 4
+    assert client.get(f"/api/story/{run_id}", params={"limit": 101}).status_code == 422
+
+
+def test_incremental_story_merges_confirmed_action_and_keeps_team_voice(tmp_path):
+    from npc_sim.storage import StoryStore
+    from npc_sim.story import build_narrative
+
+    run_id = "b" * 32
+    initial = {"role": "A scout.", "narrative": "A room.", "self": {"location_id": "room",
+               "body": {"carrying": {"rule": "item_count", "limit": 1}}},
+               "visible_entities": [{"id": "key", "name": "Key", "description": "A brass key."}]}
+    events = []
+    for sequence, (kind, payload) in enumerate([
+        ("observation", initial),
+        ("decision", {"action_id": "take", "justification": "I want the key."}),
+        ("action_request", {"action_id": "take", "arguments": {"target": "key"}}),
+        ("action_result", {"outcome": "APPLIED", "explanation": "You pick up the key.",
+                           "observation": initial}),
+        ("finished", {"status": "succeeded"}),
+    ], 1):
+        events.append({"id": f"{run_id}:{sequence}", "sequence": sequence,
+                       "actor_id": "otter", "cycle": 1, "kind": kind, "payload": payload})
+    store = StoryStore(tmp_path, run_id, team=True)
+    for event in events:
+        store.append(event)
+        store.append(event)
+    actual = store.page()["paragraphs"]
+    expected = build_narrative(events, "otter")
+    assert [paragraph["text"] for paragraph in actual] == [paragraph.text for paragraph in expected]
+    assert store.position() == 5
+    assert StoryStore(tmp_path, run_id).page()["paragraphs"] == actual
+
+
+def test_story_backfill_reports_missing_event_instead_of_silent_empty_page(tmp_path):
+    import asyncio
+    from npc_sim.storage import StoryStore, write_json
+
+    run_id = "c" * 32
+    store = StoryStore(tmp_path, run_id)
+    write_json(tmp_path / "events" / "000002.json", {
+        "id": f"{run_id}:2", "sequence": 2, "actor_id": "otter", "cycle": 1,
+        "kind": "finished", "payload": {"status": "blocked", "reason": "Stopped."},
+    })
+    asyncio.run(application._backfill_story(store, tmp_path))
+    assert store.position() == 0
+    assert "Missing narrative source event" in application._story_errors.pop(run_id)
+
+
 @pytest.mark.asyncio
 async def test_stream_cursor_skips_loaded_history_and_unchanged_snapshots(monkeypatch):
     from types import SimpleNamespace

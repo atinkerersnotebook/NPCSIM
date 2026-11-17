@@ -79,6 +79,28 @@ export async function copyStory(
   await clipboard.writeText(paragraphs.map(paragraph => paragraph.text).join("\n\n"));
 }
 
+export async function copyRecordedPages(
+  load: (after: number) => Promise<{run_id: string; paragraphs: readonly {sequence: number; text: string}[];
+    next: number | null; backfilling: boolean; error: string | null}>,
+  runId: string, clipboard: Pick<Clipboard, "writeText"> | undefined
+): Promise<void> {
+  let after = 0;
+  const paragraphs: {text: string}[] = [];
+  const visited = new Set<number>();
+  for (;;) {
+    const page = await load(after);
+    if (page.run_id !== runId) throw new Error("The adventure changed. Select its story again before copying.");
+    if (page.error) throw new Error(page.error);
+    if (page.backfilling) throw new Error("The recorded story is still being restored. Try again when it finishes.");
+    paragraphs.push(...page.paragraphs);
+    if (page.next === null) break;
+    if (page.next <= after || visited.has(page.next)) throw new Error("Invalid story page cursor.");
+    after = page.next;
+    visited.add(after);
+  }
+  await copyStory(paragraphs, clipboard);
+}
+
 const objectSchema = z.record(z.string(), z.unknown());
 const requestSchema = z.object({
   request_id: z.string(), action_id: z.string(), arguments: objectSchema

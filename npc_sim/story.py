@@ -109,7 +109,8 @@ def intent(action: str, args: dict[str, Any], names: dict[str, str],
                          + (" with " + ", ".join(settings) if settings else "") + ".")
 
 
-def build_narrative(events: list[dict[str, Any]], actor_id: str | None = None) -> list[Paragraph]:
+def build_narrative(events: list[dict[str, Any]], actor_id: str | None = None,
+                    _state: dict[str, Any] | None = None) -> list[Paragraph]:
     if actor_id is None:
         ordered = sorted(events, key=lambda event: event["sequence"])
         actors = dict.fromkeys(event["actor_id"] for event in ordered)
@@ -129,22 +130,28 @@ def build_narrative(events: list[dict[str, Any]], actor_id: str | None = None) -
                 openings.add(opening)
             result.append(paragraph)
         return result
-    team = team_narration(events)
+    team = _state.get("team", False) if _state is not None else team_narration(events)
     actor_name = actor_id.replace("-", " ").replace("_", " ").title()
 
     def voice(text: str) -> str:
         return named_voice(text, actor_name) if team else text
 
     paragraphs: list[Paragraph] = []
-    names: dict[str, str] = {}
-    challenges: dict[str, str] = {}
-    facts: dict[str, dict[str, Any]] = {}
-    decisions: dict[int, dict[str, Any]] = {}
+    names: dict[str, str] = _state.get("names", {}) if _state is not None else {}
+    challenges: dict[str, str] = _state.get("challenges", {}) if _state is not None else {}
+    facts: dict[str, dict[str, Any]] = _state.get("facts", {}) if _state is not None else {}
+    decisions: dict[int, dict[str, Any]] = {int(key): value for key, value in _state.get("decisions", {}).items()} if _state is not None else {}
     seen: set[str] = set()
-    location: str | None = None
-    observed = False
-    pending_cycle: int | None = None
-    pending_reason = ""
+    location: str | None = _state.get("location") if _state is not None else None
+    observed = _state.get("observed", False) if _state is not None else False
+    pending_cycle: int | None = _state.get("pending_cycle") if _state is not None else None
+    pending_reason = _state.get("pending_reason", "") if _state is not None else ""
+    prior_pending = _state.get("pending") if _state is not None else None
+    if prior_pending and events and events[0]["kind"] == "action_result" and events[0]["cycle"] == _state.get("pending_cycle"):
+        paragraphs.append(Paragraph.model_validate(_state["pending"]))
+        prior_pending_text = paragraphs[-1].text
+    else:
+        prior_pending_text = None
 
     def learn(value: dict[str, Any]) -> tuple[list[str], list[str]]:
         discoveries, details = [], []
@@ -195,6 +202,8 @@ def build_narrative(events: list[dict[str, Any]], actor_id: str | None = None) -
             continue
         seen.add(event["id"])
         payload, kind, cycle = event["payload"], event["kind"], event["cycle"]
+        if _state is not None and prior_pending and kind == "action_result" and pending_cycle == cycle:
+            prior_pending = None
         text, prepend = "", False
         if kind == "started":
             objective = payload["goal"]["objective"]
@@ -253,6 +262,12 @@ def build_narrative(events: list[dict[str, Any]], actor_id: str | None = None) -
                     paragraphs[-1].text = readable(pending_reason + text, names)
                 else:
                     paragraphs[-1].text += " " + readable(text, names)
+                if _state is not None:
+                    merged = paragraphs.pop()
+                    if team:
+                        merged.text = voice(merged.text)
+                    _state["merged"] = merged.model_dump()
+                    prior_pending_text = None
                 pending_cycle = None
                 continue
         elif kind == "error":
@@ -271,7 +286,21 @@ def build_narrative(events: list[dict[str, Any]], actor_id: str | None = None) -
                 paragraphs.append(paragraph)
             if kind != "action_request":
                 pending_cycle = None
+    if _state is not None:
+        if pending_cycle is not None and prior_pending_text is not None and paragraphs and paragraphs[-1].id == prior_pending["id"]:
+            pending_cycle = None
+            if paragraphs[-1].text == prior_pending_text:
+                paragraphs.clear()
+        pending = paragraphs.pop() if pending_cycle is not None and paragraphs else None
+        if pending and team and (not prior_pending or pending.id != prior_pending["id"]):
+            pending.text = voice(pending.text)
+        _state.update(names=names, challenges=challenges, facts=facts,
+                      decisions={cycle: value for cycle, value in decisions.items() if cycle >= (events[-1]["cycle"] if events else 0)},
+                      location=location, observed=observed, pending_cycle=pending_cycle if pending else None,
+                      pending_reason=pending_reason if pending else "",
+                      pending=pending.model_dump() if pending else None)
     if team:
         for paragraph in paragraphs:
-            paragraph.text = voice(paragraph.text)
+            if not prior_pending or paragraph.id != prior_pending["id"]:
+                paragraph.text = voice(paragraph.text)
     return paragraphs

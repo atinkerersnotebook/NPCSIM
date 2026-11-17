@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from npc_sim.controller import Controller
 from npc_sim.models import AgentProfile, AppConfig, BudgetExtension, ClockRequest, EpisodeLoadRequest, EpisodeSaveRequest, NeedToggle, ReopenRequest, RunModeRequest, Scenario, StartRequest, VillageConfigurationRequest
-from npc_sim.storage import read_json, write_json
+from npc_sim.storage import StoryStore, read_json, write_json
 from npc_sim.agents import default_profile_id, load_profiles, save_profile, slots
 from npc_sim.dungeon_master import DungeonMasterConfig, load_config as load_dungeon_master
 from npc_sim.interactions import ApprovalRequest, ChatRequest, EditRequest
@@ -37,6 +37,38 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="NPCSIM Admin", lifespan=lifespan)
+_story_backfills: dict[str, asyncio.Task[None]] = {}
+_story_errors: dict[str, str] = {}
+
+
+async def _backfill_story(store: StoryStore, directory: Path) -> None:
+    try:
+        after = await asyncio.to_thread(store.position)
+        for path in sorted((directory / "events").glob("*.json")):
+            sequence = int(path.stem)
+            if sequence <= after:
+                continue
+            if sequence != after + 1:
+                raise ValueError(f"Missing narrative source event after sequence {after}")
+            await asyncio.to_thread(store.append, await asyncio.to_thread(read_json, path))
+            after = sequence
+            if sequence % 100 == 0:
+                await asyncio.sleep(0)
+        _story_errors.pop(store.run_id, None)
+    except Exception as error:
+        LOGGER.exception("Narrative backfill failed for %s", store.run_id)
+        _story_errors[store.run_id] = str(error)
+
+
+def _schedule_story(store: StoryStore, directory: Path, count: int) -> bool:
+    if store.position() >= count:
+        return False
+    task = _story_backfills.get(store.run_id)
+    if task is None or task.done():
+        if store.run_id not in _story_errors:
+            task = asyncio.create_task(_backfill_story(store, directory))
+            _story_backfills[store.run_id] = task
+    return True
 
 
 @app.middleware("http")
@@ -230,9 +262,13 @@ def live_event(event: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.get("/api/events")
-async def events(request: Request, after: int = 0, compact: bool = False):
+async def events(request: Request, after: int = 0, compact: bool = False, limit: int | None = None):
     active = controller(request)
-    recorded = active.events.events[max(0, after):] if active.events else []
+    if limit is not None:
+        if not 1 <= limit <= 500:
+            raise HTTPException(422, "Invalid event page size")
+    recorded = active.events.events if active.events else []
+    recorded = (recorded[after:after + limit] if after > 0 else recorded[-limit:]) if limit else recorded[max(0, after):]
     payload = {"run_id": active.run["id"] if active.run else None,
                "events": [live_event(event) for event in recorded] if compact else recorded}
     return await asyncio.to_thread(JSONResponse, payload)
@@ -297,6 +333,29 @@ async def transcript(request: Request):
 async def history() -> dict[str, Any]:
     runs = [read_json(path) for path in DATA.glob("runs/*/run.json")]
     return {"runs": sorted(runs, key=lambda run: run["created_at"], reverse=True)}
+
+
+@app.get("/api/story/{run_id}")
+async def recorded_story(run_id: str, request: Request, day: int | None = None,
+                         actor: str | None = None, after: int = 0, limit: int = 100) -> dict[str, Any]:
+    if len(run_id) != 32 or any(char not in "0123456789abcdef" for char in run_id):
+        raise HTTPException(400, "Invalid run ID")
+    if limit < 1 or limit > 100 or after < 0 or (day is not None and day < 1):
+        raise HTTPException(422, "Invalid narrative page")
+    directory = DATA / "runs" / run_id
+    if not (directory / "run.json").exists():
+        raise HTTPException(404, "Run not found")
+    run = await asyncio.to_thread(read_json, directory / "run.json")
+    if actor is not None and actor not in (run.get("agents") or {run["actor_id"]: {}}):
+        raise HTTPException(422, "Unknown story actor")
+    store = StoryStore(directory, run_id, team=bool(run.get("agents")))
+    active = controller(request)
+    count = (len(active.events.events) if active.run and active.run["id"] == run_id and active.events
+             else len(list((directory / "events").glob("*.json"))))
+    backfilling = _schedule_story(store, directory, count)
+    page = await asyncio.to_thread(store.page, day=day, actor=actor, after=after, limit=limit)
+    return {**page, "backfilling": backfilling, "total_events": count,
+            "error": _story_errors.get(run_id)}
 
 
 @app.get("/api/saves")

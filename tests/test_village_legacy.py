@@ -170,7 +170,7 @@ def test_handoff_carries_each_role_diary_without_sharing_it(world, tmp_path):
     assert village_legacy.observation(target)["legacy"]["diary"] == []
 
 
-def test_diary_notes_are_bounded_and_not_inherited_without_handoff(world, tmp_path):
+def test_diary_notes_are_complete_and_not_inherited_without_handoff(world, tmp_path):
     state = world.state.village
     assert village_legacy.apply(world, "village_write_diary", {"text": "too short"})[1] == "INVALID_DIARY"
     assert village_legacy.apply(world, "village_write_diary", {
@@ -186,12 +186,183 @@ def test_diary_notes_are_bounded_and_not_inherited_without_handoff(world, tmp_pa
         assert village_legacy.apply(world, "village_write_diary", {
             "text": f"Day {day}: I checked the woodlot and confirmed which logs were available."
         })[1] == "DIARY_WRITTEN"
-    assert len(state.legacy.diaries["rowan"]) == village_legacy.DIARY_LIMIT
-    assert "Day 0" not in state.legacy.diaries["rowan"][0].text
+    assert len(state.legacy.diaries["rowan"]) == 4
+    assert "Day 0" in state.legacy.diaries["rowan"][0].text
     assert state.legacy.diaries["rowan"][0].problems is None
     assert state.legacy.diaries["rowan"][0].suggestions is None
     fresh = World(world.scenario, tmp_path / "fresh.json", "fresh", "rowan", "fresh-rowan")
     assert village_legacy.observation(fresh)["legacy"]["diary"] == []
+
+
+def test_full_public_history_and_private_diary_cross_multiple_generations(world, tmp_path):
+    state = world.state.village
+    state.minute = 480
+    state.residents["rowan"].life.last_woke = 480
+    assert village_legacy.apply(world, "village_write_diary", {
+        "text": "I checked the woodlot and confirmed which logs were available."
+    })[1] == "DIARY_WRITTEN"
+    for index in range(110):
+        village.event(world, "mara", "project_completed", "repair_mill", f"Repair milestone {index}.", "watermill")
+    village_legacy.advance(world)
+    state.minute = 1440
+    village_legacy.advance(world)
+    published = [entry for entry in state.legacy.chronicle if entry.kind == "resident_journal"]
+    assert len(published) == 1
+    assert published[0].text == "I checked the woodlot and confirmed which logs were available."
+    assert published[0].author == "Rowan"
+    assert published[0].origin_minute == 480
+    assert published[0].origin_day == 0
+    assert published[0].journal_id == "legacy:rowan:480"
+    assert published[0].authored is True
+    second = World(world.scenario, tmp_path / "second.json", "second", "rowan", "second-rowan")
+    village_legacy.successor_state(world.scenario, world.state, second, "a" * 32)
+    assert len(second.state.village.legacy.chronicle) >= 113
+    assert second.state.village.legacy.chronicle[3].text.endswith("Repair milestone 0.")
+    second.state.village.residents["rowan"].life.sleeping = False
+    assert village_legacy.observation(second)["legacy"]["public_history"] == []
+    assert village_legacy.apply(second, "village_read_history", {})[1] == "HISTORY_READ"
+    public = village_legacy.observation(second)["legacy"]["public_history"]
+    assert len(public) >= 113
+    assert len(public) < len(second.state.village.legacy.chronicle)
+    assert any("I checked the woodlot" in entry["text"] for entry in public)
+    mara = second.bind("mara", "second-mara")
+    assert village_legacy.observation(mara)["legacy"]["diary"] == []
+    assert "I checked the woodlot" in village_legacy.observation(second)["legacy"]["diary"][0]["text"]
+    second.state.village.minute = 1440
+    village_legacy.advance(second)
+    next_scenario = world.scenario.model_copy(deep=True)
+    next_scenario.village.legacy.families["rowan"].successor = "Talia Woodward"
+    third = World(next_scenario, tmp_path / "third.json", "third", "rowan", "third-rowan")
+    village_legacy.successor_state(world.scenario, second.state, third, "b" * 32)
+    assert len(third.state.village.legacy.chronicle) > len(second.state.village.legacy.chronicle)
+    assert third.state.village.legacy.chronicle[3].text.endswith("Repair milestone 0.")
+    assert third.state.village.legacy.diaries["rowan"][0].origin_world_id == "legacy"
+    third.save()
+    loaded = World(next_scenario, third.path, "third", "rowan", "third-rowan")
+    assert len(loaded.state.village.legacy.chronicle) == len(third.state.village.legacy.chronicle)
+    assert len([entry for entry in loaded.state.village.legacy.chronicle
+                if entry.kind == "resident_journal"]) == 1
+
+
+def test_two_days_publish_24_distinct_authored_journals_once(world, tmp_path):
+    state = world.state.village
+    assert len(world.scenario.village.residents) == 12
+    for day in range(2):
+        state.minute = day * 1440 + 480
+        for rid in world.scenario.village.residents:
+            state.residents[rid].life.last_woke = state.minute
+            actor = world if rid == "rowan" else world.bind(rid, f"journal-{rid}")
+            assert village_legacy.apply(actor, "village_write_diary", {
+                "text": f"Day {day}: I recorded the work I actually did as {rid} today."
+            })[1] == "DIARY_WRITTEN"
+            assert village_legacy.apply(actor, "village_write_diary", {
+                "text": "A duplicate reflection must not be added for this waking day."
+            })[1] == "DIARY_ALREADY_WRITTEN"
+        state.minute = (day + 1) * 1440
+        village_legacy.advance(world)
+        village_legacy.advance(world)
+        world.save()
+        loaded = World(world.scenario, world.path, "legacy", "rowan", "session-rowan")
+        village_legacy.advance(loaded)
+        assert len([entry for entry in loaded.state.village.legacy.chronicle
+                    if entry.kind == "resident_journal"]) == 12 * (day + 1)
+    journals = [entry for entry in state.legacy.chronicle if entry.kind == "resident_journal"]
+    assert len(journals) == 24
+    assert len({entry.journal_id for entry in journals}) == 24
+    assert {entry.source_actor for entry in journals} == set(world.scenario.village.residents)
+    assert {entry.origin_minute for entry in journals} == {480, 1920}
+    assert {entry.origin_day for entry in journals} == {0, 1}
+
+
+def test_published_history_requires_personal_physical_read(world):
+    state = world.state.village
+    state.minute = 480
+    note = "I found the mill needed repairs before taking further orders."
+    assert village_legacy.apply(world, "village_write_diary", {"text": note})[1] == "DIARY_WRITTEN"
+    state.minute = 1440
+    village_legacy.advance(world)
+    mara = world.bind("mara", "mara-session")
+    assert village_legacy.observation(mara)["legacy"]["public_history"] == []
+    assert village_legacy.observation(mara)["legacy"]["diary"] == []
+    assert village_legacy.observation(world)["legacy"]["public_history"] == []
+    assert village_legacy.apply(mara, "village_read_chronicle", {})[1] == "NOT_AT_CHRONICLE"
+    assert village_legacy.observation(mara)["legacy"]["public_history"] == []
+    mara.actor.location_id = "village-square"
+    assert village_legacy.apply(mara, "village_read_chronicle", {})[1] == "CHRONICLE_READ"
+    public = village_legacy.observation(mara)["legacy"]["public_history"]
+    assert len([entry for entry in public if entry["kind"] == "resident_journal"]) == 1
+    assert next(entry for entry in public if entry["kind"] == "resident_journal")["text"] == note
+    assert village_legacy.observation(mara)["legacy"]["diary"] == []
+    assert village_legacy.observation(world)["legacy"]["public_history"] == []
+
+
+def test_visitor_overnight_and_departure_history_has_source_and_is_idempotent(world):
+    from npc_sim.village_events_models import VisitorState
+
+    state = world.state.village
+    assert state.incidents is not None
+    plan = state.incidents.config.templates[0].visitor
+    assert plan is not None
+    visitor = VisitorState(id="test-visitor", incident="test-incident", name="Test Visitor",
+                           plan=plan, location=plan.lodging_location or "tavern",
+                           arrived_at=1000, leave_at=2000, next_step_at=1000, coins=10,
+                           status="present", lodging_days=[0])
+    state.incidents.visitors[visitor.id] = visitor
+    state.minute = 1440
+    village_legacy.advance(world)
+    entries = [item for item in state.legacy.chronicle if item.kind == "visitor_overnight"]
+    assert len(entries) == 1
+    assert entries[0].source_actor == visitor.id
+    assert entries[0].origin_world_id == "legacy"
+    assert entries[0].origin_minute == 1440
+    assert entries[0].authored is False
+    assert "recorded lodging" in entries[0].text
+    village_legacy.advance(world)
+    assert len([item for item in state.legacy.chronicle if item.kind == "visitor_overnight"]) == 1
+    world.save()
+    reloaded = World(world.scenario, world.path, "legacy", "rowan", "session-rowan")
+    village_legacy.advance(reloaded)
+    assert len([item for item in reloaded.state.village.legacy.chronicle
+                if item.kind == "visitor_overnight"]) == 1
+    village.event(world, visitor.id, "visitor_departed", visitor.id,
+                  "Test Visitor physically departed.", visitor.location)
+    village_legacy.advance(world)
+    departed = state.legacy.chronicle[-1]
+    assert departed.kind == "visitor_departed"
+    assert departed.source_actor == visitor.id
+    assert departed.text == "Test Visitor physically departed."
+    assert departed.authored is False
+
+
+def test_trader_history_records_departure_without_inventing_overnight(world):
+    state = world.state.village
+    assert "iron-trader" in world.state.entities
+    village.event(world, "iron-trader", "trader_arrived", "iron", "The iron trader arrived.", "village-square")
+    village.event(world, "iron-trader", "trader_departed", "iron", "The iron trader departed.", "village-square")
+    state.minute = 1440
+    village_legacy.advance(world)
+    entries = [item for item in state.legacy.chronicle if item.source_actor == "iron-trader"]
+    assert [entry.kind for entry in entries] == ["trader_arrived", "trader_departed"]
+    assert entries[-1].text == "The iron trader departed."
+    assert entries[-1].source_event is not None
+
+
+def test_trader_overnight_is_deduplicated_after_replayed_midnight(world):
+    state = world.state.village
+    state.trader_day = 0
+    world.state.entities["iron-trader"].location = "village-square"
+    state.minute = 1440
+    village_legacy.advance(world)
+    assert len([entry for entry in state.legacy.chronicle if entry.kind == "trader_overnight"]) == 1
+    state.legacy.last_day = 0
+    village_legacy.advance(world)
+    assert len([entry for entry in state.legacy.chronicle if entry.kind == "trader_overnight"]) == 1
+    world.save()
+    restored = World(world.scenario, world.path, "legacy", "rowan", "session-rowan")
+    restored.state.village.legacy.last_day = 0
+    village_legacy.advance(restored)
+    assert len([entry for entry in restored.state.village.legacy.chronicle
+                if entry.kind == "trader_overnight"]) == 1
 
 
 def test_sleep_requires_journal_for_each_waking_day(world):

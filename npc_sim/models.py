@@ -450,6 +450,11 @@ class VillageLegacyEntry(StrictModel):
     lesson: Literal["shortage", "delivery", "repair"] | None = None
     origin_world_id: str | None = None
     origin_minute: int | None = Field(default=None, ge=0)
+    source_actor: str | None = None
+    author: str | None = None
+    journal_id: str | None = None
+    authored: bool = False
+    origin_day: int | None = Field(default=None, ge=0)
 
 
 class VillageLegacyLesson(StrictModel):

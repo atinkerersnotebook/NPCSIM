@@ -683,7 +683,7 @@ def meal_delivery_forecast(world: "World") -> list[dict[str, Any]]:
         shortage = max(0, plan["remaining_portions"] - plan["covered_portions"])
         bread = max(0, plan["inputs"].get("bread", 0)
                     - usable_stock(world, inn, "bread", plan["due"]))
-        deadline = plan["due"] - policy.cooking_lead_minutes
+        deadline = _meal_delivery_deadline(world, plan, "bread")
         if not shortage or not bread:
             forecasts.append({"service": plan["id"], "due": plan["due"], "shortfall": shortage,
                               "bread_needed": bread, "delivery_deadline": deadline,
@@ -736,8 +736,8 @@ def meal_delivery_actions(world: "World") -> list[dict[str, Any]]:
     rid, location = world.actor_id, world.actor.location_id
     inn = base.residents[policy.innkeeper].work
     plans = meal_requirements(world)
-    deadlines = [plan["due"] - policy.cooking_lead_minutes for plan in plans
-                 if plan["due"] - policy.cooking_lead_minutes >= state.minute]
+    deadlines = [_meal_delivery_deadline(world, plan, "bread") for plan in plans
+                 if _meal_delivery_deadline(world, plan, "bread") >= state.minute]
     if not deadlines:
         return []
     cutoff = min(deadlines)
@@ -870,6 +870,28 @@ def _allocate(buckets: list[dict[str, Any]], quantity: int, use_at: int) -> tupl
     return taken, confirmed
 
 
+def _service_preparation_at(world: "World", plan: dict[str, Any]) -> int:
+    if plan["id"].endswith(":breakfast"):
+        base = world.scenario.village
+        return plan["due"] // 1440 * 1440 + min(
+            resident.wake_minute + base.breakfast_delay for resident in base.residents.values())
+    return plan["due"]
+
+
+def _meal_delivery_deadline(world: "World", plan: dict[str, Any], product: str) -> int:
+    policy = config(world)
+    deadline = _service_preparation_at(world, plan) - policy.cooking_lead_minutes
+    if plan["id"].endswith(":breakfast") and product == "bread":
+        base = world.scenario.village
+        supplier_id = _supplier(world, "bread", base.residents[policy.innkeeper].work)
+        if supplier_id:
+            previous_day = plan["due"] // 1440 - 1
+            deadline = min(deadline, previous_day * 1440 + min(
+                base.residents[supplier_id].bed_minute,
+                base.residents[policy.innkeeper].bed_minute))
+    return deadline
+
+
 def meal_requirements(world: "World") -> list[dict[str, Any]]:
     policy = config(world)
     if policy is None:
@@ -883,7 +905,7 @@ def meal_requirements(world: "World") -> list[dict[str, Any]]:
     meals = _supply_buckets(world, location, "meals")
     # Open tomorrow's ordering window while suppliers can still prepare and
     # communicate; never treat yesterday's fulfilled order as tomorrow's stock.
-    days = (day, day + 1) if state.minute % 1440 >= 900 else (day,)
+    days = (day, day + 1) if state.minute % 1440 >= 600 else (day,)
     for service_day in days:
         for plan in sorted(policy.meal_plans, key=lambda plan: plan.use_minute):
             due = service_day * 1440 + plan.use_minute
@@ -941,10 +963,10 @@ def meal_supply_forecast(world: "World", *, personal: bool = False) -> list[dict
         shipments.extend(state.wagon.loads)
     for plan in meal_requirements(world):
         due = plan["due"]
-        latest_delivery = due - policy.cooking_lead_minutes
-        latest_request = latest_delivery - policy.delivery_lead_minutes
         inputs = {}
         for product, required in plan["inputs"].items():
+            latest_delivery = _meal_delivery_deadline(world, plan, product)
+            latest_request = latest_delivery - policy.delivery_lead_minutes
             if product not in stock:
                 stock[product] = [{"quantity": lot.quantity, "available_at": state.minute,
                                    "expires_at": lot.expires_at, "confirmed": False}
@@ -999,7 +1021,8 @@ def meal_supply_forecast(world: "World", *, personal: bool = False) -> list[dict
                                            else "SUPPLY_UNCONFIRMED" if missing and possible_total > confirmed_total
                                            else "SUPPLY_NEEDED" if missing else None)}
         result.append({"service": plan["id"], "due": due, "inputs": inputs,
-                       "within_request_window": state.minute <= latest_request})
+                       "within_request_window": all(state.minute <= item["latest_request"]
+                                                    for item in inputs.values())})
     return result
 
 
@@ -1104,7 +1127,13 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
                              or product in {"milk", "eggs"})
                         and state.minute > use_at - policy.cooking_lead_minutes - policy.delivery_lead_minutes):
                     continue
-                deadline = max(state.minute, use_at - lead)
+                breakfast_bread = buyer == policy.innkeeper and key.endswith(":breakfast") and product == "bread"
+                if breakfast_bread:
+                    plan = next(plan for plan in meal_requirements(world) if plan["id"] == key)
+                    if state.minute > _meal_delivery_deadline(world, plan, product) - policy.delivery_lead_minutes:
+                        continue
+                deadline = max(state.minute, _meal_delivery_deadline(world, plan, product)
+                               if breakfast_bread else use_at - lead)
                 if buyer == policy.innkeeper:
                     quantity = min(quantity, budget // (unit_price(world, product) + delivery_fee(world)))
                 if not quantity:
@@ -1481,7 +1510,8 @@ def production_targets(world: "World", location: str, *, personal: bool = False)
     if location == inn:
         plans = meal_requirements(world)
         targets["meals"] = sum(plan["remaining_portions"] for plan in plans
-                               if world.state.village.minute >= plan["due"] - policy.cooking_lead_minutes)
+                               if world.state.village.minute >= _service_preparation_at(world, plan)
+                               - policy.cooking_lead_minutes)
         targets["tea"] = max(targets.get("tea", 0), sum(
             plan["inputs"].get("tea", 0) for plan in plans))
     return targets
@@ -1529,7 +1559,7 @@ def production_batch_limit(world: "World", action: str, *, personal: bool = Fals
             recipe = "fish" if action == "village_cook_fish" else "bread"
             recipe_demand = sum(plan["unmet_recipe_portions"].get(recipe, 0)
                                 for plan in meal_requirements(world)
-                                if now >= plan["due"] - policy.cooking_lead_minutes)
+                                if now >= _service_preparation_at(world, plan) - policy.cooking_lead_minutes)
             limits.append(ceil(recipe_demand / amount))
         committed = sum(person.life.work.outputs.get(product, 0)
                         for person in world.state.village.residents.values()
@@ -1572,11 +1602,25 @@ def production_blocker(world: "World", action: str, *, personal: bool = False) -
     inn = world.scenario.village.residents[policy.innkeeper].work
     if location == inn and "meals" in outputs:
         plans = meal_requirements(world)
-        if not any(plan["due"] - policy.cooking_lead_minutes <= world.state.village.minute <= plan["due"]
+        if not any(_service_preparation_at(world, plan) - policy.cooking_lead_minutes
+                   <= world.state.village.minute <= plan["due"]
                    for plan in plans):
             return "OUTSIDE_PREPARATION_WINDOW", "Cook near the next planned service, not all day."
     if production_batch_limit(world, action, personal=personal) == 0:
         return "DEMAND_MET", "Fresh stock and committed production cover accepted demand and reserve targets."
+    if location == inn and "meals" in outputs and "bread" in inputs:
+        from npc_sim import village_life
+        required, fresh = village_life.overnight_breakfast_bread_reserve(world)
+        if required:
+            next_breakfast = next(plan["due"] for plan in meal_requirements(world)
+                                   if plan["id"] == f"{world.state.village.minute // 1440 + 1}:breakfast")
+            expiring = sum(lot.quantity for lot in world.state.village.stock_lots.get(inn, {}).get("bread", [])
+                           if lot.expires_at is not None
+                           and world.state.village.minute < lot.expires_at <= next_breakfast)
+            available = fresh + expiring - required
+            if available < inputs["bread"]:
+                return ("BREAKFAST_BREAD_RESERVED",
+                        "Keep tomorrow's fresh breakfast bread at the tavern; cook supper from surplus inputs.")
     reserves = policy.reserve_targets.get(location, {})
     economy = _state(world)
     accepted = any(order.status in COMMITTED and order.source == location and order.product in outputs

@@ -10,11 +10,10 @@ if TYPE_CHECKING:
 
 
 VERBS = {"village_read_chronicle", "village_share_chronicle", "village_write_diary", "village_read_history"}
-DIARY_LIMIT = 3
 RECORDED = {
     "breakdown", "project_completed", "deadline_completed", "deadline_overdue",
     "missed_meal", "visitor_arrived", "visitor_departed", "village_merchant_trade",
-    "trader_arrived", "batch_completed", "research_completed", "trade",
+    "trader_arrived", "trader_departed", "batch_completed", "research_completed", "trade",
 }
 LESSONS = {"missed_meal": "shortage", "deadline_overdue": "delivery",
            "project_completed": "repair", "deadline_completed": "repair"}
@@ -69,26 +68,76 @@ def advance(world: "World") -> None:
         if entry.action in RECORDED and (entry.action != "batch_completed" or entry.target == config.mill):
             legacy.chronicle.append(VillageLegacyEntry(
                 minute=entry.minute, kind=entry.action,
-                text=f"{village.resident_name(world, entry.actor)}: {entry.result}",
+                text=(f"{village.resident_name(world, entry.actor)}: {entry.result}"
+                      if entry.actor in state.residents else entry.result),
                 source_event=index, lesson=LESSONS.get(entry.action),
-                origin_world_id=world.state.world_id, origin_minute=entry.minute))
+                origin_world_id=world.state.world_id, origin_minute=entry.minute,
+                source_actor=entry.actor))
             if entry.action in {"project_completed", "missed_meal"} and entry.actor in state.residents:
                 learn(world, entry.actor, len(legacy.chronicle) - 1, "firsthand experience")
     legacy.recorded_events = len(state.events)
     day = state.minute // 1440
     for next_day in range(legacy.last_day + 1, day + 1):
+        midnight = next_day * 1440
+        published = {entry.journal_id for entry in legacy.chronicle if entry.journal_id is not None}
+        # Older archives can contain published journals without a journal_id.
+        published.update(f"{entry.origin_world_id}:{entry.source_actor}:{entry.origin_minute}"
+                         for entry in legacy.chronicle if entry.kind == "resident_journal"
+                         and entry.origin_world_id is not None and entry.source_actor is not None
+                         and entry.origin_minute is not None)
+        for rid, diary in legacy.diaries.items():
+            for note in diary:
+                if note.written_at >= midnight:
+                    continue
+                identity = f"{note.origin_world_id}:{rid}:{note.written_at}"
+                if identity in published:
+                    continue
+                legacy.chronicle.append(VillageLegacyEntry(
+                    minute=midnight, kind="resident_journal", text=note.text,
+                    origin_world_id=note.origin_world_id, origin_minute=note.written_at,
+                    source_actor=rid, author=note.author, journal_id=identity, authored=True,
+                    origin_day=note.written_at // 1440))
+                published.add(identity)
+        if state.incidents is not None:
+            for visitor in state.incidents.visitors.values():
+                if (visitor.arrived_at is not None and visitor.arrived_at < midnight
+                        and (visitor.departed_at is None or visitor.departed_at > midnight)):
+                    lodging = next_day - 1 in visitor.lodging_days
+                    if not any(entry.kind == "visitor_overnight" and entry.origin_world_id == world.state.world_id
+                               and entry.origin_minute == midnight and entry.source_actor == visitor.id
+                               for entry in legacy.chronicle):
+                        legacy.chronicle.append(VillageLegacyEntry(
+                            minute=midnight, kind="visitor_overnight",
+                            text=(f"{visitor.name} remained in the village overnight"
+                                  + (f" with recorded lodging at {visitor.plan.lodging_location}." if lodging
+                                     else "; no lodging commitment is recorded.")),
+                            origin_world_id=world.state.world_id, origin_minute=midnight,
+                            source_actor=visitor.id))
+        trader = world.state.entities.get("iron-trader")
+        if (next_day == day and trader is not None and trader.location == "village-square"
+                and state.trader_day == next_day - 1 and not any(
+                    entry.kind == "trader_overnight" and entry.origin_world_id == world.state.world_id
+                    and entry.origin_minute == midnight and entry.source_actor == "iron-trader"
+                    for entry in legacy.chronicle)):
+            legacy.chronicle.append(VillageLegacyEntry(
+                minute=midnight, kind="trader_overnight",
+                text=f"The iron trader remained at {trader.location} overnight; no lodging is recorded.",
+                origin_world_id=world.state.world_id, origin_minute=midnight,
+                source_actor="iron-trader"))
         for arrival in config.legacy.arrivals:
             if arrival.day == next_day + 1:
                 legacy.newcomers[arrival.name] = arrival.model_copy(deep=True)
                 text = f"{arrival.name} arrived at {arrival.home}: {arrival.reason}"
-                legacy.chronicle.append(VillageLegacyEntry(minute=next_day * 1440, kind="arrival", text=text))
+                legacy.chronicle.append(VillageLegacyEntry(minute=midnight, kind="arrival", text=text,
+                    origin_world_id=world.state.world_id, origin_minute=midnight, source_actor="village"))
                 village.event(world, "village", "newcomer_arrived", arrival.home, text, arrival.home)
             if arrival.departure_day == next_day + 1:
                 if arrival.name not in legacy.newcomers:
                     raise ValueError(f"Cannot depart an absent newcomer: {arrival.name}")
                 del legacy.newcomers[arrival.name]
                 text = f"{arrival.name} departed from {arrival.home}."
-                legacy.chronicle.append(VillageLegacyEntry(minute=next_day * 1440, kind="departure", text=text))
+                legacy.chronicle.append(VillageLegacyEntry(minute=midnight, kind="departure", text=text,
+                    origin_world_id=world.state.world_id, origin_minute=midnight, source_actor="village"))
                 village.event(world, "village", "newcomer_departed", arrival.home, text, arrival.home)
     legacy.last_day = day
 
@@ -106,6 +155,8 @@ def observation(world: "World") -> dict[str, Any]:
     return {"legacy": {
         "family": family.model_dump(),
         "chronicle": [legacy.chronicle[index].model_dump() for index in known] if history_ready(world) else [],
+        "public_history": [legacy.chronicle[index].model_dump() for index in known
+                           if 0 <= index < len(legacy.chronicle)] if history_ready(world) else [],
         "lessons": [{**legacy.chronicle[item.entry].model_dump(), "source": item.source,
                      "learned_at": item.learned_at} for item in lessons] if history_ready(world) else [],
         "lineage": legacy.lineage.get(rid, []) if history_ready(world) else [],
@@ -193,7 +244,6 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                                        problems=problems.strip() if problems is not None else None,
                                        suggestions=suggestions.strip() if suggestions is not None else None,
                                        origin_world_id=world.state.world_id))
-        legacy.diaries[world.actor_id] = diary[-DIARY_LIMIT:]
         result = "Wrote a private diary note for a future successor."
         village.event(world, world.actor_id, action, world.actor.location_id, result)
         return "APPLIED", "DIARY_WRITTEN", result, None
@@ -281,7 +331,7 @@ def decision_hint(world: "World") -> str:
 
 
 def successor_state(source_scenario: Scenario, source: WorldState, target: "World", save_id: str) -> None:
-    """Transfer bounded family assets at a fresh-world checkpoint, never live actor bindings."""
+    """Transfer bounded property and complete history, never live actor bindings."""
     old, new = source.village, target.state.village
     if old is None or new is None or old.legacy is None or new.legacy is None:
         raise ValueError("Both generations must enable village legacy")
@@ -361,9 +411,9 @@ def successor_state(source_scenario: Scenario, source: WorldState, target: "Worl
         "origin_world_id": entry.origin_world_id or source.world_id,
         "origin_minute": entry.origin_minute if entry.origin_minute is not None else entry.minute,
         "lesson": entry.lesson if old.minute - entry.minute <= LESSON_DAYS * 1440 else None})
-        for entry in old.legacy.chronicle[-100:]] + new.legacy.chronicle
+        for entry in old.legacy.chronicle] + new.legacy.chronicle
     new.legacy.recorded_events = 0
-    new.legacy.diaries = {rid: list(old.legacy.diaries.get(rid, [])[-DIARY_LIMIT:])
+    new.legacy.diaries = {rid: [entry.model_copy(deep=True) for entry in old.legacy.diaries.get(rid, [])]
                           for rid in target.scenario.village.residents if old.legacy.diaries.get(rid)}
     for rid, family in successors.items():
         if not family.successor:
@@ -378,12 +428,9 @@ def successor_state(source_scenario: Scenario, source: WorldState, target: "Worl
         new.coins[rid] += inherited
         new.legacy.inherited_coins[rid] = inherited
         for old_lesson in old.legacy.lessons.get(rid, []):
-            if old_lesson.entry < max(0, len(old.legacy.chronicle) - 100):
-                continue
             entry = old.legacy.chronicle[old_lesson.entry]
             if old.minute - entry.minute <= LESSON_DAYS * 1440:
-                index = old_lesson.entry - max(0, len(old.legacy.chronicle) - 100)
-                learn(target, rid, index, f"family:{previous}")
+                learn(target, rid, old_lesson.entry, f"family:{previous}")
         new.legacy.chronicle.append(VillageLegacyEntry(
             minute=new.minute, kind="succession",
             text=f"{previous} retired; {family.successor} succeeded to the {rid} household and {inherited} coins."))

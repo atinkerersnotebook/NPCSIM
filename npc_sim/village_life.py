@@ -117,6 +117,37 @@ def meal_plan(world: "World", kind: str = "daily", day: int | None = None) -> di
             "shortfall": max(0, len(diners) - len(eaten) - available), "inputs_needed": inputs_needed}
 
 
+def overnight_breakfast_bread_reserve(world: "World") -> tuple[int, int]:
+    """Return next breakfast's required bread and currently fresh tavern bread."""
+    _, state = village.context(world)
+    from npc_sim import village_economy
+    if state.economy is None or state.minute % 1440 < 600:
+        return 0, 0
+    next_day = state.minute // 1440 + 1
+    breakfast = next((plan for plan in village_economy.meal_requirements(world)
+                      if plan["id"] == f"{next_day}:breakfast"), None)
+    if breakfast is None:
+        return 0, 0
+    required = max(0, breakfast["inputs"].get("bread", 0)
+                   - village_economy.config(world).stock_buffer.get("bread", 0))
+    fresh = village_economy.usable_stock(world, "tavern", "bread", breakfast["due"])
+    return required, fresh
+
+
+def overnight_bread_protected(world: "World") -> bool:
+    """Whether consuming the next loaf would leave breakfast short."""
+    _, state = village.context(world)
+    required, fresh = overnight_breakfast_bread_reserve(world)
+    if not required:
+        return False
+    from npc_sim import village_economy
+    breakfast_due = next(plan["due"] for plan in village_economy.meal_requirements(world)
+                         if plan["id"] == f"{state.minute // 1440 + 1}:breakfast")
+    perishable = sum(lot.quantity for lot in state.stock_lots.get("tavern", {}).get("bread", [])
+                     if lot.expires_at is not None and state.minute < lot.expires_at <= breakfast_due)
+    return perishable == 0 and fresh <= required
+
+
 def inn_open(world: "World") -> bool:
     config, state = village.context(world)
     innkeeper = next((rid for rid, resident in config.residents.items()
@@ -369,6 +400,15 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
         village.event(world, rid, action, world.actor.location_id, text)
         return "APPLIED", code, text, None
 
+    if action == "village_daytime_rest":
+        if world.actor.location_id != resident.home:
+            return reject("NOT_AT_HOME", "Rest at home during the day.")
+        if not resident.wake_minute <= state.minute % 1440 < resident.bed_minute:
+            return reject("REST_NOT_DUE", "Daytime rest is available only between waking and bedtime.")
+        if life.last_daytime_rest == state.minute // 1440:
+            return reject("REST_ALREADY_TAKEN", "You have already rested during this day.")
+        life.last_daytime_rest = state.minute // 1440
+        return done("DAYTIME_RESTED", "Rested at home for 15 minutes; overnight sleep is still due.")
     if action == "village_sleep":
         if config.expanded_rules and rid == config.helper and state.horse_leader == rid:
             return reject("HORSE_NOT_STABLED", "Return and release the horse at its stable before sleeping.")
@@ -430,6 +470,14 @@ def apply(world: "World", action: str) -> tuple[str, str, str, None]:
         return done("MEAL_MISSED", f"Cannot pay {config.meal_price} coin for the meal; going hungry without consuming food.")
     choices = ("bread", "meals") if meal.kind == "breakfast" else ("meals", "bread")
     resource = next((name for name in choices if stock.get(name, 0) > 0), None)
+    protected_bread = False
+    if resource == "bread" and meal.kind != "breakfast":
+        protected_bread = overnight_bread_protected(world)
+        if protected_bread:
+            resource = None
+    if protected_bread and not (stock.get("fish", 0) > 0 and stock.get("tea", 0) > 0):
+        return reject("BREAKFAST_BREAD_RESERVED",
+                      "Only bread reserved for tomorrow's breakfast remains; no other food is available.")
     if state.economy is not None and (resource is not None or (stock.get("fish", 0) > 0 and stock.get("tea", 0) > 0)):
         from npc_sim import village_economy
         if not village_economy.meal_charge(world, rid):

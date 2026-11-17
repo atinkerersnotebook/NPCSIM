@@ -1,15 +1,15 @@
 import { z } from "zod";
 import {
   stateSchema, eventSchema, eventsSchema, modelsSchema, scenariosSchema, historySchema, historyDetailSchema,
+  recordedStorySchema,
   agentsSchema, agentProfileSchema, skillModeSchema, dungeonMasterConfigSchema, dungeonMasterRulingSchema,
   completionAnalysisSchema, npcChatSchema, budgetExtensionSchema, runModeSchema,
   episodeSaveRequestSchema, episodeLoadRequestSchema, episodeSavesSchema, episodeSaveResultSchema
 } from "./contracts";
-import type { AgentProfile, CompletionAnalysis, DungeonMasterConfig, SkillMode, State, RunEvent } from "./contracts";
+import type { AgentProfile, CompletionAnalysis, DungeonMasterConfig, SkillMode, State, RunEvent, RecordedStory } from "./contracts";
 import { effectiveBody, profileText, slotLabel, validateAssignments } from "./agent-profiles";
 import { evidenceReferences, explainEvidence } from "./evidence";
-import { buildDayNarrative, buildStory, canCopyStory, copyRecordedStory, copyStory, isTeamStory, storyDays, villageTimeline } from "./story";
-import type { StoryEntry, StoryMembers } from "./story";
+import { copyRecordedPages, villageTimeline } from "./story";
 import { actorPerspective, agentPerspectives, discoveredEntities, goalPresentation, inventoryUnitsUsed, locationNetwork, nutritionLabel, teamLocationNetwork } from "./world-view";
 import { batchTiming, clockHelp, clockTime } from "./bakery-view";
 import { villageDashboardMarkup, villageMarkup } from "./village-view";
@@ -282,6 +282,7 @@ let activeTab: DashboardTab | null = null;
 function selectTab(tab: DashboardTab, updateHash = false): void {
   if (!tabLabels.some(([id]) => id === tab)) return;
   activeTab = tab;
+  if (tab === "story" && (storyPageRun !== activeRun || !recordedPage)) void loadRecordedStory();
   for (const [id] of tabLabels) {
     const button = document.getElementById(`tab-${id}`);
     const panel = document.getElementById(`panel-${id}`);
@@ -314,7 +315,6 @@ window.addEventListener("hashchange", () => {
   explicitTab = Boolean(location.hash);
   selectTab(dashboardTab(location.hash, adminView, Boolean(state?.run)));
 });
-selectTab(dashboardTab(location.hash, adminView, false));
 
 let state: State | null = null;
 let events: RunEvent[] = [];
@@ -339,11 +339,19 @@ let scenarioChoices: z.infer<typeof scenariosSchema>["scenarios"] = [];
 let assignments: Record<string, string> = {};
 let skillMode: SkillMode = "scenario";
 let dungeonMasterConfig: DungeonMasterConfig | null = null;
-let archivedStory: { text: string }[] = [];
-let archivedDetail: z.infer<typeof historyDetailSchema> | null = null;
+let archivedRuns = new Map<string, z.infer<typeof historySchema>["runs"][number]>();
+let archivedRun: z.infer<typeof historySchema>["runs"][number] | null = null;
+let archivedDay: number | null = null;
+let archivedPage: RecordedStory | null = null;
+let archiveRequest = 0;
 let selectedStoryDay: number | null = null;
 let copyingStory = false;
+let recordedPage: RecordedStory | null = null;
+let storyRequest = 0;
+let storyPageRun: string | null = null;
+let storyRefresh: number | null = null;
 const expanded = new Set<string>();
+selectTab(dashboardTab(location.hash, adminView, false));
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -386,6 +394,9 @@ function applyState(next: State): void {
     selectedStoryDay = null;
     selectedMapLocation = "";
     events = [];
+    recordedPage = null;
+    storyPageRun = null;
+    storyRequest++;
     technicalEvents.clear();
     timelineLimit = 100;
     dismissedProposals.clear();
@@ -728,7 +739,7 @@ async function interact(operation: "chat" | "propose" | "approve", payload: Reco
   renderInteractions();
   try {
     applyState(stateSchema.parse(await api(`/interactions/${operation}`, "POST", { run_id: runId, ...payload })));
-    const recorded = eventsSchema.parse(await api("/events?compact=true"));
+    const recorded = eventsSchema.parse(await api("/events?compact=true&limit=200"));
     if (activeRun === runId) {
       events = recorded.events;
       renderTimeline();
@@ -1046,7 +1057,10 @@ function renderTeamPerspectives(): void {
         ${self.needs.map(need => `<p>${escape(need.id)}: ${need.enabled ? `${need.level} / 100` : "disabled"}</p>`).join("")}` : ""}
       </details>`);
     updateReadingPane(observation, observationMarkup(agent.observation, false));
-    renderStoryFeed(feed, buildStory(events, agent.actorId, state?.run?.agent_profiles), true);
+    const paragraphs = recordedPage?.paragraphs.filter(paragraph => paragraph.actor_id === agent.actorId) ?? [];
+    updateReadingPane(feed, paragraphs.length ? paragraphs.map(paragraph =>
+      `<article class="story-entry observation"><p>${escape(paragraph.text)}</p></article>`).join("") :
+      '<p class="muted">The recorded perspective will appear here.</p>');
   }
 }
 
@@ -1073,38 +1087,11 @@ function eventSummary(event: RunEvent): { title: string; text: string; tone: str
   }
 }
 
-function storyMarkup(entries: StoryEntry[], team = false): string {
-  return entries.map(entry => `<article class="story-entry ${entry.kind}" data-story-id="${escape(entry.id)}">
-      <div class="story-marker">${entry.kind === "intent" ? "→" : entry.kind === "ending" ? "◇" : "·"}</div>
-      <div><span class="story-label">${entry.timeline ? `${escape(entry.timeline)} · ` : ""}${entry.freeAction ? "FREE LOOK/READ" : entry.kind === "intent" ? (team ? "ACTION ATTEMPT" : "I TRY") : entry.kind === "result" ? "WHAT HAPPENS" : entry.kind === "ending" ? "THE OUTCOME" : (team ? "OBSERVATION" : "I OBSERVE")}${entry.cycle ? ` · STEP ${entry.cycle}` : ""}</span><p>${escape(entry.text)}</p>
-      ${entry.explanation ? `<details><summary>Why this action?</summary><p class="story-explanation">${escape(entry.explanation)}</p></details>` : ""}</div>
-    </article>`).join("");
-}
-
 function renderStory(): void {
-  renderStoryFeed(element("story"), buildStory(events, selectedActor || state?.run?.actor_id,
-    state?.run?.agent_profiles), isTeamStory(events));
-}
-
-function renderStoryFeed(node: HTMLElement, entries: StoryEntry[], team: boolean): void {
-    const html = entries.length ? storyMarkup(entries, team) : '<div class="empty compact"><p>The story begins when an episode starts. Only what the NPC actually observes will be narrated.</p></div>';
-    if (node.innerHTML === html) return;
-    const atEnd = node.scrollHeight - node.scrollTop - node.clientHeight < 36;
-    const scroll = node.scrollTop;
-    const openEntries = new Set(Array.from(node.querySelectorAll<HTMLElement>("article:has(details[open])")).map(entry => entry.dataset.storyId));
-    node.innerHTML = html;
-    node.querySelectorAll<HTMLElement>("article").forEach(entry => {
-      const details = entry.querySelector("details");
-      if (details && openEntries.has(entry.dataset.storyId)) details.open = true;
-    });
-  node.scrollTop = atEnd ? node.scrollHeight : scroll;
-}
-
-function narrativeMarkup(source: readonly RunEvent[], actorId?: string, analysis?: CompletionAnalysis,
-  members?: StoryMembers, day: number | null = null): string {
-  const paragraphs = buildDayNarrative(source, actorId, analysis?.story, members, day);
-  return paragraphs.map(paragraph =>
-    `<p data-narrative-id="${escape(paragraph.id)}">${escape(paragraph.text)}</p>`).join("");
+  const paragraphs = recordedPage?.paragraphs.filter(paragraph => !selectedActor || paragraph.actor_id === selectedActor) ?? [];
+  updateReadingPane(element("story"), paragraphs.length ? paragraphs.map(paragraph =>
+    `<article class="story-entry observation" data-story-id="${escape(paragraph.id)}"><p>${escape(paragraph.text)}</p></article>`).join("") :
+    '<div class="empty compact"><p>The recorded story begins when an episode starts.</p></div>');
 }
 
 function completionMarkup(analysis?: CompletionAnalysis, source: readonly RunEvent[] = []): string {
@@ -1125,26 +1112,29 @@ function renderCompletionAnalysis(): void {
 
 function renderNarrative(): void {
   const run = state?.run;
-  const days = storyDays(events);
+  const days = recordedPage?.days ?? [];
   element("story-day-tools").hidden = !days.length;
   if (selectedStoryDay !== null && !days.includes(selectedStoryDay)) selectedStoryDay = null;
   const selector = element<HTMLSelectElement>("story-day");
   const options = storyDayOptions(days);
   if (selector.innerHTML !== options) selector.innerHTML = options;
   selector.value = selectedStoryDay === null ? "all" : String(selectedStoryDay);
-  if (run && state && state.event_count > 0 && !events.length) {
+  if (run && !recordedPage) {
     element<HTMLButtonElement>("copy-story").disabled = true;
     element("narrative").innerHTML = "<p>Loading the recorded adventure...</p>";
     return;
   }
-  const actorId = run?.agents ? undefined : selectedActor || run?.actor_id;
-  const analysis = run?.completion_analysis;
-  element<HTMLButtonElement>("copy-story").disabled = copyingStory || !canCopyStory(run,
-    buildDayNarrative(events, actorId, analysis?.story, run?.agent_profiles, selectedStoryDay));
+  element<HTMLButtonElement>("copy-story").disabled = copyingStory || !run || !recordedPage?.paragraphs.length ||
+    Boolean(recordedPage.error) || Boolean(recordedPage.backfilling);
   const node = element("narrative");
-  const html = narrativeMarkup(events, actorId, analysis, run?.agent_profiles, selectedStoryDay) ||
-    (selectedStoryDay === null ? "<p>The story will unfold here as the NPC discovers the world.</p>" :
-      "<p>No adventure narrative is recorded for this day yet.</p>");
+  const page = recordedPage;
+  const html = page?.error ? `<p role="alert">Story restoration failed: ${escape(page.error)}. Restart the server to retry.</p>` :
+    (page?.paragraphs.map(paragraph => `<p data-narrative-id="${escape(paragraph.id)}">${escape(paragraph.text)}</p>`).join("") ||
+     (page?.backfilling ? `<p role="status">Restoring recorded story (${page.cursor} / ${page.total_events} events)…</p>` :
+      selectedStoryDay === null ? "<p>The story will unfold here as the NPC discovers the world.</p>" :
+      "<p>No adventure narrative is recorded for this day yet.</p>")) +
+    (page?.backfilling && page.paragraphs.length ? `<p role="status">Restoring recorded story (${page.cursor} / ${page.total_events} events)…</p>` : "") +
+    (page?.next !== null && page ? '<button class="button subtle" id="story-next" type="button">Next 100 paragraphs →</button>' : "");
   if (node.innerHTML === html) return;
   const hasStory = node.querySelector("[data-narrative-id]") !== null;
   const atEnd = node.scrollHeight - node.scrollTop - node.clientHeight < 36;
@@ -1152,6 +1142,40 @@ function renderNarrative(): void {
   node.innerHTML = html;
   node.scrollTop = hasStory ? (atEnd ? node.scrollHeight : scroll) : 0;
 }
+
+async function loadRecordedStory(after = 0): Promise<void> {
+  const run = state?.run;
+  if (!run) return;
+  const request = ++storyRequest;
+  const day = selectedStoryDay;
+  const query = new URLSearchParams({after: String(after)});
+  if (day !== null) query.set("day", String(day));
+  if (!run.agents) query.set("actor", selectedActor || run.actor_id);
+  storyPageRun = run.id;
+  if (!after) recordedPage = null;
+  renderNarrative();
+  try {
+    const page = recordedStorySchema.parse(await api(`/story/${run.id}?${query}`));
+    if (request !== storyRequest || activeRun !== run.id || selectedStoryDay !== day) return;
+    recordedPage = page;
+    renderNarrative();
+    renderStory();
+    renderTeamPerspectives();
+    if (page.backfilling && !page.error) window.setTimeout(() => {
+      if (request === storyRequest && activeTab === "story") void loadRecordedStory(after);
+    }, 1000);
+  } catch (error) {
+    if (request === storyRequest) {
+      element("narrative").innerHTML = `<p role="alert">Could not load recorded story: ${escape(errorMessage(error))}</p>`;
+    }
+  }
+}
+
+element("narrative").addEventListener("click", event => {
+  if ((event.target as Element).closest("#story-next") && recordedPage?.next !== null) {
+    void loadRecordedStory(recordedPage!.next!);
+  }
+});
 
 function storyDayOptions(days: readonly number[]): string {
   return '<option value="all">All days</option>' +
@@ -1161,7 +1185,7 @@ function storyDayOptions(days: readonly number[]): string {
 element("story-day").addEventListener("change", () => {
   const value = element<HTMLSelectElement>("story-day").value;
   selectedStoryDay = value === "all" ? null : Number(value);
-  renderNarrative();
+  void loadRecordedStory();
   element("narrative").scrollTop = 0;
 });
 
@@ -1177,13 +1201,16 @@ async function copyAdventureStory(copy: () => Promise<void>): Promise<void> {
 element("copy-story").addEventListener("click", () => {
   if (!state?.run || element<HTMLButtonElement>("copy-story").disabled) return;
   const run = state.run;
-  const actor = run.agents ? undefined : selectedActor || run.actor_id;
   const day = selectedStoryDay;
   copyingStory = true;
   renderNarrative();
-  void copyAdventureStory(() => copyRecordedStory(
-    async () => eventsSchema.parse(await api("/events?compact=true")),
-    run.id, navigator.clipboard, actor, run.completion_analysis?.story, run.agent_profiles, day
+  void copyAdventureStory(() => copyRecordedPages(
+    async after => {
+      const query = new URLSearchParams({after: String(after)});
+      if (day !== null) query.set("day", String(day));
+      if (!run.agents) query.set("actor", selectedActor || run.actor_id);
+      return recordedStorySchema.parse(await api(`/story/${run.id}?${query}`));
+    }, run.id, navigator.clipboard
   )).finally(() => {
     copyingStory = false;
     renderNarrative();
@@ -1317,7 +1344,8 @@ element("self-content").addEventListener("click", event => {
 element("actor-select").addEventListener("change", () => {
   selectedActor = element<HTMLSelectElement>("actor-select").value;
   selectedMapLocation = "";
-  renderSelf(); renderWorld(); renderObservation(); renderBakery(); renderStory(); renderNarrative();
+  renderSelf(); renderWorld(); renderObservation(); renderBakery(); renderStory();
+  if (!state?.run?.agents) void loadRecordedStory();
 });
 element("world-scene").addEventListener("click", event => {
   if (!(event.target instanceof Element)) return;
@@ -1473,43 +1501,85 @@ element("history-button").addEventListener("click", () => {
   element("history-content").textContent = "Loading saved JSON episodes…";
   void api("/history").then(payload => {
     const runs = historySchema.parse(payload).runs;
+    archivedRuns = new Map(runs.map(run => [run.id, run]));
     element("history-content").innerHTML = runs.length ? runs.map(run => `<button class="history-run" data-run-id="${escape(run.id)}"><strong>${escape(run.title)}</strong><span>${escape(run.status)} · Grade: ${escape(run.completion_analysis?.verdict ?? "not graded")} · ${run.actions} actions · ${escape(new Date(run.created_at).toLocaleString())}</span><small>${escape(run.id)}</small></button>`).join("") : '<p class="empty">No saved episodes.</p>';
   }).catch(error => { element("history-content").textContent = errorMessage(error); });
 });
 element("history-content").addEventListener("click", event => {
   if (!(event.target instanceof Element)) return;
   if (event.target.closest("[data-copy-archive]")) {
-    void copyAdventureStory(() => copyStory(archivedStory, navigator.clipboard));
+    if (!archivedRun) return;
+    const run = archivedRun;
+    const day = archivedDay;
+    void copyAdventureStory(() => copyRecordedPages(async after => {
+      const query = new URLSearchParams({after: String(after)});
+      if (day !== null) query.set("day", String(day));
+      return recordedStorySchema.parse(await api(`/story/${run.id}?${query}`));
+    }, run.id, navigator.clipboard));
+    return;
+  }
+  if (event.target.closest("[data-archive-next]")) {
+    if (archivedPage?.next !== null) void loadArchiveStory(archivedPage!.next!);
+    return;
+  }
+  if (event.target.closest("[data-archive-technical]")) {
+    if (!archivedRun) return;
+    const runId = archivedRun.id;
+    const node = element("archive-technical");
+    node.textContent = "Loading technical episode…";
+    void api(`/history/${runId}`).then(payload => {
+      const detail = historyDetailSchema.parse(payload);
+      node.innerHTML = `<h3>Dungeon Master rulings</h3>${dungeonMasterMarkup(detail.events)}<h4>Evidence explained</h4>${evidenceMarkup(evidenceReferences(detail), detail.events, detail.run.completion_analysis?.story)}<pre>${escape(pretty(detail))}</pre>`;
+    }).catch(error => { node.textContent = errorMessage(error); });
     return;
   }
   const button = event.target.closest<HTMLButtonElement>("[data-run-id]");
   if (!button?.dataset.runId) return;
-  void api(`/history/${button.dataset.runId}`).then(payload => {
-    const detail = historyDetailSchema.parse(payload);
-    archivedDetail = detail;
-    const narrativeActor = detail.run.agents ? undefined : detail.run.actor_id;
-    const members = detail.run.agent_profiles;
-    archivedStory = buildDayNarrative(detail.events, narrativeActor, detail.run.completion_analysis?.story, members);
-    const days = storyDays(detail.events);
-    const daySelector = days.length ? `<div class="timeline-tools"><label for="archive-story-day">Story by day</label><select id="archive-story-day" aria-label="Archived story by day">${storyDayOptions(days)}</select></div>` : "";
-    const actorStories = Object.keys(detail.run.agents ?? { [detail.run.actor_id]: {} }).map(actorId =>
-      `<h3>${escape(members?.[actorId]?.name ?? slotLabel(actorId))}'s story</h3><div class="story-feed">${storyMarkup(buildStory(detail.events, actorId, members), isTeamStory(detail.events))}</div>`).join("");
-    element("history-content").innerHTML = `<p class="muted">Archived episode — does not change the live world.</p><h3>Completion review</h3>${completionMarkup(detail.run.completion_analysis, detail.events)}<h3>Dungeon Master rulings</h3>${dungeonMasterMarkup(detail.events)}<h3>The adventure${detail.run.agents ? " / whole team" : ""}</h3><button class="button subtle" data-copy-archive ${canCopyStory(detail.run, archivedStory) ? "" : "disabled"}>Copy story</button>${daySelector}<div id="archive-narrative" class="narrative-prose">${narrativeMarkup(detail.events, narrativeActor, detail.run.completion_analysis, members)}</div>${actorStories}<details class="inspector"><summary>Full technical JSON</summary><h4>Evidence explained</h4>${evidenceMarkup(evidenceReferences(detail), detail.events, detail.run.completion_analysis?.story)}<pre>${escape(pretty(detail))}</pre></details>`;
-  }).catch(error => { element("history-content").textContent = errorMessage(error); });
+  const run = archivedRuns.get(button.dataset.runId);
+  if (!run) return;
+  archivedRun = run;
+  archivedDay = null;
+  archivedPage = null;
+  element("history-content").innerHTML = `<p class="muted">Archived episode — does not change the live world.</p><h3>Completion review</h3>${completionMarkup(run.completion_analysis)}<h3>The adventure</h3><button class="button subtle" data-copy-archive disabled>Copy story</button><div id="archive-story-tools"></div><div id="archive-narrative" class="narrative-prose" role="status">Loading recorded story…</div><details class="inspector"><summary>Full technical JSON</summary><button class="button subtle" data-archive-technical>Load technical episode</button><div id="archive-technical"></div></details>`;
+  void loadArchiveStory();
 });
 element("history-content").addEventListener("change", event => {
-  if (!(event.target instanceof HTMLSelectElement) || event.target.id !== "archive-story-day" || !archivedDetail) return;
-  const detail = archivedDetail;
-  const day = event.target.value === "all" ? null : Number(event.target.value);
-  const actor = detail.run.agents ? undefined : detail.run.actor_id;
-  archivedStory = buildDayNarrative(detail.events, actor, detail.run.completion_analysis?.story,
-    detail.run.agent_profiles, day);
-  element("archive-narrative").innerHTML = narrativeMarkup(detail.events, actor,
-    detail.run.completion_analysis, detail.run.agent_profiles, day) ||
-    "<p>No adventure narrative is recorded for this day yet.</p>";
-  const button = element("history-content").querySelector<HTMLButtonElement>("[data-copy-archive]");
-  if (button) button.disabled = !canCopyStory(detail.run, archivedStory);
+  if (!(event.target instanceof HTMLSelectElement) || event.target.id !== "archive-story-day" || !archivedRun) return;
+  archivedDay = event.target.value === "all" ? null : Number(event.target.value);
+  void loadArchiveStory();
 });
+async function loadArchiveStory(after = 0): Promise<void> {
+  const run = archivedRun;
+  if (!run) return;
+  const request = ++archiveRequest;
+  const day = archivedDay;
+  const query = new URLSearchParams({after: String(after)});
+  if (day !== null) query.set("day", String(day));
+  const node = element("archive-narrative");
+  node.textContent = "Loading recorded story…";
+  try {
+    const page = recordedStorySchema.parse(await api(`/story/${run.id}?${query}`));
+    if (request !== archiveRequest || archivedRun?.id !== run.id || archivedDay !== day) return;
+    archivedPage = page;
+    const tools = element("archive-story-tools");
+    const options = storyDayOptions(page.days);
+    if (tools.innerHTML !== `<div class="timeline-tools"><label for="archive-story-day">Story by day</label><select id="archive-story-day" aria-label="Archived story by day">${options}</select></div>`) {
+      tools.innerHTML = `<div class="timeline-tools"><label for="archive-story-day">Story by day</label><select id="archive-story-day" aria-label="Archived story by day">${options}</select></div>`;
+    }
+    element<HTMLSelectElement>("archive-story-day").value = day === null ? "all" : String(day);
+    node.innerHTML = page.error ? `<p role="alert">Story restoration failed: ${escape(page.error)}</p>` :
+      (page.paragraphs.map(paragraph => `<p>${escape(paragraph.text)}</p>`).join("") ||
+       (page.backfilling ? `<p role="status">Restoring story (${page.cursor} / ${page.total_events})…</p>` : "<p>No narrative recorded for this day.</p>")) +
+      (page.next !== null ? '<button class="button subtle" data-archive-next>Next 100 paragraphs →</button>' : "");
+    const copy = element("history-content").querySelector<HTMLButtonElement>("[data-copy-archive]");
+    if (copy) copy.disabled = Boolean(page.error || page.backfilling || !page.paragraphs.length);
+    if (page.backfilling && !page.error) window.setTimeout(() => {
+      if (request === archiveRequest && element<HTMLDialogElement>("history-dialog").open) void loadArchiveStory(after);
+    }, 1000);
+  } catch (error) {
+    if (request === archiveRequest) node.innerHTML = `<p role="alert">Could not load story: ${escape(errorMessage(error))}</p>`;
+  }
+}
 element("close-history").addEventListener("click", () => element<HTMLDialogElement>("history-dialog").close());
 
 element("save-episode").addEventListener("click", () => {
@@ -1570,7 +1640,7 @@ element("episode-saves-content").addEventListener("click", event => {
   void (async () => {
     try {
       applyState(stateSchema.parse(await api("/saves/load", "POST", request)));
-      const history = eventsSchema.parse(await api("/events?compact=true"));
+      const history = eventsSchema.parse(await api("/events?compact=true&limit=200"));
       if (history.run_id === activeRun) events = history.events;
       renderTimeline();
       renderNarrative();
@@ -1601,7 +1671,7 @@ async function initialize(): Promise<void> {
     select.value = selectedScenario;
     renderAssignments();
     renderProfileEditor();
-    const history = eventsSchema.parse(await api("/events?compact=true"));
+    const history = eventsSchema.parse(await api("/events?compact=true&limit=200"));
     if (history.run_id === activeRun) events = history.events;
     renderTimeline();
   } catch (error) {
@@ -1626,6 +1696,13 @@ async function initialize(): Promise<void> {
       const event = eventSchema.parse(JSON.parse(message.data));
       if (event.run_id !== activeRun || events.some(item => item.id === event.id)) return;
       events.push(event);
+      if (events.length > 200) events.splice(0, events.length - 200);
+      if (activeTab === "story" && ["observation", "action_result", "action_request", "finished", "started"].includes(event.kind)) {
+        if (storyRefresh === null) storyRefresh = window.setTimeout(() => {
+          storyRefresh = null;
+          void loadRecordedStory();
+        }, 300);
+      }
       if (timelineFrame === null) timelineFrame = requestAnimationFrame(() => {
         timelineFrame = null;
         renderTimeline();

@@ -146,6 +146,9 @@ handcart, home cooking and market-day/seasonal systems are not yet usable
 mechanics; livestock water and deliveries still follow the existing well and
 transport rules.
 
+For the next meal-service and continuity work, see the
+[Generation 12 development plan](GENERATION-12-DEVELOPMENT-PLAN.md).
+
 For Generation 11 P2 continuity evidence, save an opening world before the
 first midnight and the same world's next three consecutive midnight states.
 Capture a read-only, hash-linked ledger without replacing any saved world:
@@ -277,7 +280,7 @@ to leave a private 20-500 character note of firsthand experience for the next
 iteration of their role. The action optionally accepts separate `problems` and
 `suggestions` (20-1000 characters each), for a more detailed account of observed
 blockers and actionable advice. Older notes without these fields still load.
-The three most recent notes retain their author, time and origin world through
+All notes retain their author, time and origin world through
 saves and an explicit same-scenario midnight handoff.
 Only that role's next resident sees the diary in their personal observation;
 this includes roles without a named successor, provided another role has a
@@ -288,11 +291,20 @@ after restarting with the updated engine, a continued eligible run can write
 new entries. In a legacy-enabled episode, sleep requires that waking day's
 journal entry; the resident writes it as a five-minute action before sleeping.
 The resident supplies the text; the engine does not invent a summary. At a successor
+midnight, authored resident notes are published to the village chronicle with
+their original day and world; other residents must visit the square and read
+the chronicle to learn them. Private notes remain visible only to their role.
+Visitor and trader arrival, departure and overnight records are event history,
+not first-person journals authored by those non-playable characters. At a successor
 handoff, each role must first use `village_read_history` after waking, at home,
 before other actions; this unlocks its inherited diary and the source-marked
 chronicle entries. The old account is guidance, not knowledge of present stock
 or active orders. The nightly journal requirement does not alter non-legacy
 scenarios or retrospectively fill gaps in earlier saves.
+
+In timed daily-life runs, `village_daytime_rest` is a 15-minute at-home action
+available once per waking day between wake time and bedtime. It does not
+replace overnight sleep or satisfy the nightly journal requirement.
 
 The engine supports opt-in supplier orders, demand-limited production,
 breakfast, funded meal pricing/subsidies, reserve and freshness forecasts,
@@ -1306,7 +1318,7 @@ For initial setup, open **Admin view**:
 4. Click **Step** for one decision/action cycle or **Run agent** for continuous execution.
 5. Inspect world state, the NPC's separate observed view, concise decision explanations, requests, results, and goal verification.
 
-The **NPC's story** panel retells observations, attempted actions and confirmed outcomes chronologically. Single-agent stories use first person; multi-agent stories name the acting agent and use "we" for the team's confirmed success. Decision explanations are also instructed to name the actor, reserving "we" for statements that apply to everyone. Expand **Why this action?** for the decision explanation. The technical log remains below it, and archived episodes and copied stories use the same narration. Stories are reconstructed from persisted JSON events without extra model calls or hidden-state spoilers. Archived team prose is displayed with named actors; the saved original grading evidence is not modified.
+The **NPC's story** panel retells observations, attempted actions and confirmed outcomes chronologically. Single-agent stories use first person; multi-agent stories name the acting agent and use "we" for the team's confirmed success. Decision explanations are also instructed to name the actor, reserving "we" for statements that apply to everyone. Expand **Why this action?** for the decision explanation. The technical log remains below it, and archived episodes and copied stories use the same narration. New stories are recorded incrementally; older episodes are restored from persisted JSON events by a resumable background backfill, without extra model calls or hidden-state spoilers. Archived team prose is displayed with named actors; the saved original grading evidence is not modified.
 
 Adventure prose, decision explanations, archived stories and copied stories use
 the member names saved with that episode (for example, Avery), not internal actor

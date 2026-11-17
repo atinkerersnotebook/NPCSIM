@@ -591,6 +591,13 @@ export const eventSchema = z.object({
   payload: z.unknown()
 });
 export const eventsSchema = z.object({ run_id: z.string().nullable(), events: z.array(eventSchema) });
+export const recordedStorySchema = z.object({
+  run_id: z.string(), cursor: z.number(), total_events: z.number(), days: z.array(z.number()),
+  backfilling: z.boolean(), error: z.string().nullable(), next: z.number().nullable(),
+  paragraphs: z.array(z.object({ sequence: z.number(), id: z.string(), actor_id: z.string(),
+    day: z.number().nullable(), text: z.string(), version: z.number() }))
+});
+export type RecordedStory = z.infer<typeof recordedStorySchema>;
 export const modelsSchema = z.object({ models: z.array(z.string()) });
 export const scenariosSchema = z.object({ scenarios: z.array(z.object({
   id: z.string(), title: z.string(), objective: z.string(),

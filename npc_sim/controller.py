@@ -20,7 +20,7 @@ from npc_sim.mcp_client import WorldClient
 from npc_sim.models import AppConfig, BudgetExtension, Budgets, ClockMode, ClockRequest, Decision, EpisodeLoadRequest, EpisodeSave, EpisodeSaveRequest, ReopenRequest, RunModeRequest, Scenario, SkillMode, WorldState
 from npc_sim.proxy import EmptyModelResponse, Proxy
 from npc_sim.prompt_context import REVIEW_EVENTS
-from npc_sim.storage import EventStore, read_json, write_json
+from npc_sim.storage import EventStore, StoryStore, read_json, write_json
 from npc_sim.world_storage import WorldStorage, read_world_state
 from npc_sim.assessment import CompletionAnalysis, grade, load_memory, record_feedback, remove_feedback
 from npc_sim.story import build_narrative
@@ -52,6 +52,7 @@ class Controller:
         self.observation: dict[str, Any] | None = None
         self.memory: dict[str, Any] = {"schema_version": "1.0", "recent": [], "discoveries": [], "plan": [], "subgoal": ""}
         self.events: EventStore | None = None
+        self.story: StoryStore | None = None
         self.queue: asyncio.Queue[tuple[str, dict[str, Any], asyncio.Future[Any]]] = asyncio.Queue()
         self.worker: asyncio.Task[None] | None = None
         self._llm_retry_at: float | None = None
@@ -161,6 +162,9 @@ class Controller:
 
     async def start_worker(self) -> None:
         self._restore_history()
+        if self.story and self.events and self.story.position() < len(self.events.events):
+            from npc_sim.app import _schedule_story
+            _schedule_story(self.story, self.events.directory, len(self.events.events))
         self.worker = asyncio.create_task(self._worker(), name="npc-loop")
         if self.run and self.run["status"] == "paused" and self.run.get("safe_checkpoint"):
             try:
@@ -182,6 +186,7 @@ class Controller:
         if self.run.get("schema_version") != "1.0":
             raise ValueError("Unsupported saved run schema")
         self.events = EventStore(paths[-1].parent, self.run["id"])
+        self.story = StoryStore(paths[-1].parent, self.run["id"], team=bool(self.run.get("agents")))
         self.memory = read_json(paths[-1].parent / "npc-memory.json")
         self.agents = self.run.get("agents", {})
         self.observation = self.run.get("observation")
@@ -481,6 +486,7 @@ class Controller:
                 self.world = None
             episode_saves.stage_branch(self.data, data)
             candidate.events = EventStore(directory, loaded_run["id"])
+            candidate.story = StoryStore(directory, loaded_run["id"], team=bool(loaded_run.get("agents")))
             await candidate._connect_saved_world(require_frozen=True)
             if candidate.world is None:
                 raise ValueError("The loaded world did not connect.")
@@ -490,6 +496,8 @@ class Controller:
             candidate.observation = fresh
             candidate.emit("episode_loaded", loaded_run["loaded_from_save"])
             candidate.checkpoint()
+            from npc_sim.app import _schedule_story
+            _schedule_story(candidate.story, directory, len(candidate.events.events))
         except Exception:
             LOGGER.exception("Loading save point failed; preserving the current episode")
             if candidate.world:
@@ -501,6 +509,7 @@ class Controller:
                 await self._connect_saved_world(require_frozen=True)
             raise
         self.run, self.memory, self.events = loaded_run, candidate.memory, candidate.events
+        self.story = candidate.story
         self.world, self.observation, self.agents = candidate.world, candidate.observation, candidate.agents
         self.patterns, self.replan_count = candidate.patterns, candidate.replan_count
         self.wait_until, self.wait_revision = candidate.wait_until, candidate.wait_revision
@@ -909,6 +918,7 @@ class Controller:
             **({"village_minute": scenario.village.start_minute} if scenario.village else {}),
         }
         self.events = EventStore(directory, rid)
+        self.story = StoryStore(directory, rid, team=bool(self.run.get("agents")))
         self.memory = {"schema_version": "1.0", "recent": [], "discoveries": [], "plan": [], "subgoal": ""}
         self.memory["agent_profile"] = profile_context(profiles[actor_id])
         previous = load_memory(self.data, scenario.id)
@@ -1397,9 +1407,18 @@ class Controller:
                                             and event["payload"]["request_id"] == payload["request_id"]), None)
                             if request is not None:
                                 metadata["free_action"] = request["action_id"] in {"look", "read"}
-            self.events.append({"kind": kind, "timestamp": utc_now(), **metadata,
+            recorded = self.events.append({"kind": kind, "timestamp": utc_now(), **metadata,
                                 "cycle": self.run["cycles"], "session_id": session_id,
                                 "actor_id": actor_id, "payload": payload})
+            story = self.story
+            if story and story.position() == recorded["sequence"] - 1:
+                try:
+                    story.append(recorded)
+                except Exception:
+                    LOGGER.exception("Story checkpoint deferred; events remain authoritative")
+            elif story and story.position() < recorded["sequence"] - 1:
+                from npc_sim.app import _schedule_story
+                _schedule_story(story, self.events.directory, len(self.events.events))
 
     def finish(self, status: str, reason: str) -> None:
         if not self.run:

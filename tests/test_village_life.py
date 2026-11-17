@@ -106,6 +106,24 @@ def test_early_tavern_meal_does_not_allow_daytime_sleep(cast):
     assert life(cast, "iona").sleep_until == cast["iona"].state.village.minute + (resident.wake_minute - resident.bed_minute) % 1440
 
 
+def test_daytime_rest_is_physical_once_daily_and_does_not_replace_sleep(cast):
+    world = cast["iona"]
+    world.actor.location_id = "tavern"
+    assert act(world, "village_daytime_rest")["code"] == "NOT_AT_HOME"
+    world.actor.location_id = world.scenario.village.residents["iona"].home
+    assert do(cast, "iona", "village_daytime_rest")["code"] == "DAYTIME_RESTED"
+    assert life(cast, "iona").last_daytime_rest == 0
+    assert not life(cast, "iona").sleeping
+    advance_to(cast, 500)
+    assert act(world, "village_daytime_rest")["code"] == "REST_ALREADY_TAKEN"
+    assert act(world, "village_sleep")["code"] == "REST_NOT_DUE"
+    advance_to(cast, 1320)
+    assert act(world, "village_daytime_rest")["code"] == "REST_NOT_DUE"
+    world.save()
+    restored = World(world.scenario, world.path, "life", "iona", "session-iona")
+    assert restored.state.village.residents["iona"].life.last_daytime_rest == 0
+
+
 def test_early_sleep_requires_completed_supper_and_does_not_skip_it(cast):
     cast["iona"].actor.location_id = "cottages"
     advance_to(cast, 1080)

@@ -74,7 +74,8 @@ def test_innkeeper_can_request_tomorrow_food_at_physical_board(tmp_path):
     request = next(choice for choice in village_fallback.candidates(world)
                    if choice["action_id"] == "village_request_supply"
                    and choice["arguments"]["good"] == "bread")
-    assert request["arguments"]["deadline"] // 1440 == 1
+    assert 1200 <= request["arguments"]["deadline"] <= 1320
+    assert request["arguments"]["required_fresh_until"] // 1440 == 1
     assert act(world, request["action_id"], **request["arguments"])["outcome"] == "APPLIED"
     assert not any(choice["action_id"] == "village_request_supply"
                    and choice["arguments"]["good"] == "bread"

@@ -880,6 +880,34 @@ def test_evening_forecast_renews_funded_next_day_bread_without_reusing_spent_sto
     assert all(request["commitment"] <= world.state.village.coins["elsie"] for request in requests)
 
 
+def test_next_breakfast_orders_bread_before_previous_bedtime(world):
+    world.scenario.village.breakfast = True
+    economy.configure(world, {**economy.config(world).model_dump(), "meal_plans": [
+        {"id": "breakfast", "use_minute": 510, "portions": 12,
+         "recipe_portions": {"bread": 12}},
+        {"id": "supper", "use_minute": 1140, "portions": 12,
+         "recipe_portions": {"bread": 8, "fish": 4}}]})
+    world.state.village.minute = 600
+    requests = [item for item in economy.suggestions(world)
+                if item["request_key"] == "1:breakfast:elsie:bread"]
+    assert len(requests) == 1
+    assert requests[0]["quantity"] >= 6
+    assert requests[0]["deadline"] <= 1440
+    assert requests[0]["required_fresh_until"] == 1950
+
+
+def test_breakfast_cooking_opens_at_earliest_diner_not_average_service(world):
+    world.scenario.village.breakfast = True
+    world.scenario.village.residents["elsie"].wake_minute = 300
+    economy.configure(world, {**economy.config(world).model_dump(), "meal_plans": [
+        {"id": "breakfast", "use_minute": 510, "portions": 12,
+         "recipe_portions": {"bread": 12}}]})
+    world.state.village.minute = 1710
+    add(world, "tavern", "bread", 6, expiry=2000, produced=1200)
+    assert economy.production_blocker(world, "village_work") is None
+    assert economy.production_batch_limit(world, "village_work") > 0
+
+
 def test_next_day_bread_order_can_plan_real_bakery_batch(world):
     world.state.village.minute = 1200
     add(world, "bakery", "flour", 2)
