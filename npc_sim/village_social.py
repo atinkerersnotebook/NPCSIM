@@ -847,6 +847,28 @@ def advance(world: "World") -> None:
     _quests_advance(world)
 
 
+def harvest_blocker(world: "World") -> tuple[str, str] | None:
+    from npc_sim import village_extensions
+
+    _, state, config, social = _context(world)
+    plot = config.activities.get("herb-garden-care") if config else None
+    rid = world.actor_id
+    if (not village_extensions.policy(world).purposeful_downtime or plot is None or rid != "iona"
+            or world.actor.location_id != plot.location):
+        return "GARDEN_UNAVAILABLE", "The authorized gardener must be at the opted-in plot."
+    if "gardening" not in world.actor.body.capabilities:
+        return "GARDEN_CAPABILITY_REQUIRED", "Harvesting requires the actual gardening capability."
+    ready = social.garden_yields.get(plot.location)
+    if ready is None or state.minute < ready:
+        return "GARDEN_NOT_READY", "Tending has no immediate yield; wait for growth."
+    problem = _guard(world, rid, plot.location, state.minute + 5)
+    if problem:
+        return problem
+    if not _equipment_access(world, rid, "herb-garden-plot", plot.location, config):
+        return "NO_PLOT", "The physical herb garden is inaccessible."
+    return None
+
+
 def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, str, None]:
     _, state, config, social = _context(world)
     if config is None:
@@ -926,20 +948,10 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         state.residents[rid].available_at = state.minute + 5
         return done("MANURE_COLLECTED", "Collected one unreserved, cared-for hen manure lot for the garden.")
     if action == "village_garden_harvest":
-        from npc_sim import village_extensions
-        garden = config.activities["herb-garden-care"].location if "herb-garden-care" in config.activities else None
-        if (not getattr(village_extensions.policy(world), "purposeful_downtime", False)
-                or "herb-garden-care" not in config.activities or rid != "iona"
-                or world.actor.location_id != garden):
-            return reject("GARDEN_UNAVAILABLE", "The authorized gardener must be at the opted-in plot.")
-        ready = social.garden_yields.get(garden)
-        if ready is None or state.minute < ready:
-            return reject("GARDEN_NOT_READY", "Tending has no immediate yield; wait for growth.")
-        problem = _guard(world, rid, garden, state.minute + 5)
+        problem = harvest_blocker(world)
         if problem:
             return reject(*problem)
-        if not _equipment_access(world, rid, "herb-garden-plot", garden, config):
-            return reject("NO_PLOT", "The physical herb garden is inaccessible.")
+        garden = world.actor.location_id
         village_goods.put(world, garden, "herbs", 1, ingredients=["herb-garden-plot"])
         del social.garden_yields[garden]
         state.residents[rid].available_at = state.minute + 5

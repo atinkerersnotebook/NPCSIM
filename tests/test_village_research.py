@@ -3,7 +3,10 @@ import copy
 import pytest
 from pydantic import ValidationError
 
-from npc_sim import village, village_economy, village_extensions, village_goods, village_research, village_turns
+from npc_sim import (
+    village, village_communication, village_economy, village_extensions, village_fallback,
+    village_goods, village_research, village_turns,
+)
 from npc_sim.contracts import observation
 from npc_sim.living_village import build_scenario
 from npc_sim.models import VillageEconomyConfig, VillageResearchConfig
@@ -131,6 +134,54 @@ def test_discovery_unlocks_real_production_and_persistent_freshness(tmp_path, mo
     assert village_research.prices(loaded)[key] == loaded.scenario.village.prices["flour"]
 
 
+@pytest.mark.parametrize("reserve_all_flour", [False, True])
+def test_known_food_can_be_requested_before_it_is_stocked(tmp_path, monkeypatch, reserve_all_flour):
+    world = make_world(tmp_path)
+    village_communication.configure(world, {})
+    key = propose(world)
+    elsie = world.bind("elsie", "session-elsie")
+
+    def offers():
+        return elsie.observe()["village"]["requestable_food"]
+
+    assert offers() == []
+    discover(world, key, monkeypatch)
+    assert offers() == []
+    elsie.actor.location_id = "bakery"
+    assert act(world, "village_research_share", project=key, target="elsie")["outcome"] == "APPLIED"
+    village.advance(world, 5)
+    offer, = offers()
+    assert (offer["product"], offer["title"], offer["supplier"]) == (key, "Herb loaf", "jory")
+    before = world.state.village.minute
+    assert act(elsie, "village_request_supply", good=key, preferred_supplier_id="jory",
+               purpose="Herb loaves for the tavern", quantity=2, deadline=before + 150,
+               required_fresh_until=before + 160)["code"] == "NOTICE_POSTED"
+    village.advance(world, 5)
+    notice = next(iter(world.state.village.communication.notices))
+    if reserve_all_flour:
+        world.state.village.economy.config.reserve_targets["bakery"] = {
+            "flour": world.state.village.stocks["bakery"]["flour"]}
+    result = act(world, "village_respond_to_request", request_id=notice, response="accept")
+    if reserve_all_flour:
+        assert result["outcome"] == "REJECTED"
+        assert "Insufficient uncommitted flour" in result["explanation"]
+        assert not world.state.village.economy.orders
+        return
+    assert result["outcome"] == "APPLIED", result["explanation"]
+    order, = world.state.village.economy.orders.values()
+    assert order.status == "accepted_planned"
+    assert village_economy.loadable_for_order(world, order) == 0
+    village.advance(world, 5)
+    for _ in range(2):
+        choice = next(choice for choice in village_fallback._purposeful_choices(world)
+                      if choice["task_id"] == f"discovery:produce:{order.id}")
+        assert act(world, choice["action_id"], **choice["arguments"])["outcome"] == "APPLIED"
+        village.advance(world, 30)
+    village.advance(world, 5)
+    assert order.status == "ready_to_collect"
+    assert village_economy.loadable_for_order(world, order) == 2
+
+
 def test_discovered_food_can_be_ordered_delivered_shared_and_eaten(tmp_path, monkeypatch):
     world = make_world(tmp_path)
     key = propose(world)
@@ -203,7 +254,7 @@ def test_research_priority_and_physical_guards(tmp_path):
     world.state.village.economy.config.reserve_targets["bakery"] = {"flour": 6}
     assert act(world, "village_research", project=key)["code"] == "RESEARCH_SUPPLIES"
     suggestions = village_economy.suggestions(world)
-    assert any(item["product"] == "flour" for item in suggestions)
+    assert not any(item["product"] == "flour" for item in suggestions)
 
 
 def test_midnight_preserves_partial_research_without_duplicate_projects(tmp_path):
@@ -276,6 +327,59 @@ def test_research_does_not_displace_maintenance_meals_orders_or_needed_work(tmp_
     world.actor.body.capabilities.append("manipulate")
     village.advance(world, 1140 - world.state.village.minute)
     assert act(world, "village_research", project=key)["code"] == "MEAL_DUE"
+
+
+@pytest.mark.parametrize("demand", ["accepted", "proposed", "posted", "target", "meal forecast"])
+def test_trials_spend_only_surplus_after_bread_production_needs(tmp_path, demand):
+    from npc_sim.village_economy_models import VillageSupplierOrder
+
+    world = make_world(tmp_path)
+    key = propose(world)
+    state = world.state.village
+    state.residents["jory"].next_work = state.minute + 30
+    flour_needed = 2 if demand == "meal forecast" else 1
+    for product, keep in {"bread": 0, "flour": flour_needed}.items():
+        quantity = state.stocks["bakery"].get(product, 0) - keep
+        if quantity:
+            village_goods.take(world, "bakery", product, quantity)
+    if demand == "target":
+        state.economy.config.production_targets["bakery"] = {"bread": 1}
+    elif demand == "meal forecast":
+        from npc_sim.village_economy_models import VillageMealPlan
+
+        village_goods.take(world, "tavern", "bread", state.stocks["tavern"]["bread"])
+        state.economy.config.meal_plans = [VillageMealPlan(
+            id="supper", use_minute=1140, portions=2, recipe_portions={"bread": 2})]
+    elif demand == "posted":
+        village_communication.configure(world, {})
+        buyer = world.bind("elsie", "session-elsie")
+        buyer.actor.location_id = "bakery"
+        assert act(buyer, "village_request_supply", good="bread", preferred_supplier_id="jory",
+                   purpose="Bread for the tavern", quantity=1, deadline=900,
+                   required_fresh_until=900)["code"] == "NOTICE_POSTED"
+        village.advance(world, 5)
+    else:
+        order = VillageSupplierOrder(
+            id="bread", buyer="elsie", supplier="jory", source="bakery", destination="tavern",
+            product="bread", quantity=1, price=2, delivery_fee=1, created_at=state.minute,
+            deadline=900, required_fresh_until=900, request_key="bread")
+        state.economy.orders[order.id] = order
+        if demand == "accepted":
+            assert act(world, "village_accept_order", order_id=order.id)["code"] == "ORDER_ACCEPTED_PLANNED"
+            assert order.production_plan["input:flour"] == 1
+            village.advance(world, 5)
+
+    assert act(world, "village_research", project=key)["code"] == "RESEARCH_SUPPLIES"
+    assert state.stocks["bakery"]["flour"] == flour_needed
+    assert not state.research.projects[key].chunks
+    village_goods.put(world, "bakery", "flour", 1)
+    assert act(world, "village_research", project=key)["code"] == "RESEARCH_STARTED"
+    assert state.stocks["bakery"]["flour"] == flour_needed
+    if demand == "accepted":
+        village.advance(world, state.residents["jory"].next_work - state.minute)
+        assert act(world, "village_work")["code"] == "BATCH_STARTED"
+        village.advance(world, order.production_plan["finish"] + 5 - state.minute)
+        assert order.status == "ready_to_collect"
 
 
 def test_material_discoveries_can_feed_new_recipes_and_reading_teaches_real_recipe(tmp_path, monkeypatch):

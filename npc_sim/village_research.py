@@ -70,6 +70,12 @@ def discoveries(world: "World") -> dict[str, ResearchProject]:
             if project.discovered_at is not None} if state else {}
 
 
+def producing(world: "World", product: str, location: str) -> bool:
+    project = discoveries(world).get(product)
+    chunk = _active(project) if project else None
+    return bool(chunk and chunk.operation == "produce" and chunk.location == location)
+
+
 def prices(world: "World") -> dict[str, int]:
     base, state = village.context(world)
     result = dict(base.prices)
@@ -154,6 +160,13 @@ def _supplies(world: "World", project: ResearchProject, operation: str) -> tuple
     if operation == "research" and project.trial_materials_consumed:
         return None
     inputs = {project.product: 1} if operation == "use" else project.proposal.inputs
+    if operation == "research":
+        from npc_sim import village_firewood
+        if village_firewood.research_uses_fuel(world, project.location, project.proposal.equipment):
+            inputs = {**inputs, "firewood": max(1, inputs.get("firewood", 0))}
+        floor = village_economy.research_stock_floor(world, project.location, inputs)
+    else:
+        floor = {good: village_economy.protected_quantity(world, project.location, good) for good in inputs}
     _, state = village.context(world)
     for resource, amount in inputs.items():
         stock = state.stocks.get(project.location, {}).get(resource, 0)
@@ -161,8 +174,8 @@ def _supplies(world: "World", project: ResearchProject, operation: str) -> tuple
         if sum(lot.quantity for lot in lots) != stock:
             raise ValueError(f"Research freshness ledger disagrees with stock: {resource}")
         available = village_economy.usable_stock(world, project.location, resource, state.minute)
-        if available - amount < village_economy.protected_quantity(world, project.location, resource):
-            return "RESEARCH_SUPPLIES", "Arrange real usable supplies beyond reserves and accepted orders; experiments cannot consume committed stock."
+        if available - amount < floor[resource]:
+            return "RESEARCH_SUPPLIES", f"Not enough surplus {resource}; keep supplies for reserves, orders and forecast demand."
     return None
 
 
@@ -191,7 +204,7 @@ def _downtime(world: "World", actor: str, end: int) -> tuple[str, str] | None:
         for job in state.maintenance.jobs.values():
             if job.definition.assignee == actor and job.completed_at is None and state.minute < job.release_at < end:
                 return "MAINTENANCE_DUE", "Leave time for upcoming assigned maintenance."
-    if resident.job and resident.job.location == world.actor.location_id and person.next_work <= state.minute:
+    if resident.job and resident.job.location == world.actor.location_id and person.next_work < end:
         blocker = village_economy.production_blocker(world, "village_work")
         if (blocker is None and all(village_economy.usable_stock(world, resident.work, resource, state.minute) >= amount
                                     for resource, amount in resident.job.inputs.items())):
@@ -458,8 +471,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             return "REJECTED", "RESEARCH_SKILL_REQUIRED", "Repair requires the real occupational skill as well as a known tool.", None
     if operation == "produce":
         orders = state.economy.orders.values() if state.economy else []
-        orders = [order for order in orders if order.status == "accepted" and order.product == project.product
-                  and order.source == project.location and order.loadable]
+        orders = [order for order in orders if order.status in village_economy.LOADABLE
+                  and order.product == project.product and order.source == project.location and order.loadable]
         lots = [lot.model_copy(deep=True) for lot in state.stock_lots.get(project.location, {}).get(project.product, [])]
         needed = 0
         for order in sorted(orders, key=lambda item: item.required_fresh_until):
@@ -539,9 +552,7 @@ def requests(world: "World", actor: str) -> list[tuple[str, int, dict[str, int]]
     for key, project in state.projects.items():
         if project.owner != actor:
             continue
-        if project.discovered_at is None and not project.trial_materials_consumed:
-            result.append((f"research:{key}:{project.attempts}", now + 120, dict(project.proposal.inputs)))
-        elif project.discovered_at is not None and village_state.economy:
+        if project.discovered_at is not None and village_state.economy:
             orders = [order for order in village_state.economy.orders.values()
                       if order.status == "accepted" and order.supplier == actor and order.product == project.product]
             needed = max(0, sum(order.loadable for order in orders) -
@@ -573,9 +584,11 @@ def observation(world: "World") -> dict[str, Any]:
                         "projects": [_view(world, key, project, True) for key, project in research.projects.items()
                                      if key in research.known.get(world.actor_id, [])],
                         "policy": "Use genuinely free workday time for occupational research. Propose a new item using your actual skill, "
-                        "real inputs and equipment at your workplace. Study in 15-minute chunks; each 60-minute trial consumes inputs once "
-                        "and can fail. Progress and failed trials persist across days and saves. Discovery needs both study and successful trials. "
-                        "Validated discoveries unlock real production, not free stock. Food/crops prepare into two meals; tools repair actual "
+                        "real inputs and equipment at your workplace. Study in 15-minute chunks; each 60-minute trial consumes surplus inputs once "
+                        "and can fail. Preserve reserves, orders and forecast demand; do not request stock solely for trials. "
+                        "Progress and failed trials persist across days and saves. Discovery needs both study and successful trials. "
+                        "Validated discoveries unlock real production, not free stock. Request learned food or crops from the listed producer "
+                        "when needed; make batches for accepted orders. At the tavern, prepare one unit into two meals. Tools repair actual "
                         "occupational objects by 25 health per unit; materials can enter later recipes. Share verified recipes face-to-face. "
                         "Meals, sleep, accepted orders, animal care and maintenance take priority. Check supplied proposal schema for supported fields."}}
 

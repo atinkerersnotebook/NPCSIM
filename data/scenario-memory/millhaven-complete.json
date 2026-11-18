@@ -210,24 +210,30 @@
     {
       "run_id": "b701c04570cb439dbaa59788e9ae309e",
       "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
-      "recorded_at": "2026-11-18T15:54:22.906614+00:00",
+      "recorded_at": "2026-11-18T21:58:53.155842+00:00",
       "findings": [
         {
-          "reason": "Village recovery is still in progress: every resident contributed, everyone home, everyone asleep.",
+          "reason": "Village recovery is still in progress: every resident contributed, everyone fed, everyone home, everyone asleep.",
           "evidence_ids": [
-            "b701c04570cb439dbaa59788e9ae309e:13634"
+            "b701c04570cb439dbaa59788e9ae309e:36293"
           ]
         },
         {
-          "reason": "Final verification did not credit every resident with a qualifying contribution.",
+          "reason": "The final check failed the meal requirement: Torvin, Mara, Nella, and Rowan missed required meals, and the missed meals were no longer recoverable.",
           "evidence_ids": [
-            "b701c04570cb439dbaa59788e9ae309e:13634"
+            "b701c04570cb439dbaa59788e9ae309e:36293"
           ]
         },
         {
-          "reason": "Nella was not home, and the final check that everyone was asleep also failed.",
+          "reason": "The final checks for everyone being home and everyone being asleep both failed.",
           "evidence_ids": [
-            "b701c04570cb439dbaa59788e9ae309e:13634"
+            "b701c04570cb439dbaa59788e9ae309e:36293"
+          ]
+        },
+        {
+          "reason": "The well, mill, and wagon passed their recovery checks, but the final check for every resident contributing failed.",
+          "evidence_ids": [
+            "b701c04570cb439dbaa59788e9ae309e:36293"
           ]
         }
       ]

@@ -50,7 +50,7 @@ choose **New adventure**. **Skills & challenge options** retains the NPC-only
 ability policy. Watch the discovered map, characters, continuous story and
 outcome without configuration editors or technical logs.
 
-**Run mode & call/action budget** in Player or Admin view includes **Run until
+**Run mode & call/action budget** in Admin view includes **Run until
 complete (ignore budget limits)**. This opt-in setting applies only to the current
 adventure and bypasses action, model-call and active-time caps without changing the
 configured budgets. Model charges can continue without a spending limit. Village
@@ -67,7 +67,7 @@ next midnight and pause at the second midnight instead. Then POST
 `/api/control/resume` with `{}`. The stop is saved with the run; it does not
 fast-forward or relax non-progress safeguards.
 
-**Add budget** in Player or Admin view adds model calls, action
+**Add budget** in Admin view adds model calls, action
 attempts, or active real-time minutes to the current adventure's frozen limits,
 without changing future defaults or resetting its world, clock, cast, or history.
 Use **Add budget**, then **Continue** if the adventure stopped at a budget limit.
@@ -97,23 +97,41 @@ Player view groups the dashboard into **Play**, **Cast**, and **Story** tabs;
 Admin view uses **Live**, **Cast & setup**, **Story**, and **Technical**. The
 selected tab is reflected in the URL hash for refresh and sharing. Without an
 episode, the cast tab opens by default. The masthead and episode commands remain
-available above the tabs, with Archive and (in Admin) Export JSON alongside
-the simulation controls. Village tracking opens on demand in the live tab.
+available above the tabs. Player highlights the next available play control and groups
+Restart, Save, Load, and Archive under **Manage adventure**. Admin keeps those commands
+alongside Export JSON and shows **Live triage** above the dashboard: run status and reason,
+current turn, latest rejected action from the loaded log, and the most-used budget limit.
+The rejection links directly to its event in Technical. In village adventures,
+Player shows **Village at a glance** with current milestones. Admin keeps
+**Village diagnostics & resident details** for private observations, plans and
+event history. Both link to **World** for village systems such as research and
+maintenance, and to **Town Supply** for inventory, forecasts, orders and requests.
 
-Player, World, and Admin views fill the available window width, keeping their
-normal edge padding and responsive layouts rather than a fixed maximum width.
+Player, Admin, World, and Town Supply share a full-width layout, responsive
+page margins, and the same sticky NPCSIM masthead. The active view is highlighted
+in the masthead. All four views keep their section tabs there, with only the selected
+section visible. Player and Admin also keep their commands in the masthead.
 
 ### Town supply chain dashboard
 
 Open **Town supply** in the top navigation (`/?view=supply`) while a village episode is loaded.
 This read-only operator dashboard refreshes from saved simulation state every five seconds.
-Start with **Needs attention** for overdue, blocked, or soon-due orders and maintenance.
-The overview charts compare usable stock with configured reserves and show a selected
-product's current stock and projected checkpoints. Use **Location** to narrow the overview,
-counts, and detail tables; orders match either end of the route, while cargo and requests
-match their recorded destination. The filters stay selected as snapshots refresh when
-those choices are still available. Inventory rows and charts show only products with
-stock on hand. Shortage counts and forecast exceptions still include out-of-stock products.
+Start with **Needs attention** for stock below reserve, at reserve (no buffer), or projected
+below reserve, alongside overdue, blocked, and soon-due orders and maintenance. Categories
+can overlap; the heading counts each affected stock row once. The overview previews the five
+highest-priority entries per list and links directly to the relevant tabs. Town supply
+has tabs for **Overview**, **Inventory & forecast**, **Orders & requests**,
+**Production & materials**, **Maintenance**, and **Posted notes**.
+
+Select a product in a stock list or the inventory table to open its forecast, or use the
+picker beside the chart. The forecast compares projections with and without unstarted plans,
+and preserves reserve warnings even when a plan covers the gap. **What changes the forecast?**
+distinguishes planned harvests and collections from planned production, and shows started
+output, deliveries, input use, outbound orders, and expiry between checkpoints.
+Use **Location** to narrow the picker, counts, and detail tables; orders match either end
+of the route, while cargo and requests match their recorded destination. Selections persist
+across refreshes when still available. The inventory includes out-of-stock products that
+have a configured reserve or projected stock.
 
 The detail sections show stock by location, cargo, supplier orders, recorded requests and resident needs,
 production plans and their bills of materials, structural and routine maintenance status,
@@ -128,8 +146,14 @@ adventure, then stop and restart the server before reloading the dashboard.
 Inventory projections show usable units in 6, 24 and 48 simulated hours. They account for
 known lot expiry and recorded production and deliveries, using order deadlines as estimated
 arrival times. The report protects reserves and flags projected material or delivery shortages.
-It is not a full simulation forecast: it excludes unrecorded work and future consumption such
-as meals or maintenance, and assumes planned gathering or started batches succeed.
+Residents can schedule and cancel their own replenishment tasks for local stock, such as
+herb gathering, egg collection, milking, felling logs, or splitting firewood from real logs.
+Each resident can schedule one
+batch at a time, up to 48 simulated hours ahead. These are not trade orders: they
+create no payment, shipment, or stock. **Production & materials** shows the recorded tasks
+and any blockers. Only eligible plans contribute to the with-plans projection; residents
+still have to perform the actual work. The forecast excludes unrecorded work and future
+consumption such as meals or maintenance.
 
 ### Live town map
 
@@ -146,8 +170,8 @@ and production linked to orders at that site. Due times are deadlines, not promi
 arrival times; unaccepted requests are not scheduled production. Planned output and
 reserved inputs appear only when recorded by the economy, while blocked orders show
 their recorded reason and requested output shows its recipe inputs and current site stock.
-The World timeline sits below the town map at every screen width. Other,
-non-village adventures retain their existing World view.
+Open **Timeline** to see recorded activity without scrolling past the map.
+World view shows only the tabs available for the current adventure.
 
 Confirmed successful `say` actions appear as speech bubbles for 18 real-time seconds,
 with a recent spoken-dialogue panel below the map. Requested/rejected actions,
@@ -439,7 +463,12 @@ Successful research adds a readable discovery to the world and unlocks
 `village_research_make`: actual inputs, tools and recipe duration produce one real
 stock unit, with no free discovery inventory. Food/crop stock lasts one day and
 can be ordered, physically delivered to the tavern, and prepared with
-`village_research_use` into two meal portions on the real hearth. Crops need at
+`village_research_use` into two meal portions on the real hearth. Learned foods
+and crops appear in a resident's `requestable_food` list with the product ID,
+producer and price. Use `village_request_supply` through a real channel (or
+`village_propose_order` in person). A supplier can accept a made-to-order request
+only if real inputs, equipment, work time, delivery and freshness allow it.
+Discovery alone neither creates stock nor places orders. Crops need at
 least 60 minutes to grow. Tools are consumable repair kits: each restores 25 health
 on a real damaged occupational object; they do not bypass structural mill
 repairs. New materials are usable inputs in subsequent researched recipes.
@@ -832,8 +861,9 @@ communication channels; remote stock, unread orders and whereabouts are not shar
 
 Rowan's `village_split_firewood` consumes **one actual log**, uses his actual axe
 and commits **15 minutes** to produce **four firewood**. These defaults are
-configurable. Log reserves and the logs needed for construction timber remain
-protected. Felling targets account for real pending fuel production, avoiding a
+configurable. Blocked firewood orders are replanned using Rowan’s axe access
+and work availability, even during another resident’s turn. Log reserves and
+the logs needed for construction timber remain protected. Felling targets account for real pending fuel production, avoiding a
 reserve/replenishment deadlock. Firewood production is capped by accepted orders
 plus one splitting-batch reserve; indivisible batches can leave at most one batch
 minus one unit of additional stock. Committed output counts toward the cap.
@@ -846,6 +876,12 @@ materials are first consumed and when making/using a heated discovered recipe;
 continuing an already-funded trial does not burn again. Recipe-specified firewood
 counts toward fuel rather than being charged twice. Rejections and replayed requests
 do not burn extra fuel. Missing fuel explicitly blocks hot production.
+
+Occupational trials use only surplus stock, including fuel. The simulator keeps
+stock for reserves, accepted production plans, open supply requests, and known
+future needs such as meal forecasts and production targets. If there is no
+surplus, the trial waits rather than generating a procurement request. Making an
+already discovered recipe to meet an order is production, not a trial.
 
 Between **18:00 and 07:00**, a household with at least one member physically home
 automatically lights/tends its shared hearth from the local pile: one unit gives
@@ -1005,6 +1041,16 @@ model calls, simulation controls, configuration, private plans, or transcripts. 
 adventures show their last recorded world state; unavailable live positions are
 explicitly labeled. Switching views never pauses or resets the adventure.
 
+**World now** shows the current turn, last successful recorded move, and blocked
+village work on the **Overview** tab. Switch to **Map**, **Timeline**, **Residents**,
+**Trades**, or **Village systems** to see those sections when available.
+Select a resident on the map, in the
+roster, or beside their timeline lane to highlight them across all three. Selection
+survives live updates for the same adventure; select the resident again to clear it.
+The timeline can show the last simulated hour (or last 20 turns in untimed worlds)
+and filter action markers and tiles by Movement, Work, or Dialogue. Location bands
+remain visible for context. **Full timeline** clears the time and activity filters.
+
 Timed worlds also show a live **World timeline** Gantt chart: one row per agent,
 location-coloured bands, taller rounded action/availability tiles, free-action diamonds, sleeping
 and wagon-route bands, public milestones, and a current-time line. The 64-pixel-high
@@ -1014,7 +1060,7 @@ for a rounded white detail card showing the agent, activity, status (when record
 time range, duration, location, any distinct recorded result, and the agent's recorded
 reason for choosing the action when available. Older or automatic events without a
 recorded decision do not invent a reason.
-The timeline uses the full available width below the Town map. Collapse the map to bring the timeline higher on the page. Unknown history stays blank;
+The **Timeline** tab uses the full available width. Unknown history stays blank;
 scheduled intentions are never drawn as completed work. The chart follows the
 latest activity until you scroll back, and keeps agent names visible while you
 scroll horizontally. Hover or focus a name to see the resident's location, occupation,
@@ -1425,15 +1471,12 @@ details** to match `D1`, `D2`, etc. to door names and states. The current agent 
 nearby observed teammates appear on their room. The map scrolls for larger worlds
 and follows the selected actor's discoveries rather than sharing hidden knowledge.
 
-On wide screens, **LIVE TEAM** sits to the right of **01 / DISCOVERED**;
-the **Technical Log** sits directly beneath Discovered in the same column,
-followed by **02 / EMBODIMENT**, then **Connection / LLM proxy**.
-The team dashboard uses the full available width, with the adventure story
-in a third column to the right of LIVE TEAM. The Completion Review sits directly above
-LIVE TEAM in the middle column, including on narrower screens. On wide screens,
-the live agent cards fill the space below the review, and all three
-columns share an aligned bottom edge. Narrower screens
-move the story below the overview and stack the map above the team.
+Each view shows its page title in the navigation header and the simulation name
+and clock in a separate **World** summary. Choose the scenario in **Admin view**;
+**Player view** uses the current scenario (or the configured default before an
+adventure starts) and lets players choose its cast. In Admin view, use **Village
+policy** for adaptive supplier recommendations, **Settings** for the LLM proxy,
+and **Technical** for the technical log and agent diagnostics.
 The story uses the dashboard's standard panel colors, sans-serif typography and
 compact paragraph spacing, including archived story displays.
 For single- and multi-agent episodes, **All agent perspectives** shows every agent in a

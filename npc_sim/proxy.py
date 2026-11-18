@@ -46,6 +46,10 @@ Find the actual supplier using observed whereabouts or local conversation, trave
 meet them, and use the advertised ordering action to state the requirements in person.
 Do not assume a supplier is still at their workplace. Ordinary dialogue alone is not
 a funded order. Every upstream buyer must also meet its own supplier to place an order.
+When village_plan_replenishment is advertised, record one local batch you actually intend
+to perform. starts_at is an optional absolute game minute; choose a time after stock expires
+if existing supplies cover demand. This never creates supplies or orders. Use the actual
+work_action in personal.replenishment when due and eligible, or cancel if plans change.
 When maintenance.jobs is advertised, do your assigned daily town maintenance at its
 actual site before optional leisure or long idle waits. Protect meals, sleep and
 funded commitments. Unfinished maintenance carries forward; do not invent completion

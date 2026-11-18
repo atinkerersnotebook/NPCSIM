@@ -1296,7 +1296,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
         "village_notice_tell": (TellNotice, "Tell one listed relevant new candidate to an actually present available listener."),
         "village_inbox_read": (ReadInbox, "Read only your owned physical workplace box while actually there."),
         "village_inbox_leave": (PostNotice, "Write a directed request at its actual recipient's box (channel inbox); no teleporting."),
-        "village_request_supply": (SupplyIntent, "Request priced supply with a real supplier, purpose, quantity, deadline and freshness. The engine resolves your workplace and price; post only at a physical channel."),
+        "village_request_supply": (SupplyIntent, "Request priced supply with a real supplier, purpose, quantity, deadline and freshness. For learned foods and crops, use requestable_food's product and supplier IDs. The engine resolves your workplace and price; post only at a physical channel."),
         "village_propose_meeting": (MeetingIntent, "Propose a project appointment; the engine resolves the work site and partner."),
         "village_schedule_crew": (CrewIntent, "Schedule a crew by project, earliest_start and participant_ids. The engine sets a 60-minute window; use a real encounter, board or partner inbox for consent. Accepted partners may confirm together at the site without another paper receipt."),
         "village_respond_to_request": (RespondIntent, "Respond through a physical channel. For infeasible same-day supply, propose a next-day deadline and proposed_fresh_until; the buyer must revise terms before acceptance."),

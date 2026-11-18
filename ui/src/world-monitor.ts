@@ -1,15 +1,16 @@
 import { eventSchema, stateSchema } from "./contracts.ts";
 import type { RunEvent, State } from "./contracts.ts";
 import { timelineEventProjection, worldGanttMarkup } from "./world-gantt.ts";
-import type { GanttScale } from "./world-gantt.ts";
+import type { GanttActivity, GanttScale } from "./world-gantt.ts";
 import { slotLabel } from "./agent-profiles.ts";
 import { actorPerspective } from "./world-view.ts";
-import { canReopenAdventure, simulationClock, villageClockText, villageClockTime, viewNavigation } from "./view-mode.ts";
+import { canReopenAdventure, simulationClock, villageClockText, villageClockTime, dashboardHeader, dashboardWorldSummary, trackDashboardHeader } from "./view-mode.ts";
 import { villageSystemsMarkup } from "./village-view.ts";
 import { TownDialogue, townMapMarkup } from "./town-map.ts";
 import type { TownMapOptions } from "./town-map.ts";
 import { tradeNote } from "./trade-notes.ts";
 import { npcPortrait } from "./npc-sprite.ts";
+import { sectionTabPanel, sectionTabs } from "./section-tabs.ts";
 
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
@@ -108,9 +109,51 @@ export function monitoredAgents(state: State) {
   return [...residents, ...visitors];
 }
 
+function worldNowMarkup(state: State, events: readonly RunEvent[], agents: ReturnType<typeof monitoredAgents>,
+  active: boolean, historyReady: boolean): string {
+  const village = state.world?.village;
+  const turn = active ? agents.find(agent => agent.deciding) : undefined;
+  const walks = new Set<string>();
+  let movement: { actor: string; destination: string; minute?: number; sequence: number } | undefined;
+  for (const event of events) {
+    const payload = event.payload as { action_id?: unknown; request_id?: unknown } | null;
+    if (event.kind === "action_request" && payload?.action_id === "go" && typeof payload.request_id === "string") {
+      walks.add(payload.request_id);
+    }
+  }
+  for (const event of events) {
+    const payload = event.payload as { outcome?: unknown; request_id?: unknown; observation?: {
+      self?: { location_id?: unknown }; village?: { minute?: unknown }
+    } } | null;
+    if (event.kind !== "action_result" || payload?.outcome !== "APPLIED"
+      || typeof payload.request_id !== "string" || !walks.has(payload.request_id)
+      || (movement && event.sequence <= movement.sequence)) continue;
+    const observed = payload.observation;
+    const destination = observed?.self?.location_id;
+    if (typeof destination !== "string") continue;
+    const minute = observed?.village?.minute;
+    movement = { actor: event.actor_id, destination, sequence: event.sequence, minute: typeof minute === "number" ? minute : undefined };
+  }
+  const locationName = (id: string) => state.world?.entities[id]?.name ?? id.replaceAll(/[-_]/g, " ");
+  const actorName = (id: string) => agents.find(agent => agent.id === id)?.name ?? slotLabel(id);
+  const blocked = [
+    ...Object.values(village?.tasks ?? {}).map(item => ({ title: item.kind.replaceAll("_", " "), ...item })),
+    ...(village?.dashboard?.maintenance ?? []), ...(village?.dashboard?.research ?? [])
+  ].filter(item => item.status === "blocked");
+  const turnText = turn ? `${turn.name} · ${turn.current && state.world ? turn.location : `Last observed: ${turn.location}`}`
+    : active ? "No turn in progress" : "Adventure is not running";
+  const movementText = movement ? `${actorName(movement.actor)} → ${locationName(movement.destination)}`
+    : historyReady ? "No movement recorded" : "Reading world history…";
+  return `<section class="monitor-now" aria-labelledby="monitor-now-title"><h2 id="monitor-now-title">World now</h2><dl>
+    <div><dt>Current turn</dt><dd>${escape(turnText)}</dd></div>
+    <div><dt>Last recorded move${movement?.minute === undefined ? "" : ` · ${villageClockTime(movement.minute)}`}</dt><dd>${escape(movementText)}</dd></div>
+    ${village ? `<div><dt>${active ? "Blocked work" : "Last recorded blocked work"} (${blocked.length})</dt><dd>${blocked.length ? `${escape(villageClockText(blocked[0].title))}${blocked[0].blocker ? ` · ${escape(villageClockText(blocked[0].blocker))}` : ""}${blocked.length > 1 ? ` · ${blocked.length - 1} more` : ""}` : "None recorded"}</dd></div>` : ""}
+  </dl></section>`;
+}
+
 export function worldMonitorMarkup(
   state: State, events: readonly RunEvent[] = [], scale: GanttScale = {}, map: TownMapOptions = {},
-  mapCollapsed = false
+  historyReady = true
 ): string {
   const agents = monitoredAgents(state);
   const clock = simulationClock(state.world ?? state.observation, state.observation);
@@ -127,56 +170,58 @@ export function worldMonitorMarkup(
     group.push(agent);
     groups.set(agent.locationId, group);
   }
-  return `<section class="monitor-summary" aria-label="World summary">
-    <div><span class="eyebrow">WORLD</span><h2>${escape(state.run?.title ?? "No active adventure")}</h2>
-      <p><span class="status ${escape(status)}">${statusText}</span> /
-        ${agents.some(agent => agent.visitor) ? `${agents.filter(agent => !agent.visitor).length} residents /
-          ${agents.filter(agent => agent.visitor && agent.current).length} visitors present`
-          : `${agents.length} ${agents.length === 1 ? "agent" : "agents"}`} / Read-only</p></div>
-    <div class="monitor-clock" role="timer" aria-label="Current game time">
+  const timeline = worldGanttMarkup(state, events, agents, { ...scale, linkResidents: true, selectedActorId: map.selectedActorId });
+  const systems = villageSystemsMarkup(state, state.observation?.village?.research?.enabled);
+  const trades = state.world?.village?.dashboard?.trades ?? [];
+  return `${dashboardWorldSummary(state.run?.title ?? "No active adventure",
+    `<p><span class="status ${escape(status)}">${statusText}</span> /
+      ${agents.some(agent => agent.visitor) ? `${agents.filter(agent => !agent.visitor).length} residents /
+        ${agents.filter(agent => agent.visitor && agent.current).length} visitors present`
+        : `${agents.length} ${agents.length === 1 ? "agent" : "agents"}`} / Read-only</p>`,
+    `<div class="monitor-clock" role="timer" aria-label="Current game time">
       <span class="eyebrow">CURRENT GAME TIME</span><strong>${clock?.time ?? "Untimed world"}</strong>
-      ${clock ? `<small>${clock.description}</small>` : ""}</div>
-  </section>
+      ${clock ? `<small>${clock.description}</small>` : ""}</div>`)}
+  <section ${sectionTabPanel("monitor-overview", "Overview")}>
+  ${worldNowMarkup(state, events, agents, active, historyReady)}
   ${state.run?.reason ? `<p class="notice">${escape(villageClockText(state.run.reason))}</p>` : ""}
-  ${status === "budget_exceeded" ? '<p class="muted">Keep this world and continue: <a class="button" href="/?budget=extend">Extend budget in Player view</a></p>' : ""}
+  ${status === "budget_exceeded" ? '<p class="muted">Keep this world and continue: <a class="button" href="/?view=admin&amp;budget=extend">Extend budget in Admin view</a></p>' : ""}
   ${canReopenAdventure(state.run, Boolean(state.world)) ? `<p class="muted">The day is unfinished. <a class="button" href="/">${status === "error" ? "Recover the interrupted day in Player view" : "Continue the unfinished day in Player view"}</a></p>` : ""}
   ${!active && agents.length ? '<p class="muted">Last recorded world state. The adventure is not running.</p>' : ""}
   ${!state.world && agents.length ? '<p class="muted">World snapshot unavailable. Locations below are last observed, not live positions.</p>' : ""}
-  ${state.world?.village ? `<button type="button" class="button subtle monitor-map-toggle" data-map-toggle aria-expanded="${!mapCollapsed}" aria-controls="monitor-town-map">${mapCollapsed ? "Show Town map" : "Collapse Town map"}</button>` : ""}
-  <div class="monitor-visuals">
-    ${state.world?.village ? `<div id="monitor-town-map"${mapCollapsed ? " hidden" : ""}>${mapCollapsed ? "" : townMapMarkup(state, agents, map)}</div>` : ""}
-    ${worldGanttMarkup(state, events, agents, scale)}
-  </div>
-  ${state.world?.village?.dashboard?.trades?.length ? `<section class="monitor-trades" aria-label="Recorded completed trades">
-    <h2>Recorded completed trades</h2>
-    <p class="muted">Settled goods and payments only; trading presence and accepted orders are not completed deals.</p>
-    <ul>${state.world.village.dashboard.trades.slice().sort((a, b) => b.minute - a.minute).slice(0, 20)
-      .map(trade => `<li>${escape(villageClockTime(trade.minute))} / ${escape(tradeNote(state, trade))}</li>`).join("")}</ul>
-  </section>` : ""}
-  ${villageSystemsMarkup(state, [], state.observation?.village?.research?.enabled)}
+  </section>
+  ${state.world?.village ? `<section ${sectionTabPanel("monitor-map", "Map")}>${townMapMarkup(state, agents, map)}</section>` : ""}
+  ${timeline ? `<section ${sectionTabPanel("monitor-timeline", "Timeline")}>${timeline}</section>` : ""}
+  <section ${sectionTabPanel("monitor-residents", "Residents")}><h2 id="monitor-residents-title">Residents &amp; agents</h2>
   <div class="monitor-locations">${[...groups.values()].map(group =>
     `<section class="monitor-location" aria-label="${escape(group[0].location)}">
       <h2>${escape(group[0].location)} <small>${group.length}</small></h2>
       ${group.map(agent => `<article class="monitor-agent${agent.deciding ? " deciding" : ""}" data-monitor-agent="${escape(agent.id)}">
-        <h3>${npcPortrait(agent.id)} ${escape(agent.name)}</h3>
+        <h3>${npcPortrait(agent.id)} <button type="button" class="monitor-resident-link" data-resident-select="${escape(agent.id)}" aria-label="Highlight ${escape(agent.name)}" aria-pressed="${agent.id === map.selectedActorId}">${escape(agent.name)}</button></h3>
         ${agent.visitor ? '<span class="tag">Visitor</span>' : ""}
         ${!agent.current ? '<small class="muted">Last observed location / not live</small>' : ""}
         <p>${escape(agent.activity)}</p>
         ${agent.lastAction ? `<small class="muted">Last action: ${escape(agent.lastAction)}</small>` : ""}
       </article>`).join("")}
-    </section>`).join("") || '<p class="muted">No agents to monitor yet. Start an adventure in Player or Admin view.</p>'}</div>`;
+    </section>`).join("") || '<p class="muted">No agents to monitor yet. Start an adventure in Player or Admin view.</p>'}</div></section>
+  ${trades.length ? `<section ${sectionTabPanel("monitor-trades", "Trades")}><div class="monitor-trades">
+    <h2>Recorded completed trades</h2>
+    <p class="muted">Settled goods and payments only; trading presence and accepted orders are not completed deals.</p>
+    <ul>${trades.slice().sort((a, b) => b.minute - a.minute).slice(0, 20)
+      .map(trade => `<li>${escape(villageClockTime(trade.minute))} / ${escape(tradeNote(state, trade))}</li>`).join("")}</ul>
+  </div></section>` : ""}
+  ${systems ? `<section ${sectionTabPanel("monitor-systems", "Village systems")}><div class="monitor-systems">${systems}</div></section>` : ""}`;
 }
 
 export function startWorldMonitor(app: HTMLDivElement): void {
   app.className = "world-view";
   document.title = "NPCSIM · World view";
-  app.innerHTML = `<main>
-    <header><div><span class="eyebrow">NPCSIM / LIVE WORLD</span><h1>World view<span class="dot">.</span></h1></div>
-      <div class="header-right"><span class="live-dot"></span><span id="monitor-connection">Connecting</span>${viewNavigation("world")}</div>
-    </header>
+  app.innerHTML = `<main class="dashboard-page"><div class="command-shell">
+    ${dashboardHeader("world", "LIVE WORLD", "World view", '<span class="live-dot"></span><span id="monitor-connection">Connecting</span>')}
+    <nav class="dashboard-tabs" role="tablist" aria-label="World sections" hidden></nav></div>
     <p id="monitor-error" class="notice" role="alert" hidden></p>
     <div id="monitor-content"><p class="muted">Loading the world...</p></div>
   </main>`;
+  trackDashboardHeader(app);
   const content = app.querySelector<HTMLDivElement>("#monitor-content")!;
   const error = app.querySelector<HTMLParagraphElement>("#monitor-error")!;
   const connection = app.querySelector<HTMLSpanElement>("#monitor-connection")!;
@@ -188,8 +233,42 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   let historyReady = false;
   let zoom = 1;
   let renderedZoom = 1;
+  let recent = false;
+  let activity: GanttActivity = "all";
+  let resetTimelineScroll = false;
   let mapZoom = 1;
-  let mapCollapsed = false;
+  let mapLeft = 0;
+  let mapTop = 0;
+  let timelineLeft = 0;
+  let timelineCentre = 0.5;
+  let followingTimeline = true;
+  const rememberScroll = () => {
+    const mapScroll = content.querySelector<HTMLDivElement>("#monitor-map:not([hidden]) .town-map-scroll");
+    if (mapScroll) {
+      mapLeft = mapScroll.scrollLeft;
+      mapTop = mapScroll.scrollTop;
+    }
+    const scroll = content.querySelector<HTMLDivElement>("#monitor-timeline:not([hidden]) .gantt-scroll");
+    if (scroll?.clientWidth) {
+      timelineLeft = scroll.scrollLeft;
+      followingTimeline = scroll.scrollWidth - scroll.clientWidth - timelineLeft < 24;
+      timelineCentre = (timelineLeft + scroll.clientWidth / 2) / scroll.scrollWidth;
+    }
+  };
+  const restoreScroll = () => {
+    content.querySelector<HTMLDivElement>("#monitor-map:not([hidden]) .town-map-scroll")?.scrollTo(mapLeft, mapTop);
+    const scroll = content.querySelector<HTMLDivElement>("#monitor-timeline:not([hidden]) .gantt-scroll");
+    if (scroll) scroll.scrollLeft = followingTimeline || resetTimelineScroll ? scroll.scrollWidth
+      : renderedZoom !== zoom ? timelineCentre * scroll.scrollWidth - scroll.clientWidth / 2 : timelineLeft;
+    return scroll;
+  };
+  const tabs = sectionTabs(app.querySelector<HTMLElement>(".dashboard-tabs")!, content, phase => {
+    if (phase === "before") rememberScroll();
+    else {
+      restoreScroll();
+      schedule();
+    }
+  });
   let selectedActorId: string | undefined;
   let dialogue = new TownDialogue();
   let liveAfterSequence = 0;
@@ -200,38 +279,48 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     frame = null;
     if (!state) return;
     historyReady ||= seen.size >= state.event_count;
-    const old = content.querySelector<HTMLDivElement>(".gantt-scroll");
-    const viewportWidth = old?.clientWidth ?? content.clientWidth - (window.matchMedia("(max-width: 700px)").matches ? 102 : 132);
+    const old = content.querySelector<HTMLDivElement>("#monitor-timeline:not([hidden]) .gantt-scroll");
+    const viewportWidth = old?.clientWidth || content.clientWidth - (window.matchMedia("(max-width: 700px)").matches ? 102 : 132);
     const now = Date.now();
-    const markup = worldMonitorMarkup(state, historyReady ? [...events.values()] : [], { zoom, viewportWidth },
-      { zoom: mapZoom, selectedActorId, dialogue, now }, mapCollapsed);
+    const markup = worldMonitorMarkup(state, historyReady ? [...events.values()] : [], { zoom, viewportWidth, recent, activity },
+      { zoom: mapZoom, selectedActorId, dialogue, now }, historyReady);
     clearTimeout(bubbleTimer);
     const expiries = dialogue.active(now).map(line => line.expiresAt);
     if (expiries.length) bubbleTimer = setTimeout(schedule, Math.min(...expiries) - now + 1);
     if (markup !== previous) {
       const mapScroll = content.querySelector<HTMLDivElement>(".town-map-scroll");
-      const mapLeft = mapScroll?.scrollLeft ?? 0;
-      const mapTop = mapScroll?.scrollTop ?? 0;
+      rememberScroll();
+      const openSystems = new Set([...content.querySelectorAll<HTMLDetailsElement>("#monitor-systems details[open]")]
+        .map(details => details.querySelector("summary")?.textContent));
       const mapActorFocus = document.activeElement?.getAttribute("data-map-actor");
+      const residentFocus = document.activeElement?.getAttribute("data-resident-select");
+      const residentArea = document.activeElement?.closest("#monitor-residents, #monitor-timeline")?.id;
+      const filterFocus = ["data-timeline-recent", "data-timeline-activity", "data-timeline-reset"]
+        .find(attribute => document.activeElement?.hasAttribute(attribute));
       const mapZoomFocus = document.activeElement?.getAttribute("data-map-zoom");
-      const mapToggleFocus = document.activeElement?.hasAttribute("data-map-toggle");
+      const panelFocus = document.activeElement?.matches('[role="tabpanel"]') ? document.activeElement.id : undefined;
+      const systemsFocus = document.activeElement?.matches("#monitor-systems summary") ? document.activeElement.textContent : null;
       const mapHadFocus = document.activeElement === mapScroll;
-      const left = old?.scrollLeft ?? 0;
-      const following = !old || old.scrollWidth - old.clientWidth - left < 24;
-      const centre = old ? (left + old.clientWidth / 2) / old.scrollWidth : 0.5;
       const focused = document.activeElement?.getAttribute("data-gantt-focus");
       const nameFocus = document.activeElement?.getAttribute("data-gantt-name");
       const zoomFocus = document.activeElement?.getAttribute("data-timeline-zoom");
       const hadFocus = old?.contains(document.activeElement);
       const zoomControls = renderedZoom === zoom ? content.querySelector(".gantt-zoom") : null;
       content.innerHTML = markup;
-      if (mapToggleFocus) content.querySelector<HTMLButtonElement>("[data-map-toggle]")?.focus({ preventScroll: true });
-      const nextMapScroll = content.querySelector<HTMLDivElement>(".town-map-scroll");
-      if (nextMapScroll) {
-        nextMapScroll.scrollLeft = mapLeft;
-        nextMapScroll.scrollTop = mapTop;
-        if (mapHadFocus) nextMapScroll.focus({ preventScroll: true });
+      tabs.sync();
+      const scroll = restoreScroll();
+      if (panelFocus) document.getElementById(panelFocus)?.focus({ preventScroll: true });
+      for (const details of content.querySelectorAll<HTMLDetailsElement>("#monitor-systems details")) {
+        const summary = details.querySelector("summary");
+        if (openSystems.has(summary?.textContent)) details.open = true;
+        if (systemsFocus && summary?.textContent === systemsFocus) summary.focus({ preventScroll: true });
       }
+      if (filterFocus) content.querySelector<HTMLElement>(`[${filterFocus}]`)?.focus({ preventScroll: true });
+      if (residentFocus && residentArea) {
+        [...content.querySelectorAll<HTMLButtonElement>(`#${residentArea} [data-resident-select]`)]
+          .find(button => button.dataset.residentSelect === residentFocus)?.focus({ preventScroll: true });
+      }
+      if (mapHadFocus) content.querySelector<HTMLDivElement>(".town-map-scroll")?.focus({ preventScroll: true });
       if (mapActorFocus) {
         [...content.querySelectorAll<HTMLButtonElement>("[data-map-actor]")]
           .find(button => button.dataset.mapActor === mapActorFocus)?.focus({ preventScroll: true });
@@ -244,16 +333,11 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       if (nameFocus) [...content.querySelectorAll<HTMLElement>("[data-gantt-name]")]
         .find(label => label.dataset.ganttName === nameFocus)?.focus({ preventScroll: true });
       if (zoomControls) content.querySelector(".gantt-zoom")?.replaceWith(zoomControls);
-      const scroll = content.querySelector<HTMLDivElement>(".gantt-scroll");
-      if (scroll) {
-        scroll.scrollLeft = following ? scroll.scrollWidth
-          : renderedZoom !== zoom ? centre * scroll.scrollWidth - scroll.clientWidth / 2 : left;
-        if (hadFocus) {
-          const target = focused ? [...scroll.querySelectorAll<SVGElement>("[data-gantt-focus]")]
-            .find(element => element.getAttribute("data-gantt-focus") === focused) : undefined;
-          (target ?? scroll).focus({ preventScroll: true });
-          if (target?.matches(".gantt-bar, .gantt-marker")) showGanttTooltip(target);
-        }
+      if (scroll && hadFocus) {
+        const target = focused ? [...scroll.querySelectorAll<SVGElement>("[data-gantt-focus]")]
+          .find(element => element.getAttribute("data-gantt-focus") === focused) : undefined;
+        (target ?? scroll).focus({ preventScroll: true });
+        if (target?.matches(".gantt-bar, .gantt-marker")) showGanttTooltip(target);
       }
       if (zoomFocus) {
         const button = content.querySelector<HTMLButtonElement>(`[data-timeline-zoom="${zoomFocus}"]`);
@@ -264,6 +348,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
         const hovered = document.elementFromPoint(pointerPosition.x, pointerPosition.y)?.closest(".gantt-bar, .gantt-marker");
         if (hovered) showGanttTooltip(hovered);
       }
+      resetTimelineScroll = false;
       renderedZoom = zoom;
       previous = markup;
       if (scroll && scroll.clientWidth !== viewportWidth) schedule();
@@ -373,10 +458,31 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     if (event.target instanceof Element && event.target.matches(".gantt-bar, .gantt-marker")) hideGanttTooltip();
   });
   content.addEventListener("scroll", hideGanttTooltip, true);
+  content.addEventListener("change", event => {
+    const select = event.target;
+    if (!(select instanceof HTMLSelectElement) || !select.hasAttribute("data-timeline-activity")) return;
+    if (select.value === "all" || select.value === "movement" || select.value === "work" || select.value === "dialogue") {
+      activity = select.value;
+      schedule();
+    }
+  });
   content.addEventListener("click", event => {
     if (!(event.target instanceof Element)) return;
-    if (event.target.closest("[data-map-toggle]")) {
-      mapCollapsed = !mapCollapsed;
+    if (event.target.closest("[data-timeline-recent], [data-timeline-reset]")) {
+      if (event.target.closest("[data-timeline-reset]")) {
+        recent = false;
+        activity = "all";
+        zoom = 1;
+      } else {
+        recent = !recent;
+      }
+      resetTimelineScroll = true;
+      schedule();
+      return;
+    }
+    const resident = event.target.closest<HTMLButtonElement>("[data-resident-select]");
+    if (resident) {
+      selectedActorId = resident.dataset.residentSelect === selectedActorId ? undefined : resident.dataset.residentSelect;
       schedule();
       return;
     }

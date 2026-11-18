@@ -85,6 +85,8 @@ function researchTableMarkup(projects: VillageResearchView[], name: (id: string)
         <p>Equipment: ${project.equipment.map(name).join(", ") || "None"}</p>
         <p>${project.kind === "food" || project.kind === "crop" ? "Use: 2 meal portions" :
           project.kind === "tool" ? "Use: repairs actual damaged objects" : "Use: ingredient for further recipes"}</p>
+        ${project.status === "discovered" && (project.kind === "food" || project.kind === "crop")
+          ? `<p>Residents who learn this recipe can request it from ${name(project.owner)}. Not a stock guarantee.</p>` : ""}
       </td></tr>`).join("")}</tbody></table></div>`;
 }
 
@@ -194,6 +196,29 @@ export function villageMarkup(village: VillageObservation): string {
         || '<p class="muted">No witnessed events yet.</p>'}
     </details>
   </section>`;
+}
+
+function villageDetailLinks(state: State): string {
+  const systems = state.world?.village?.dashboard ||
+    (state.observation?.village?.livestock ?? state.run?.observation?.village?.livestock)?.enabled;
+  return `<p class="village-detail-links">
+    ${systems ? '<a href="/?view=world#monitor-systems">World: village systems</a>' : '<a href="/?view=world#monitor-map">World: village map</a>'}
+    <a href="/?view=supply#inventory">Town Supply: inventory</a>
+    <a href="/?view=supply#orders">Town Supply: orders &amp; requests</a>
+  </p>`;
+}
+
+export function villageSummaryMarkup(state: State): string {
+  const village = state.world?.village;
+  if (!village || !Object.keys(village.roster).length) return "";
+  return `<h2>Village at a glance</h2>
+    <p>Day ${Math.floor(village.minute / 1440) + 1} · ${time(village.minute)} · ${Object.keys(village.roster).length} residents</p>
+    <div class="village-progress">
+      <span class="fact-chip">Shovel: ${village.shovel_recovered ? "recovered" : "outstanding"}</span>
+      <span class="fact-chip">Well: ${village.well_dug ? "completed" : "unfinished"}</span>
+      <span class="fact-chip">Mill: ${village.repaired ? "repaired" : village.breakdown ? "broken" : "running"}</span>
+    </div>
+    ${villageDetailLinks(state)}`;
 }
 
 export function villageDashboardMarkup(state: State, events: RunEvent[]): string {
@@ -323,10 +348,10 @@ export function villageDashboardMarkup(state: State, events: RunEvent[]): string
           ${label(entry.kind)}: ${escape(entry.text)}${entry.origin_world_id ? " / carried from an earlier world" : ""}</p>`).join("")}
       </details>
     </section>` : ""}
-    ${villageSystemsMarkup(state, events, state.observation?.village?.research?.enabled)}
+    ${villageDetailLinks(state)}
+    ${modelCallMarkup(state, events, named)}
     <div class="village-roster">${cards}</div>
-    <details><summary>Village stock & event ledger</summary>
-      ${Object.entries(village.stocks).map(([location, values]) => `<p><b>${named(location)}:</b> ${stock(values)}</p>`).join("")}
+    <details><summary>Village event ledger</summary>
       ${village.events.slice(-24).map(entry => `<p>${time(entry.minute)} / ${named(entry.actor)} / ${escape(villageClockText(entry.result))}</p>`).join("")}
     </details>
     ${village.stock_history?.length ? `<details aria-label="Hourly stock records"><summary>Hourly workplace stock records (${village.stock_history.length})</summary>
@@ -342,7 +367,31 @@ export function villageDashboardMarkup(state: State, events: RunEvent[]): string
     </details>` : ""}`;
 }
 
-export function villageSystemsMarkup(state: State, events: readonly RunEvent[] = [], researchEnabled = false): string {
+function modelCallMarkup(state: State, events: readonly RunEvent[], name: (id: string) => string): string {
+  const calls = new Map<string, { pending: number; wait: number; read: number; coordination: number }>();
+  for (const event of events) {
+    if (event.run_id !== state.run?.id) continue;
+    const count = calls.get(event.actor_id) ?? { pending: 0, wait: 0, read: 0, coordination: 0 };
+    if (event.kind === "proxy_request") count.pending += 1;
+    if (event.kind === "action_request" && event.payload && typeof event.payload === "object"
+      && "action_id" in event.payload && typeof event.payload.action_id === "string") {
+      const action = event.payload.action_id;
+      if (["village_wait", "village_wait_event"].includes(action)) count.wait += count.pending;
+      else if (["read", "look"].includes(action)) count.read += count.pending;
+      else if (["say", "village_ask", "village_tell", "village_share_route", "village_meeting"].includes(action)) {
+        count.coordination += count.pending;
+      }
+      count.pending = 0;
+    }
+    calls.set(event.actor_id, count);
+  }
+  const rows = [...calls].filter(([, count]) => count.wait + count.read + count.coordination > 0);
+  return rows.length ? `<details><summary>Model calls linked to actions</summary>
+    ${rows.map(([actor, count]) => `<p>${name(actor)}: waiting ${count.wait}, reading/looking ${count.read}, coordination ${count.coordination}</p>`).join("")}
+  </details>` : "";
+}
+
+export function villageSystemsMarkup(state: State, researchEnabled = false): string {
   const dashboard = state.world?.village?.dashboard;
   const firewoodPanel = dashboard?.firewood ? firewoodMarkup(dashboard.firewood, true) : "";
   const livestock = state.observation?.village?.livestock ?? state.run?.observation?.village?.livestock;
@@ -368,23 +417,6 @@ export function villageSystemsMarkup(state: State, events: readonly RunEvent[] =
     <td>${at(job.due_at)}</td><td>${escape(job.status)}${job.blocker ? ` / ${escape(job.blocker)}` : ""}</td>
     <td>${Object.entries(job.supplies).map(([item, quantity]) => `${quantity} ${label(item)}`).join(", ")
       || "No consumables"}</td></tr>`;
-  const calls = new Map<string, { pending: number; wait: number; read: number; coordination: number }>();
-  for (const event of events) {
-    if (event.run_id !== state.run?.id) continue;
-    const count = calls.get(event.actor_id) ?? { pending: 0, wait: 0, read: 0, coordination: 0 };
-    if (event.kind === "proxy_request") count.pending += 1;
-    if (event.kind === "action_request" && event.payload && typeof event.payload === "object"
-      && "action_id" in event.payload && typeof event.payload.action_id === "string") {
-      const action = event.payload.action_id;
-      if (["village_wait", "village_wait_event"].includes(action)) count.wait += count.pending;
-      else if (["read", "look"].includes(action)) count.read += count.pending;
-      else if (["say", "village_ask", "village_tell", "village_share_route", "village_meeting"].includes(action)) {
-        count.coordination += count.pending;
-      }
-      count.pending = 0;
-    }
-    calls.set(event.actor_id, count);
-  }
   return `${firewoodPanel}${livestockPanel}${dashboard.communication?.enabled ? communicationMarkup(dashboard.communication, true) : ""}
     <section class="village-panel" aria-label="Village economy and activities">
     ${maintenance.length ? `<h3>Town maintenance checklist</h3>
@@ -438,9 +470,6 @@ export function villageSystemsMarkup(state: State, events: readonly RunEvent[] =
         measured since ${at(usage.since)}: work ${usage.work} min, travel ${usage.travel} min,
         requested wait ${usage.wait} min, leisure ${usage.leisure} min, idle ${usage.idle} min,
         sleep ${usage.sleep} min / ${usage.successful_actions} successful actions</p>`).join("")}
-      ${[...calls].filter(([, count]) => count.wait + count.read + count.coordination > 0)
-        .map(([actor, count]) => `<p>${name(actor)} / model calls linked to actions:
-          waiting ${count.wait}, reading/looking ${count.read}, coordination ${count.coordination}</p>`).join("")}
     </details>
   </section>`;
 }

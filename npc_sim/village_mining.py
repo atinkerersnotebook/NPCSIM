@@ -129,9 +129,7 @@ def iron_needed(world: "World") -> int:
         for project in state.research.projects.values():
             if project.owner != smith:
                 continue
-            if project.discovered_at is None and not project.trial_materials_consumed:
-                required += project.proposal.inputs.get("iron", 0)
-            elif project.discovered_at is not None and state.economy:
+            if project.discovered_at is not None and state.economy:
                 demand = sum(order.loadable for order in state.economy.orders.values()
                              if order.status == "accepted" and order.product == project.product and order.supplier == smith)
                 required += max(0, demand - village_economy.usable_stock(world, location, project.product, state.minute)) * project.proposal.inputs.get("iron", 0)

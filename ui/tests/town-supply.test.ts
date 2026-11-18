@@ -46,33 +46,98 @@ const overview = townSupplySchema.parse({ title: "Millhaven", revision: 1, minut
   requests: [], needs: [], production: [], risks: [], notes: [],
 });
 
+test("Town supply separates operational sections and keeps overview links to their tabs", () => {
+  const markup = townSupplyMarkup(overview);
+  const panels = [...markup.matchAll(/<section id="([^"]+)"[^>]+role="tabpanel"/g)].map(match => match[1]);
+  assert.deepEqual(panels, ["supply-overview", "inventory", "orders", "production", "maintenance", "notices"]);
+  const overviewPanel = markup.split('id="supply-overview"')[1].split('id="inventory"')[0];
+  for (const id of ["inventory", "orders", "maintenance"]) assert.ok(overviewPanel.includes(`href="#${id}"`));
+});
+
 test("stock chart puts shortages first and forecast uses the selected inventory row", () => {
   const markup = townSupplyMarkup(overview, "", JSON.stringify(["farm", "grain"]));
   const reserves = markup.split('id="supply-reserves"')[1].split('id="supply-forecast-chart"')[0];
   assert.match(reserves, /flour · Mill[\s\S]*2 below reserve[\s\S]*grain · Farm Site/);
   assert.doesNotMatch(reserves, /eggs/);
-  const forecast = markup.split('id="supply-forecast-chart"')[1].split('<dl')[0];
-  assert.match(forecast, /grain · Farm Site[\s\S]*<strong>6<\/strong>[\s\S]*Now[\s\S]*<strong>5<\/strong>[\s\S]*\+6h[\s\S]*<strong>4<\/strong>[\s\S]*\+24h[\s\S]*<strong>3<\/strong>[\s\S]*\+48h/);
+  const forecast = markup.split('id="supply-forecast-chart"')[1].split('</section>')[0];
+  assert.match(forecast, /grain · Farm Site[\s\S]*Now<\/strong><span>On hand: <strong>6<\/strong>[\s\S]*\+6h<\/strong><span>With plans: <strong>5<\/strong>[\s\S]*\+24h<\/strong><span>With plans: <strong>4<\/strong>[\s\S]*\+48h<\/strong><span>With plans: <strong>3<\/strong>/);
+  assert.match(forecast, /Projection without unstarted plans unavailable/);
+  assert.doesNotMatch(forecast, /Without plans: <strong>/);
 });
 
 test("location scopes attention, metrics, and details while matching both order endpoints", () => {
   const markup = townSupplyMarkup(overview, "mill", JSON.stringify(["farm", "grain"]));
-  const attention = markup.split('id="supply-attention"')[1].split('class="supply-chart-grid"')[0];
-  assert.match(attention, /Needs attention \(4\)[\s\S]*Overdue[\s\S]*incoming[\s\S]*Blocked[\s\S]*Rebuild axle[\s\S]*Need timber[\s\S]*Due now[\s\S]*Tighten belt[\s\S]*Due soon[\s\S]*outgoing/);
+  const attention = markup.split('id="supply-attention"')[1].split('</section>')[0];
+  assert.match(attention, /Needs attention \(5\)[\s\S]*1 below reserve now · 0 at reserve \(no buffer\) · 1 projected below reserve[\s\S]*Overdue[\s\S]*incoming[\s\S]*Blocked[\s\S]*Rebuild axle[\s\S]*Need timber[\s\S]*Due now[\s\S]*Tighten belt[\s\S]*Due soon[\s\S]*outgoing/);
   assert.doesNotMatch(attention, /later|elsewhere|closed|Dig ditch/);
-  assert.match(markup, /Open orders<\/dt><dd>3/);
+  assert.match(markup, /<div><dt>Open orders<\/dt><dd>3/);
+  assert.match(markup, /<div><dt>Blocked orders<\/dt><dd>0/);
+  assert.match(markup, /<div class="supply-metric-alert"><dt>Below reserve now<\/dt><dd>1/);
   assert.match(markup, /Inventory forecast<\/h3>[\s\S]*flour · Mill/);
   assert.match(markup, /<td>later<\/td>/);
   assert.doesNotMatch(markup, /elsewhere|Dig ditch|barley|grain · Farm Site/);
 });
 
-test("inventory hides zero on-hand rows even with inbound stock, without hiding shortages", () => {
+test("zero stock at a configured reserve remains actionable; forecast shows the first breach and its drivers", () => {
   const data = { ...overview, inventory: [inventory("mill", "out-of-stock", 0, 3, [0, 7, 7]),
-    { ...inventory("mill", "expired-stock", 2, 0, [0, 0, 0]), usable: 0 }] };
-  const markup = townSupplyMarkup(data, "mill", JSON.stringify(["mill", "out-of-stock"]));
-  assert.doesNotMatch(markup, /out of stock/);
-  assert.match(markup, /Inventory forecast<\/h3>[\s\S]*expired stock · Mill/);
-  assert.match(markup, /<td>expired stock<\/td><td>2<\/td><td>0<\/td>/);
-  assert.match(markup, /Below reserve now<\/dt><dd>1/);
-  assert.match(townSupplyMarkup(data, "square"), /No products on hand in this view/);
+    { ...inventory("mill", "at-reserve", 2, 2, [2, 1, 4]), forecast_changes: [
+      { production: 0, inbound: 0, inputs: 0, outbound: 0, expired: 0 },
+      { production: 0, inbound: 0, inputs: 1, outbound: 0, expired: 0 },
+      { production: 0, inbound: 3, inputs: 0, outbound: 0, expired: 0 },
+    ] }] };
+  const empty = townSupplyMarkup(data, "mill", JSON.stringify(["mill", "out-of-stock"]));
+  assert.match(empty, /aria-pressed="true">out of stock · Mill/);
+  assert.match(empty, /Below reserve now<\/dt><dd>1/);
+  const markup = townSupplyMarkup(data, "mill", JSON.stringify(["mill", "at-reserve"]));
+  assert.match(markup, /1 below reserve now · 1 at reserve \(no buffer\) · 2 projected below reserve/);
+  assert.match(markup, /First projected below reserve: <strong>\+24h/);
+  assert.match(markup, /−1 planned production inputs[\s\S]*\+3 expected deliveries/);
+  assert.match(townSupplyMarkup(data, "square"), /No products to forecast in this view/);
+});
+
+test("forecast separates actual stock and both scenarios, warning when either falls below reserve", () => {
+  const movement = { production: 0, inbound: 0, inputs: 0, outbound: 0, expired: 0 };
+  const data = townSupplySchema.parse({ ...overview, inventory: [{ ...inventory("mill", "herbs", 5, 3, [8, 2, 4]),
+    on_hand: 7, baseline_projected: [1, 4, 0], forecast_changes: [
+      { ...movement, production: 1, harvest: 4, planned_production: 2 }, movement, movement,
+    ] }] });
+  const markup = townSupplyMarkup(data);
+  assert.match(markup, /Below reserve without plans at \+6h/);
+  assert.match(markup, /Below reserve at \+48h<\/dt><dd>1/);
+  const chart = markup.split('id="supply-forecast-chart"')[1].split('</section>')[0];
+  assert.match(chart, /aria-label="Forecast legend"[\s\S]*On hand[\s\S]*With unstarted plans[\s\S]*Without unstarted plans[\s\S]*Reserve/);
+  assert.match(chart, /Reserve: 3[\s\S]*Now<\/strong><span>On hand: <strong>7<\/strong><\/span><span>Usable: <strong>5/);
+  assert.match(chart, /\+6h<\/strong><span>With plans: <strong>8<\/strong><\/span>\s*<span>Without plans: <strong>1/);
+  assert.match(chart, /First projected below reserve with plans: <strong>\+24h/);
+  assert.match(chart, /First projected below reserve without plans: <strong>\+6h/);
+  assert.match(chart, /\+1 started production[\s\S]*class="supply-driver planned_production">\+2 planned production[\s\S]*class="supply-driver harvest">\+4 planned harvest \/ collection/);
+  const inventoryTable = markup.split('aria-label="Inventory by location"')[1].split('</table>')[0];
+  assert.match(inventoryTable, /\+6h · [^<]+ with plans<\/th><th scope="col">\+6h · [^<]+ without plans/);
+  assert.match(inventoryTable, /<td>8<\/td><td>1<\/td><td>2<\/td><td>4<\/td><td>4<\/td><td>0<\/td>/);
+});
+
+test("replenishment shows planned and blocked work under production and respects the site filter", () => {
+  const data = townSupplySchema.parse({ ...overview, residents: { iona: "Iona", ada: "Ada", rowan: "Rowan" }, replenishment: [
+    { id: "herbs", worker: "iona", location: "square", product: "herbs", quantity: 3, finish: 540, status: "planned", basis: "Local reserve" },
+    { id: "eggs-and-milk", worker: "ada", location: "farm", product: "eggs_and_milk", quantity: 4, finish: 600, status: "planned", basis: "Local reserve" },
+    { id: "wood", worker: "rowan", location: "mill", product: "wood", quantity: 0, finish: null, status: "blocked", basis: "No <dry> wood" },
+  ] });
+  const markup = townSupplyMarkup(data);
+  const production = markup.split('id="production"')[1].split('</section>')[0];
+  assert.match(production, /Production &amp; materials \(3\)[\s\S]*Internal replenishment tasks/);
+  assert.match(production, /<td>Iona<\/td><td>Village Square<\/td><td>herbs<\/td><td>3<\/td><td>[^<]+<\/td><td>planned/);
+  assert.match(production, /<td>Ada<\/td><td>Farm Site<\/td><td>eggs and milk<\/td>/);
+  const mill = townSupplyMarkup(data, "mill").split('id="production"')[1].split('</section>')[0];
+  assert.match(mill, /Production &amp; materials \(1\)[\s\S]*<td>Rowan<\/td><td>Mill<\/td><td>wood<\/td><td>—<\/td><td>Unscheduled<\/td><td>blocked<\/td><td>No &lt;dry&gt; wood/);
+  assert.doesNotMatch(mill, /Iona|Ada/);
+});
+
+test("overview caps its stock preview without hiding the full inventory", () => {
+  const data = { ...overview, inventory: Array.from({ length: 7 }, (_, i) => inventory("mill", `product_${i}`, i + 1, 8, [8, 8, 8])) };
+  const markup = townSupplyMarkup(data, "mill");
+  const preview = markup.split('aria-label="Stock and reserve comparison"')[1].split('</ul>')[0];
+  assert.match(preview, /product 0 · Mill/);
+  assert.doesNotMatch(preview, /product 6 · Mill/);
+  assert.match(markup, /Full inventory \(7\)<\/a> · Showing 5 of 7/);
+  assert.match(markup.split('id="inventory"')[1], /data-forecast-key[^>]+>product 6<\/button>/);
 });

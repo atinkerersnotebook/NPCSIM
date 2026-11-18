@@ -442,19 +442,57 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
     pending = [other for other in state.economy.orders.values() if other.id != order.id
                and other.status in COMMITTED and other.supplier == order.supplier
                and other.production_plan and other.loadable]
+    discovery = village_research.discoveries(world).get(order.product)
+    if (discovery and discovery.proposal.kind in {"food", "crop"}
+            and state.research.config.enabled and order.supplier == discovery.owner
+            and order.source == discovery.location):
+        supplier = state.residents[order.supplier]
+        if (order.supplier not in world.state.actors or supplier.life is None
+                or discovery.proposal.skill not in resident.skills or village_research._tools(world, discovery)):
+            return {}, "The verified recipe needs its skilled supplier and usable equipment"
+        start = max(state.minute + 5, supplier.available_at, supplier.busy_until,
+                    supplier.life.work.finishes_at if supplier.life.work else 0,
+                    production_day * 1440 + resident.wake_minute,
+                    max((other.production_plan.get("finish", 0) for other in pending), default=0),
+                    village_research.blocked_until(world, order.supplier) or 0)
+        duration = discovery.proposal.duration * village_life.cooldown_factor(world, order.supplier)
+        finish = start + missing * duration
+        if shelf and start + duration + shelf <= order.required_fresh_until:
+            finish = order.required_fresh_until - shelf + 1 + (missing - 1) * duration
+        home = village.route(world, order.source, resident.home)
+        if home is None or finish > min(latest_start, closing,
+                                        production_day * 1440 + resident.bed_minute - 5 * (len(home) + 1)):
+            return {}, "No free recipe production slot before delivery and closing time"
+        inputs = {}
+        for product, amount in discovery.proposal.inputs.items():
+            required = missing * amount
+            reserved = sum(other.production_plan.get(f"input:{product}", 0) for other in pending
+                           if other.source == order.source)
+            if available_for_order(world, order.source, product, finish) - reserved < required:
+                return {}, f"Insufficient uncommitted {product} inputs above reserves"
+            inputs[f"input:{product}"] = required
+        return {"finish": finish, "output": missing, **inputs}, ""
     job = resident.job
     from npc_sim import village_firewood
-    if order.product == "firewood" and village_firewood.enabled(world):
-        dynamic = village_firewood.production_job(world)
-        if dynamic and order.supplier == state.firewood.config.supplier:
-            job = dynamic
+    fuel_world = None
+    if (order.product == "firewood" and village_firewood.enabled(world)
+            and order.supplier == state.firewood.config.supplier and order.source == resident.work):
+        supplier_actor = world.state.actors.get(order.supplier)
+        if supplier_actor is None:
+            return {}, "Fuel supplier is unavailable"
+        fuel_world = world.bind(order.supplier, supplier_actor.session_id)
+        job = village_firewood.production_job(fuel_world)
+        if job is None:
+            return {}, "Fuel production site is unavailable"
     if job and order.product in job.outputs and order.source == resident.work:
-        if job.equipment and (world.state.entities[job.equipment].broken or world.state.entities[job.equipment].hidden):
-            return {}, "Production equipment is unavailable"
-        if job.equipment and (world.state.entities[job.equipment].location != job.location
-                              and job.equipment not in world.state.actors[order.supplier].inventory):
-            return {}, "Production equipment cannot be reached at the workplace"
-        if order.product == "firewood" and world.actor_id == order.supplier and village_firewood.production_potential(world, deadline) < missing:
+        if job.equipment:
+            equipment = world.state.entities.get(job.equipment)
+            if equipment is None or equipment.broken or equipment.hidden:
+                return {}, "Production equipment is unavailable"
+            if (equipment.location != job.location
+                    and job.equipment not in world.state.actors[order.supplier].inventory):
+                return {}, "Production equipment cannot be reached at the workplace"
+        if fuel_world is not None and village_firewood.production_potential(fuel_world, deadline) < missing:
             return {}, "Insufficient timed felling and splitting capacity before delivery"
         batches = ceil(missing / job.outputs[order.product])
         interval = max(5, job.interval, job.duration) * village_life.cooldown_factor(world, order.supplier)
@@ -484,28 +522,6 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
             inputs[f"input:{product}"] = required
         return {"finish": finish, "output": batches * job.outputs[order.product],
                 "gather:logs": gather_needed, **inputs}, ""
-    from npc_sim import village_firewood
-    if (order.product == "firewood" and village_firewood.enabled(world)
-            and order.supplier == state.firewood.config.supplier
-            and order.source == resident.work):
-        fuel_job = village_firewood.production_job(world)
-        axe = world.state.entities.get(village_firewood.AXE)
-        if (fuel_job is None or axe is None or axe.broken or axe.hidden
-                or (axe.location != order.source and village_firewood.AXE not in world.actor.inventory)):
-            return {}, "The real wood axe and fuel production site are unavailable"
-        outstanding = sum(other.production_plan.get("output", 0) for other in pending)
-        capacity = village_firewood.capacity_available(world, order.source)
-        if capacity is not None and missing + outstanding > capacity:
-            return {}, "Fuel storage cannot hold the committed production"
-        start = max(earliest, max((other.production_plan.get("finish", 0) for other in pending), default=0))
-        for finish in range(start + 5, min(latest_start, closing) + 1, 5):
-            if village_firewood.production_potential(world, finish) >= missing + outstanding:
-                logs = available_for_order(world, order.source, "logs", finish)
-                reserved = sum(other.production_plan.get("input:logs", 0) for other in pending)
-                batches = ceil(missing / fuel_job.outputs["firewood"])
-                return {"finish": finish, "output": missing,
-                        "input:logs": min(batches, max(0, logs - reserved))}, ""
-        return {}, "No feasible felling and splitting capacity before the delivery deadline"
     livestock = state.livestock
     if (livestock and livestock.config.enabled and order.supplier == livestock.config.keeper
             and order.source == "farm" and order.product in {"milk", "eggs"}):
@@ -1407,20 +1423,19 @@ def advance(world: "World") -> None:
                               order.destination)
             continue
         elif order.status in {"accepted_planned", "in_production"}:
+            from npc_sim import village_research
+            producing = village_research.producing(world, order.product, order.source) or any(
+                person.life and person.life.work and person.life.work.location == order.source
+                and order.product in person.life.work.outputs for person in world.state.village.residents.values())
             if loadable_for_order(world, order) >= order.loadable:
                 order.status, order.production_plan = "ready_to_collect", {}
                 from npc_sim import village_communication
                 village_communication.sync_order(world, order, "commitment_ready", order.source)
-            elif (order.production_plan.get("finish", 0) < world.state.village.minute
-                  and not any(person.life and person.life.work and person.life.work.location == order.source
-                              and order.product in person.life.work.outputs
-                              for person in world.state.village.residents.values())):
+            elif order.production_plan.get("finish", 0) < world.state.village.minute and not producing:
                 order.status, order.reason, order.production_plan = "blocked", "Planned production did not complete", {}
                 from npc_sim import village_communication
                 village_communication.sync_order(world, order, "commitment_blocked", order.source)
-            elif any(person.life and person.life.work and person.life.work.location == order.source
-                     and order.product in person.life.work.outputs
-                     for person in world.state.village.residents.values()):
+            elif producing:
                 order.status = "in_production"
                 from npc_sim import village_communication
                 village_communication.sync_order(world, order, "commitment_in_progress", order.source)
@@ -1567,6 +1582,132 @@ def _production(world: "World", action: str) -> tuple[dict[str, int], dict[str, 
     if action in village_services.JOBS:
         return {}, {village_services.JOBS[action][1]: 2}, 1
     return job.inputs, job.outputs, job.batch_size
+
+
+def research_stock_floor(world: "World", location: str, inputs: dict[str, int]) -> dict[str, int]:
+    """Keep optional experiments behind commitments and known future demand."""
+    from npc_sim import village_communication, village_firewood, village_research
+
+    base, state = village.context(world)
+    policy = config(world)
+    floor = {good: protected_quantity(world, location, good) for good in inputs}
+    if village_firewood.enabled(world) and "firewood" in inputs:
+        fuel = state.firewood.config
+        consumers = [village_firewood.consumer_target(world, rid) for rid in fuel.businesses
+                     if base.residents[rid].work == location]
+        if location == (fuel.household_location or base.residents[fuel.household_buyer].home):
+            consumers.append(village_firewood.consumer_target(world, fuel.household_buyer))
+        if location == base.residents[fuel.supplier].work:
+            consumers.append(village_firewood.source_reserve(world))
+        fuel_target = max(consumers, default=0)
+    else:
+        fuel_target = 0
+    if policy is None:
+        if fuel_target:
+            floor["firewood"] += fuel_target
+        return floor
+
+    demand: dict[str, list[tuple[int, int, int]]] = {}
+    pending: dict[str, int] = {}
+    planned: dict[str, dict[str, int]] = {}
+
+    def need(good: str, quantity: int, fresh_until: int, *, deadline: int | None = None,
+             additional: bool = False) -> None:
+        if quantity > 0:
+            cutoff = max(state.minute, fresh_until)
+            demand.setdefault(good, []).append((cutoff, deadline if deadline is not None else cutoff, quantity))
+            if additional:
+                pending[good] = pending.get(good, 0) + quantity
+
+    for order in state.economy.orders.values():
+        if order.source != location or order.status not in ACTIVE or order.deadline < state.minute or not order.loadable:
+            continue
+        need(order.product, order.loadable, order.required_fresh_until, deadline=order.deadline,
+             additional=order.status not in LOADABLE)
+        if order.status in LOADABLE:
+            reservations = planned.setdefault(order.product, {})
+            for good in inputs:
+                qty = max(0, order.production_plan.get(f"input:{good}", 0)
+                          - order.production_plan.get(f"gather:{good}", 0))
+                reservations[good] = reservations.get(good, 0) + qty
+
+    inn = base.residents[policy.innkeeper].work
+    posted_for_meals: dict[str, list[tuple[int, int, int]]] = {}
+    if state.communication:
+        for versions in state.communication.notices.values():
+            notice = versions[-1]
+            terms = notice.terms
+            if (terms.type == "supply_request" and not notice.linked_order_id
+                    and notice.status not in village_communication.TERMINAL
+                    and terms.due_at is not None and terms.due_at >= state.minute
+                    and (terms.expires_at is None or terms.expires_at >= state.minute)
+                    and terms.required_fresh_until is not None and terms.quantity is not None
+                    and any(base.residents[rid].work == location for rid in terms.recipients)):
+                need(terms.subject, terms.quantity, terms.required_fresh_until, deadline=terms.due_at, additional=True)
+                if terms.destination == inn:
+                    posted_for_meals.setdefault(terms.subject, []).append(
+                        (terms.due_at, terms.required_fresh_until, terms.quantity))
+
+    if policy.meal_plans:
+        for service in meal_supply_forecast(world):
+            for good, forecast in service["inputs"].items():
+                if location == inn:
+                    need(good, forecast["required"] - forecast["confirmed_incoming"], service["due"], additional=True)
+                elif (supplier := _supplier(world, good, inn)) and base.residents[supplier].work == location:
+                    missing = max(0, forecast["uncovered"] - forecast["unconfirmed"])
+                    requests = posted_for_meals.get(good, [])
+                    for index, (deadline, fresh_until, quantity) in enumerate(requests):
+                        if deadline <= forecast["latest_delivery"] and fresh_until >= service["due"]:
+                            covered = min(missing, quantity)
+                            missing -= covered
+                            requests[index] = deadline, fresh_until, quantity - covered
+                    need(good, missing, service["due"], deadline=forecast["latest_delivery"], additional=True)
+
+    targets = dict(policy.reserve_targets.get(location, {}))
+    for good, quantity in policy.production_targets.get(location, {}).items():
+        targets[good] = max(targets.get(good, 0), quantity)
+    if fuel_target:
+        targets["firewood"] = max(targets.get("firewood", 0), fuel_target)
+    if village_firewood.enabled(world) and location == base.residents[state.firewood.config.supplier].work:
+        targets["firewood"] = max(targets.get("firewood", 0), village_firewood.source_reserve(world))
+
+    shortfalls = {}
+    for good in demand.keys() | targets.keys():
+        buckets = _supply_buckets(world, location, good)
+        missing = 0
+        for fresh_until, deadline, quantity in sorted(demand.get(good, [])):
+            covered, _ = _allocate([bucket for bucket in buckets if bucket["available_at"] <= max(state.minute, deadline)],
+                                   quantity, fresh_until)
+            missing += quantity - covered
+        covered, _ = _allocate(buckets, targets.get(good, 0), state.minute)
+        shortfalls[good] = missing + targets.get(good, 0) - covered
+        if good in floor:
+            floor[good] += max(0, targets.get(good, 0) - policy_reserve(world, location, good)) + pending.get(good, 0)
+
+    # Count the larger of the recorded reservation and inferred demand, not both.
+    def protect_recipe(outputs: dict[str, int], materials: dict[str, int]) -> None:
+        batches = max((ceil(shortfalls.get(good, 0) / quantity) for good, quantity in outputs.items()), default=0)
+        for good in inputs:
+            reserved = sum(planned.get(output, {}).get(good, 0) for output in outputs)
+            floor[good] += max(reserved, batches * materials.get(good, 0))
+        for output in outputs:
+            planned.pop(output, None)
+
+    for resident in base.residents.values():
+        job = resident.job
+        if job and job.location == location and job.outputs:
+            protect_recipe(job.outputs, job.inputs)
+    if village_firewood.enabled(world):
+        job = village_firewood.production_job(world)
+        if job and job.location == location:
+            protect_recipe(job.outputs, job.inputs)
+    for discovery in village_research.discoveries(world).values():
+        if discovery.location == location:
+            protect_recipe({discovery.product: 1}, discovery.proposal.inputs)
+    for reservations in planned.values():
+        for good, quantity in reservations.items():
+            floor[good] += quantity
+    return floor
 
 
 def production_batch_limit(world: "World", action: str, *, personal: bool = False) -> int:
@@ -1833,6 +1974,17 @@ def observation(world: "World") -> dict[str, Any]:
         request["order_availability"] = "blocked" if blocked else "available"
         request["order_reason"] = blocked[1] if blocked else None
         request["order_code"] = blocked[0] if blocked else None
+    from npc_sim import village_research
+    research = state.research
+    known = set(research.known.get(rid, [])) if research else set()
+    report["requestable_food"] = [
+        {"product": product, "title": project.proposal.title, "supplier": project.owner,
+         "price": unit_price(world, product)}
+        for product, project in village_research.discoveries(world).items()
+        if product in known and project.proposal.kind in {"food", "crop"} and project.owner != rid
+        and project.owner in base.residents and project.location == base.residents[project.owner].work
+        and project.location != base.residents[rid].work
+    ]
     report["ordering_guidance"] = village_communication.GUIDANCE if village_communication.enabled(world) else (
         "Planning alone places no orders. Find each supplier and speak face-to-face using "
         "village_plan_supplies with supplier, or village_propose_order. Suppliers respond "

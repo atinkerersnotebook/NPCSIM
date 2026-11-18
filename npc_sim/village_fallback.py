@@ -593,6 +593,35 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
     if village_depot.enabled(world) and world.actor_id == config.livestock.keeper:
         choices.extend(_feed_store_choices(world))
     choices.extend(_egg_negotiation_choices(world))
+    if state.research and state.research.config.enabled and state.economy:
+        from npc_sim import village_research
+        projects = village_research.discoveries(world)
+        for order in sorted(village_economy._personal_orders(world), key=lambda order: order.deadline):
+            project = projects.get(order.product)
+            if (not project or project.proposal.kind not in {"food", "crop"}
+                    or order.supplier != world.actor_id or project.owner != world.actor_id
+                    or order.status not in village_economy.LOADABLE or not order.loadable
+                    or village_economy.loadable_for_order(world, order) >= order.loadable):
+                continue
+            task = f"discovery:produce:{order.id}"
+            reason = "Make the verified food or crop for a personally confirmed order."
+            if location != project.location:
+                travel = _travel_choice(world, project.location, task, reason, "P1")
+                if travel:
+                    choices.append(travel)
+                continue
+            end = state.minute + project.proposal.duration * village_life.cooldown_factor(world, world.actor_id)
+            shelf = village_research.shelf_life(world, order.product)
+            if end >= order.deadline or (shelf and end + shelf <= order.required_fresh_until):
+                continue
+            args = {"project": order.product}
+            action = "village_research_make"
+            if (village_research._guard(world, project, "produce", end) is None
+                    and village_life.action_blocker(world, action, args=args) is None
+                    and action_blocker(world, action, args, check_wait=False) is None):
+                choices.append({"task_id": task, "action_id": action, "arguments": args,
+                                "priority": "P1", "reason": reason})
+                break
     if state.communication and state.economy:
         from npc_sim import village_communication
         notices = sorted((memory for memory in state.communication.knowledge.get(world.actor_id, {}).values()

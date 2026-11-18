@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any
 
 from npc_sim import handling, village, village_goods, village_life, village_services, village_wagon, village_extensions, village_communication, village_depot
+from npc_sim import village_replenishment
 from npc_sim.models import VillageCommittedWork, VillageCrewSession, VillageJob
 
 if TYPE_CHECKING:
@@ -11,7 +12,7 @@ VERBS = {"village_wait", "village_ask", "village_tell", "village_observe", "vill
          "village_load", "village_deliver", "village_project", "village_patrol", "village_eat", "village_sleep",
          "village_daytime_rest",
          "village_meeting", "village_cook_fish", "village_share_route", "village_split_firewood",
-         "village_execute_fuel_delivery", "village_plan_walk", "wait_until_next_relevant_event"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS
+         "village_execute_fuel_delivery", "village_plan_walk", "wait_until_next_relevant_event"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS | village_replenishment.VERBS
 
 
 def observation(world: "World") -> dict[str, Any]:
@@ -51,6 +52,7 @@ def observation(world: "World") -> dict[str, Any]:
                                 or world.state.entities["wagon"].location == world.actor.location_id)
             else None} if config.time_based_turns else {}),
         "personal": {
+            "replenishment": village_replenishment.personal(world),
             "supply_needs": [need.model_dump() for need in person.fallback.supply_needs.values()]
             if person.fallback else [],
             "recent_locations": [step.model_dump() for step in person.fallback.recent_locations],
@@ -171,12 +173,23 @@ def actions(world: "World") -> list[dict[str, Any]]:
     nearby = [other for other in village.local_residents(world, world.actor.location_id) if other != rid]
     result: list[dict[str, Any]] = []
 
-    def add(aid: str, text: str, properties: dict[str, Any]) -> None:
+    def add(aid: str, text: str, properties: dict[str, Any], *, optional: tuple[str, ...] = ()) -> None:
         result.append({"id": aid, "description": text, "targets": [],
                        "arguments_schema": {"type": "object", "properties": properties,
-                                            "required": list(properties), "additionalProperties": False},
+                                            "required": [key for key in properties if key not in optional],
+                                            "additionalProperties": False},
                        "availability": "available", "reason": None})
 
+    tasks = village_replenishment.choices(world)
+    if tasks:
+        add(village_replenishment.PLAN,
+            "Plan one local batch; optionally choose starts_at (absolute game minute in the next 48 hours). "
+            "The plan alone produces nothing.",
+            {"task": {"type": "string", "enum": tasks},
+             "starts_at": {"type": "integer", "minimum": state.minute + 5,
+                           "maximum": state.minute + village_replenishment.MAX_LEAD}}, optional=("starts_at",))
+    if village_replenishment.personal(world):
+        add(village_replenishment.CANCEL, "Cancel your own outstanding replenishment plan; no supplies move.", {})
     add("village_observe", "Check local tools and correct your own stale location beliefs.", {})
     if config.time_based_turns and world.scenario.id == "millhaven-living":
         from npc_sim import village_walking
@@ -338,6 +351,10 @@ def production_ready(world: "World", action: str) -> tuple[str, str] | None:
         return "WRONG_WORKPLACE", "Go to your own workplace first."
     if any(skill not in world.actor.body.capabilities for skill in resident.skills):
         return "CAPABILITY_REQUIRED", "Your assigned body lacks your occupation's skills."
+    if action == "village_fell_logs" and job.equipment:
+        axe = world.state.entities.get(job.equipment)
+        if axe is None or axe.hidden or job.equipment not in world.visible_ids():
+            return "WOOD_AXE_REQUIRED", "Bring the actual wood axe to the woodlot before felling logs."
     if job.equipment:
         blocked = handling.use_reason(world, [job.equipment])
         if blocked:
@@ -376,6 +393,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     def contribute() -> None:
         state.role_contributions[rid] = state.role_contributions.get(rid, 0) + 1
 
+    if action in village_replenishment.VERBS:
+        return village_replenishment.apply(world, action, args)
     if action == "village_plan_walk":
         from npc_sim import village_walking
         return village_walking.plan(world, args)
@@ -705,6 +724,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
 
 
 def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
+    if action in village_replenishment.WORK_ACTIONS:
+        village_replenishment.record_work(world, action)
     config, state = village.context(world)
     person = state.residents[world.actor_id]
     if action == "go":

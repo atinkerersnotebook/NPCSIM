@@ -10,7 +10,7 @@ from npc_sim import (
     village_livestock, village_mining, village_research, village_walking,
 )
 from npc_sim.living_village import build_scenario
-from npc_sim.models import Scenario, VillageEconomyConfig, VillageFirewoodConfig
+from npc_sim.models import Scenario, VillageDayPolicy, VillageEconomyConfig, VillageFirewoodConfig
 from npc_sim.storage import read_json
 from npc_sim.world import World
 from test_village_expanded import scenario
@@ -605,6 +605,7 @@ def test_strict_config_atomic_install_and_complete_household_membership(tmp_path
 def test_heated_research_trial_and_verified_recipe_burn_only_real_fuel_once(tmp_path, monkeypatch, recipe_fuel):
     world = make_world(tmp_path)
     world.state.village.economy.config.production_targets = {}
+    world.state.village.economy.config.meal_plans = []
     village_research.configure(world, {"required_minutes": 60, "required_successes": 1})
     worker = actor(world, "torvin" if recipe_fuel else "jory")
     location = worker.actor.location_id
@@ -621,6 +622,10 @@ def test_heated_research_trial_and_verified_recipe_burn_only_real_fuel_once(tmp_
     village.advance(world, 5)
     key = next(iter(world.state.village.research.projects))
     assert act(worker, "village_research", project=key)["code"] == "FIREWOOD_REQUIRED"
+    reserve = fuel.consumer_target(world, worker.actor_id)
+    goods.put(world, location, "firewood", reserve)
+    assert act(worker, "village_research", project=key)["code"] == "RESEARCH_SUPPLIES"
+    assert burn_count(world, location) == 0
     goods.put(world, location, "firewood", 1)
     monkeypatch.setattr(village_research, "_trial_success", lambda *_: True)
     for _ in range(4):
@@ -629,6 +634,8 @@ def test_heated_research_trial_and_verified_recipe_burn_only_real_fuel_once(tmp_
         village.advance(world, 15)
     assert burn_count(world, location) == 1
     assert world.state.village.research.projects[key].discovered_at is not None
+    assert world.state.village.stocks[location]["firewood"] == reserve
+    goods.take(world, location, "firewood", reserve)
     assert act(worker, "village_research_make", project=key)["code"] == "FIREWOOD_REQUIRED"
     goods.put(world, location, "firewood", 1)
     assert act(worker, "village_research_make", project=key)["code"] == "DISCOVERY_WORK_STARTED"
@@ -794,6 +801,34 @@ def test_split_and_deliver_three_funded_fuel_units_in_two_stops(tmp_path):
     paid = len(world.state.village.economy.payments)
     assert act(world, "village_execute_fuel_delivery", route_id=plan.route_id)["outcome"] == "REJECTED"
     assert len(world.state.village.economy.payments) == paid
+
+
+@pytest.mark.parametrize("axe_available", [True, False])
+def test_blocked_fuel_order_replans_from_another_residents_turn(tmp_path, axe_available):
+    world = make_world(tmp_path)
+    buyer = actor(world, "jory", "woods")
+    assert economy.apply(buyer, "village_propose_order", {
+        "product": "firewood", "quantity": 2, "supplier": "rowan",
+        "deadline": 1000, "required_fresh_until": 1000})[0] == "APPLIED"
+    order = next(iter(world.state.village.economy.orders.values()))
+    assert economy.apply(world, "village_accept_order", {"order_id": order.id})[:2] == (
+        "APPLIED", "ORDER_ACCEPTED_PLANNED")
+    order.status, order.production_plan = "blocked", {}
+    world.state.village.day_policy = VillageDayPolicy(purposeful_downtime=True)
+    if axe_available:
+        world.state.entities[fuel.AXE].location = "rowan"
+        world.actor.inventory.append(fuel.AXE)
+    else:
+        world.state.entities[fuel.AXE].health = 0
+
+    economy.advance(buyer)
+
+    if axe_available:
+        assert order.status == "accepted_planned", order.reason
+        assert order.reason is None and order.production_plan["output"] >= order.loadable
+    else:
+        assert order.status == "blocked" and not order.production_plan
+        assert "equipment is unavailable" in order.reason
 
 
 def test_blocked_fuel_commitment_uses_newly_split_stock_for_real_route(tmp_path):

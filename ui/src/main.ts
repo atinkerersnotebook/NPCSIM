@@ -12,8 +12,8 @@ import { evidenceReferences, explainEvidence } from "./evidence";
 import { copyRecordedPages, villageTimeline } from "./story";
 import { actorPerspective, agentPerspectives, discoveredEntities, goalPresentation, inventoryUnitsUsed, locationNetwork, nutritionLabel, teamLocationNetwork } from "./world-view";
 import { batchTiming, clockHelp, clockTime } from "./bakery-view";
-import { villageDashboardMarkup, villageMarkup } from "./village-view";
-import { adventureStatus, budgetSummary, canAskQuestions, canExtendBudget, canReopenAdventure, dashboardTab, isAdminView, playerCommandVisible, simulationClock, villageClockText, viewMode, viewNavigation } from "./view-mode";
+import { villageDashboardMarkup, villageMarkup, villageSummaryMarkup } from "./village-view";
+import { adminTriage, adventureStatus, budgetSummary, canAskQuestions, canExtendBudget, canReopenAdventure, dashboardTab, isAdminView, playerCommandVisible, playerPrimaryCommand, simulationClock, villageClockText, viewMode, dashboardHeader, dashboardWorldSummary } from "./view-mode";
 import type { DashboardTab } from "./view-mode";
 import { startWorldMonitor } from "./world-monitor";
 import { startTownSupply } from "./town-supply";
@@ -30,30 +30,33 @@ if (viewMode(location.search) === "supply") {
   startWorldMonitor(app);
 } else {
 const adminView = isAdminView(location.search);
-let focusBudget = new URLSearchParams(location.search).get("budget") === "extend";
+let focusBudget = adminView && new URLSearchParams(location.search).get("budget") === "extend";
 app.className = adminView ? "admin-view" : "player-view";
 document.title = adminView ? "NPCSIM · World Observatory" : "NPCSIM · Adventures";
 
 app.innerHTML = `
-  <main id="observatory">
-    <header>
-      <div class="masthead-title"><a class="brand" href="/" aria-label="NPCSIM home">NPCSIM<span>·</span></a><div><span class="eyebrow">${adminView ? "WORLD OBSERVATORY" : "THE ADVENTURE"}</span><h1 id="masthead-episode">No episode yet</h1></div><span id="episode-status" class="tag" role="status">NO EPISODE</span></div>
-      <div class="header-right"><div id="simulation-clock" class="simulation-clock" role="timer" aria-label="Current game time" hidden></div><span class="live-dot"></span><span id="connection">Connecting</span>${viewNavigation(adminView ? "admin" : "player")}</div>
-    </header>
+  <main id="observatory" class="dashboard-page">
+    ${dashboardHeader(adminView ? "admin" : "player", adminView ? "WORLD OBSERVATORY" : "THE ADVENTURE", adminView ? "Admin view" : "Player view",
+      '<span class="live-dot"></span><span id="connection">Connecting</span>')}
     <div id="notice" class="notice" role="alert" hidden></div>
+    ${dashboardWorldSummary("No active adventure",
+      '<p><span id="episode-status" class="tag" role="status">NO EPISODE</span><span id="episode-name"></span></p>',
+      '<div id="simulation-clock" class="monitor-clock" role="timer" aria-label="Current game time" hidden></div>', "world-summary-title")}
     <section class="toolbar">
-      <div class="episode"><label class="eyebrow" for="scenario-select">SCENARIO</label><select id="scenario-select" aria-label="Choose scenario"><option value="">Loading scenarios...</option></select><div id="episode-name">No episode yet</div></div>
       <div class="controls" id="controls">
-        <button data-command="start" class="button subtle">＋ ${adminView ? "New episode" : "New adventure"}</button>
+        ${adminView ? `<div class="scenario-picker"><label class="eyebrow" for="scenario-select">SCENARIO</label><select id="scenario-select" aria-label="Choose scenario"><option value="">Loading scenarios...</option></select></div>
+        <button data-command="start" class="button subtle">＋ New episode</button>` : ""}
         <button data-command="step" class="button" data-admin-only>Step →</button>
-        <button id="run-command" data-command="run" class="button primary">▶ Run agent</button>
-        <button data-command="pause" class="button">Ⅱ Pause</button>
-        <button data-command="resume" class="button">↗ ${adminView ? "Resume" : "Continue"}</button>
-        <button data-command="reopen" class="button">Continue unfinished day</button>
-        <button data-command="reset" class="button subtle">↺ ${adminView ? "Reset" : "Restart"}</button>
-        <button id="save-episode" class="button subtle">Save episode</button>
+        <button id="run-command" data-command="run" class="button primary"${adminView ? "" : " hidden"}>▶ Run agent</button>
+        <button data-command="pause" class="button"${adminView ? "" : " hidden"}>Ⅱ Pause</button>
+        <button data-command="resume" class="button"${adminView ? "" : " hidden"}>↗ ${adminView ? "Resume" : "Continue"}</button>
+        <button data-command="reopen" class="button" hidden>Continue unfinished day</button>
+        ${adminView ? "" : '<button data-command="start" class="button primary">＋ New adventure</button><details class="adventure-management"><summary class="button subtle">Manage adventure</summary><div class="adventure-management-actions">'}
+        <button data-command="reset" class="button subtle"${adminView ? "" : " hidden"}>↺ ${adminView ? "Reset" : "Restart"}</button>
+        <button id="save-episode" class="button subtle" disabled>Save episode</button>
         <button id="load-episode" class="button subtle">Load saved episode</button>
         <button id="history-button" class="button subtle" type="button">Archive</button>
+        ${adminView ? "" : "</div></details>"}
         <a class="button subtle" href="/api/transcript" data-admin-only>Export JSON</a>
       </div>
     </section>
@@ -61,7 +64,7 @@ app.innerHTML = `
     <div id="dashboard-panels"></div>
     <section class="panel agent-setup">
       <div class="panel-heading"><div><span class="eyebrow">${adminView ? "CAST / TASK ASSIGNMENTS" : "YOUR NEXT ADVENTURE"}</span><h2>${adminView ? "Choose your agents" : "Choose your cast"}</h2></div><span class="tag">${adminView ? "NEXT EPISODE" : "NEXT ADVENTURE"}</span></div>
-      <p class="timeline-note">${adminView ? "Each agent brings its own personality, rules and physical abilities. Slots retain their task starting locations, not their original character's skills." : "Choose a world and its characters, then click New adventure and Play. Each character brings their own personality and abilities. Your choices apply to the next adventure."}</p>
+      <p class="timeline-note">${adminView ? "Each agent brings its own personality, rules and physical abilities. Slots retain their task starting locations, not their original character's skills." : "Choose the characters for this world, then click New adventure and Play. Each character brings their own personality and abilities. Scenario selection is available in Admin view."}</p>
       <details class="adventure-options" ${adminView ? "open" : ""}><summary>Skills & challenge options</summary>
       <div class="agent-editor">
         <label for="skill-mode">Skills policy</label>
@@ -109,8 +112,11 @@ app.innerHTML = `
       <p class="timeline-note" id="clock-help" data-admin-only></p>
       <div class="batch-grid" id="bread-batches" aria-label="Bread batch timers"></div>
     </section>
+    <section id="admin-triage" class="panel admin-triage" aria-labelledby="triage-title" hidden data-admin-only>
+      <h2 id="triage-title">Live triage</h2><dl id="triage-items"></dl>
+    </section>
     <section class="metrics" id="metrics"></section>
-    <details class="panel budget-panel" id="budget-controls" hidden${focusBudget ? " open" : ""}>
+    ${adminView ? `<details class="panel budget-panel" id="budget-controls" hidden${focusBudget ? " open" : ""}>
       <summary>Run mode & call/action budget</summary>
       <p id="budget-usage" class="muted"></p>
       <label><input id="run-until-complete" type="checkbox" /> Run until complete (ignore budget limits)</label>
@@ -122,9 +128,9 @@ app.innerHTML = `
         <label>Extra active minutes<input id="budget-minutes" type="number" min="0" step="1" value="0" required /></label>
         <button id="extend-budget" type="submit" class="button">Add budget</button>
       </form>
-      <p id="budget-message" role="status">Extending a stopped adventure leaves it paused. Press Continue when ready.</p>
-    </details>
-    <section id="village-overview" class="village-panel" aria-label="Village-wide tracking" hidden></section>
+      <p id="budget-message" role="status">Extending a stopped adventure leaves it paused. Press Resume when ready.</p>
+    </details>` : ""}
+    <section id="village-overview" class="village-panel" aria-label="${adminView ? "Village diagnostics" : "Village at a glance"}" hidden></section>
     <section id="team-overview" class="team-overview" aria-label="Team overview" hidden>
       <div class="team-left">
       </div>
@@ -238,7 +244,7 @@ app.innerHTML = `
 `;
 
 const tabLabels: [DashboardTab, string][] = adminView ?
-  [["live", "Live"], ["cast", "Cast & setup"], ["story", "Story"], ["technical", "Technical"]] :
+  [["live", "Live"], ["cast", "Cast & setup"], ["story", "Story"], ["technical", "Technical"], ["village-policy", "Village policy"], ["settings", "Settings"]] :
   [["live", "Play"], ["cast", "Cast"], ["story", "Story"]];
 let explicitTab = Boolean(location.hash);
 const tabs = document.querySelector<HTMLElement>(".dashboard-tabs");
@@ -247,13 +253,12 @@ if (!tabs || !panels) throw new Error("Missing dashboard navigation");
 const shell = document.createElement("div");
 shell.className = "command-shell";
 const header = document.querySelector("#observatory > header");
-const toolbar = document.querySelector("#observatory > .toolbar");
-if (!header || !toolbar) throw new Error("Missing dashboard commands");
+if (!header) throw new Error("Missing dashboard header");
 header.before(shell);
-shell.append(header, toolbar, tabs);
+shell.append(header, tabs);
 tabs.innerHTML = tabLabels.map(([id, label]) =>
   `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="false" tabindex="-1">${label}</button>`).join("");
-for (const id of ["live", "cast", "story", "technical"] as const) {
+for (const id of adminView ? tabLabels.map(([id]) => id) : ["live", "cast", "story", "technical"]) {
   const panel = document.createElement("section");
   panel.id = `panel-${id}`;
   panel.className = "dashboard-panel";
@@ -272,7 +277,7 @@ function moveToTab(id: DashboardTab, ...selectors: string[]): void {
   }
 }
 moveToTab("cast", ".agent-setup", "#dungeon-master-panel");
-moveToTab("live", "#bakery-panel", "#metrics", "#budget-controls", "#team-overview");
+moveToTab("live", "#admin-triage", "#bakery-panel", "#metrics", ...(adminView ? ["#budget-controls"] : []), "#team-overview");
 const worldDetails = document.createElement("details");
 worldDetails.className = "world-details panel";
 worldDetails.innerHTML = "<summary>Explore the discovered world map</summary>";
@@ -280,15 +285,25 @@ const worldPanel = document.querySelector(".world-panel");
 if (!worldPanel) throw new Error("Missing world panel");
 worldDetails.append(worldPanel);
 document.getElementById("panel-live")?.append(worldDetails);
-const villageDetails = document.createElement("details");
-villageDetails.className = "village-details panel";
-villageDetails.innerHTML = "<summary>Village tracking & resident details</summary>";
-const villageOverview = document.getElementById("village-overview");
-if (!villageOverview) throw new Error("Missing village overview");
-villageDetails.append(villageOverview);
-document.getElementById("panel-live")?.append(villageDetails);
+if (adminView) {
+  const villageDetails = document.createElement("details");
+  villageDetails.className = "village-details panel";
+  villageDetails.innerHTML = "<summary>Village diagnostics &amp; resident details</summary>";
+  const villageOverview = document.getElementById("village-overview");
+  if (!villageOverview) throw new Error("Missing village overview");
+  villageDetails.append(villageOverview);
+  document.getElementById("panel-live")?.append(villageDetails);
+} else {
+  moveToTab("live", "#village-overview");
+}
 moveToTab("story", "#narrative-column", "#story-panel", "#completion-panel");
-moveToTab("technical", "#technical-log", "#self-panel", "#supplier-panel", "#connection-panel", "#observation-panel");
+moveToTab("technical", "#technical-log", "#self-panel", "#observation-panel");
+if (adminView) {
+  moveToTab("village-policy", "#supplier-panel");
+  moveToTab("settings", "#connection-panel");
+} else {
+  moveToTab("technical", "#supplier-panel", "#connection-panel");
+}
 document.querySelector("#observatory > .workspace")?.remove();
 
 let activeTab: DashboardTab | null = null;
@@ -418,7 +433,7 @@ function applyState(next: State): void {
     element<HTMLSelectElement>("chat-actor").value = "";
     expanded.clear();
     selectedScenario = next.run?.scenario_id ?? next.config.world.scenario;
-    element<HTMLSelectElement>("scenario-select").value = selectedScenario;
+    if (adminView) element<HTMLSelectElement>("scenario-select").value = selectedScenario;
     assignments = next.run?.agent_assignments ? { ...next.run.agent_assignments } : {};
     skillMode = next.run?.skill_mode ?? "scenario";
     renderAssignments();
@@ -433,14 +448,15 @@ function applyState(next: State): void {
     configured = true;
   }
   element("episode-name").textContent = next.run ? (adminView ?
-    `${next.run.title} / ${next.run.id.slice(0, 8)}${next.run.agents ? ` / ${Object.keys(next.run.agents).length} agents / active: ${next.run.actor_id}` : ""}` :
-    `Current adventure: ${next.run.title}`) : adminView ? "Create an episode to begin" : "Create an adventure to begin";
-  element("masthead-episode").textContent = next.run?.title ?? "No episode yet";
+    ` / ${next.run.id.slice(0, 8)}${next.run.agents ? ` / ${Object.keys(next.run.agents).length} agents / active: ${next.run.actor_id}` : ""}` : "") :
+    adminView ? " / Create an episode to begin" : " / Create an adventure to begin";
+  element("world-summary-title").textContent = next.run?.title ?? "No active adventure";
   const statusPill = element("episode-status");
   statusPill.textContent = (next.run?.status ?? "no episode").replaceAll("_", " ").toUpperCase();
   statusPill.className = `tag ${next.run?.status === "running" ? "green" : ""}`;
   element<HTMLButtonElement>("run-command").textContent = adminView ? (next.run?.agents ? "▶ Run agents" : "▶ Run agent") : "▶ Play";
   renderMetrics();
+  renderTriage();
   renderBakery();
   renderSelf();
   renderTeamPerspectives();
@@ -455,12 +471,37 @@ function applyState(next: State): void {
     next.in_flight ? "Agent is deciding…" : (next.run?.status ?? "No active episode");
 }
 
+function renderTriage(): void {
+  if (!adminView || !state) return;
+  const run = state.run;
+  const triage = adminTriage(state, events);
+  element("admin-triage").hidden = !run;
+  if (!run || !triage) return;
+  const { lastFailure, pressure } = triage;
+  const status = run.status.replaceAll("_", " ");
+  const turn = state.in_flight ? (run.agent_profiles?.[run.actor_id]?.name ?? state.world?.entities[run.actor_id]?.name ?? slotLabel(run.actor_id)) : "No turn in progress";
+  const failure = lastFailure && eventSummary(lastFailure);
+  const percent = pressure ? Math.round(100 * pressure.used / pressure.limit) : 0;
+  const reason = run.reason ? villageClockText(run.reason) : "No reason recorded";
+  const tiles = [
+    `<div><dt>Run status</dt><dd><strong>${escape(status)}</strong><small>${escape(reason)}</small></dd></div>`,
+    `<div><dt>Current turn</dt><dd>${escape(turn)}${state.in_flight && run.agents ? ' · <a href="#team-overview" data-triage-team>Agent perspectives</a>' : ""}</dd></div>`,
+    `<div${lastFailure ? ' class="triage-warning"' : ""}><dt>Latest rejected action</dt><dd>${failure && lastFailure ?
+      `<strong>${escape(failure.title)}</strong><small>${escape(villageClockText(failure.text))}</small><button type="button" class="triage-event" data-triage-event="${escape(lastFailure.id)}">View event #${lastFailure.sequence}</button>` : "None in the loaded log"}</dd></div>`,
+    `<div${percent >= 80 ? ' class="triage-warning"' : ""}><dt>Budget pressure</dt><dd>${pressure ?
+      `${escape(pressure.label)}: ${percent}% used${canExtendBudget(run.status, Boolean(state.world)) ? ' · <a href="#budget-controls" data-triage-budget>Budget settings</a>' : ""}` : "No active limit"}</dd></div>`,
+  ];
+  const items = element("triage-items");
+  const markup = tiles.join("");
+  if (items.innerHTML !== markup) items.innerHTML = markup;
+}
+
 function renderMetrics(): void {
   if (!state) return;
   const clock = simulationClock(state.world ?? state.observation, state.observation);
   const display = element("simulation-clock");
-  display.hidden = clock === null;
-  display.innerHTML = clock ? `<span class="eyebrow">CURRENT GAME TIME</span><strong>${clock.time}</strong><small>${clock.description}</small>` : "";
+    display.hidden = state.run === null;
+    display.innerHTML = `<span class="eyebrow">CURRENT GAME TIME</span><strong>${clock?.time ?? "Untimed world"}</strong>${clock ? `<small>${clock.description}</small>` : ""}`;
   const run = state.run;
   const status = run?.status ?? "idle";
   if (!adminView) {
@@ -650,31 +691,36 @@ function renderControls(): void {
   renderSupplierPolicy();
   const status = state?.run?.status ?? "idle";
   const terminal = ["idle", "succeeded", "error", "blocked", "stalled", "cancelled", "budget_exceeded"].includes(status);
+  const canReopen = canReopenAdventure(state?.run ?? null, Boolean(state?.world));
+  const primary = adminView ? undefined : playerPrimaryCommand(status, canReopen);
   document.querySelectorAll<HTMLButtonElement>("[data-command]").forEach(button => {
     const command = button.dataset.command;
     if (command === "reopen") button.textContent = status === "error"
       ? "Recover interrupted day" : "Continue unfinished day";
     button.hidden = (!adminView && !playerCommandVisible(command, status)) ||
-      (command === "reopen" && !canReopenAdventure(state?.run ?? null, Boolean(state?.world)));
+      (command === "reopen" && !canReopen);
+    if (!adminView && button.closest("#controls")) button.classList.toggle("primary", command === primary);
     button.disabled = busy || interactionBusy || Boolean(state?.in_flight) ||
       ((command === "step" || command === "run") && (terminal || status === "running")) ||
       (command === "pause" && status !== "running") ||
       (command === "resume" && status !== "paused") ||
       (command === "assess" && (!terminal || status === "idle"));
   });
-  const budgetPanel = element<HTMLDetailsElement>("budget-controls");
-  budgetPanel.hidden = !canExtendBudget(status, Boolean(state?.world));
-  if (focusBudget && !budgetPanel.hidden) {
-    selectTab("live", true);
-    budgetPanel.open = true;
-    requestAnimationFrame(() => budgetPanel.scrollIntoView({block: "start"}));
-    focusBudget = false;
+  if (adminView) {
+    const budgetPanel = element<HTMLDetailsElement>("budget-controls");
+    budgetPanel.hidden = !canExtendBudget(status, Boolean(state?.world));
+    if (focusBudget && !budgetPanel.hidden) {
+      selectTab("live", true);
+      budgetPanel.open = true;
+      requestAnimationFrame(() => budgetPanel.scrollIntoView({ block: "start" }));
+      focusBudget = false;
+    }
+    element("budget-usage").textContent = state ? budgetSummary(state) : "";
+    const runMode = element<HTMLInputElement>("run-until-complete");
+    runMode.checked = Boolean(state?.run?.run_until_complete);
+    runMode.disabled = busy || interactionBusy;
+    element<HTMLButtonElement>("extend-budget").disabled = busy || interactionBusy;
   }
-  element("budget-usage").textContent = state ? budgetSummary(state) : "";
-  const runMode = element<HTMLInputElement>("run-until-complete");
-  runMode.checked = Boolean(state?.run?.run_until_complete);
-  runMode.disabled = busy || interactionBusy;
-  element<HTMLButtonElement>("extend-budget").disabled = busy || interactionBusy;
   element<HTMLButtonElement>("save-episode").disabled = busy || interactionBusy || !state?.run || !state.world;
   element<HTMLButtonElement>("load-episode").disabled = busy || interactionBusy;
   element<HTMLButtonElement>("confirm-save-episode").disabled = busy || interactionBusy;
@@ -1036,7 +1082,7 @@ function updateReadingPane(node: HTMLElement, html: string): void {
 
 function renderTeamPerspectives(): void {
   const villageOverview = element("village-overview");
-  const villageContent = state ? villageDashboardMarkup(state, events) : "";
+  const villageContent = !state ? "" : adminView ? villageDashboardMarkup(state, events) : villageSummaryMarkup(state);
   villageOverview.hidden = !villageContent;
   updateReadingPane(villageOverview, villageContent);
   const agents = state ? agentPerspectives(state) : [];
@@ -1260,6 +1306,7 @@ element("copy-story").addEventListener("click", () => {
 });
 
 function renderTimeline(updateStory = true): void {
+  renderTriage();
   if (updateStory) {
     renderInteractions();
     renderDungeonMaster();
@@ -1293,6 +1340,40 @@ function renderTimeline(updateStory = true): void {
   }).join("");
 }
 
+element("admin-triage").addEventListener("click", event => {
+  if (!(event.target instanceof Element)) return;
+  if (event.target.closest("[data-triage-team]")) {
+    event.preventDefault();
+    const team = element("team-overview");
+    team.tabIndex = -1;
+    team.focus({ preventScroll: true });
+    team.scrollIntoView({ block: "start" });
+    return;
+  }
+  if (event.target.closest("[data-triage-budget]")) {
+    event.preventDefault();
+    const budget = element<HTMLDetailsElement>("budget-controls");
+    budget.open = true;
+    budget.querySelector("summary")?.focus();
+    budget.scrollIntoView({ block: "start" });
+    return;
+  }
+  const id = event.target.closest<HTMLButtonElement>("[data-triage-event]")?.dataset.triageEvent;
+  if (!id) return;
+  const index = events.findIndex(item => item.id === id);
+  if (index < 0) return;
+  filter = "all";
+  element<HTMLSelectElement>("event-filter").value = filter;
+  timelineLimit = Math.max(timelineLimit, events.length - index);
+  expanded.add(id);
+  selectTab("technical", true);
+  renderTimeline(false);
+  const item = [...element("timeline").querySelectorAll<HTMLDetailsElement>("[data-event-id]")]
+    .find(detail => detail.dataset.eventId === id);
+  item?.querySelector("summary")?.focus({ preventScroll: true });
+  item?.scrollIntoView({ block: "center" });
+});
+
 async function command(name: string): Promise<void> {
   if (busy) return;
   if ((name === "reset" || name === "start") && state?.run &&
@@ -1323,7 +1404,29 @@ element("controls").addEventListener("click", event => {
   const button = event.target.closest<HTMLButtonElement>("[data-command]");
   if (button?.dataset.command) void command(button.dataset.command);
 });
-element("budget-form").addEventListener("submit", event => {
+if (adminView) element("run-until-complete").addEventListener("change", event => {
+  if (!(event.target instanceof HTMLInputElement) || !state?.run || busy || interactionBusy) return;
+  const request = runModeSchema.parse({run_id: state.run.id, run_until_complete: event.target.checked});
+  if (request.run_until_complete && !confirm("Ignore all adventure budgets? Model charges can continue without a spending limit until the cycle ends or you pause.")) {
+    renderControls();
+    return;
+  }
+  busy = true;
+  renderControls();
+  void (async () => {
+    try {
+      applyState(stateSchema.parse(await api("/adventure/run-mode", "POST", request)));
+      element("budget-message").textContent = request.run_until_complete ?
+        (state?.run?.status === "running" ? "Run until complete enabled. The adventure is still running." :
+          "Run until complete enabled. Press Resume when ready.") : "Budget limits restored.";
+    } catch (error) {
+      const message = errorMessage(error);
+      element("budget-message").textContent = message;
+      notice(message);
+    } finally { busy = false; renderControls(); }
+  })();
+});
+if (adminView) element("budget-form").addEventListener("submit", event => {
   event.preventDefault();
   if (!state?.run || busy || interactionBusy) return;
   const runId = state.run.id;
@@ -1338,31 +1441,9 @@ element("budget-form").addEventListener("submit", event => {
         add_actions: element<HTMLInputElement>("budget-actions").valueAsNumber,
         add_seconds: element<HTMLInputElement>("budget-minutes").valueAsNumber * 60
       });
-      element("run-until-complete").addEventListener("change", event => {
-        if (!(event.target instanceof HTMLInputElement) || !state?.run || busy || interactionBusy) return;
-        const request = runModeSchema.parse({run_id: state.run.id, run_until_complete: event.target.checked});
-        if (request.run_until_complete && !confirm("Ignore all adventure budgets? Model charges can continue without a spending limit until the cycle ends or you pause.")) {
-          renderControls();
-          return;
-        }
-        busy = true;
-        renderControls();
-        void (async () => {
-          try {
-            applyState(stateSchema.parse(await api("/adventure/run-mode", "POST", request)));
-            element("budget-message").textContent = request.run_until_complete ?
-              (state?.run?.status === "running" ? "Run until complete enabled. The adventure is still running." :
-                "Run until complete enabled. Press Play or Continue when ready.") : "Budget limits restored.";
-          } catch (error) {
-            const message = errorMessage(error);
-            element("budget-message").textContent = message;
-            notice(message);
-          } finally { busy = false; renderControls(); }
-        })();
-      });
       applyState(stateSchema.parse(await api("/budget/extend", "POST", request)));
       element("budget-message").textContent = state?.run?.status === "running" ?
-        "Budget extended. The adventure is still running." : "Budget extended. Press Play or Continue when ready.";
+        "Budget extended. The adventure is still running." : "Budget extended. Press Resume when ready.";
     } catch (error) {
       const message = error instanceof z.ZodError ?
         error.issues.map(issue => issue.message).join(" ") : errorMessage(error);
@@ -1421,7 +1502,7 @@ element("world-scene").addEventListener("click", event => {
   selectedMapLocation = button.dataset.mapLocation;
   renderWorld();
 });
-element("scenario-select").addEventListener("change", () => {
+if (adminView) element("scenario-select").addEventListener("change", () => {
   selectedScenario = element<HTMLSelectElement>("scenario-select").value;
   assignments = {};
   renderAssignments();
@@ -1732,10 +1813,12 @@ async function initialize(): Promise<void> {
     dungeonMasterConfig = dungeonMasterConfigSchema.parse(supervisorPayload);
     element<HTMLTextAreaElement>("dungeon-master-json").value = pretty(dungeonMasterConfig);
     renderDungeonMaster();
-    const select = element<HTMLSelectElement>("scenario-select");
-    select.innerHTML = choices.map(choice => `<option value="${escape(choice.id)}">${escape(choice.title)}</option>`).join("");
     selectedScenario ||= state?.run?.scenario_id ?? state?.config.world.scenario ?? "";
-    select.value = selectedScenario;
+    if (adminView) {
+      const select = element<HTMLSelectElement>("scenario-select");
+      select.innerHTML = choices.map(choice => `<option value="${escape(choice.id)}">${escape(choice.title)}</option>`).join("");
+      select.value = selectedScenario;
+    }
     renderAssignments();
     renderProfileEditor();
     const history = eventsSchema.parse(await api("/events?compact=true&limit=200"));

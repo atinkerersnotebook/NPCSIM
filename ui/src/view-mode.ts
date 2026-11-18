@@ -1,5 +1,6 @@
-import type { CompletionAnalysis, State } from "./contracts";
+import type { CompletionAnalysis, RunEvent, State } from "./contracts";
 import { clockTime } from "./bakery-view.ts";
+import { escape } from "./html.ts";
 
 export function villageClockTime(minute: number): string {
   const time = clockTime(minute % 1440 * 60).slice(0, 5);
@@ -34,13 +35,13 @@ export function simulationClock(snapshot: {
 }
 
 export type ViewMode = "player" | "admin" | "world" | "supply";
-export type DashboardTab = "live" | "cast" | "story" | "technical";
+export type DashboardTab = "live" | "cast" | "story" | "technical" | "village-policy" | "settings";
 
 export function dashboardTab(hash: string, admin: boolean, hasEpisode: boolean): DashboardTab {
   const requested = hash.replace(/^#/, "").toLowerCase();
   if (requested === "cast" || requested === "story" ||
     requested === "live" || (!admin && requested === "play") ||
-    (admin && requested === "technical")) {
+    (admin && (requested === "technical" || requested === "village-policy" || requested === "settings"))) {
     return requested === "play" ? "live" : requested as DashboardTab;
   }
   return hasEpisode ? "live" : "cast";
@@ -60,6 +61,30 @@ export function viewNavigation(current: ViewMode): string {
     ${(["player", "world", "supply", "admin"] as const).map(view =>
       `<a class="button subtle" href="${view === "player" ? "/" : `/?view=${view}`}"${view === current ? ' aria-current="page"' : ""}>${view === "supply" ? "Town supply" : `${view[0].toUpperCase() + view.slice(1)} view`}</a>`).join("")}
   </nav>`;
+}
+
+export function dashboardHeader(current: ViewMode, eyebrow: string, title: string, tools = ""): string {
+  return `<header class="dashboard-masthead">
+    <div class="masthead-title"><a class="brand" href="/" aria-label="NPCSIM home">NPCSIM<span>·</span></a><div><span class="eyebrow">${escape(eyebrow)}</span><h1>${escape(title)}</h1></div></div>
+    <div class="header-right">${tools}${viewNavigation(current)}</div>
+  </header>`;
+}
+
+export function dashboardWorldSummary(title: string, details: string, clock: string, titleId?: string): string {
+  return `<section class="monitor-summary" aria-label="World summary">
+    <div><span class="eyebrow">WORLD</span><h2${titleId ? ` id="${escape(titleId)}"` : ""}>${escape(title)}</h2>${details}</div>
+    ${clock}
+  </section>`;
+}
+
+export function trackDashboardHeader(app: HTMLElement): void {
+  const shell = app.querySelector<HTMLElement>(".command-shell");
+  if (!shell) return;
+  const update = () => app.style.setProperty("--dashboard-header-height", `${shell.offsetHeight}px`);
+  update();
+  const observer = new ResizeObserver(update);
+  observer.observe(shell);
+  window.addEventListener("pagehide", () => observer.disconnect(), { once: true });
 }
 
 export function canAskQuestions(status: string, hasObservation: boolean): boolean {
@@ -108,6 +133,28 @@ export function playerCommandVisible(command: string | undefined, status: string
     case "reopen": return status === "succeeded" || status === "error" || status === "blocked";
     default: return false;
   }
+}
+
+export function playerPrimaryCommand(status: string, canReopen = false): string | undefined {
+  if (canReopen && playerCommandVisible("reopen", status)) return "reopen";
+  return ({ idle: "start", ready: "run", running: "pause", paused: "resume" } as Record<string, string>)[status];
+}
+
+export function adminTriage(state: State, events: readonly RunEvent[]) {
+  const run = state.run;
+  if (!run) return null;
+  const lastFailure = events.reduce<RunEvent | undefined>((latest, event) => {
+    if (event.run_id !== run.id || event.kind !== "action_result" || (latest && latest.sequence >= event.sequence)) return latest;
+    const payload = event.payload as { outcome?: unknown } | null;
+    return payload?.outcome === "REJECTED" ? event : latest;
+  }, undefined);
+  const budgets = run.config?.budgets ?? state.config.budgets;
+  const usage = [
+    { label: "Actions", used: run.actions, limit: budgets.max_actions },
+    { label: "Model calls", used: run.model_calls, limit: budgets.max_model_calls },
+    { label: "Active time", used: run.elapsed_seconds, limit: budgets.max_seconds },
+  ].filter(item => item.limit > 0).sort((a, b) => b.used / b.limit - a.used / a.limit);
+  return { lastFailure, pressure: run.run_until_complete ? undefined : usage[0] };
 }
 
 export function adventureStatus(status: string,

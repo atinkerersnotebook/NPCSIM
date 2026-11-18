@@ -313,10 +313,21 @@ def advance(world):
     _rollover(world)
 
 
-def apply(world, action, args):
+def preview_collection(world, action):
+    if action not in {"village_milk_cow", "village_collect_eggs"}:
+        raise ValueError("Only milk and egg collection can be previewed")
+    outcome, code, text, _ = apply(world, action, {}, collection_preview=True)
+    if outcome == "REJECTED":
+        return (code, text), 0, None
+    quantity, finish = text
+    return None, quantity, finish
+
+
+def apply(world, action, args, *, collection_preview=False):
     base, town = village.context(world)
     state = _state(world)
-    _rollover(world)
+    if not collection_preview:
+        _rollover(world)
     actor, location = world.actor_id, world.actor.location_id
     if action == "village_livestock_pause":
         chunk = next((chunk for chunk in state.chunks if chunk.actor == actor and chunk.status == "active"), None)
@@ -422,7 +433,7 @@ def apply(world, action, args):
             state.water -= 1
             care.watered = True
     elif operation in {"milk", "eggs"}:
-        if not (care.fed and care.watered and care.cleaned):
+        if care.day != town.minute // 1440 or not (care.fed and care.watered and care.cleaned):
             return "REJECTED", "LIVESTOCK_CARE_REQUIRED", "Feed, water and clean the animals today before collecting food.", None
         clock = town.minute % 1440
         if not 480 <= clock < 1080 or end % 1440 > 1080:
@@ -440,6 +451,8 @@ def apply(world, action, args):
         quantity = min(6 if operation == "milk" else state.config.hens, needed(world, product))
         if not quantity:
             return "REJECTED", "DEMAND_MET", "Stock/cargo/work covers actual reserves and accepted orders.", None
+        if collection_preview:
+            return "PREVIEW", "LIVESTOCK_READY", (quantity, end), None
         if operation == "milk":
             care.milk_sessions.append(session)
         else:

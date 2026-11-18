@@ -845,6 +845,20 @@ class World:
         return {"session_id": self.session_id, "request_id": rid, "outcome": outcome,
                 "code": code, "explanation": explanation, "observation": self.observe()}
 
+    def _village_action_blocker(self, action: str, args: dict[str, Any]) -> tuple[str, str] | None:
+        from npc_sim import village_fallback, village_firewood, village_life, village_precheck
+
+        if self.scenario.village.time_based_turns and action not in {
+                "look", "read", "village_stop_route", "village_maintenance_pause", "village_research_pause",
+                "village_mining_pause", "village_livestock_pause"}:
+            person = self.state.village.residents[self.actor_id]
+            if self.state.village.minute < person.available_at:
+                return "ACTOR_BUSY", f"Available again at {village.clock_time(person.available_at)}."
+        return (village_fallback.action_blocker(self, action, args)
+                or village_life.action_blocker(self, action, args=args)
+                or village_firewood.action_blocker(self, action, args)
+                or village_precheck.check(self, action, args))
+
     def _apply(self, action: str, args: dict[str, Any]) -> tuple[str, str, str, str | None]:
         def reject(code: str, text: str) -> tuple[str, str, str, None]:
             return "REJECTED", code, text, None
@@ -859,33 +873,12 @@ class World:
         if action == "erp_terminal":
             return erp.apply(self, args["command"])
         if self.scenario.village and self.scenario.village.ai_controlled:
-            from npc_sim import village_ai, village_life, village_fallback
-            if self.scenario.village.time_based_turns and action not in {
-                    "look", "read", "village_stop_route", "village_maintenance_pause", "village_research_pause", "village_mining_pause", "village_livestock_pause"}:
-                person = self.state.village.residents[self.actor_id]
-                if self.state.village.minute < person.available_at:
-                    return reject("ACTOR_BUSY", f"Available again at {village.clock_time(person.available_at)}.")
-            blocked = village_fallback.action_blocker(self, action, args)
-            if blocked:
-                return reject(*blocked)
-            blocked = village_life.action_blocker(self, action, args=args)
-            if blocked:
-                return reject(*blocked)
-            from npc_sim import village_firewood
-            blocked = village_firewood.action_blocker(self, action, args)
+            from npc_sim import village_ai
+            blocked = self._village_action_blocker(action, args)
             if blocked:
                 return reject(*blocked)
             if action in village_ai.VERBS:
-                from npc_sim import village_precheck
-                blocked = village_precheck.check(self, action, args)
-                if blocked:
-                    return reject(*blocked)
                 return village_ai.apply(self, action, args)
-        if self.scenario.village and self.scenario.village.ai_controlled:
-            from npc_sim import village_precheck
-            blocked = village_precheck.check(self, action, args)
-            if blocked:
-                return reject(*blocked)
         if action in village.VERBS:
             return village.apply(self, action, args)
         if action == "look":

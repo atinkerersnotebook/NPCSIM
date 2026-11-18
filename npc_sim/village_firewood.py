@@ -758,6 +758,14 @@ def sync_delivery_plans(world: "World", carrier: str, *, destination: str | None
                 plan.status = "in_progress"
 
 
+def research_uses_fuel(world: "World", location: str, equipment: list[str]) -> bool:
+    if not enabled(world):
+        return False
+    base, state = village.context(world)
+    return (any(base.residents[rid].work == location for rid in state.firewood.config.businesses)
+            and bool(set(equipment) & {"anvil", "oven", "tavern-hearth", "smelting-furnace"}))
+
+
 def fuel_required(world: "World", action: str, args: dict[str, Any] | None = None) -> bool:
     if not enabled(world):
         return False
@@ -776,7 +784,7 @@ def fuel_required(world: "World", action: str, args: dict[str, Any] | None = Non
         return project.proposal.kind in {"food", "crop"}
     if action == "village_research" and project.trial_materials_consumed:
         return False
-    return bool(set(project.proposal.equipment) & {"anvil", "oven", "tavern-hearth", "smelting-furnace"})
+    return research_uses_fuel(world, world.actor.location_id, project.proposal.equipment)
 
 
 def action_blocker(world: "World", action: str, args: dict[str, Any] | None = None,

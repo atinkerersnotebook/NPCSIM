@@ -876,7 +876,16 @@ class VillageWalkingPlan(StrictModel):
     known_notice_versions: dict[str, int] = Field(default_factory=dict)
 
 
+class VillageReplenishmentPlan(StrictModel):
+    task: Literal["gather_herbs", "harvest_garden", "collect_eggs", "milk_cow", "fell_logs", "split_firewood"]
+    location: str
+    created_at: int = Field(ge=0)
+    starts_at: int = Field(ge=0)
+    expires_at: int = Field(gt=0)
+
+
 class VillagePersonState(StrictModel):
+    replenishment: VillageReplenishmentPlan | None = None
     beliefs: dict[str, VillageBelief] = Field(default_factory=dict)
     memories: list[int] = Field(default_factory=list)
     trust: dict[str, int] = Field(default_factory=dict)
@@ -1257,7 +1266,8 @@ class Scenario(StrictModel):
                      "village_drink_tea", "village_buy_iron", "village_lead_horse",
                      "village_release_horse", "village_hitch", "village_unhitch",
                      "village_start_timber_route", "village_stop_timber_route",
-                     "village_urgent_work", "village_share_route"}
+                     "village_urgent_work", "village_share_route", "village_plan_replenishment",
+                     "village_cancel_replenishment"}
         from npc_sim import village_economy, village_social, village_events, village_research, village_mining, village_livestock, village_communication, village_legacy
         core_ids |= village_economy.VERBS | village_social.VERBS | village_events.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | village_legacy.VERBS | {"village_wait_event"}
         if len(recovery_ids) != len(set(recovery_ids)) or set(recovery_ids) & core_ids:

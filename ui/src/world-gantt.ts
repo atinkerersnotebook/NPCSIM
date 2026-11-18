@@ -56,9 +56,14 @@ export interface GanttAgent {
   visitor?: boolean;
   activity?: string;
 }
+export type GanttActivity = "all" | "movement" | "work" | "dialogue";
 export interface GanttScale {
   zoom?: number;
   viewportWidth?: number;
+  recent?: boolean;
+  activity?: GanttActivity;
+  linkResidents?: boolean;
+  selectedActorId?: string;
 }
 interface Position {
   at: number;
@@ -74,6 +79,7 @@ export interface GanttSpan {
   detail: string;
   reasoning?: string;
   status?: string;
+  activity?: Exclude<GanttActivity, "all">;
   kind: "action" | "travel" | "wait" | "sleep" | "route" | "free" | "rejected" | "event";
 }
 interface Milestone { at: number; label: string; detail: string }
@@ -237,6 +243,9 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           : planForTile
           ? `Purpose: ${planForTile.purpose}${/[.!?]$/.test(planForTile.purpose) ? "" : "."} ${villageClockText(result.explanation)}`
           : villageClockText(result.explanation), status: result.outcome, kind,
+        activity: action === "go" || action === "village_plan_walk" ? "movement"
+          : ["say", "village_ask", "village_tell", "village_share_route", "village_meeting"].includes(action) ? "dialogue"
+          : life?.work || /^village_(work|project|research|repair|maintain|craft|produce|load_goods|unload_goods)(_|$)/.test(action) ? "work" : undefined,
         ...(linked.reasoning?.trim() ? { reasoning: linked.reasoning.trim() } : {})
       });
       if (walkingPlan && result.observation.self.location_id === walkingPlan.destination) {
@@ -303,10 +312,12 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       const end = Math.min(now, activity.end, orderedActivities[index + 1]?.start ?? now,
         visitor?.departure ?? now);
       if (end < activity.start) continue;
+      const linked = row.spans.find(span => span.kind === "action" && span.start === activity.start);
       row.spans = row.spans.filter(span => !(span.kind === "action" && span.start === activity.start));
       row.spans.push({
         start: activity.start, end, location: activity.location, label: activity.label,
-        detail: `${activity.label} / ${activity.status}`, status: activity.status, kind: "action"
+        detail: `${activity.label} / ${activity.status}`, status: activity.status, kind: "action",
+        activity: linked?.activity
       });
       row.positions.push({ at: activity.start, order: activity.start, location: activity.location });
     }
@@ -382,8 +393,14 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
 
 export function worldGanttMarkup(state: State, events: readonly RunEvent[], agents: readonly GanttAgent[],
   scale: GanttScale = {}): string {
-  const chart = buildWorldTimeline(state, events, agents);
-  if (!chart || !chart.rows.length) return "";
+  const model = buildWorldTimeline(state, events, agents);
+  if (!model || !model.rows.length) return "";
+  const activity = scale.activity ?? "all";
+  const cutoff = scale.recent ? Math.max(model.start, model.now - (model.turns ? 20 : 60)) : model.start;
+  const chart = { ...model, start: cutoff };
+  const matches = (item: GanttSpan) => activity === "all" || item.activity === activity
+    || (activity === "movement" && (item.kind === "travel" || item.kind === "route"));
+  const visible = (item: { start: number; end: number }) => item.start === item.end ? item.start >= cutoff : item.end > cutoff;
   const format = (minute: number) => chart.turns ? `Turn ${minute}`
     : chart.village ? villageClockTime(minute) : clockTime(minute * 60);
   const span = Math.max(chart.turns ? 1 : 10, chart.now - chart.start);
@@ -409,7 +426,8 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
   const legend = new Map<string, string>();
   const rows = chart.rows.map((row, index) => {
     const y = top + index * rowHeight;
-    const locations = row.locations.map((band, bandIndex) => {
+    const locations = row.locations.filter(visible).map((band, bandIndex) => {
+      band = { ...band, start: Math.max(cutoff, band.start) };
       legend.set(band.location, placeName(band.location));
       const w = x(band.end) - x(band.start);
       const inset = Math.min(1.5, w / 8);
@@ -419,10 +437,12 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
         <rect x="${x(band.start) + inset}" y="${y + 4}" width="${w - inset * 2}" height="82" rx="8" fill="${locationColour(band.location)}" opacity=".8"/>
         ${w > 80 ? `<text x="${x(band.start) + 8}" y="${y + 16}" class="gantt-place" clip-path="url(#${clip})">${escape(placeName(band.location))}</text>` : ""}</g>`;
     }).join("");
-    const durationSpans = row.spans.filter(item => item.end > item.start)
+    const spans = row.spans.filter(item => visible(item) && matches(item));
+    const durationSpans = spans.filter(item => item.end > item.start)
       .sort((a, b) => Number(a.kind !== "route" && a.kind !== "sleep") - Number(b.kind !== "route" && b.kind !== "sleep"));
     const bars = durationSpans.map((item, barIndex) => {
-      const w = x(item.end) - x(item.start);
+      const left = x(Math.max(cutoff, item.start));
+      const w = x(item.end) - left;
       const inset = Math.min(1.5, w / 8);
       const tileWidth = w - inset * 2;
       const id = `gantt-clip-${index}-${barIndex}`;
@@ -441,15 +461,15 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const characters = tileWidth >= 48 ? Math.floor((tileWidth - 16 - iconWidth) / 7) : 0;
       const detailCharacters = Math.floor((tileWidth - 16) / 6);
       return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail + (item.reasoning ? ` Reason: ${item.reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.detail)}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}">
-        <clipPath id="${id}"><rect x="${x(item.start) + inset + 6}" y="${y + 19}" width="${Math.max(0, tileWidth - 12)}" height="64"/></clipPath>
-        <rect x="${x(item.start) + inset}" y="${y + 19}" width="${tileWidth}" height="64" rx="7"/>
-        ${tileWidth >= 28 ? `<text x="${x(item.start) + inset + 7}" y="${y + 37}" class="gantt-cell-icon" clip-path="url(#${id})">${icon}</text>` : ""}
-        ${characters >= 6 ? `<text x="${x(item.start) + w / 2 + (tileWidth >= 48 ? iconWidth / 2 : 0)}" y="${y + 37}" text-anchor="middle" class="gantt-cell-title" clip-path="url(#${id})">${escape(shorten(label, characters))}</text>` : ""}
-        ${detailCharacters >= 8 ? `<text x="${x(item.start) + w / 2}" y="${y + 54}" text-anchor="middle" class="gantt-cell-time" clip-path="url(#${id})">${escape(shorten(detailCharacters >= 30 ? timing : duration, detailCharacters))}</text>` : ""}
-        ${detailCharacters >= 14 && summary ? `<text x="${x(item.start) + w / 2}" y="${y + 71}" text-anchor="middle" class="gantt-cell-detail" clip-path="url(#${id})">${escape(shorten(summary, detailCharacters))}</text>` : ""}</g>`;
+        <clipPath id="${id}"><rect x="${left + inset + 6}" y="${y + 19}" width="${Math.max(0, tileWidth - 12)}" height="64"/></clipPath>
+        <rect x="${left + inset}" y="${y + 19}" width="${tileWidth}" height="64" rx="7"/>
+        ${tileWidth >= 28 ? `<text x="${left + inset + 7}" y="${y + 37}" class="gantt-cell-icon" clip-path="url(#${id})">${icon}</text>` : ""}
+        ${characters >= 6 ? `<text x="${left + w / 2 + (tileWidth >= 48 ? iconWidth / 2 : 0)}" y="${y + 37}" text-anchor="middle" class="gantt-cell-title" clip-path="url(#${id})">${escape(shorten(label, characters))}</text>` : ""}
+        ${detailCharacters >= 8 ? `<text x="${left + w / 2}" y="${y + 54}" text-anchor="middle" class="gantt-cell-time" clip-path="url(#${id})">${escape(shorten(detailCharacters >= 30 ? timing : duration, detailCharacters))}</text>` : ""}
+        ${detailCharacters >= 14 && summary ? `<text x="${left + w / 2}" y="${y + 71}" text-anchor="middle" class="gantt-cell-detail" clip-path="url(#${id})">${escape(shorten(summary, detailCharacters))}</text>` : ""}</g>`;
     }).join("");
     const markers = new Map<number, GanttSpan[]>();
-    for (const item of row.spans.filter(item => item.end === item.start)) {
+    for (const item of spans.filter(item => item.end === item.start)) {
       const list = markers.get(item.start) ?? [];
       list.push(item);
       markers.set(item.start, list);
@@ -461,10 +481,12 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
         <path d="M ${x(at)} ${y + 88} l 4 4 l -4 4 l -4 -4 Z"/>
         ${items.length > 1 ? `<text x="${x(at) + 6}" y="${y + 95}">${items.length}</text>` : ""}</g>`;
     }).join("");
-    return `<g data-gantt-agent="${escape(row.id)}"><line x1="0" x2="${width}" y1="${y + rowHeight}" y2="${y + rowHeight}" class="gantt-gridline"/>${locations}${bars}${dots}</g>`;
+    return `<g data-gantt-agent="${escape(row.id)}">${row.id === scale.selectedActorId
+      ? `<rect class="gantt-selected-lane" x="1" y="${y + 1}" width="${width - 2}" height="${rowHeight - 2}" rx="6"/>` : ""}<line x1="0" x2="${width}" y1="${y + rowHeight}" y2="${y + rowHeight}" class="gantt-gridline"/>${locations}${bars}${dots}</g>`;
   }).join("");
   const milestones = new Map<number, Milestone[]>();
   for (const mark of chart.milestones) {
+    if (mark.at < cutoff || activity !== "all") continue;
     const list = milestones.get(mark.at) ?? [];
     list.push(mark);
     milestones.set(mark.at, list);
@@ -483,14 +505,22 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
           <button type="button" class="button subtle" data-timeline-zoom="in" aria-label="Zoom in timescale"${zoom >= 8 ? " disabled" : ""}>+</button>
           <button type="button" class="button subtle" data-timeline-zoom="fit">Fit</button>
         </div></div></div>
+    ${scale.linkResidents ? `<div class="gantt-filters" aria-label="Timeline filters" role="group">
+      <button type="button" class="button subtle" data-timeline-recent aria-pressed="${Boolean(scale.recent)}">${model.turns ? "Last 20 turns" : "Last simulated hour"}</button>
+      <label>Activity <select data-timeline-activity>${(["all", "movement", "work", "dialogue"] as const).map(value =>
+        `<option value="${value}"${value === activity ? " selected" : ""}>${value === "all" ? "All activity" : value[0].toUpperCase() + value.slice(1)}</option>`).join("")}</select></label>
+      <button type="button" class="button subtle" data-timeline-reset>Full timeline</button>
+    </div>` : ""}
     <p class="gantt-help">Location colours show recorded positions. ${chart.turns
       ? "Turns count recorded action attempts across all agents, including inspections and rejected actions, not elapsed time. Turn 0 is the initial observation. Boxes show recorded actions; red diamonds mark rejected attempts."
       : "Boxes show action time or reserved availability, not model thinking time. Diamonds mark instant or free actions; red diamonds are rejected actions."}
       Hover or focus for details. Scroll sideways to explore.</p>
+    ${activity !== "all" && events.length && !chart.rows.some(row => row.spans.some(item => visible(item) && matches(item)))
+      ? '<p class="gantt-help">No matching activities in this time range.</p>' : ""}
     <div id="gantt-tooltip" class="gantt-tooltip" role="tooltip" hidden></div>
     <div class="gantt-layout">
       <div class="gantt-names" style="padding-top:${top}px">${chart.rows.map(row =>
-        `<div class="gantt-name-row" style="height:${rowHeight}px"><span class="gantt-name-anchor" data-gantt-name="${escape(row.id)}" tabindex="0" aria-label="${escape(`${row.name}, actor details`)}" aria-describedby="gantt-actor-${escape(row.id)}"><strong>${escape(row.name)}</strong><small>${escape(row.occupation)}</small><span id="gantt-actor-${escape(row.id)}" class="actor-details-popover" role="tooltip"><strong>${escape(row.name)}${row.visitor ? " / Visitor" : ""}</strong>${actorDetailsMarkup(state, { ...row, activity: agents.find(agent => agent.id === row.id)?.activity })}</span></span></div>`).join("")}</div>
+        `<div class="gantt-name-row${row.id === scale.selectedActorId ? " is-selected" : ""}" style="height:${rowHeight}px"><span class="gantt-name-anchor" data-gantt-name="${escape(row.id)}" tabindex="0" aria-label="${escape(`${row.name}, actor details`)}" aria-describedby="gantt-actor-${escape(row.id)}"><strong>${escape(row.name)}</strong><small>${escape(row.occupation)}</small><span id="gantt-actor-${escape(row.id)}" class="actor-details-popover" role="tooltip"><strong>${escape(row.name)}${row.visitor ? " / Visitor" : ""}</strong>${actorDetailsMarkup(state, { ...row, activity: agents.find(agent => agent.id === row.id)?.activity })}</span></span>${scale.linkResidents ? `<button type="button" class="gantt-resident-link" data-resident-select="${escape(row.id)}" aria-label="Highlight ${escape(row.name)}" aria-pressed="${row.id === scale.selectedActorId}">Highlight</button>` : ""}</div>`).join("")}</div>
       <div class="gantt-scroll" tabindex="0" aria-label="Scrollable activity timeline">
         <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="group" aria-label="Activity from ${escape(format(chart.start))} to ${escape(format(chart.now))}">
           <defs>

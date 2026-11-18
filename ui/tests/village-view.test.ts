@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { agentProfileSchema, communicationSchema, eventSchema, observationSchema, stateSchema, villageFirewoodSchema, villageObservationSchema, villageResearchSchema } from "../src/contracts.ts";
-import { communicationMarkup, firewoodMarkup, villageDashboardMarkup, villageMarkup, villageSystemsMarkup } from "../src/village-view.ts";
+import { communicationMarkup, firewoodMarkup, villageDashboardMarkup, villageMarkup, villageSummaryMarkup, villageSystemsMarkup } from "../src/village-view.ts";
 import { inventoryUnitsUsed } from "../src/world-view.ts";
 import { monitoredAgents, replayWorldHistory, worldMonitorMarkup } from "../src/world-monitor.ts";
 import { buildWorldTimeline, locationColour, timelineEventProjection, worldGanttMarkup } from "../src/world-gantt.ts";
@@ -123,8 +123,7 @@ test("World view shows enabled empty operator noticeboard and all physical inbox
     quests: [], visitors: [], incidents: [], time_use: {}
   };
   const parsed = stateSchema.parse(state);
-  for (const markup of [worldMonitorMarkup(parsed), villageDashboardMarkup(parsed, []),
-    villageSystemsMarkup(parsed)]) {
+  for (const markup of [worldMonitorMarkup(parsed), villageSystemsMarkup(parsed)]) {
     const heading = "Operator: noticeboard, commitments & appointments";
     assert.equal(markup.split(heading).length - 1, 1);
     for (const text of ["Privileged world view. This is not shared NPC knowledge.",
@@ -405,7 +404,7 @@ test("personal activities clip at now and economy reporting escapes generated la
   };
   const timeline = buildWorldTimeline(state, [], monitoredAgents(state))!;
   assert.equal(timeline.rows.find(row => row.id === "iona")!.spans.at(-1)!.end, 600);
-  const markup = villageDashboardMarkup(state, []);
+  const markup = villageSystemsMarkup(state);
   for (const text of ["2 delivered", "SHORTAGE", "not net profit", "&lt;script&gt;book"]) {
     assert.ok(markup.includes(text), text);
   }
@@ -520,7 +519,6 @@ test("town research shows named researchers, sites, real recipe and honest trial
     "Proposed recipe (not unlocked)", "2 iron, 1 timber", "→ 1 hardy shovel / 35 min",
     "Equipment: Smith&#39;s Anvil", "repairs actual damaged objects"]) assert.ok(markup.includes(text), text);
   assert.ok(!markup.includes("Unlocked recipe"));
-  assert.ok(villageDashboardMarkup(state, []).includes("Town research & discoveries"));
 });
 
 test("discoveries display unlocked recipes, discovery clocks and product-specific uses", () => {
@@ -537,6 +535,7 @@ test("discoveries display unlocked recipes, discovery clocks and product-specifi
   const markup = villageSystemsMarkup(state);
   assert.equal(markup.match(/Unlocked recipe/g)?.length, 4);
   assert.equal(markup.match(/Use: 2 meal portions/g)?.length, 2);
+  assert.equal(markup.match(/Residents who learn this recipe can request it from/g)?.length, 2);
   for (const text of ["240/240 min", "3/5 successful/total trials", "Discovered day 2", "01:05",
     "ingredient for further recipes", "repairs actual damaged objects", "→ 1 material discovery / 35 min"]) {
     assert.ok(markup.includes(text), text);
@@ -621,7 +620,7 @@ test("enabled town research is visible before proposals while legacy dashboards 
   };
   const legacy = villageSystemsMarkup(state);
   const legacyDashboard = villageDashboardMarkup(state, []);
-  assert.equal(villageSystemsMarkup(state, [], false), legacy);
+  assert.equal(villageSystemsMarkup(state, false), legacy);
   state.observation = observationSchema.parse({
     contract_version: "1.0", world_id: "world", session_id: "session", observation_revision: "r1",
     self: { actor_id: "torvin", location_id: "forge", inventory: [], needs: [],
@@ -636,14 +635,13 @@ test("enabled town research is visible before proposals while legacy dashboards 
   assert.ok(!legacyMonitor.includes("Town research & discoveries"));
   state.observation!.village!.research!.enabled = true;
   const parsed = stateSchema.parse(state);
-  const markup = villageSystemsMarkup(parsed, [], parsed.observation?.village?.research?.enabled);
+  const markup = villageSystemsMarkup(parsed, parsed.observation?.village?.research?.enabled);
   assert.ok(markup.includes("Town research & discoveries"));
   assert.ok(markup.includes("Occupational research is enabled. No research projects proposed or discoveries yet."));
   assert.ok(!markup.includes('class="maintenance-list research-list"'));
-  assert.ok(villageDashboardMarkup(parsed, []).includes("Town research & discoveries"));
   assert.ok(worldMonitorMarkup(parsed).includes("Town research & discoveries"));
   delete parsed.world!.village!.dashboard!.research;
-  assert.equal(villageSystemsMarkup(parsed, [], true), markup);
+  assert.equal(villageSystemsMarkup(parsed, true), markup);
   parsed.observation!.village!.research!.enabled = false;
   assert.equal(villageDashboardMarkup(parsed, []), legacyDashboard);
   assert.equal(worldMonitorMarkup(parsed), legacyMonitor);
@@ -664,7 +662,7 @@ test("town maintenance checklist shows assignments, carryover and escaped blocke
       supplies: { iron: 1 }, status: "blocked", blocker: "Missing <iron>", completed_at: null
     }]
   };
-  const markup = villageDashboardMarkup(state, []);
+  const markup = villageSystemsMarkup(state);
   for (const text of ["Town maintenance checklist", "carried from day 1", "15/30 min",
     "Missing &lt;iron&gt;", "Forge &lt;inspection&gt;", "1 iron"]) assert.ok(markup.includes(text), text);
   assert.ok(!markup.includes("<inspection>"));
@@ -870,6 +868,38 @@ test("world monitor shows cooldowns and automatic deliveries rather than raw act
   assert.equal(monitoredAgents(state)[0].activity, "Running the wagon delivery route");
 });
 
+test("Player summarizes village milestones and Admin links out to the full tables", () => {
+  const state = expanded();
+  const village = state.world!.village!;
+  village.well_dug = true;
+  village.breakdown = true;
+  village.dashboard = {
+    research: [{ ...researchProject(), status: "discovered", discovered_at: 490 }],
+    orders: [{ id: "order", buyer: "elsie", seller: "jory", product: "bread", quantity: 4,
+      delivered: 2, status: "accepted", deadline: 1100 }],
+    products: [], accounts: [], activities: [], projects: [], quests: [], visitors: [], incidents: [], time_use: {}
+  };
+  const player = villageSummaryMarkup(state);
+  const admin = villageDashboardMarkup(state, []);
+  for (const text of ["Village at a glance", "12 residents", "Well: completed", "Mill: broken"]) {
+    assert.ok(player.includes(text), text);
+  }
+  assert.ok(!player.includes("Private beliefs"));
+  assert.ok(admin.includes("Private beliefs"));
+  for (const markup of [player, admin]) {
+    for (const href of ["/?view=world#monitor-systems", "/?view=supply#inventory", "/?view=supply#orders"]) {
+      assert.ok(markup.includes(`href="${href}"`), href);
+    }
+    assert.ok(!markup.includes("Hardy shovel"));
+    assert.ok(!markup.includes("2 delivered"));
+  }
+  assert.ok(worldMonitorMarkup(state).includes("Hardy shovel"));
+  delete village.dashboard;
+  assert.ok(villageSummaryMarkup(state).includes('href="/?view=world#monitor-map"'));
+  state.world!.village = null;
+  assert.equal(villageSummaryMarkup(state), "");
+});
+
 test("expanded overview tracks every real villager and their private evidence", () => {
   const state = expanded();
   const markup = villageDashboardMarkup(state, []);
@@ -879,7 +909,7 @@ test("expanded overview tracks every real villager and their private evidence", 
   }
   for (const text of ["12 AI villagers", "Operator overview", "Torvin", "Bren", "Mara", "Elsie",
     "Hobb", "Jory", "Ada", "Nella", "Rowan", "Garrick", "Iona", "Finn", "Private beliefs",
-    "Relationships", "Goals, job", "Village stock", "memory:lent-to-bren", "Mill shed",
+    "Relationships", "Goals, job", "Village event ledger", "memory:lent-to-bren", "Mill shed",
     "Residents contributed: 0/12"]) assert.ok(markup.includes(text), text);
   assert.ok(!villageMarkup(view()).includes("memory:lent-to-bren"));
 });
@@ -1116,6 +1146,61 @@ function timelineObservation(minute: number, location = "cottages", available = 
   return { self: { actor_id: "torvin", location_id: location },
     village: { minute, personal: { available_at: available } } };
 }
+
+test("World now only reports completed moves and labels a stopped snapshot", () => {
+  const state = expanded();
+  state.run!.status = "running";
+  state.run!.actor_id = "torvin";
+  state.in_flight = true;
+  state.world!.village!.tasks.repair_mill = { kind: "repair_mill", assignee: "torvin", status: "blocked",
+    step: "Find supplies", blocker: "Need <timber>" };
+  const events = [
+    timelineEvent(1, "action_request", 485, { request_id: "move", action_id: "go", arguments: {} }),
+    timelineEvent(2, "action_result", 485, { request_id: "move", outcome: "APPLIED", explanation: "Walked.", observation: timelineObservation(485, "village-square") }),
+    timelineEvent(3, "action_request", 490, { request_id: "failed", action_id: "go", arguments: {} }),
+    timelineEvent(4, "action_result", 490, { request_id: "failed", outcome: "REJECTED", explanation: "Blocked.", observation: timelineObservation(490, "stable") })
+  ];
+  const now = worldMonitorMarkup(state, events).split('aria-labelledby="monitor-now-title"')[1].split('</section>')[0];
+  assert.match(now, /Current turn<\/dt><dd>Torvin · /i);
+  assert.match(now, /Last recorded move · 08:05<\/dt><dd>Torvin → Village square/i);
+  assert.match(now, /Blocked work \(1\)[\s\S]*Need &lt;timber&gt;/);
+  state.run!.status = "cancelled";
+  assert.match(worldMonitorMarkup(state, events), /Adventure is not running[\s\S]*Last recorded blocked work/);
+});
+
+test("World separates the overview, map, residents, and village systems and omits unavailable trades", () => {
+  const state = expanded();
+  state.world!.village!.dashboard = { orders: [], products: [], accounts: [], projects: [], quests: [], activities: [], incidents: [], visitors: [], time_use: {} };
+  const markup = worldMonitorMarkup(state);
+  const panels = [...markup.matchAll(/<section id="([^"]+)"[^>]+role="tabpanel"/g)].map(match => match[1]);
+  assert.deepEqual(panels, ["monitor-overview", "monitor-map", "monitor-timeline", "monitor-residents", "monitor-systems"]);
+  assert.match(markup.split('id="monitor-map"')[1].split('id="monitor-timeline"')[0], /class="town-map"/);
+});
+
+test("World timeline filters recent activity and highlights the selected resident across views", () => {
+  const state = expanded();
+  state.world!.village!.minute = 600;
+  const events = [timelineEvent(1, "observation", 480, timelineObservation(480))];
+  for (const [action, detail, start] of [["say", "Early dialogue", 500], ["go", "Recent movement", 550],
+    ["village_work", "Recent work", 560], ["say", "Recent dialogue", 570]] as const) {
+    events.push(timelineEvent(events.length + 1, "action_request", start, { request_id: detail, action_id: action, arguments: {} }));
+    events.push(timelineEvent(events.length + 1, "action_result", start, { request_id: detail, outcome: "APPLIED",
+      explanation: detail, observation: timelineObservation(start, "cottages", start + 5) }));
+  }
+  const markup = worldMonitorMarkup(state, events, { recent: true, activity: "dialogue" }, { selectedActorId: "torvin" });
+  assert.match(markup, /data-map-actor="torvin" aria-pressed="true"/);
+  assert.equal((markup.match(/data-resident-select="torvin"[^>]*aria-pressed="true"/g) ?? []).length, 2);
+  assert.match(markup, /data-gantt-agent="torvin"><rect class="gantt-selected-lane"/);
+  assert.match(markup, /Recent dialogue/);
+  assert.doesNotMatch(markup, /Early dialogue|Recent movement|Recent work/);
+  const work = worldMonitorMarkup(state, events, { activity: "work" });
+  assert.match(work, /Recent work/);
+  assert.doesNotMatch(work, /Recent dialogue|Recent movement/);
+  const movement = worldMonitorMarkup(state, events, { activity: "movement" });
+  assert.match(movement, /Recent movement/);
+  assert.doesNotMatch(movement, /Recent dialogue|Recent work/);
+  assert.match(worldMonitorMarkup(state, events), /Early dialogue/);
+});
 
 test("timeline panels show recorded decision reasons for both instant and timed actions", () => {
   const state = expanded();
@@ -1652,11 +1737,6 @@ test("Gantt fits the available width and zooms only the display with adaptive cl
   assert.match(fit, /data-timeline-zoom="out"[^>]* disabled/);
   assert.match(zoomed, /<output[^>]*>200%<\/output>/);
   assert.ok(zoomed.includes('data-timeline-zoom="fit"'));
-  const collapsed = worldMonitorMarkup(state, events, { viewportWidth: 1300 }, {}, true);
-  assert.match(collapsed, /data-map-toggle aria-expanded="false"/);
-  assert.match(collapsed, /id="monitor-town-map" hidden/);
-  assert.ok(!collapsed.includes('class="town-map"'));
-  assert.match(fit, /data-map-toggle aria-expanded="true"/);
   const ticks = [...fit.matchAll(/text-anchor="([^"]+)" class="gantt-tick"/g)];
   assert.equal(ticks[0]?.[1], "start");
   assert.equal(ticks.at(-1)?.[1], "end");
@@ -1805,9 +1885,10 @@ test("untimed Gantt shows Unknown Room actions and backtracking on integer turns
   assert.ok(markup.includes("not elapsed time"));
   assert.ok(markup.includes("&lt;script&gt;"));
   assert.ok(!markup.includes("<script>"));
-  assert.ok(!markup.includes(" sec"));
-  assert.ok(!markup.includes(" min"));
-  assert.ok(!markup.includes("Wagon route"));
+  const timeline = markup.split('id="monitor-timeline"')[1];
+  assert.ok(!timeline.includes(" sec"));
+  assert.ok(!timeline.includes(" min"));
+  assert.ok(!timeline.includes("Wagon route"));
   assert.equal(JSON.stringify({ state, events }), before);
   assert.deepEqual(buildWorldTimeline(state, [...projected].reverse(), agents), model);
   const zoomed = worldGanttMarkup(state, projected, agents, { zoom: 8, viewportWidth: 188 });

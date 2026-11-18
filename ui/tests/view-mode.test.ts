@@ -1,7 +1,26 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { adventureStatus, canAskQuestions, canExtendBudget, canReopenAdventure, dashboardTab, isAdminView, playerCommandVisible, simulationClock, villageClockText, villageClockTime, viewMode, viewNavigation } from "../src/view-mode.ts";
+import { adminTriage, adventureStatus, canAskQuestions, canExtendBudget, canReopenAdventure, dashboardTab, isAdminView, playerCommandVisible, playerPrimaryCommand, simulationClock, villageClockText, villageClockTime, viewMode, viewNavigation } from "../src/view-mode.ts";
 import { budgetExtensionSchema, runModeSchema } from "../src/contracts.ts";
+
+test("Player highlights the safe next command, including eligible recovery", () => {
+  assert.deepEqual(["idle", "ready", "running", "paused", "error"].map(status => playerPrimaryCommand(status)),
+    ["start", "run", "pause", "resume", undefined]);
+  assert.equal(playerPrimaryCommand("error", true), "reopen");
+  assert.equal(playerPrimaryCommand("paused", true), "resume");
+});
+
+test("Admin triage chooses the latest current-run rejection and the most-used frozen budget", () => {
+  const budgets = { max_actions: 100, max_model_calls: 50, max_seconds: 200 };
+  const state = { run: { id: "current", actions: 85, model_calls: 10, elapsed_seconds: 15, config: { budgets } },
+    config: { budgets: { ...budgets, max_actions: 1000 } } };
+  const result = (sequence, outcome = "REJECTED", run_id = "current") => ({ sequence, run_id, kind: "action_result", payload: { outcome } });
+  const latest = result(12);
+  const events = [latest, result(18, "APPLIED"), result(1), result(20, "REJECTED", "prior")];
+  assert.deepEqual(adminTriage(state, events), { lastFailure: latest, pressure: { label: "Actions", used: 85, limit: 100 } });
+  assert.equal(adminTriage({ ...state, run: { ...state.run, run_until_complete: true } }, events)?.pressure, undefined);
+  assert.equal(adminTriage({ ...state, run: null }, events), null);
+});
 
 test("run mode requires an explicit boolean and current run ID", () => {
   assert.deepEqual(runModeSchema.parse({run_id: "run", run_until_complete: true}),
@@ -135,6 +154,10 @@ test("dashboard tabs restore deep links and default to setup without an episode"
   assert.equal(dashboardTab("#story", true, true), "story");
   assert.equal(dashboardTab("#technical", true, false), "technical");
   assert.equal(dashboardTab("#technical", false, true), "live");
+  for (const tab of ["village-policy", "settings"]) {
+    assert.equal(dashboardTab(`#${tab}`, true, true), tab);
+    assert.equal(dashboardTab(`#${tab}`, false, true), "live");
+  }
   assert.equal(dashboardTab("#play", false, true), "live");
   assert.equal(dashboardTab("#unknown", false, false), "cast");
 });

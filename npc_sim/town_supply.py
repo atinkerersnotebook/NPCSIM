@@ -3,12 +3,14 @@
 from collections import defaultdict
 from typing import Any
 
-from npc_sim.models import VillageConfig, WorldState
+from npc_sim.models import VillageCommittedWork, VillageConfig, WorldState
 from npc_sim.village_economy import ACTIVE, COMMITTED
 from npc_sim.village_livestock import SHELF
+from npc_sim.village_replenishment import forecast_rows
 
 
 Lot = tuple[int, int | None]
+STARTED, HARVEST, PLANNED_PRODUCTION, DELIVERY = range(4)
 
 
 def _take(lots: list[Lot], quantity: int, fresh_until: int) -> list[Lot]:
@@ -88,49 +90,130 @@ def report(world: WorldState, config: VillageConfig | None) -> dict[str, Any] | 
                            "finish": work.finishes_at, "status": "in_progress",
                            "basis": "Inputs already consumed" if viable else "Worker or equipment unavailable; not forecast"})
         if work.finishes_at >= now and viable:
-            events.append((work.finishes_at, 0, rid, work))
+            events.append((work.finishes_at, STARTED, rid, work))
             for good in work.outputs:
                 lots[work.location, good]
+
+    if state.livestock and state.livestock.config.enabled:
+        for chunk in state.livestock.chunks:
+            if chunk.status != "active" or chunk.operation not in {"milk", "eggs"} or chunk.end < now:
+                continue
+            worker = world.actors.get(chunk.actor)
+            person = state.residents.get(chunk.actor)
+            animal_ids = ["farm-cow"] if chunk.operation == "milk" else [
+                f"farm-hen-{index:02d}" for index in range(1, state.livestock.config.hens + 1)]
+            if (not worker or worker.location_id != chunk.location or not person
+                    or (person.life and person.life.sleeping) or chunk.start // 1440 != chunk.end // 1440
+                    or any((animal := world.entities.get(key)) is None or animal.kind != "creature"
+                           or animal.hidden or animal.broken or animal.location != chunk.location
+                           for key in animal_ids)):
+                continue
+            if any(
+                (tool := world.entities.get(key)) is None or tool.hidden or tool.broken
+                or (tool.location != chunk.location and key not in worker.inventory)
+                for key in chunk.equipment
+            ):
+                continue
+            outputs = {chunk.operation: chunk.quantity}
+            active_outputs[chunk.location].update(outputs)
+            production.append({"id": f"collection:{chunk.actor}:{chunk.start}", "worker": chunk.actor,
+                               "location": chunk.location, "outputs": outputs, "inputs": {}, "gathered": {},
+                               "ingredients": [], "finish": chunk.end, "status": "in_progress",
+                               "basis": "Collection underway; yield depends on continued care and demand"})
+            events.append((chunk.end, STARTED, chunk.actor, VillageCommittedWork(
+                location=chunk.location, finishes_at=chunk.end, outputs=outputs)))
+            lots[chunk.location, chunk.operation]
 
     for order in orders:
         plan = order.production_plan
         if order.status in COMMITTED and plan and plan.get("output", 0) > 0:
             finish = plan.get("finish", now)
             superseded = order.status == "in_production" or order.product in active_outputs.get(order.source, ())
+            resident = config.residents.get(order.supplier) if config else None
+            worker = world.actors.get(order.supplier)
+            lacks_skills = bool(resident and worker and set(resident.skills) - set(worker.body.capabilities))
             row = {"id": order.id, "worker": order.supplier, "location": order.source,
                    "outputs": {order.product: plan["output"]}, "ingredients": [],
                    "inputs": {key[6:]: qty for key, qty in plan.items() if key.startswith("input:") and qty > 0},
                    "gathered": {key[7:]: qty for key, qty in plan.items() if key.startswith("gather:") and qty > 0},
                    "finish": finish, "status": order.status,
+                   "driver": "harvest" if plan.get("session") and order.product in {"milk", "eggs"}
+                   else "planned_production",
                    "basis": ("Overlapping work: only started batches are forecast" if superseded else
                              "Past planned finish; not forecast" if finish < now else
+                             "Worker lacks required occupation skills; not forecast" if lacks_skills else
                              "Requires livestock care" if plan.get("requires_care") else "Recorded plan")}
             production.append(row)
-            if finish >= now and not superseded and not plan.get("requires_care"):
-                events.append((finish, 1, order.id, row))
+            if finish >= now and not superseded and not lacks_skills and not plan.get("requires_care"):
+                events.append((finish, PLANNED_PRODUCTION, order.id, row))
                 lots[order.source, order.product]
                 for good in row["inputs"]:
                     lots[order.source, good]
         if order.status in COMMITTED and order.remaining and order.deadline >= now:
-            events.append((order.deadline, 2, order.id, order))
+            events.append((order.deadline, DELIVERY, order.id, order))
             lots[order.source, order.product]
             lots[order.destination, order.product]
+
+    replenishment = forecast_rows(world, config)
+    for task in replenishment:
+        site, product = task["location"], task["product"]
+        lots[site, product]
+        if task["status"] != "planned" or task["finish"] is None or task["finish"] < now:
+            continue
+        if task.get("kind") == "production":
+            row = {**task, "outputs": {product: task["quantity"]}, "gathered": {}}
+            events.append((task["finish"], PLANNED_PRODUCTION, task["id"], row))
+            for good in row["inputs"]:
+                lots[site, good]
+        else:
+            events.append((task["finish"], HARVEST, task["id"], task))
+
+    usable = {key: _available(buckets, now) for key, buckets in lots.items()}
+    baseline, _, _ = _project(lots, cargo, events, horizons, shelf, reserves, usable, include_plans=False)
+    projected, changes, plan_risks = _project(lots, cargo, events, horizons, shelf, reserves, usable, include_plans=True)
+    risks.extend(plan_risks)
+    blocked = {risk["id"] for risk in plan_risks if risk["kind"] == "production input"}
+    for task in replenishment:
+        if task["id"] in blocked:
+            task.update(status="blocked", quantity=0, finish=None,
+                        basis="Not enough unreserved inputs at the planned time")
+
+    inventory = [{"location": site, "product": good, "on_hand": stock.get((site, good), 0),
+                  "usable": usable[site, good], "reserve": reserves.get(site, {}).get(good, 0),
+                  "target": targets.get(site, {}).get(good), "projected": projected[site, good],
+                  "baseline_projected": baseline[site, good], "forecast_changes": changes[site, good]}
+                 for site, good in sorted(projected)]
+    return _details(world, config, horizons, inventory, orders, cargo_rows, production, replenishment, risks)
+
+
+def _project(initial_lots, initial_cargo, events, horizons, shelf, reserves, usable, *, include_plans):
+    lots = {key: buckets.copy() for key, buckets in initial_lots.items()}
+    cargo = defaultdict(list, {key: buckets.copy() for key, buckets in initial_cargo.items()})
+    projected = {key: [] for key in lots}
+    changes = {key: [] for key in lots}
+    previous = usable.copy()
+    risks = []
 
     def put(site: str, good: str, qty: int, minute: int) -> None:
         lifetime = shelf.get(good)
         lots[site, good].append((qty, minute + lifetime if lifetime else None))
 
-    usable = {key: _available(buckets, now) for key, buckets in lots.items()}
-    projected: dict[tuple[str, str], list[int]] = {key: [] for key in lots}
-    pending = iter(sorted(events, key=lambda event: event[:3]))
+    pending = iter(sorted((event for event in events if include_plans or event[1] in (STARTED, DELIVERY)),
+                          key=lambda event: event[:3]))
     event = next(pending, None)
     for horizon in horizons:
+        movement: dict[tuple[str, str], dict[str, int]] = defaultdict(lambda: defaultdict(int))
         while event is not None and event[0] <= horizon:
             minute, kind, event_id, item = event
-            if kind == 0:
+            if kind == STARTED:
                 for good, quantity in item.outputs.items():
                     put(item.location, good, quantity, minute)
-            elif kind == 1:
+                    movement[item.location, good]["production"] += quantity
+            elif kind == HARVEST:
+                site, good = item["location"], item["product"]
+                put(site, good, item["quantity"], minute)
+                movement[site, good]["harvest"] += item["quantity"]
+            elif kind == PLANNED_PRODUCTION:
                 site = item["location"]
                 inputs = {good: max(0, quantity - item["gathered"].get(good, 0))
                           for good, quantity in item["inputs"].items()}
@@ -143,28 +226,42 @@ def report(world: WorldState, config: VillageConfig | None) -> dict[str, Any] | 
                                       "location": site, "product": good, "missing": missing})
                 if not any(missing > 0 for missing in shortages.values()):
                     for good, quantity in inputs.items():
-                        _take(lots[site, good], quantity, minute)
+                        taken = _take(lots[site, good], quantity, minute)
+                        movement[site, good]["inputs"] += sum(amount for amount, _ in taken)
                     for good, quantity in item["outputs"].items():
                         put(site, good, quantity, minute)
+                        movement[site, good][item.get("driver", "planned_production")] += quantity
             else:
                 cutoff = max(minute, item.required_fresh_until)
                 incoming = _take(cargo[event_id], min(item.in_transit, item.remaining), cutoff)
                 source = lots[item.source, item.product]
                 surplus = max(0, _available(source, minute) - reserves.get(item.source, {}).get(item.product, 0))
-                incoming += _take(source, min(item.loadable, surplus), cutoff)
+                loaded = _take(source, min(item.loadable, surplus), cutoff)
+                movement[item.source, item.product]["outbound"] += sum(quantity for quantity, _ in loaded)
+                incoming += loaded
                 moved = sum(quantity for quantity, _ in incoming)
                 lots[item.destination, item.product].extend(incoming)
+                movement[item.destination, item.product]["inbound"] += moved
                 if moved < item.remaining:
                     risks.append({"id": event_id, "kind": "delivery", "minute": minute,
                                   "location": item.destination, "product": item.product, "missing": item.remaining - moved})
             event = next(pending, None)
-        for key in projected:
-            projected[key].append(_available(lots[key], horizon))
+        for key, checkpoints in projected.items():
+            value = _available(lots[key], horizon)
+            delta = movement[key]
+            # Whatever left usable stock without being allocated expired during this interval.
+            gains = delta["production"] + delta["inbound"] + delta.get("harvest", 0) + delta.get("planned_production", 0)
+            expired = previous[key] + gains - delta["inputs"] - delta["outbound"] - value
+            changes[key].append({**delta, "expired": expired})
+            checkpoints.append(value)
+            previous[key] = value
 
-    inventory = [{"location": site, "product": good, "on_hand": stock.get((site, good), 0),
-                  "usable": usable[site, good], "reserve": reserves.get(site, {}).get(good, 0),
-                  "target": targets.get(site, {}).get(good), "projected": projected[site, good]}
-                 for site, good in sorted(projected)]
+    return projected, changes, risks
+
+
+def _details(world, config, horizons, inventory, orders, cargo_rows, production, replenishment, risks):
+    state = world.village
+    assert state is not None
     communication = state.communication
     requests = []
     notes = []
@@ -231,10 +328,11 @@ def report(world: WorldState, config: VillageConfig | None) -> dict[str, Any] | 
                          "due": None, "progress": None, "blocker": None})
     dashboard = state.dashboard
     maintenance = [job.model_dump() for job in dashboard.maintenance] if dashboard else []
-    return {"minute": now, "revision": world.revision, "horizons": horizons, "inventory": inventory,
+    return {"minute": state.minute, "revision": world.revision, "horizons": horizons, "inventory": inventory,
             "orders": [{**order.model_dump(), "remaining": order.remaining, "open": order.status in ACTIVE}
                        for order in orders],
             "requests": requests, "needs": needs, "cargo": cargo_rows, "production": production,
+            "replenishment": replenishment,
             "risks": risks, "maintenance": maintenance, "projects": projects, "notes": notes,
             "sites": {key: entity.name for key, entity in world.entities.items() if entity.kind == "location"},
             "fixtures": {note["fixture"]: world.entities[note["fixture"]].name for note in notes
