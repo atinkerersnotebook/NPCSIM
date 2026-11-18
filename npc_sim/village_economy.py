@@ -115,6 +115,12 @@ def validate_config(scenario: Any) -> None:
     for resource, supplier in policy.suppliers.items():
         if resource not in products or supplier not in base.residents:
             raise ValueError("Suppliers must name real products and residents")
+    for product, alternatives in policy.supplier_alternatives.items():
+        if (product not in policy.suppliers or not alternatives
+                or len(set(alternatives)) != len(alternatives)
+                or policy.suppliers[product] in alternatives
+                or any(resident not in base.residents for resident in alternatives)):
+            raise ValueError("Supplier alternatives require a configured primary and distinct other real residents")
     for targets in (policy.reserve_targets, policy.production_targets):
         for location, quantities in targets.items():
             if location not in base.stocks or any(resource not in products for resource in quantities):
@@ -166,14 +172,27 @@ def reconcile_inventory(world: "World") -> list[dict[str, Any]]:
     return result
 
 
-def configure(world: "World", values: dict[str, Any]) -> None:
-    policy = VillageEconomyConfig.model_validate(values)
+def _validate_live_config(world: "World", policy: VillageEconomyConfig) -> None:
     base = world.scenario.village
     wrapped = SimpleNamespace(**base.model_dump())
     wrapped.residents, wrapped.economy = base.residents, policy
     from npc_sim import village_research
     wrapped.prices = village_research.prices(world)
     validate_config(SimpleNamespace(village=wrapped))
+
+
+def configure_supplier_alternatives(world: "World", alternatives: dict[str, list[str]]) -> None:
+    state, current = _state(world), config(world)
+    if state is None or current is None:
+        raise ValueError("Supplier alternatives require an enabled economy")
+    policy = current.model_copy(update={"supplier_alternatives": alternatives})
+    _validate_live_config(world, policy)
+    state.config = policy
+
+
+def configure(world: "World", values: dict[str, Any]) -> None:
+    policy = VillageEconomyConfig.model_validate(values)
+    _validate_live_config(world, policy)
     state = _state(world)
     if state is None:
         world.state.village.economy = VillageEconomyState(config=policy,

@@ -260,6 +260,8 @@ def configure(world: "World", request_id: str, revision: str, patch: dict[str, A
         parsed = VillageConfigurationPatch.model_validate(patch)
         if not parsed.model_fields_set or all(getattr(parsed, field) is None for field in parsed.model_fields_set):
             raise ValueError("Specify at least one non-null village configuration")
+        if parsed.economy is not None and parsed.supplier_alternatives is not None:
+            raise ValueError("Set supplier alternatives either in the economy configuration or as a separate patch")
         before = world.state.model_copy(deep=True)
         try:
             for field, module in (("economy", village_economy), ("social", village_social),
@@ -279,6 +281,10 @@ def configure(world: "World", request_id: str, revision: str, patch: dict[str, A
                 if parsed.day_policy.demand_led_completion and state.economy is None:
                     raise ValueError("Demand-led completion requires an enabled economy")
                 state.day_policy = parsed.day_policy
+            if parsed.supplier_alternatives is not None:
+                village_economy.configure_supplier_alternatives(world, parsed.supplier_alternatives)
+                from npc_sim import village_fallback
+                village_fallback.advance(world)
             refresh(world)
             village.event(world, "dungeon-master", "village_configured", "village",
                           f"Configured village systems: {', '.join(sorted(parsed.model_fields_set))}.",

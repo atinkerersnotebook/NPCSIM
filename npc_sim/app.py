@@ -107,6 +107,11 @@ async def state(request: Request) -> JSONResponse:
     return JSONResponse(controller(request).status())
 
 
+@app.get("/api/town-supply")
+async def town_supply(request: Request) -> JSONResponse:
+    return JSONResponse(controller(request).town_supply(), headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/scenarios")
 async def scenarios() -> dict[str, Any]:
     choices = [Scenario.model_validate(read_json(path)) for path in sorted((DATA / "scenarios").glob("*.json"))]

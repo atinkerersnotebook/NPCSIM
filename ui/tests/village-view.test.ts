@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { agentProfileSchema, communicationSchema, eventSchema, observationSchema, stateSchema, villageFirewoodSchema, villageObservationSchema, villageResearchSchema } from "../src/contracts.ts";
 import { communicationMarkup, firewoodMarkup, villageDashboardMarkup, villageMarkup, villageSystemsMarkup } from "../src/village-view.ts";
 import { inventoryUnitsUsed } from "../src/world-view.ts";
-import { monitoredAgents, worldMonitorMarkup } from "../src/world-monitor.ts";
+import { monitoredAgents, replayWorldHistory, worldMonitorMarkup } from "../src/world-monitor.ts";
 import { buildWorldTimeline, locationColour, timelineEventProjection, worldGanttMarkup } from "../src/world-gantt.ts";
 import type { RunEvent } from "../src/contracts.ts";
 import { budgetSummary, canReopenAdventure } from "../src/view-mode.ts";
@@ -1593,6 +1593,42 @@ test("Gantt stops Ada's event wait when a same-minute action begins", () => {
   ]);
 });
 
+test("Gantt replays early actions across history pages, even in runs over 5,000 events", async () => {
+  const state = expanded();
+  state.world!.village!.minute = 540;
+  const events = [
+    timelineEvent(1, "observation", 480, timelineObservation(480)),
+    timelineEvent(2, "action_request", 480, { request_id: "work", action_id: "village_work", arguments: {} }),
+    timelineEvent(3, "action_result", 490, { request_id: "work", outcome: "APPLIED",
+      explanation: "Recorded work.", observation: timelineObservation(490, "forge") }),
+    ...Array.from({ length: 5_000 }, (_, i) => timelineEvent(i + 4, "proxy_request", 490, {}))
+  ];
+  const request: typeof fetch = async input => {
+    const url = new URL(String(input), "http://localhost");
+    if (url.pathname === "/api/events/1" && url.searchParams.get("run_id") === "run") return Response.json(events[0]);
+    const after = Number(url.searchParams.get("after"));
+    const limit = Number(url.searchParams.get("limit"));
+    assert.ok(after > 0 && limit > 0 && limit <= 500);
+    return Response.json({ run_id: "run", events: events.slice(after, after + limit) });
+  };
+  const projected: RunEvent[] = [];
+  const sequences: number[] = [];
+  await replayWorldHistory("run", events.length, 0, event => {
+    sequences.push(event.sequence);
+    const item = timelineEventProjection(event);
+    if (item) projected.push(item);
+  }, request);
+  assert.deepEqual(sequences, events.map(event => event.sequence));
+  assert.match(worldMonitorMarkup(state, projected), /data-gantt-range="08:00 - 08:10"/);
+});
+
+test("Gantt history rejects a page from a different run without mixing its events", async () => {
+  const request: typeof fetch = async () => Response.json({ run_id: "new", events: [
+    timelineEvent(2, "observation", 480, timelineObservation(480), "torvin", "new")
+  ] });
+  await assert.rejects(replayWorldHistory("run", 2, 1, () => assert.fail("recorded a stale page"), request), /history changed/);
+});
+
 test("Gantt stores only relevant timing facts rather than model requests or private memories", () => {
   const event = timelineEvent(1, "observation", 480, {
     ...timelineObservation(480), narrative: "PRIVATE NARRATIVE", memory: { plan: "PRIVATE PLAN" }
@@ -1620,8 +1656,10 @@ test("Gantt fits the available width and zooms only the display with adaptive cl
   assert.match(collapsed, /data-map-toggle aria-expanded="false"/);
   assert.match(collapsed, /id="monitor-town-map" hidden/);
   assert.ok(!collapsed.includes('class="town-map"'));
-  assert.ok(!collapsed.includes('class="monitor-visuals with-town-map"'));
   assert.match(fit, /data-map-toggle aria-expanded="true"/);
+  const ticks = [...fit.matchAll(/text-anchor="([^"]+)" class="gantt-tick"/g)];
+  assert.equal(ticks[0]?.[1], "start");
+  assert.equal(ticks.at(-1)?.[1], "end");
   assert.ok((zoomed.match(/class="gantt-gridline"/g) ?? []).length >
     (fit.match(/class="gantt-gridline"/g) ?? []).length);
   assert.equal((zoomed.match(/data-gantt-agent=/g) ?? []).length, 12);

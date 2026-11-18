@@ -33,7 +33,7 @@ export function simulationClock(snapshot: {
   return seconds === undefined ? null : { time: clockTime(seconds), description: "Simulated elapsed time" };
 }
 
-export type ViewMode = "player" | "admin" | "world";
+export type ViewMode = "player" | "admin" | "world" | "supply";
 export type DashboardTab = "live" | "cast" | "story" | "technical";
 
 export function dashboardTab(hash: string, admin: boolean, hasEpisode: boolean): DashboardTab {
@@ -48,7 +48,7 @@ export function dashboardTab(hash: string, admin: boolean, hasEpisode: boolean):
 
 export function viewMode(search: string): ViewMode {
   const view = new URLSearchParams(search).get("view");
-  return view === "admin" || view === "world" ? view : "player";
+  return view === "admin" || view === "world" || view === "supply" ? view : "player";
 }
 
 export function isAdminView(search: string): boolean {
@@ -57,8 +57,8 @@ export function isAdminView(search: string): boolean {
 
 export function viewNavigation(current: ViewMode): string {
   return `<nav class="view-navigation" aria-label="View">
-    ${(["player", "world", "admin"] as const).map(view =>
-      `<a class="button subtle" href="${view === "player" ? "/" : `/?view=${view}`}"${view === current ? ' aria-current="page"' : ""}>${view[0].toUpperCase() + view.slice(1)} view</a>`).join("")}
+    ${(["player", "world", "supply", "admin"] as const).map(view =>
+      `<a class="button subtle" href="${view === "player" ? "/" : `/?view=${view}`}"${view === current ? ' aria-current="page"' : ""}>${view === "supply" ? "Town supply" : `${view[0].toUpperCase() + view.slice(1)} view`}</a>`).join("")}
   </nav>`;
 }
 

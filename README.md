@@ -103,6 +103,34 @@ the simulation controls. Village tracking opens on demand in the live tab.
 Player, World, and Admin views fill the available window width, keeping their
 normal edge padding and responsive layouts rather than a fixed maximum width.
 
+### Town supply chain dashboard
+
+Open **Town supply** in the top navigation (`/?view=supply`) while a village episode is loaded.
+This read-only operator dashboard refreshes from saved simulation state every five seconds.
+Start with **Needs attention** for overdue, blocked, or soon-due orders and maintenance.
+The overview charts compare usable stock with configured reserves and show a selected
+product's current stock and projected checkpoints. Use **Location** to narrow the overview,
+counts, and detail tables; orders match either end of the route, while cargo and requests
+match their recorded destination. The filters stay selected as snapshots refresh when
+those choices are still available. Inventory rows and charts show only products with
+stock on hand. Shortage counts and forecast exceptions still include out-of-stock products.
+
+The detail sections show stock by location, cargo, supplier orders, recorded requests and resident needs,
+production plans and their bills of materials, structural and routine maintenance status,
+and notes grouped by their physical board or workplace inbox. Posted copies can be older
+than the latest notice version and are shown as posted. This view includes operator-visible
+inbox contents; it is not an NPC's knowledge view.
+
+If the dashboard reports `HTTP 404` after an update, the running server has not loaded the
+Town Supply endpoint. Use **Save episode** to create a resumable checkpoint for any active
+adventure, then stop and restart the server before reloading the dashboard.
+
+Inventory projections show usable units in 6, 24 and 48 simulated hours. They account for
+known lot expiry and recorded production and deliveries, using order deadlines as estimated
+arrival times. The report protects reserves and flags projected material or delivery shortages.
+It is not a full simulation forecast: it excludes unrecorded work and future consumption such
+as meals or maintenance, and assumes planned gathering or started batches succeed.
+
 ### Live town map
 
 World view displays the extended Millhaven illustration with named residents and
@@ -898,6 +926,23 @@ configured meal window and cannot consume food intended for supper. Empty model
 decisions receive one bounded retry, then pause without dispatching an action.
 These safeguards do not establish a successful autonomous multi-day meal run.
 
+To opt into adaptive supplier recommendations for the current episode, pause it
+and open **Admin → Technical → Adaptive supplier recommendations**. Enter
+comma-separated alternative resident IDs beside each good and select **Save supplier
+policy**. Clear all entries and save to disable recommendations. This changes
+only the episode's supplier policy, not its existing orders or scenario file.
+For new episodes, set `supplier_alternatives` in the scenario's village economy
+configuration instead. Each entry maps a priced good with a primary in
+`suppliers` to a list of other resident IDs that can actually supply that good.
+An empty map (the default) keeps the primary-only recommendation. For eligible
+purposeful food and production requests, the selector explores reachable
+alternatives and gives more weight to suppliers with better observed delivery
+results for the same good, destination and deadline window (up to two hours, or
+longer). It learns from the buyer's directly received notice history: on-time
+completion is a success, known rejection or expiry is a failure, and unknown
+outcomes are not counted as failures. Recommendations still require a physical
+channel, funding and a supplier's acceptance; no order is placed automatically.
+
 Useful inspections are limited until visible conditions change or the configured
 review interval passes. With anti-idle enabled, an idle resident away from their
 main workplace returns there by a real, traversable walk before waiting, provided
@@ -969,7 +1014,7 @@ for a rounded white detail card showing the agent, activity, status (when record
 time range, duration, location, any distinct recorded result, and the agent's recorded
 reason for choosing the action when available. Older or automatic events without a
 recorded decision do not invent a reason.
-Collapse the Town map to give the timeline the full available width, and show it again when needed. Unknown history stays blank;
+The timeline uses the full available width below the Town map. Collapse the map to bring the timeline higher on the page. Unknown history stays blank;
 scheduled intentions are never drawn as completed work. The chart follows the
 latest activity until you scroll back, and keeps agent names visible while you
 scroll horizontally. Hover or focus a name to see the resident's location, occupation,
@@ -978,8 +1023,9 @@ the same details. Visitor details omit unknown personal inventory and funds. The
 timeline matches the other gray panels. Use **+** and
 **-** to zoom its timescale from 100% to 800%, or **Fit** to show the full recorded
 period at the available width. Tick spacing adapts to the zoom level; zooming never
-changes simulation time. It replays saved events when opened or reconnected without
-calling the model or changing the world. Completed merchant transfers appear as
+changes simulation time. When opened, it loads the run's recorded history in pages,
+then streams new events and catches up after reconnecting without calling the model
+or changing the world. Completed merchant transfers appear as
 markers on both the resident's and visitor's timeline rows, with paid quantities
 and amounts; the World view also lists the latest settled trade notes. Standing
 "Trading" activity and accepted but unpaid iron orders are not settled trades.

@@ -66,6 +66,8 @@ class Controller:
         self.agents: dict[str, dict[str, Any]] = {}
         self._snapshot_key: tuple[Path, int, int] | None = None
         self._world_snapshot: dict[str, Any] | None = None
+        self._supply_key: tuple[Any, ...] | None = None
+        self._supply_snapshot: dict[str, Any] | None = None
 
     def _save_agent(self) -> None:
         if self.run and self.agents:
@@ -1584,6 +1586,28 @@ class Controller:
             write_json(self.events.directory / "goal.json", {
                 "schema_version": "1.0", "run_id": self.run["id"], **self.run["goal"]})
             write_json(self.events.directory / "npc-memory.json", self.memory)
+
+    def town_supply(self) -> dict[str, Any] | None:
+        from npc_sim import town_supply
+
+        if not self.run:
+            return None
+        path = self.data / "worlds" / self.run["world_id"] / "world-state.json"
+        scenario_path = self.events.directory / "scenario.json" if self.events else None
+        if scenario_path is None or not scenario_path.exists():
+            scenario_path = self.data / "scenarios" / f"{self.run['scenario_id']}.json"
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            return None
+        key = (path, stat.st_mtime_ns, stat.st_size, scenario_path)
+        if key != self._supply_key:
+            world = WorldState.model_validate(read_json(path))
+            config = Scenario.model_validate(read_json(scenario_path)).village if world.village and scenario_path.exists() else None
+            snapshot = town_supply.report(world, config)
+            self._supply_snapshot = {"title": self.run["title"], **snapshot} if snapshot is not None else None
+            self._supply_key = key
+        return self._supply_snapshot
 
     def status(self) -> dict[str, Any]:
         snapshot = None

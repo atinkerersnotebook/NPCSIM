@@ -292,7 +292,7 @@ const villageActivityViewSchema = z.object({
 const villageDayPolicySchema = z.object({
   breakfast: z.boolean(), breakfast_delay: z.number().int(), meal_window: z.number().int(),
   event_driven_waits: z.boolean(), require_tea_use: z.boolean(),
-  anti_idle: z.boolean().default(false), idle_review_minutes: z.number().int().min(15).max(240).default(60),
+  anti_idle: z.boolean().default(false), purposeful_downtime: z.boolean().default(false), idle_review_minutes: z.number().int().min(15).max(240).default(60),
   require_manure_use: z.boolean().default(true), demand_led_completion: z.boolean().default(false)
 });
 const villageDashboardSchema = z.object({
@@ -352,6 +352,11 @@ const villageDashboardSchema = z.object({
   day_policy: villageDayPolicySchema.nullable().optional()
 });
 const villageStateSchema = z.object({
+  communication: z.object({}).nullable().optional(),
+  economy: z.object({ config: z.object({
+    suppliers: z.record(z.string(), z.string()),
+    supplier_alternatives: z.record(z.string(), z.array(z.string())).default({})
+  }).nullable().optional() }).nullable().optional(),
   legacy: z.object({
     chronicle: z.array(z.object({ minute: z.number(), kind: z.string(), text: z.string(),
       source_event: z.number().nullable().optional(), lesson: z.string().nullable().optional(),

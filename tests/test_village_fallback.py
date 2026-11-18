@@ -83,6 +83,57 @@ def test_innkeeper_can_request_tomorrow_food_at_physical_board(tmp_path):
                    for choice in village_fallback.candidates(world))
 
 
+def test_food_request_explores_configured_supplier_after_a_known_attempt(tmp_path):
+    value = build_scenario(scenario(), purposeful_downtime=True)
+    value.village.start_minute = 1200
+    value.village.events = None
+    policy = value.village.economy
+    primary = policy.suppliers["bread"]
+    policy.supplier_alternatives = {"bread": ["mara"]}
+    for agent in value.agents:
+        agent.start_location = value.village.residents[agent.id].work
+    world = World(value, tmp_path / "suppliers.json", "suppliers", "elsie", "session-elsie")
+    state = world.state.village
+    state.coins["elsie"] = 1000
+    for stock in state.stocks.values():
+        stock.update(dict.fromkeys(stock, 0))
+    state.stock_lots = {}
+    board = state.communication.config.board_id
+    world.actor.location_id = world.state.entities[board].location
+
+    def bread_requests():
+        return [choice["arguments"] for choice in village_fallback.candidates(world)
+                if choice["action_id"] == "village_request_supply" and choice["arguments"]["good"] == "bread"]
+
+    first, = bread_requests()
+    assert first["preferred_supplier_id"] == primary
+    assert act(world, "village_request_supply", **first)["code"] == "NOTICE_POSTED"
+    assert not bread_requests()
+    supplier = world.bind(primary, f"session-{primary}")
+    supplier.actor.location_id = world.actor.location_id
+    nid = next(iter(state.communication.notices))
+    assert village_communication.apply(supplier, "village_notice_read", {"notice_ids": [nid]})[0] == "APPLIED"
+    village.advance(world, 5)
+    assert act(supplier, "village_respond_to_request", request_id=nid, response="reject",
+               reason="No bread available")["code"] == "NOTICE_UPDATED"
+    village.advance(world, 5)
+    assert not bread_requests()
+    village.advance(world, 5)
+    alternate, = bread_requests()
+    assert alternate == {**first, "preferred_supplier_id": "mara"}
+    assert act(world, "village_request_supply", **alternate)["code"] == "NOTICE_POSTED"
+    assert not bread_requests()
+    second_id = next(reversed(state.communication.notices))
+    second_supplier = world.bind("mara", "session-mara")
+    second_supplier.actor.location_id = world.actor.location_id
+    assert village_communication.apply(second_supplier, "village_notice_read", {"notice_ids": [second_id]})[0] == "APPLIED"
+    village.advance(world, 5)
+    assert act(second_supplier, "village_respond_to_request", request_id=second_id, response="reject",
+               reason="No bread available")["code"] == "NOTICE_UPDATED"
+    village.advance(world, 15)
+    assert all(request["purpose"] != first["purpose"] for request in bread_requests())
+
+
 def test_blocked_bakery_order_prompts_upstream_flour_request_at_board(tmp_path):
     value = build_scenario(scenario(), purposeful_downtime=True)
     value.village.start_minute = 600

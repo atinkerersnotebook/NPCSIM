@@ -416,6 +416,45 @@ def _intent_channel(world: "World", terms: NoticeTerms, *, author: str | None = 
                              + "use a real encounter or travel to " + alternatives)
 
 
+def preferred_supply_contact(world: "World", terms: NoticeTerms) -> NoticeTerms | None:
+    """Change only the recipient of a fallback request; no eligible new terms means no request."""
+    from npc_sim import village_supplier_choice
+
+    policy = village_economy.config(world)
+    primary = terms.recipients[0]
+    if policy is None or policy.suppliers.get(terms.subject) != primary:
+        return terms
+    alternatives = policy.supplier_alternatives.get(terms.subject)
+    if not alternatives:
+        return terms
+    state = _state(world)
+    if world.state.village.minute < state.cooldowns.get(f"post:{world.actor_id}", 0):
+        return None
+    prior = [history[-1].terms for history in state.notices.values()
+             if history[-1].author == world.actor_id]
+    eligible: dict[str, NoticeTerms] = {}
+    reachable: list[str] = []
+    for recipient in (primary, *alternatives):
+        candidate = terms.model_copy(update={"recipients": [recipient]})
+        priced = _priced_terms(world, candidate)
+        if priced in prior:
+            continue
+        try:
+            _validate_terms(world, priced, world.actor_id)
+        except ValueError:
+            continue
+        eligible[recipient] = candidate
+        try:
+            _intent_channel(world, candidate)
+        except ValueError:
+            continue
+        reachable.append(recipient)
+    if not eligible:
+        return None
+    ranked = village_supplier_choice.rank(world, terms, reachable or list(eligible))
+    return eligible[ranked[0]]
+
+
 def _intent_request(world: "World", action: str, request: Any) -> tuple[str, str]:
     state, actor = _state(world), world.actor_id
     if action == "village_check_messages":

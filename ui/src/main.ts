@@ -16,6 +16,7 @@ import { villageDashboardMarkup, villageMarkup } from "./village-view";
 import { adventureStatus, budgetSummary, canAskQuestions, canExtendBudget, canReopenAdventure, dashboardTab, isAdminView, playerCommandVisible, simulationClock, villageClockText, viewMode, viewNavigation } from "./view-mode";
 import type { DashboardTab } from "./view-mode";
 import { startWorldMonitor } from "./world-monitor";
+import { startTownSupply } from "./town-supply";
 import { conditionText } from "./secondary-goals";
 import { savedEpisodesMarkup } from "./episode-saves";
 import { escape } from "./html";
@@ -23,7 +24,9 @@ import "./style.css";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing application root");
-if (viewMode(location.search) === "world") {
+if (viewMode(location.search) === "supply") {
+  startTownSupply(app);
+} else if (viewMode(location.search) === "world") {
   startWorldMonitor(app);
 } else {
 const adminView = isAdminView(location.search);
@@ -144,6 +147,16 @@ app.innerHTML = `
         <section class="panel self-panel" id="self-panel" data-admin-only>
           <div class="panel-heading"><div><span class="eyebrow">02 / EMBODIMENT</span><h2>Self & constraints</h2></div><select id="actor-select" aria-label="Select actor"></select></div>
           <div id="self-content"></div>
+        </section>
+        <section class="panel" id="supplier-panel" data-admin-only>
+          <div class="panel-heading"><div><span class="eyebrow">VILLAGE POLICY</span><h2>Adaptive supplier recommendations</h2></div></div>
+          <p class="muted" id="supplier-availability"></p>
+          <form id="supplier-form" hidden>
+            <p class="muted">Choose other residents who can supply each good. Leaving all choices empty disables adaptive recommendations.</p>
+            <p class="muted" id="supplier-residents"></p><div id="supplier-options"></div>
+            <button type="submit" id="save-suppliers" class="button">Save supplier policy</button>
+          </form>
+          <p id="supplier-message" role="status"></p>
         </section>
         <section class="panel proxy-panel" id="connection-panel" data-admin-only>
           <div class="panel-heading"><div><span class="eyebrow">CONNECTION</span><h2>LLM proxy</h2></div><span id="proxy-status" class="tag">NOT CHECKED</span></div>
@@ -275,7 +288,7 @@ if (!villageOverview) throw new Error("Missing village overview");
 villageDetails.append(villageOverview);
 document.getElementById("panel-live")?.append(villageDetails);
 moveToTab("story", "#narrative-column", "#story-panel", "#completion-panel");
-moveToTab("technical", "#technical-log", "#self-panel", "#connection-panel", "#observation-panel");
+moveToTab("technical", "#technical-log", "#self-panel", "#supplier-panel", "#connection-panel", "#observation-panel");
 document.querySelector("#observatory > .workspace")?.remove();
 
 let activeTab: DashboardTab | null = null;
@@ -320,6 +333,7 @@ let state: State | null = null;
 let events: RunEvent[] = [];
 let activeRun: string | null = null;
 let busy = false;
+let supplierFormKey = "";
 let interactionBusy = false;
 let chatOptions = "";
 let chatMarkup = "";
@@ -398,6 +412,7 @@ function applyState(next: State): void {
     storyPageRun = null;
     storyRequest++;
     technicalEvents.clear();
+    element("supplier-message").textContent = "";
     timelineLimit = 100;
     dismissedProposals.clear();
     element<HTMLSelectElement>("chat-actor").value = "";
@@ -605,7 +620,34 @@ function renderBakery(): void {
   }).join("") : '<p class="muted">Discover the bowls to track individual batches.</p>';
 }
 
+function renderSupplierPolicy(): void {
+  const village = state?.world?.village;
+  const config = village?.economy?.config;
+  const products = Object.entries(config?.suppliers ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  const form = element<HTMLFormElement>("supplier-form");
+  form.hidden = !config || products.length === 0;
+  const running = state?.run?.status === "running";
+  const purposeful = (village?.dashboard?.day_policy ?? village?.day_policy)?.purposeful_downtime;
+  element("supplier-availability").textContent = form.hidden
+    ? "Start a village episode with configured primary suppliers to use this option."
+    : running ? "Pause the episode before editing this policy."
+    : !purposeful || !village?.communication ? "Saved settings only take effect in villages with purposeful downtime and communication."
+    : "Applies to food and production requests in this episode.";
+  element("supplier-residents").textContent = `Resident IDs: ${Object.keys(village?.residents ?? {}).sort().join(", ")}`;
+  const key = JSON.stringify([state?.run?.id, products, config?.supplier_alternatives]);
+  const options = element("supplier-options");
+  if (key !== supplierFormKey) {
+    supplierFormKey = key;
+    options.innerHTML = products.map(([good, primary]) => `<p><label>${escape(good)} (primary: ${escape(primary)})
+      <input data-supplier-good="${escape(good)}" value="${escape(config?.supplier_alternatives[good]?.join(", ") ?? "")}" placeholder="Comma-separated resident IDs" /></label></p>`).join("");
+  }
+  const disabled = busy || interactionBusy || running || Boolean(state?.in_flight) || !state?.run || !state?.observation;
+  options.querySelectorAll("input").forEach(input => { input.disabled = disabled; });
+  element<HTMLButtonElement>("save-suppliers").disabled = disabled;
+}
+
 function renderControls(): void {
+  renderSupplierPolicy();
   const status = state?.run?.status ?? "idle";
   const terminal = ["idle", "succeeded", "error", "blocked", "stalled", "cancelled", "budget_exceeded"].includes(status);
   document.querySelectorAll<HTMLButtonElement>("[data-command]").forEach(button => {
@@ -1328,6 +1370,31 @@ element("budget-form").addEventListener("submit", event => {
       notice(message);
     } finally { busy = false; renderControls(); }
   })();
+});
+element("supplier-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const run = state?.run;
+  const revision = state?.observation?.observation_revision;
+  if (!adminView || !run || !revision || busy || interactionBusy || state?.in_flight ||
+      run.status === "running" || element<HTMLFormElement>("supplier-form").hidden) return;
+  const supplier_alternatives = Object.fromEntries(Array.from(
+    element("supplier-options").querySelectorAll<HTMLInputElement>("[data-supplier-good]"), input =>
+      [input.dataset.supplierGood!, input.value.split(",").map(id => id.trim()).filter(Boolean)] as const
+  ).filter(([, ids]) => ids.length));
+  const message = element("supplier-message");
+  message.textContent = "Saving supplier policy…";
+  busy = true;
+  renderControls();
+  void api("/village/configure", "POST", {
+    run_id: run.id, request_id: `suppliers-${crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`,
+    expected_revision: revision, configuration: { supplier_alternatives }
+  }).then(payload => {
+    applyState(stateSchema.parse(payload));
+    message.textContent = "Supplier policy saved for this episode.";
+  }).catch(error => { message.textContent = errorMessage(error); }).finally(() => {
+    busy = false;
+    renderControls();
+  });
 });
 element("self-content").addEventListener("click", event => {
   if (!(event.target instanceof Element)) return;

@@ -679,6 +679,7 @@ class VillageFirewoodView(StrictModel):
 
 
 class VillageConfigurationPatch(StrictModel):
+    supplier_alternatives: dict[str, list[str]] | None = None
     firewood: VillageFirewoodConfig | None = None
     communication: VillageCommunicationConfig | None = None
     economy: VillageEconomyConfig | None = None

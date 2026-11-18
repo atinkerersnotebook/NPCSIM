@@ -76,6 +76,7 @@ def _context_values(world: "World") -> dict[str, Any]:
         "stock_policy": economy.model_dump(include={
             "reserve_targets", "production_targets", "require_orders", "stock_buffer"}) if economy else None,
         "firewood_policy": state.firewood.config.model_dump() if state.firewood else None,
+        **({"supplier_alternatives": economy.supplier_alternatives} if economy and economy.supplier_alternatives else {}),
         "policy": village_extensions.policy(world).model_dump(include={
             "anti_idle", "purposeful_downtime", "downtime_review_minutes", "board_check_minutes",
             "idle_review_minutes", "breakfast", "breakfast_delay", "meal_window"}),
@@ -675,6 +676,9 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
                    and history[-1].status not in village_communication.TERMINAL
                    for history in state.communication.notices.values()):
                 continue
+            terms = village_communication.preferred_supply_contact(world, terms)
+            if terms is None:
+                continue
             try:
                 village_communication._intent_channel(world, terms)
             except village_communication.ChannelUnavailable:
@@ -688,7 +692,7 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
             args = {"good": request["product"], "quantity": request["quantity"],
                     "purpose": terms.description, "deadline": request["deadline"],
                     "required_fresh_until": request["required_fresh_until"],
-                    "preferred_supplier_id": request["supplier"]}
+                    "preferred_supplier_id": terms.recipients[0]}
             if action_blocker(world, "village_request_supply", args, check_wait=False) is None:
                 choices.append({"task_id": f"production:request:{request['request_key']}",
                                 "action_id": "village_request_supply", "arguments": args,
@@ -725,6 +729,9 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
                             for history in state.communication.notices.values())
             if open_need:
                 continue
+            terms = village_communication.preferred_supply_contact(world, terms)
+            if terms is None:
+                continue
             try:
                 village_communication._intent_channel(world, terms)
             except village_communication.ChannelUnavailable:
@@ -738,7 +745,7 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
             args = {"good": request["product"], "quantity": request["quantity"],
                     "purpose": terms.description, "deadline": request["deadline"],
                     "required_fresh_until": request["required_fresh_until"],
-                    "preferred_supplier_id": request["supplier"]}
+                    "preferred_supplier_id": terms.recipients[0]}
             if action_blocker(world, "village_request_supply", args, check_wait=False) is None:
                 choices.append({"task_id": f"food:request:{request['request_key']}",
                                 "action_id": "village_request_supply", "arguments": args,

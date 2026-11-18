@@ -45,6 +45,7 @@ class VillageEconomyConfig(EconomyModel):
                         recipe_portions={"bread": 8, "fish": 4})
     ])
     suppliers: dict[str, str] = Field(default_factory=dict)
+    supplier_alternatives: dict[str, list[str]] = Field(default_factory=dict)
     stock_buffer: dict[str, Quantity] = Field(default_factory=dict)
     reserve_targets: dict[str, dict[str, Quantity]] = Field(default_factory=dict)
     production_targets: dict[str, dict[str, Quantity]] = Field(default_factory=dict)

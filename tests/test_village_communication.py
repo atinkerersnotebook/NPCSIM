@@ -305,6 +305,43 @@ def test_supply_and_response_intents_require_physical_receipt_and_reply(world):
     assert len(world.state.village.economy.orders) == 1
 
 
+def test_supplier_choice_uses_only_direct_outcomes_in_the_same_deadline_window(world):
+    from npc_sim.village_supplier_choice import rank
+
+    terms = comm.NoticeTerms.model_validate(flour(due_at=570))
+    knowledge = world.state.village.communication.knowledge.setdefault("jory", {})
+    for i in range(8):
+        for supplier, status, due, confidence in (
+            ("mara", "rejected", 570, "direct"),
+            ("ada", "completed", 570, "direct"),
+            ("mara", "completed", 900, "direct"),
+            ("ada", "rejected", 900, "direct"),
+            ("ada", "rejected", 570, "secondhand"),
+        ):
+            nid = f"{i}:{supplier}:{status}:{due}"
+            notice = comm.NoticeVersion(id=nid, version=2, author="jory",
+                                        terms=terms.model_copy(update={"recipients": [supplier], "due_at": due}),
+                                        status=status, created_at=420 if due == 900 else 480, updated_at=550)
+            knowledge[nid] = comm.NoticeKnowledge(snapshot=notice, heard_at=560, source_type="witness",
+                                                  confidence=confidence)
+
+    suppliers = ["mara", "ada"]
+    assert rank(world, terms, suppliers) == ["ada", "mara"]
+    assert rank(world, terms.model_copy(update={"due_at": 900}), suppliers) == ["mara", "ada"]
+def test_supplier_choice_uses_reachable_alternative_when_primary_has_no_channel(world):
+    policy = world.state.village.economy.config
+    policy.suppliers = {"flour": "mara"}
+    policy.supplier_alternatives = {"flour": ["ada"]}
+    terms = comm.NoticeTerms.model_validate(flour())
+    buyer = actor(world, "jory", "farm")
+    actor(world, "mara", "watermill")
+    actor(world, "ada", "farm")
+    ready(world)
+    selected = comm.preferred_supply_contact(buyer, terms)
+    assert selected is not None and selected.recipients == ["ada"]
+    assert selected.model_copy(update={"recipients": terms.recipients}) == terms
+
+
 def test_schedule_crew_intent_requires_actual_partner_confirmation(world):
     crew, site = comm._project(world, "dig_well")
     proposer = actor(world, crew[0], "village-square")

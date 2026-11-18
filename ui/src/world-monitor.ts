@@ -14,6 +14,37 @@ import { npcPortrait } from "./npc-sprite.ts";
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 
+export async function replayWorldHistory(runId: string, through: number, after: number,
+  record: (event: RunEvent) => void, request = fetch, signal?: AbortSignal): Promise<void> {
+  const load = async (path: string) => {
+    const response = await request(path, { signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  };
+  if (through > 0 && after === 0) {
+    // With no positive cursor, the paged events endpoint returns the latest events.
+    const first = eventSchema.parse(await load(`/api/events/1?run_id=${encodeURIComponent(runId)}`));
+    if (first.run_id !== runId || first.sequence !== 1) throw new Error("World history changed while loading.");
+    record(first);
+    after = first.sequence;
+  }
+  while (after < through) {
+    const limit = Math.min(500, through - after);
+    const page = await load(`/api/events?compact=true&after=${after}&limit=${limit}`) as {
+      run_id: string; events: unknown[];
+    };
+    if (page.run_id !== runId || !page.events.length) throw new Error("World history changed while loading.");
+    for (const raw of page.events) {
+      const event = eventSchema.parse(raw);
+      if (event.run_id !== runId || event.sequence !== after + 1 || event.sequence > through) {
+        throw new Error("World history contains an unexpected event sequence.");
+      }
+      record(event);
+      after = event.sequence;
+    }
+  }
+}
+
 export function monitoredAgents(state: State) {
   const { world, run } = state;
   const village = world?.village;
@@ -112,7 +143,7 @@ export function worldMonitorMarkup(
   ${!active && agents.length ? '<p class="muted">Last recorded world state. The adventure is not running.</p>' : ""}
   ${!state.world && agents.length ? '<p class="muted">World snapshot unavailable. Locations below are last observed, not live positions.</p>' : ""}
   ${state.world?.village ? `<button type="button" class="button subtle monitor-map-toggle" data-map-toggle aria-expanded="${!mapCollapsed}" aria-controls="monitor-town-map">${mapCollapsed ? "Show Town map" : "Collapse Town map"}</button>` : ""}
-  <div class="monitor-visuals${state.world?.village && !mapCollapsed ? " with-town-map" : ""}">
+  <div class="monitor-visuals">
     ${state.world?.village ? `<div id="monitor-town-map"${mapCollapsed ? " hidden" : ""}>${mapCollapsed ? "" : townMapMarkup(state, agents, map)}</div>` : ""}
     ${worldGanttMarkup(state, events, agents, scale)}
   </div>
@@ -159,7 +190,6 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   let renderedZoom = 1;
   let mapZoom = 1;
   let mapCollapsed = false;
-  let renderedMapCollapsed = false;
   let selectedActorId: string | undefined;
   let dialogue = new TownDialogue();
   let liveAfterSequence = 0;
@@ -171,8 +201,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     if (!state) return;
     historyReady ||= seen.size >= state.event_count;
     const old = content.querySelector<HTMLDivElement>(".gantt-scroll");
-    const viewportWidth = (renderedMapCollapsed === mapCollapsed ? old?.clientWidth : undefined) ?? Math.max(120,
-      (state.world?.village && !mapCollapsed && content.clientWidth > 1100 ? (content.clientWidth - 18) / 2.15 : content.clientWidth) - 130);
+    const viewportWidth = old?.clientWidth ?? content.clientWidth - (window.matchMedia("(max-width: 700px)").matches ? 102 : 132);
     const now = Date.now();
     const markup = worldMonitorMarkup(state, historyReady ? [...events.values()] : [], { zoom, viewportWidth },
       { zoom: mapZoom, selectedActorId, dialogue, now }, mapCollapsed);
@@ -236,10 +265,8 @@ export function startWorldMonitor(app: HTMLDivElement): void {
         if (hovered) showGanttTooltip(hovered);
       }
       renderedZoom = zoom;
-      const layoutChanged = renderedMapCollapsed !== mapCollapsed;
-      renderedMapCollapsed = mapCollapsed;
       previous = markup;
-      if (layoutChanged) schedule();
+      if (scroll && scroll.clientWidth !== viewportWidth) schedule();
     }
     error.hidden = true;
   };
@@ -374,54 +401,47 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   });
   window.addEventListener("resize", schedule);
   let awaitingSnapshot = true;
+  const record = (event: RunEvent, live: boolean) => {
+    if (event.run_id !== state?.run?.id || seen.has(event.id)) return;
+    dialogue.record(event, live, Date.now());
+    const projected = timelineEventProjection(event);
+    seen.add(event.id);
+    if (projected) events.set(event.id, projected);
+  };
   const initialize = async () => {
     awaitingSnapshot = true;
+    const controller = new AbortController();
+    const { signal } = controller;
+    let stream: EventSource | undefined;
+    window.addEventListener("pagehide", () => {
+      controller.abort();
+      stream?.close();
+      clearTimeout(bubbleTimer);
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+    }, { once: true });
     let streamRun = "";
     let streamAfter = 0;
     try {
-      const response = await fetch("/api/state");
+      const response = await fetch("/api/state", { signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       render(await response.json());
       streamRun = state?.run?.id ?? "";
-      streamAfter = state?.event_count ?? 0;
-      if (streamRun && streamAfter <= 5000) {
-        const history = await fetch("/api/events?compact=true&limit=200");
-        if (!history.ok) throw new Error(`HTTP ${history.status}`);
-        const page = await history.json() as { run_id: string; events: unknown[] };
-        if (page.run_id === streamRun) {
-          for (const raw of page.events) {
-            const event = eventSchema.parse(raw);
-            const projected = timelineEventProjection(event);
-            seen.add(event.id);
-            if (projected) events.set(event.id, projected);
-          }
-          historyReady = true;
-          schedule();
-        }
-      } else {
-        historyReady = true;
-        schedule();
+      if (streamRun) {
+        streamAfter = seen.size;
+        await replayWorldHistory(streamRun, state!.event_count, streamAfter, event => {
+          record(event, false);
+          streamAfter = event.sequence;
+        }, fetch, signal);
       }
-    } catch (failure) { report(failure); }
-    if (streamAfter > 5000) {
-      connection.textContent = "Live snapshots";
-      dot.classList.add("connected");
-      const refresh = async () => {
-        try {
-          const response = await fetch("/api/state");
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          render(await response.json());
-        } catch (failure) { report(failure); }
-      };
-      const timer = window.setInterval(() => { void refresh(); }, 10000);
-      window.addEventListener("pagehide", () => {
-        clearInterval(timer);
-        clearTimeout(bubbleTimer);
-        if (frame !== null) cancelAnimationFrame(frame);
-      }, { once: true });
-      return;
+      historyReady = true;
+      schedule();
+    } catch (failure) {
+      if (signal.aborted) return;
+      report(failure);
     }
-    const stream = new EventSource(`/api/stream?compact=true&run_id=${encodeURIComponent(streamRun)}&after=${streamAfter}`);
+    if (signal.aborted) return;
+    stream = new EventSource(`/api/stream?compact=true&run_id=${encodeURIComponent(streamRun)}&after=${streamAfter}`);
     stream.onopen = () => {
       connection.textContent = "Live connection";
       dot.classList.add("connected");
@@ -438,20 +458,10 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     stream.addEventListener("run-event", (message: MessageEvent<string>) => {
       try {
         const event = eventSchema.parse(JSON.parse(message.data));
-        if (event.run_id !== state?.run?.id || seen.has(event.id)) return;
-        dialogue.record(event, event.sequence > liveAfterSequence, Date.now());
-        const projected = timelineEventProjection(event);
-        seen.add(event.id);
-        if (projected) events.set(event.id, projected);
+        record(event, event.sequence > liveAfterSequence);
         schedule();
       } catch (failure) { report(failure); }
     });
-    window.addEventListener("pagehide", () => {
-      stream.close();
-      clearTimeout(bubbleTimer);
-      if (frame !== null) cancelAnimationFrame(frame);
-      frame = null;
-    }, { once: true });
   };
   window.addEventListener("pageshow", event => {
     if (event.persisted) void initialize();

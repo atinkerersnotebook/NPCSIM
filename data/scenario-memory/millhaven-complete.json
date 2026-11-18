@@ -175,6 +175,62 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "54d52aa6f1f3418f86a921acd10bae6b",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-18T12:47:06.636495+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: shovel recovered, well dug, mill repaired, bread supply resumed, every resident contributed, working wagon, evening reached, everyone fed, resource reserves ready.",
+          "evidence_ids": [
+            "54d52aa6f1f3418f86a921acd10bae6b:19"
+          ]
+        },
+        {
+          "reason": "The shovel was not recovered, the well was not dug, the mill was not repaired, bread supply had not resumed, the wagon was not working, and the resident contribution check failed.",
+          "evidence_ids": [
+            "54d52aa6f1f3418f86a921acd10bae6b:19"
+          ]
+        },
+        {
+          "reason": "Evening had not been reached, and no resident passed the meal check.",
+          "evidence_ids": [
+            "54d52aa6f1f3418f86a921acd10bae6b:19"
+          ]
+        },
+        {
+          "reason": "Grain at the farm and general store and timber at the woods were below configured reserves.",
+          "evidence_ids": [
+            "54d52aa6f1f3418f86a921acd10bae6b:19"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "b701c04570cb439dbaa59788e9ae309e",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-18T15:54:22.906614+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: every resident contributed, everyone home, everyone asleep.",
+          "evidence_ids": [
+            "b701c04570cb439dbaa59788e9ae309e:13634"
+          ]
+        },
+        {
+          "reason": "Final verification did not credit every resident with a qualifying contribution.",
+          "evidence_ids": [
+            "b701c04570cb439dbaa59788e9ae309e:13634"
+          ]
+        },
+        {
+          "reason": "Nella was not home, and the final check that everyone was asleep also failed.",
+          "evidence_ids": [
+            "b701c04570cb439dbaa59788e9ae309e:13634"
+          ]
+        }
+      ]
     }
   ]
 }

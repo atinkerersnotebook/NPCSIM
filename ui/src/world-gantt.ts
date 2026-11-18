@@ -402,8 +402,9 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     ? `${text.slice(0, Math.max(0, characters - 3)).trimEnd()}...` : text;
   const grid: string[] = [];
   for (let minute = start; minute <= end; minute += tick) {
+    const anchor = minute === start ? "start" : minute === end ? "end" : "middle";
     grid.push(`<line x1="${x(minute)}" x2="${x(minute)}" y1="${top - 12}" y2="${height - 20}" class="gantt-gridline"/>
-      <text x="${x(minute)}" y="${height - 5}" text-anchor="middle" class="gantt-tick">${escape(chart.village ? villageClockTime(minute % 1440) : format(minute))}</text>`);
+      <text x="${x(minute)}" y="${height - 5}" text-anchor="${anchor}" class="gantt-tick">${escape(chart.village ? villageClockTime(minute % 1440) : format(minute))}</text>`);
   }
   const legend = new Map<string, string>();
   const rows = chart.rows.map((row, index) => {

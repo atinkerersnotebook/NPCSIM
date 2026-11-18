@@ -196,6 +196,34 @@ def test_day_policy_configuration_is_revision_checked_and_idempotent(tmp_path):
     assert loaded.state.village.day_policy.breakfast
 
 
+def test_supplier_patch_can_enable_and_clear_alternatives_without_replacing_orders(tmp_path):
+    from npc_sim.models import VillageEconomyConfig
+    from npc_sim.village_economy_models import VillageSupplierOrder
+
+    world = make_world(tmp_path, economy=VillageEconomyConfig(suppliers={"flour": "mara"}))
+    economy = world.state.village.economy
+    order = VillageSupplierOrder(id="order-1", request_key="flour", buyer="jory", supplier="mara",
+                                 source="watermill", destination="bakery", product="flour", quantity=1,
+                                 price=1, deadline=600, required_fresh_until=600, created_at=480, status="accepted")
+    economy.orders[order.id] = order
+    revision = world.revision()
+    patch = {"supplier_alternatives": {"flour": ["ada"]}}
+    assert village_extensions.configure(world, "suppliers-1", revision, patch)["configured"] == ["supplier_alternatives"]
+    assert economy.orders[order.id] == order
+    assert world.scenario.village.economy.supplier_alternatives == {}
+    loaded = World(world.scenario, world.path, "backlog", "torvin", "session-torvin")
+    assert loaded.state.village.economy.config.supplier_alternatives == patch["supplier_alternatives"]
+    assert loaded.state.village.economy.orders[order.id] == order
+    with pytest.raises(ValueError, match="changed"):
+        village_extensions.configure(loaded, "suppliers-2", revision, {"supplier_alternatives": {}})
+    with pytest.raises(ValueError, match="distinct other real residents"):
+        village_extensions.configure(loaded, "suppliers-3", loaded.revision(), {"supplier_alternatives": {"flour": ["mara"]}})
+    assert loaded.state.village.economy.config.supplier_alternatives == patch["supplier_alternatives"]
+    village_extensions.configure(loaded, "suppliers-4", loaded.revision(), {"supplier_alternatives": {}})
+    assert loaded.state.village.economy.config.supplier_alternatives == {}
+    assert loaded.state.village.economy.orders[order.id] == order
+
+
 def test_dm_configuration_requires_explicit_authority():
     review = DungeonMasterReview(verdict="continue", findings=[{
         "reason": "A quiet day is appropriate.", "evidence_ids": ["event-1"]
@@ -220,6 +248,9 @@ def test_village_configuration_api_validates_policy_and_surfaces_conflicts(monke
     assert client.post("/api/village/configure", json=body).status_code == 200
     assert command.call_args.args[0] == "configure_village"
     assert command.call_args.args[1]["configuration"]["day_policy"]["breakfast"] is True
+    supplier_body = {**body, "configuration": {"supplier_alternatives": {}}}
+    assert client.post("/api/village/configure", json=supplier_body).status_code == 200
+    assert command.call_args.args[1]["configuration"]["supplier_alternatives"] == {}
     body["configuration"]["day_policy"]["breakfast_delay"] = 7
     assert client.post("/api/village/configure", json=body).status_code == 422
     body["configuration"]["day_policy"]["breakfast_delay"] = 30
