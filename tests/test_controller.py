@@ -2,6 +2,7 @@ import asyncio
 import json
 import shutil
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -135,6 +136,28 @@ def configuration(tmp_path):
     config.proxy.model = "test-model"
     config.budgets.max_seconds = 60
     return data, config
+
+
+@pytest.mark.asyncio
+async def test_unhandled_automatic_cycle_reports_error_without_stopping_worker(configuration, monkeypatch):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        monkeypatch.setattr(controller, "cycle", AsyncMock(side_effect=RuntimeError("cycle failed")))
+        monkeypatch.setattr(controller, "assess_completion", AsyncMock())
+        await controller.command("run")
+        for _ in range(100):
+            if controller.run["status"] == "error":
+                break
+            await asyncio.sleep(0.01)
+        assert controller.run["status"] == "error"
+        assert controller.run["reason"] == "cycle failed"
+        assert not controller.worker.done()
+        assert read_json(controller.events.directory / "run.json")["status"] == "error"
+    finally:
+        await controller.shutdown()
 
 
 @pytest.mark.asyncio

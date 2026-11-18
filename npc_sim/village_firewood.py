@@ -295,7 +295,12 @@ def requests(world: "World", actor: str) -> list[tuple[str, int, dict[str, int]]
     if available > getattr(config, "site_reorder_points", {}).get(location, config.reorder_point):
         return []
     used = state.firewood.consumed.get(location, 0)
-    return [(f"firewood:{state.minute // 1440}:{location}:{used}", state.minute + 360, {"firewood": target})]
+    next_workday = (state.minute // 1440 + 1) * 1440
+    deadline = state.minute + 360
+    if deadline >= next_workday:
+        deadline = next_workday + 1080
+    return [(f"firewood:{state.minute // 1440}:{location}:{used}",
+             deadline, {"firewood": target})]
 
 
 def delivery_plan(world: "World", carrier: str | None = None) -> VillageFuelDeliveryPlan | None:

@@ -376,12 +376,52 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   let awaitingSnapshot = true;
   const initialize = async () => {
     awaitingSnapshot = true;
+    let streamRun = "";
+    let streamAfter = 0;
     try {
       const response = await fetch("/api/state");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       render(await response.json());
+      streamRun = state?.run?.id ?? "";
+      streamAfter = state?.event_count ?? 0;
+      if (streamRun && streamAfter <= 5000) {
+        const history = await fetch("/api/events?compact=true&limit=200");
+        if (!history.ok) throw new Error(`HTTP ${history.status}`);
+        const page = await history.json() as { run_id: string; events: unknown[] };
+        if (page.run_id === streamRun) {
+          for (const raw of page.events) {
+            const event = eventSchema.parse(raw);
+            const projected = timelineEventProjection(event);
+            seen.add(event.id);
+            if (projected) events.set(event.id, projected);
+          }
+          historyReady = true;
+          schedule();
+        }
+      } else {
+        historyReady = true;
+        schedule();
+      }
     } catch (failure) { report(failure); }
-    const stream = new EventSource("/api/stream?compact=true");
+    if (streamAfter > 5000) {
+      connection.textContent = "Live snapshots";
+      dot.classList.add("connected");
+      const refresh = async () => {
+        try {
+          const response = await fetch("/api/state");
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          render(await response.json());
+        } catch (failure) { report(failure); }
+      };
+      const timer = window.setInterval(() => { void refresh(); }, 10000);
+      window.addEventListener("pagehide", () => {
+        clearInterval(timer);
+        clearTimeout(bubbleTimer);
+        if (frame !== null) cancelAnimationFrame(frame);
+      }, { once: true });
+      return;
+    }
+    const stream = new EventSource(`/api/stream?compact=true&run_id=${encodeURIComponent(streamRun)}&after=${streamAfter}`);
     stream.onopen = () => {
       connection.textContent = "Live connection";
       dot.classList.add("connected");

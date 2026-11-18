@@ -3,7 +3,8 @@ import copy
 import pytest
 
 from npc_sim import (village, village_communication, village_economy, village_extensions,
-                     village_fallback, village_goods, village_life, village_social, village_turns)
+                     village_fallback, village_goods, village_life, village_social, village_turns,
+                     village_wagon)
 from npc_sim.contracts import observation
 from npc_sim.living_village import build_scenario
 from npc_sim.models import Scenario, VillageDayPolicy, VillageEconomyConfig
@@ -79,6 +80,120 @@ def test_innkeeper_can_request_tomorrow_food_at_physical_board(tmp_path):
     assert act(world, request["action_id"], **request["arguments"])["outcome"] == "APPLIED"
     assert not any(choice["action_id"] == "village_request_supply"
                    and choice["arguments"]["good"] == "bread"
+                   for choice in village_fallback.candidates(world))
+
+
+def test_blocked_bakery_order_prompts_upstream_flour_request_at_board(tmp_path):
+    value = build_scenario(scenario(), purposeful_downtime=True)
+    value.village.start_minute = 600
+    for agent in value.agents:
+        agent.start_location = value.village.residents[agent.id].work
+    world = World(value, tmp_path / "upstream.json", "upstream", "jory", "session-jory")
+    state = world.state.village
+    board = state.communication.config.board_id
+    world.actor.location_id = world.state.entities[board].location
+    state.economy.orders["bread-short"] = VillageSupplierOrder(
+        id="bread-short", request_key="bread-short", buyer="elsie", supplier="jory",
+        source="bakery", destination="tavern", product="bread", quantity=4,
+        price=3, deadline=1050, required_fresh_until=1140, created_at=600,
+        status="deferred", reason="SUPPLY_NOT_READY")
+    state.stocks["bakery"]["flour"] = 0
+    state.stock_lots.get("bakery", {}).pop("flour", None)
+    state.stocks["bakery"]["bread"] = 0
+    state.stock_lots.get("bakery", {}).pop("bread", None)
+    state.coins["jory"] = 100
+    request = next(choice for choice in village_fallback.candidates(world)
+                   if choice["task_id"].startswith("production:request:")
+                   and choice["action_id"] == "village_request_supply")
+    assert request["arguments"]["good"] == "flour"
+    assert request["arguments"]["deadline"] > state.minute
+    result = act(world, request["action_id"], **request["arguments"])
+    assert result["outcome"] == "APPLIED", result
+    assert not any(choice["task_id"].startswith("production:request:")
+                   for choice in village_fallback.candidates(world))
+
+
+def test_funded_grain_notice_is_prioritized_over_optional_research(tmp_path):
+    value = build_scenario(scenario(), purposeful_downtime=True)
+    value.village.start_minute = 600
+    for agent in value.agents:
+        agent.start_location = value.village.residents[agent.id].work
+    world = World(value, tmp_path / "grain-reply.json", "grain-reply", "mara", "session-mara")
+    state = world.state.village
+    farmer = world.bind("ada", "session-ada")
+    world.actor.location_id = farmer.actor.location_id = "farm"
+    state.coins["mara"] = 100
+    result = act(world, "village_request_supply", good="grain", quantity=1,
+                 purpose="Milling flour for a paid bakery order", deadline=900,
+                 required_fresh_until=960, preferred_supplier_id="ada")
+    assert result["outcome"] == "APPLIED", result
+    village.advance(world, 5)
+    reply = next(choice for choice in village_fallback.candidates(farmer)
+                 if choice["action_id"] == "village_respond_to_request")
+    assert reply["priority"] == "P1" and reply["arguments"]["response"] == "accept"
+    assert act(farmer, reply["action_id"], **reply["arguments"])["outcome"] == "APPLIED"
+    assert next(iter(state.economy.orders.values())).status in {"accepted", "accepted_planned"}
+
+
+def test_courier_dispatches_only_for_confirmed_funded_shipment(tmp_path):
+    value = build_scenario(scenario(), purposeful_downtime=True)
+    value.village.start_minute = 600
+    for agent in value.agents:
+        agent.start_location = value.village.residents[agent.id].work
+    world = World(value, tmp_path / "wagon-priority.json", "wagon-priority", "nella", "session-nella")
+    state = world.state.village
+    state.wagon.repaired = state.wagon.hitched = True
+    world.actor.location_id = world.state.entities["wagon"].location
+    state.residents["nella"].life.meals["0:breakfast"].status = "eaten"
+    assert not [choice for choice in village_fallback.candidates(world)
+                if choice["task_id"] == "shipment:wagon"]
+    state.economy.orders["wagon-bread"] = VillageSupplierOrder(
+        id="wagon-bread", request_key="wagon-bread", buyer="elsie", supplier="jory",
+        source="bakery", destination="tavern", product="bread", quantity=2,
+        price=1, deadline=900, required_fresh_until=850, created_at=600,
+        status="ready_to_collect")
+    village_goods.put(world, "bakery", "bread", 2)
+    assert village_wagon.readiness(world)["ready"]
+    choice = next(choice for choice in village_fallback.candidates(world)
+                  if choice["task_id"] == "shipment:wagon")
+    assert choice["priority"] == "P1"
+    assert act(world, choice["action_id"], **choice["arguments"])["code"] == "ROUTE_STARTED"
+    for _ in range(60):
+        if not state.wagon.automatic:
+            break
+        state.minute = state.wagon.next_event_at
+        village_wagon.advance(world)
+    assert state.economy.orders["wagon-bread"].status == "fulfilled"
+    assert state.economy.orders["wagon-bread"].paid > 0
+    assert state.wagon.loads == []
+    assert world.state.entities["wagon"].location == "forge"
+
+
+def test_confirmed_crew_meeting_is_prioritized_over_optional_work(tmp_path):
+    value = build_scenario(scenario(), purposeful_downtime=True)
+    value.village.start_minute = 600
+    for agent in value.agents:
+        agent.start_location = value.village.residents[agent.id].work
+    world = World(value, tmp_path / "crew-priority.json", "crew-priority", "mara", "session-mara")
+    state = world.state.village
+    world.actor.location_id = "village-square"
+    notice = NoticeVersion(
+        id="crew-confirmed", version=2, author="hobb", created_at=550, updated_at=590,
+        status="accepted", terms=NoticeTerms(
+            type="meeting", subject="repair_mill", description="Repair the mill",
+            recipients=["mara"], destination="watermill", due_at=630),
+        appointment=village_communication.Appointment(
+            id="crew-confirmed", version=2, project="repair_mill",
+            members=["hobb", "mara"], accepted=["hobb", "mara"],
+            place="watermill", due_at=630, end_at=690, status="confirmed"))
+    state.communication.notices[notice.id] = [notice]
+    state.communication.knowledge.setdefault("mara", {})[notice.id] = NoticeKnowledge(
+        snapshot=notice, heard_at=590, source_type="conversation")
+    choice = next(choice for choice in village_fallback.candidates(world)
+                  if choice["task_id"] == "crew:attend:crew-confirmed")
+    assert choice["priority"] == "P1" and choice["destination"] == "watermill"
+    state.minute = 695
+    assert not any(choice["task_id"] == "crew:attend:crew-confirmed"
                    for choice in village_fallback.candidates(world))
 
 

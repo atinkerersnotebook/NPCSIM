@@ -592,13 +592,15 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
     if village_depot.enabled(world) and world.actor_id == config.livestock.keeper:
         choices.extend(_feed_store_choices(world))
     choices.extend(_egg_negotiation_choices(world))
-    if world.actor_id in {"jory", "finn"} and state.communication:
+    if state.communication and state.economy:
         from npc_sim import village_communication
-        for memory in state.communication.knowledge.get(world.actor_id, {}).values():
+        notices = sorted((memory for memory in state.communication.knowledge.get(world.actor_id, {}).values()
+                          if memory.snapshot.terms.due_at is not None),
+                         key=lambda memory: memory.snapshot.terms.due_at)
+        for memory in notices:
             notice = memory.snapshot
             terms = notice.terms
             if (memory.confidence != "direct" or terms.type != "supply_request"
-                    or terms.subject != ("bread" if world.actor_id == "jory" else "fish")
                     or terms.recipients != [world.actor_id] or notice.status not in {"posted", "seen"}
                     or terms.due_at is None or terms.due_at <= state.minute
                     or terms.required_fresh_until is None or terms.quantity is None
@@ -622,16 +624,89 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
                 box = next((box for box, owner in state.communication.boxes.items()
                             if owner == notice.author), None)
                 target = world.state.entities[box].location if box else None
-                travel = _travel_choice(world, target, f"food:reply:{notice.id}",
-                                        "Reach the buyer's real inbox to accept a feasible food request.", "P2") if target else None
+                travel = _travel_choice(world, target, f"supply:reply:{notice.id}",
+                                        "Reach the buyer's real inbox to accept a feasible supply request.", "P1") if target else None
                 if travel:
                     choices.append(travel)
                 continue
-            choices.append({"task_id": f"food:reply:{notice.id}",
+            choices.append({"task_id": f"supply:reply:{notice.id}",
                             "action_id": "village_respond_to_request",
                             "arguments": {"request_id": notice.id, "response": "accept"},
-                            "priority": "P1", "reason": "Accept a personally learned, feasible funded food order."})
+                            "priority": "P1", "reason": "Accept a personally learned, feasible funded supply order."})
             break
+    if state.communication:
+        from npc_sim import village_communication
+        for memory in state.communication.knowledge.get(world.actor_id, {}).values():
+            notice = memory.snapshot
+            plan = notice.appointment
+            if (memory.confidence != "direct" or plan is None or world.actor_id not in plan.members
+                    or plan.status != "confirmed" or notice.status in {"completed", "cancelled", "expired"}
+                    or state.minute >= plan.end_at):
+                continue
+            if location != plan.place:
+                travel = _travel_choice(world, plan.place, f"crew:attend:{plan.id}",
+                                        "Reach the confirmed crew meeting before its window closes.", "P1")
+                if travel and state.minute + 5 <= plan.end_at:
+                    choices.append(travel)
+            elif state.minute >= plan.due_at and village_communication.project_blocker(world, plan.project) is None:
+                args = {"project": plan.project}
+                if (village_life.action_blocker(world, "village_project") is None
+                        and action_blocker(world, "village_project", args, check_wait=False) is None):
+                    choices.append({"task_id": f"crew:work:{plan.id}",
+                                    "action_id": "village_project", "arguments": args,
+                                    "priority": "P1", "reason": "Contribute to the confirmed crew session."})
+            break
+    if state.communication:
+        from npc_sim import village_communication
+        for request in village_economy.suggestions(world, personal=True):
+            if (not request["request_key"].endswith(f":production:{world.actor_id}:{request['product']}")
+                    and not (state.firewood and request["product"] == "firewood")):
+                continue
+            if request["deadline"] <= state.minute:
+                continue
+            terms = village_communication.NoticeTerms(
+                type="supply_request", subject=request["product"], description="Inputs for accepted production",
+                recipients=[request["supplier"]], quantity=request["quantity"],
+                destination=request["destination"], due_at=request["deadline"],
+                required_fresh_until=request["required_fresh_until"])
+            if any(history[-1].author == world.actor_id
+                   and village_communication._need_key(world.actor_id, history[-1].terms)
+                   == village_communication._need_key(world.actor_id, terms)
+                   and history[-1].status not in village_communication.TERMINAL
+                   for history in state.communication.notices.values()):
+                continue
+            try:
+                village_communication._intent_channel(world, terms)
+            except village_communication.ChannelUnavailable:
+                board = state.communication.config.board_id
+                travel = _travel_choice(world, world.state.entities[board].location,
+                                        f"production:request:{request['request_key']}",
+                                        "Reach the board to request inputs for a pending order.", "P1")
+                if travel:
+                    choices.append(travel)
+                break
+            args = {"good": request["product"], "quantity": request["quantity"],
+                    "purpose": terms.description, "deadline": request["deadline"],
+                    "required_fresh_until": request["required_fresh_until"],
+                    "preferred_supplier_id": request["supplier"]}
+            if action_blocker(world, "village_request_supply", args, check_wait=False) is None:
+                choices.append({"task_id": f"production:request:{request['request_key']}",
+                                "action_id": "village_request_supply", "arguments": args,
+                                "priority": "P1", "reason": "Fund upstream inputs before a pending output order expires."})
+            break
+    if state.firewood and world.actor_id == state.firewood.config.supplier:
+        from npc_sim import village_firewood
+        plan = (next((item for item in state.firewood.delivery_plans
+                      if item.carrier == world.actor_id and item.status in {"loaded", "in_progress"}), None)
+                or village_firewood.delivery_plan(world))
+        if (plan is not None
+                and village_life.action_blocker(world, "village_execute_fuel_delivery") is None
+                and action_blocker(world, "village_execute_fuel_delivery", {
+                    "route_id": plan.route_id}, check_wait=False) is None):
+            choices.append({"task_id": f"fuel:delivery:{plan.route_id}",
+                            "action_id": "village_execute_fuel_delivery",
+                            "arguments": {"route_id": plan.route_id}, "priority": "P1",
+                            "reason": "Deliver a confirmed funded fuel load before its deadline."})
     if world.actor_id == village_economy.config(world).innkeeper and state.communication:
         from npc_sim import village_communication
         for request in village_economy.suggestions(world, personal=True):
@@ -971,6 +1046,16 @@ def candidates(world: "World") -> list[dict[str, Any]]:
                 choices.append({"task_id": f"meal-delivery:{step['order_id']}", "action_id": action_id,
                                 "arguments": args, "priority": "P1",
                                 "reason": "A personally known funded bread delivery can reach the inn before supper."})
+        from npc_sim import village_wagon
+        if world.actor_id == config.courier and state.wagon and not state.wagon.automatic:
+            wagon = state.wagon
+            ready = village_wagon.readiness(world)
+            if (ready["ready"] and world.actor.location_id == world.state.entities["wagon"].location
+                    and village_life.action_blocker(world, "village_start_route") is None
+                    and action_blocker(world, "village_start_route", {}, check_wait=False) is None):
+                choices.append({"task_id": "shipment:wagon", "action_id": "village_start_route",
+                                "arguments": {}, "priority": "P1",
+                                "reason": "Drive the repaired, hitched wagon only for confirmed funded cargo."})
     if state.maintenance is not None:
         from npc_sim import village_maintenance
         for job in village_maintenance.observation(world)["maintenance"]["jobs"]:

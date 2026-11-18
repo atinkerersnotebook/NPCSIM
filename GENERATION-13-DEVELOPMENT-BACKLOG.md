@@ -125,6 +125,7 @@ same-world three-day run and report failures alongside successes.
   supper in an autonomous run nor a completed mill in a fresh episode has
   been demonstrated. The delivery/cooking schedule and controlled two-day
   service/repair gates above remain open.
+
 - Follow-up: breakfast now serves already cooked, short-lived portions before
   shelf-stable bread. A controlled twelve-diner breakfast consumes twelve real
   cooked portions without spoiling them; a provisioned, timed evening fixture
@@ -132,3 +133,125 @@ same-world three-day run and report failures alongside successes.
   next breakfast. This is a controlled service result, **not** an autonomous
   supplier-delivery or two-day continuity result. Prioritize a fresh run and
   trace any remaining supply and crew scheduling blockers there.
+- A two-day deterministic fixture now carries one world's bread, funds and
+  meal records through save/reload and real overnight sleep, and verifies
+  twelve paid breakfasts and suppers on both days. Its mill branch produces a
+  plank from real timber, authorizes and physically loads/unloads it, obtains
+  partner acceptance at a real board, and completes six crew contributions
+  before evening. Each day's fish is now caught, ordered face to face,
+  accepted, physically loaded/unloaded and paid for; no fish stock is staged
+  at the tavern. This fixture still starts with 26 bread at the tavern and
+  places actors at their sites, so it does **not** demonstrate bakery bread
+  delivery, autonomous travel or a fresh model episode. An initial four-fish
+  grant failed because fish spoiled before supper; 20 initial bread failed
+  Day 2's six-loaf Day 3 breakfast reserve. The next actionable test is a
+  funded bakery bread order produced and delivered in time across the two
+  days, followed by a fresh autonomous episode to identify scheduling gaps.
+- The controlled fixture now accepts a six-loaf bakery order on Day 2, bakes
+  three timed batches and carries the six real loaves in two three-unit foot
+  loads. The first attempted load at Day 2 10:05 failed with
+  `RAW_MATERIAL_RESERVE`: the third batch was still `in_production`, leaving
+  only one loaf loadable against the order. Waiting until its 11:05 finish
+  clears that blocker. Both active days pass 12/12 breakfasts and suppers;
+  each has 22 recorded diner meal payments (Elsie is the innkeeper), and
+  bread/fish orders are fulfilled by physical deliveries. The Day 1 mill
+  repair has a completed appointment and three contributions from each
+  consenting worker. This controlled result still teleports actors between
+  sites and provisions opening bread/flour; it is not autonomous travel proof.
+- A separate fresh `millhaven-complete` episode
+  `e537b1bc83624479b3f09eeff076fb93` started at Day 1 05:00 under its
+  frozen 600-action/750-model-call budget. Its latest persisted checkpoint is
+  Day 1 06:40 (minute 400), 37 actions, 37 calls: four breakfasts are eaten,
+  supper has not begun and the mill is not repaired. The local service then
+  returned HTTP 500/503 on state/health requests, so this run does not verify
+  autonomous P0 or two-day continuity. Do not count the checkpoint as a pass.
+- Separately, `test_supplier_order_requires_travel_to_actual_person_and_records_requirements`
+  fails its first `go` with `ACTOR_BUSY` immediately after `village_plan_walk`;
+  waiting for that actor then exposes `INVALID_ARGUMENTS` on the second plan
+  (watermill is absent from the advertised reachable-destinations enum).
+  The fixture now starts Elsie at the square to read the real map, then waits
+  for each planned departure; the supplier-travel test passes without changing
+  movement or granting route knowledge remotely.
+- The old port-8000 service still reports HTTP 503 (`Simulation worker stopped`)
+  and its state endpoint reports 500. The first crash's exception was not
+  retained in its run ledger, so its root cause is not established. The
+  controller now records an unexpected automatic-cycle/reconnect failure as
+  a persisted error without letting the worker task die; a regression test
+  verifies the worker stays alive. This requires a server restart to affect
+  the old service and does not retroactively restore the interrupted run.
+- A separate isolated service on port 8011 stays healthy. Its fresh autonomous
+  run `d6ffbcdf4e2a4390a5859e2fe7d1a823` was paused at Day 1 07:35
+  (minute 455) after 145 actions/145 model calls: all twelve paid breakfasts
+  are recorded, but no supper or mill repair has occurred; the one firewood
+  order is only `accepted_planned`. The 600-action/750-call episode budget
+  and observed action-to-clock ratio make a full day uncertain. This is not
+  a one-day autonomous pass, and the three-day simulation should not start
+  until the current run's real deliveries, supper and crew work are proved.
+
+## Parallel three-day follow-up (reported, not independently reconciled)
+
+The supplied comparison reports 24/36 breakfasts and 14/36 daily suppers in
+the parallel run, with no breakfast on Day 3 or the partial Day 4 morning.
+It also reports ten Day 1 daytime meals at 18:15-18:45, six distinct daily
+suppers, no Day 2-3 firewood deliveries, and repeated grain, flour and bread
+requests. Daytime meals are currently a separate entitlement; do not combine
+them with daily supper counts. Reconcile their food and payment ledgers before
+changing meal policy.
+
+**Current supply/meal planning focus:** A supplier whose output order is
+deferred as `SUPPLY_NOT_READY` now exposes its upstream input need in the
+order suggestions, so a failed bread acceptance can prompt flour procurement
+and a failed flour acceptance can prompt grain procurement before retrying.
+This does not itself fund, accept, transport or complete those inputs. The
+next controlled gate is a same-world grain-to-flour-to-bread chain with
+accepted funded orders, viable deadlines, production batches, physical
+loading/unloading and 12/12 breakfasts and suppers on consecutive days.
+Record each first blocker rather than declaring continuity from forecasts.
+
+Other items from the parallel comparison remain backlog work, not part of
+this supply-planning checkpoint:
+
+| Priority | Follow-up | Acceptance evidence |
+| --- | --- | --- |
+| P0 | Reconcile the 18:15-18:45 daytime entitlement and its stock/payment accounting with the 19:00/19:30 supper. Decide whether to retain or reschedule the separate entitlement only after ledger analysis. | Per-resident, per-meal totals and conserved food/coins; 12 distinct daily suppers without double-counting daytime food. |
+| P0 | Trace expired, unconfirmed and still-open crew appointments, especially the delayed well; retain consent, tools and real meeting channels. | Both crews can rebook a missed window and complete real repairs before cutoff. |
+| P1 | Carry funded supply requests and workable production/delivery deadlines across midnight; expose an explicit blocker when a request is too late. | Requests survive save/reload and result in actual delivery or a specific failure, without duplicates. |
+| P1 | Replenish protected firewood reserves and assign real shipments to the repaired wagon only when cargo is funded and accepted. | Firewood reaches the tavern on Days 2 and 3; at least one capacity-safe wagon load, route and unload is reconciled. |
+| P1 | Prioritize a resident's own blocking supplier/meeting obligations over optional research or repeated movement. | Fewer missed supplier meetings without worsening meals, care or sleep. |
+| P2 | Follow verified discoveries through production and use, separately from research completion. | At least one researched good is made from real inputs and served, sold or stored. |
+
+The reported 1,493 movement actions and 88 rejected waits are comparison
+signals only; do not treat lower action counts as evidence of working supply.
+
+An accelerated, controlled Day 1 supply fixture now places participants at
+the contact/work sites, advances the shared clock, and accepts and fulfills
+funded four-grain, four-flour and six-bread orders. Ada grows grain, Mara mills
+flour, Jory bakes bread, and carriers load/unload each product in two physical
+loads; six bread reach the tavern before the 17:30 delivery deadline and remain
+fresh through the next breakfast. The fixture checks movement and cash
+conservation. It uses opening farm/watermill/bakery stock, no intermediate
+grants, and does not model walking time. Unlike the separately provisioned
+two-day meal fixture, it does not serve meals or prove repeat production across
+days. Next join the chain to meal service without teleported contacts and
+verify production and delivery capacity under actual daily schedules.
+
+## P1 implementation checkpoint (not autonomous sign-off)
+
+- Supplier suggestions for deferred `SUPPLY_NOT_READY` bread/flour orders now
+  expose upstream flour/grain demand. The purposeful fallback offers a funded,
+  physical upstream request when its deadline is still feasible, suppresses
+  duplicate open notices, and prioritizes feasible personally received supply
+  replies beyond the former bread/fish-only path. A confirmed personally known
+  crew meeting also gets a travel/work choice ahead of optional work.
+- Evening firewood demand now requests delivery through the following day's
+  work window instead of expiring six hours after a late order. An accepted
+  fuel order persists through save/reload and midnight in a controlled test.
+  Rowan can select a real grouped route; Nella selects the existing automatic
+  wagon route only for confirmed, funded, loadable shipments with an actual
+  hitched/repaired wagon. Meal and sleep blockers still apply.
+- Focused tests cover these decisions and existing physical route/payment
+  behavior. A controlled saved-world fixture now settles funded bakery fuel
+  deliveries on Days 2 and 3, and a separate confirmed-order fixture dispatches
+  Nella's wagon, unloads paid bread and returns it to the forge. These fixtures
+  place people at contact sites and do not prove an autonomous multi-day run.
+  The P1 acceptance evidence remains open for a fresh autonomous episode.

@@ -834,6 +834,52 @@ def test_accepted_orders_drive_real_upstream_replenishment(world):
     assert flour["deadline"] < order.deadline
 
 
+def test_deferred_bread_shortage_requests_upstream_flour_before_retry(world):
+    bakery = actor(world, "jory", "bakery")
+    order = propose(world, quantity=4, deadline=1110, fresh=1140)
+    result = economy.apply(bakery, "village_accept_order", {"order_id": order.id})
+    assert result[:2] == ("REJECTED", "SUPPLY_NOT_READY")
+    assert order.status == "deferred"
+    flour = next(request for request in economy.suggestions(bakery)
+                 if request["product"] == "flour")
+    assert flour["quantity"] >= 2
+    assert flour["deadline"] < order.deadline
+    add(world, "bakery", "flour", flour["quantity"])
+    assert economy.apply(bakery, "village_accept_order", {"order_id": order.id})[:2] == (
+        "APPLIED", "ORDER_ACCEPTED_PLANNED")
+
+
+def test_deferred_flour_shortage_requests_upstream_grain_before_retry(world):
+    miller = actor(world, "mara", "watermill")
+    order = propose(world, product="flour", supplier="mara", quantity=2,
+                    deadline=1110, fresh=1140)
+    result = economy.apply(miller, "village_accept_order", {"order_id": order.id})
+    assert result[:2] == ("REJECTED", "SUPPLY_NOT_READY")
+    grain = next(request for request in economy.suggestions(miller)
+                 if request["product"] == "grain")
+    assert grain["quantity"] >= 2
+    assert grain["deadline"] < order.deadline
+    add(world, "watermill", "grain", grain["quantity"])
+    assert economy.apply(miller, "village_accept_order", {"order_id": order.id})[:2] == (
+        "APPLIED", "ORDER_ACCEPTED_PLANNED")
+
+
+def test_expired_deferred_output_does_not_trigger_upstream_purchase(world):
+    bakery = actor(world, "jory", "bakery")
+    order = propose(world, quantity=4, deadline=600, fresh=660)
+    assert economy.apply(bakery, "village_accept_order", {"order_id": order.id})[:2] == (
+        "REJECTED", "SUPPLY_NOT_READY")
+    world.state.village.minute = 605
+    assert not [request for request in economy.suggestions(bakery)
+                if request["request_key"].endswith(":production:jory:flour")]
+
+
+def test_expired_production_window_does_not_advertise_immediate_order(world):
+    world.state.village.minute = 1400
+    requests = economy.suggestions(actor(world, "jory", "bakery"))
+    assert all(request["deadline"] > world.state.village.minute for request in requests)
+
+
 def test_external_cash_is_ledger_only_and_monitor_shape_is_flat(world):
     before = world.state.village.coins.copy()
     economy.record_external_payment(world, "visiting-merchant", "jory", 7)

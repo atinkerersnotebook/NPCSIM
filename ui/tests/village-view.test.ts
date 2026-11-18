@@ -1032,6 +1032,19 @@ test("daily-life contract rejects negative missed meals", () => {
   }).success, false);
 });
 
+test("World state accepts paid daytime meals without weakening meal validation", () => {
+  const state = expanded();
+  const meal = { kind: "daytime", due: 720, status: "eaten", source: "tavern:bread" };
+  state.world!.village!.residents.torvin.life = {
+    hungry: false, missed_meals: 0, sleeping: false, sleep_until: null, last_woke: 480,
+    meals: { "0:daytime": meal }, work: null
+  };
+  assert.equal(stateSchema.parse(state).world!.village!.residents.torvin.life!.meals["0:daytime"].kind, "daytime");
+  const invalid = structuredClone(state);
+  invalid.world!.village!.residents.torvin.life!.meals["0:daytime"].kind = "invented" as "daytime";
+  assert.equal(stateSchema.safeParse(invalid).success, false);
+});
+
 test("dashboard shows mixed wagon cargo, standing route and public bell notices", () => {
   const state = expanded();
   state.world!.village!.wagon = {

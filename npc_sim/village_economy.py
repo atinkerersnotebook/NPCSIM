@@ -1055,7 +1055,9 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
     job = base.residents[buyer].job
     if job and job.inputs and buyer != policy.innkeeper and economy:
         accepted = [order for order in (_personal_orders(world) if personal else economy.orders.values())
-                    if order.status in LOADABLE and order.supplier == buyer and order.loadable]
+                    if (order.status in LOADABLE or
+                        (order.status == "deferred" and order.reason == "SUPPLY_NOT_READY"))
+                    and order.supplier == buyer and order.loadable and order.deadline >= state.minute]
         if accepted:
             batches = max((ceil(max(0, sum(order.loadable for order in accepted if order.product == product)
                                     - usable_stock(world, destination, product,
@@ -1136,11 +1138,17 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
                     plan = next(plan for plan in meal_requirements(world) if plan["id"] == key)
                     if state.minute > _meal_delivery_deadline(world, plan, product) - policy.delivery_lead_minutes:
                         continue
-                deadline = max(state.minute, _meal_delivery_deadline(world, plan, product)
-                               if breakfast_bread else use_at - lead)
+                deadline = (_meal_delivery_deadline(world, plan, product)
+                            if breakfast_bread else use_at - lead)
+                if deadline <= state.minute and buyer != policy.innkeeper:
+                    continue
+                deadline = max(state.minute, deadline)
                 if buyer == policy.innkeeper:
                     quantity = min(quantity, budget // (unit_price(world, product) + delivery_fee(world)))
                 if not quantity:
+                    continue
+                if (buyer != policy.innkeeper and key.endswith(":production")
+                        and state.minute >= deadline - policy.delivery_lead_minutes):
                     continue
                 commitment = quantity * (unit_price(world, product) + delivery_fee(world))
                 if buyer == policy.innkeeper:

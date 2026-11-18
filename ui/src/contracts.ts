@@ -150,7 +150,7 @@ const villageResidentSchema = z.object({
 const villageLifeSchema = z.object({
   hungry: z.boolean(), missed_meals: z.number().int().nonnegative(),
   meals: z.record(z.string(), z.object({
-    kind: z.enum(["daily", "breakfast"]), due: z.number().int().nonnegative(),
+    kind: z.enum(["daily", "breakfast", "daytime"]), due: z.number().int().nonnegative(),
     status: z.enum(["pending", "eaten", "missed"]), source: z.string().nullable()
   })),
   sleeping: z.boolean(), sleep_until: z.number().int().nonnegative().nullable(), last_woke: z.number().int(),

@@ -329,6 +329,119 @@ def test_actual_fuel_requests_use_local_stock_affordable_funds_and_no_remote_sto
     assert not [row for row in economy.suggestions(keeper) if row["product"] == "firewood"]
 
 
+def test_evening_fuel_request_survives_midnight_with_workable_deadline(tmp_path):
+    world = make_world(tmp_path, minute=1200)
+    keeper = actor(world, "jory", "bakery")
+    world.state.village.coins["jory"] = 50
+    request = next(row for row in economy.suggestions(keeper) if row["product"] == "firewood")
+    assert request["deadline"] > 1440
+    assert request["required_fresh_until"] > request["deadline"]
+    supplier = actor(world, "rowan", "woods")
+    keeper.actor.location_id = "woods"
+    result = economy.apply(keeper, "village_propose_order", {
+        "product": "firewood", "quantity": 1, "supplier": "rowan",
+        "deadline": request["deadline"], "required_fresh_until": request["required_fresh_until"],
+        "request_key": request["request_key"]})
+    assert result[0] == "APPLIED", result
+    order = next(iter(world.state.village.economy.orders.values()))
+    assert economy.apply(supplier, "village_accept_order", {"order_id": order.id})[0] == "APPLIED"
+    world.save()
+    world = World(world.scenario, world.path, world.state.world_id, "rowan", "session-rowan")
+    village.advance(world, 245)
+    assert world.state.village.minute == 1445
+    restored = world.state.village.economy.orders[order.id]
+    assert restored.deadline > world.state.village.minute
+    assert restored.status in economy.COMMITTED
+
+
+def test_funded_fuel_order_is_prioritized_for_physical_delivery(tmp_path):
+    world = make_world(tmp_path)
+    world.scenario.village.anti_idle = True
+    world.scenario.village.purposeful_downtime = True
+    goods.put(world, "woods", "firewood", 4)
+    buyer = actor(world, "jory", "woods")
+    assert economy.apply(buyer, "village_propose_order", {
+        "product": "firewood", "quantity": 1, "supplier": "rowan",
+        "deadline": 1000, "required_fresh_until": 1080})[0] == "APPLIED"
+    order = next(iter(world.state.village.economy.orders.values()))
+    assert economy.apply(world, "village_accept_order", {"order_id": order.id})[0] == "APPLIED"
+    from npc_sim import village_fallback
+    choices = village_fallback.candidates(world)
+    choice = next((choice for choice in choices
+                   if choice["action_id"] == "village_execute_fuel_delivery"), None)
+    assert choice is not None, (day, state.minute, order.status, world.actor.location_id,
+                                [item["task_id"] for item in choices],
+                                [item.status for item in state.firewood.delivery_plans],
+                                state.residents["rowan"].life.sleeping,
+                                state.residents["rowan"].life.meals,
+                                village_life.action_blocker(world, "village_execute_fuel_delivery"))
+    assert choice["priority"] == "P1"
+    for _ in range(32):
+        if order.status == "fulfilled":
+            break
+        current = next(choice for choice in village_fallback.candidates(world)
+                       if choice["action_id"] == "village_execute_fuel_delivery")
+        result = act(world, current["action_id"], **current["arguments"])
+        assert result["outcome"] == "APPLIED", result
+        village.advance(world, 5)
+    assert order.status == "fulfilled" and order.paid > 0
+    assert world.state.village.stocks["bakery"]["firewood"] == 1
+
+
+def test_fuel_replenishment_remains_funded_and_deliverable_on_days_two_and_three(tmp_path):
+    world = make_world(tmp_path, minute=1500)
+    world.scenario.village.anti_idle = True
+    world.scenario.village.purposeful_downtime = True
+    goods.put(world, "woods", "firewood", 8)
+    state = world.state.village
+    state.coins["jory"] = 50
+    state.residents["jory"].life.sleeping = False
+    state.residents["rowan"].life.sleeping = False
+    from npc_sim import village_fallback
+    for day in (1, 2):
+        state.minute = day * 1440 + 600
+        for rid in ("jory", "rowan"):
+            state.residents[rid].life.last_woke = day * 1440 + world.scenario.village.residents[rid].wake_minute
+        from npc_sim import village_life
+        village_life.add_meals(state.residents["rowan"].life,
+                               world.scenario.village.residents["rowan"], state.minute,
+                               village_extensions.policy(world))
+        world.actor.location_id = "woods"
+        buyer = actor(world, "jory", "bakery")
+        request = next(row for row in economy.suggestions(buyer) if row["product"] == "firewood")
+        buyer.actor.location_id = "woods"
+        result = economy.apply(buyer, "village_propose_order", {
+            "product": "firewood", "quantity": 1, "supplier": "rowan",
+            "deadline": request["deadline"], "required_fresh_until": request["required_fresh_until"],
+            "request_key": request["request_key"]})
+        assert result[0] == "APPLIED", (day, result)
+        order = next(reversed(state.economy.orders.values()))
+        assert economy.apply(world, "village_accept_order", {"order_id": order.id})[0] == "APPLIED"
+        if day == 1:
+            assert fuel.delivery_plan(world) is not None, (
+                order.status, order.deadline, state.stocks["woods"], state.firewood.config.model_dump())
+        if f"{day}:breakfast" in state.residents["rowan"].life.meals:
+            state.residents["rowan"].life.meals[f"{day}:breakfast"].status = "eaten"
+        for _ in range(32):
+            if order.status == "fulfilled":
+                break
+            choices = village_fallback.candidates(world)
+            choice = next((item for item in choices if item["action_id"] == "village_execute_fuel_delivery"), None)
+            assert choice is not None, repr((day, state.minute, order.status, world.actor.location_id,
+                                              [item["task_id"] for item in choices],
+                                              [item.status for item in state.firewood.delivery_plans],
+                                              state.residents["rowan"].life.sleeping,
+                                              village_life.action_blocker(world, "village_execute_fuel_delivery")))
+            assert act(world, choice["action_id"], **choice["arguments"])["outcome"] == "APPLIED"
+            village.advance(world, 5)
+        assert order.status == "fulfilled" and order.paid > 0
+        assert state.stocks["bakery"]["firewood"] == day
+        world.save()
+        if day == 1:
+            world = World(world.scenario, world.path, world.state.world_id, "rowan", "session-rowan")
+            state = world.state.village
+
+
 def test_site_fuel_thresholds_and_targets_are_validated_and_trigger_locally(tmp_path):
     world = make_world(tmp_path)
     config = world.state.village.firewood.config

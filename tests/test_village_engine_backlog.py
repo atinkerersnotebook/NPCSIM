@@ -69,6 +69,8 @@ def test_supplier_order_requires_travel_to_actual_person_and_records_requirement
         agent.start_location = value.village.residents[agent.id].work
         if agent.id == "jory":
             agent.start_location = "watermill"
+        if agent.id == "elsie":
+            agent.start_location = "village-square"
     world = World(value, tmp_path / "orders.json", "orders", "elsie", "session-elsie")
     cast = {agent.id: world.bind(agent.id, f"session-{agent.id}") for agent in value.agents}
     state = world.state.village
@@ -76,6 +78,7 @@ def test_supplier_order_requires_travel_to_actual_person_and_records_requirement
     request = {"supplier": "jory", "product": "bread", "quantity": 1,
                "deadline": 1080, "required_fresh_until": 1140}
 
+    assert act(world, "read", target="noticeboard")["code"] == "READ"
     assert act(world, "village_plan_supplies")["outcome"] == "APPLIED"
     assert not state.economy.orders
     village.advance(world, max(5, state.residents["elsie"].available_at - state.minute))
@@ -85,6 +88,7 @@ def test_supplier_order_requires_travel_to_actual_person_and_records_requirement
     # Visiting the supplier's shop is insufficient when the person is elsewhere.
     assert act(world, "village_plan_walk", destination="bakery", purpose="Meet the baker")["code"] == "ROUTE_PLANNED"
     planned = state.residents["elsie"].walking_plan
+    village.advance(world, state.residents["elsie"].available_at - state.minute)
     while planned and world.actor.location_id != "bakery":
         assert act(world, "go", target=planned.doors[planned.next_step])["outcome"] == "APPLIED"
         village.advance(world, max(5, state.residents["elsie"].available_at - state.minute))
@@ -94,6 +98,7 @@ def test_supplier_order_requires_travel_to_actual_person_and_records_requirement
     assert not state.economy.orders
     assert act(world, "village_plan_walk", destination="watermill", purpose="Meet the baker")["code"] == "ROUTE_PLANNED"
     planned = state.residents["elsie"].walking_plan
+    village.advance(world, state.residents["elsie"].available_at - state.minute)
     while planned and world.actor.location_id != "watermill":
         assert act(world, "go", target=planned.doors[planned.next_step])["outcome"] == "APPLIED"
         village.advance(world, max(5, state.residents["elsie"].available_at - state.minute))

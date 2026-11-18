@@ -231,9 +231,23 @@ class Controller:
                     item = await self.queue.get()
             except asyncio.TimeoutError:
                 if automatic:
-                    await self.cycle()
+                    try:
+                        await self.cycle()
+                    except Exception as error:
+                        LOGGER.exception("Simulation worker cycle failed outside action handling")
+                        if self.run:
+                            self.finish("error", self.safe_error(error))
+                        else:
+                            raise
                 else:
-                    await self._retry_llm()
+                    try:
+                        await self._retry_llm()
+                    except Exception as error:
+                        LOGGER.exception("Simulation worker reconnect failed")
+                        if self.run:
+                            self.finish("error", self.safe_error(error))
+                        else:
+                            raise
                 continue
             name, arguments, future = item
             self._llm_retry_at = None
