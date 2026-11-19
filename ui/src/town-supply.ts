@@ -34,6 +34,9 @@ export const townSupplySchema = z.object({
   risks: z.array(z.object({ id: text, kind: text, minute: quantity, location: text, product: text, missing: quantity })),
   maintenance: z.array(z.object({ id: text, title: text, assignee: text, location: text, due_at: quantity,
     worked_minutes: quantity, required_minutes: quantity, supplies: amounts, status: text, blocker: detail })),
+  upcoming_maintenance: z.array(z.object({ id: text, title: text, assignee: text, location: text,
+    due_at: quantity, release_at: quantity, day: quantity, required_minutes: quantity, supplies: amounts,
+    status: text })).default([]),
   projects: z.array(z.object({ id: text, title: text, location: text, status: text,
     due: dated, progress: dated, blocker: detail })),
   notes: z.array(z.object({ id: detail, fixture: text, location: detail, author: detail, title: text, text,
@@ -82,6 +85,7 @@ function atLocation(data: Snapshot, location: string): Snapshot {
     replenishment: data.replenishment?.filter(row => row.location === location),
     risks: data.risks.filter(row => row.location === location),
     maintenance: data.maintenance.filter(row => row.location === location),
+    upcoming_maintenance: data.upcoming_maintenance.filter(row => row.location === location),
     projects: data.projects.filter(row => row.location === location),
     notes: data.notes.filter(row => row.location === location),
   };
@@ -290,6 +294,12 @@ export function townSupplyMarkup(snapshot: Supply, location = "", forecastKey = 
     ${table("Structural projects", ["Project", "Site", "Status", "Contributions", "Due", "Blocker"],
       data.projects.map(project => [project.title, site(project.location), label(project.status), project.progress,
         time(project.due), project.blocker]), "No structural projects tracked.")}
+    <h3>Tomorrow's routine upkeep</h3>
+    <p class="muted">Preview only; these jobs become active on release and are not duplicate current work.</p>
+    ${table("Tomorrow's routine upkeep", ["Job", "Assignee", "Site", "Release", "Due", "Work minutes", "Materials"],
+      data.upcoming_maintenance.map(job => [job.title, resident(job.assignee), site(job.location),
+        time(job.release_at), time(job.due_at), job.required_minutes, goods(job.supplies)]),
+      "No routine jobs are scheduled to start tomorrow.")}
     ${table("Maintenance jobs, including completed history", ["Job", "Assignee", "Site", "Status", "Work minutes", "Due", "Materials", "Blocker"],
       [...data.maintenance].sort((a, b) => Number(a.status === "completed") - Number(b.status === "completed")
         || b.due_at - a.due_at).map(job => [job.title, resident(job.assignee), site(job.location), label(job.status),

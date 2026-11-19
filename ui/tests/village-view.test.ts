@@ -1183,7 +1183,10 @@ test("World timeline filters recent activity and highlights the selected residen
   const events = [timelineEvent(1, "observation", 480, timelineObservation(480))];
   for (const [action, detail, start] of [["say", "Early dialogue", 500], ["go", "Recent movement", 550],
     ["village_work", "Recent work", 560], ["say", "Recent dialogue", 570]] as const) {
-    events.push(timelineEvent(events.length + 1, "action_request", start, { request_id: detail, action_id: action, arguments: {} }));
+    events.push(timelineEvent(events.length + 1, "action_request", start, {
+      request_id: detail, action_id: action,
+      arguments: action === "say" ? { recipient: "elsie", message: detail } : {}
+    }));
     events.push(timelineEvent(events.length + 1, "action_result", start, { request_id: detail, outcome: "APPLIED",
       explanation: detail, observation: timelineObservation(start, "cottages", start + 5) }));
   }
@@ -1192,6 +1195,7 @@ test("World timeline filters recent activity and highlights the selected residen
   assert.equal((markup.match(/data-resident-select="torvin"[^>]*aria-pressed="true"/g) ?? []).length, 2);
   assert.match(markup, /data-gantt-agent="torvin"><rect class="gantt-selected-lane"/);
   assert.match(markup, /Recent dialogue/);
+  assert.match(markup, /Torvin → Elsie/);
   assert.doesNotMatch(markup, /Early dialogue|Recent movement|Recent work/);
   const work = worldMonitorMarkup(state, events, { activity: "work" });
   assert.match(work, /Recent work/);

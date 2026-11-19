@@ -35,6 +35,8 @@ RECIPES = {
     "tackle": ({"timber": 1, "iron": 1}, {"tackle": 1}),
     "smoked_fish": ({"fish": 2, "logs": 1}, {"preserved-fish": 1}),
     "herb_garden": ({"manure": 1}, {}),
+    "wooden_cup": ({"timber": 1}, {"wooden-cup": 1}),
+    "herbal_remedy": ({"herbs": 2}, {"herbal-remedy": 1}),
 }
 
 
@@ -95,7 +97,8 @@ def validate_config(scenario) -> None:
                 raise ValueError(f"Activity supply is not real configured stock: {resource}")
         if activity.recipe:
             inputs, outputs = RECIPES[activity.recipe]
-            if activity.recipe in {"furniture", "tackle", "smoked_fish", "herb_garden"}:
+            if activity.recipe in {"furniture", "tackle", "smoked_fish", "herb_garden",
+                                   "wooden_cup", "herbal_remedy"}:
                 if activity.max_participants != 1 or not activity.equipment:
                     raise ValueError("Optional crafts require a solo worker and real tools")
                 if activity.recipe == "herb_garden" and not any(
@@ -386,7 +389,8 @@ def _book_guard(world, rid, activity, social, config):
 def _practical_guard(world, rid, activity, *, completing=False):
     base, state, _, social = _context(world)
     person = social.residents[rid]
-    if activity.recipe in {"furniture", "tackle", "smoked_fish", "herb_garden"} or activity.kind == "catch_release":
+    if activity.recipe in {"furniture", "tackle", "smoked_fish", "herb_garden",
+                           "wooden_cup", "herbal_remedy"} or activity.kind == "catch_release":
         from npc_sim import village_extensions
         if not getattr(village_extensions.policy(world), "purposeful_downtime", False):
             return "OPTIONAL_GOODS_DISABLED", "Enable purposeful downtime for these opt-in crafts and leisure."
@@ -402,12 +406,16 @@ def _practical_guard(world, rid, activity, *, completing=False):
         return "CAPABILITY_REQUIRED", "Real garden care requires actual farming capability."
     capabilities = {
         "furniture": "carpentry", "tackle": "fishing", "smoked_fish": "fishing",
-        "herb_garden": "herbalism",
+        "herb_garden": "herbalism", "wooden_cup": "carpentry", "herbal_remedy": "herbalism",
     }
     if activity.recipe in capabilities and capabilities[activity.recipe] not in base.residents[rid].skills:
         return "CAPABILITY_REQUIRED", "This craft requires the resident's actual capability."
     if activity.recipe == "furniture" and rid != base.carpenter:
         return "CAPABILITY_REQUIRED", "Only the authorized joiner may use the workshop's furniture materials."
+    if activity.recipe == "wooden_cup" and rid != base.carpenter:
+        return "CAPABILITY_REQUIRED", "Only the authorized joiner may use the workshop's cup timber."
+    if activity.recipe == "herbal_remedy" and rid != "iona":
+        return "CAPABILITY_REQUIRED", "Only Iona may prepare the workshop's fictional herbal remedy."
     if activity.recipe == "herb_garden" and (rid != "iona" or "gardening" not in base.residents[rid].skills
                                             or "gardening" not in world.state.actors[rid].body.capabilities):
         return "CAPABILITY_REQUIRED", "This herbal plot requires its gardener's explicit aptitude."
@@ -420,6 +428,8 @@ def _practical_guard(world, rid, activity, *, completing=False):
             return "DAYLIGHT_REQUIRED", "Fish only during the daytime."
         if person.practice_days.get(f"catch_release:{activity.location}") == state.minute // 1440:
             return "ALREADY_FISHED", "Today's catch-and-release has already been recorded."
+    if not completing and activity.recipe == "herb_garden" and activity.location in social.garden_yields:
+        return "GARDEN_YIELD_PENDING", "Let the existing herbs ripen and harvest them before tending again."
     if activity.recipe in {"herb_garden", "smoked_fish"} and (
         state.minute % 1440 < 540 or state.minute % 1440 + activity.duration > 1080
     ):
@@ -432,7 +442,7 @@ def _practical_guard(world, rid, activity, *, completing=False):
             sum(lot.quantity for lot in lots if lot.expires_at is None or lot.expires_at > state.minute) < 2
         )):
             return "NO_FISH", "Only real fresh fish can be preserved."
-    if not completing and activity.recipe in {"furniture", "tackle"} and state.stocks.get(activity.location, {}).get(
+    if not completing and activity.recipe in {"furniture", "tackle", "wooden_cup", "herbal_remedy"} and state.stocks.get(activity.location, {}).get(
         next(iter(RECIPES[activity.recipe][1])), 0
     ) >= 2:
         return "STOCK_CAP", "Finish selling existing speculative crafts before making more."
@@ -1456,11 +1466,14 @@ def install_optional_goods(scenario) -> None:
     for eid, (name, location) in fixtures.items():
         scenario.entities[eid] = Entity(name=name, kind="fixture", location=location,
                                         description=f"A physical {name.lower()} for optional village work.")
-    base.prices.update({"furniture": 8, "tackle": 5, "preserved-fish": 6})
+    base.prices.update({"furniture": 8, "tackle": 6, "preserved-fish": 6,
+                        "wooden-cup": 3, "herbal-remedy": 4})
     base.spoil_after["preserved-fish"] = 2880
+    base.spoil_after["herbal-remedy"] = 7200
     for site, resources in {
-        "workshop": ("furniture",), "riverbank": ("timber", "iron", "logs", "tackle", "preserved-fish"),
-        gardener.work: ("manure",),
+        "workshop": ("furniture", "wooden-cup"),
+        "riverbank": ("timber", "iron", "logs", "tackle", "preserved-fish"),
+        gardener.work: ("manure", "herbal-remedy"),
     }.items():
         for resource in resources:
             base.stocks.setdefault(site, {}).setdefault(resource, 0)
@@ -1468,6 +1481,12 @@ def install_optional_goods(scenario) -> None:
         "furniture-making": {"kind": "crafting", "location": "workshop", "duration": 45,
                              "recipe": "furniture", "supplies": {"timber": 1, "planks": 2},
                              "equipment": ["workbench", base.hammer], "interests": ["woodcraft"]},
+        "wooden-cup-making": {"kind": "crafting", "location": "workshop", "duration": 15,
+                              "recipe": "wooden_cup", "supplies": {"timber": 1},
+                              "equipment": ["workbench", base.hammer], "interests": ["woodcraft"]},
+        "herbal-remedy-making": {"kind": "crafting", "location": gardener.work, "duration": 30,
+                                 "recipe": "herbal_remedy", "supplies": {"herbs": 2},
+                                 "equipment": ["mortar"], "interests": ["plants"], "skill": "herbalism"},
         "fly-tying": {"kind": "crafting", "location": "riverbank", "duration": 30,
                       "recipe": "tackle", "supplies": {"timber": 1, "iron": 1},
                       "equipment": ["fishing-net", "fishing-rod"], "interests": ["rivers"]},

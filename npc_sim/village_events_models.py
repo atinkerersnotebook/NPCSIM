@@ -132,6 +132,7 @@ class VillageEventsConfig(EventsModel):
     daily_min: int = Field(default=0, ge=0, le=12)
     daily_max: int = Field(default=2, ge=0, le=12)
     max_active: int = Field(default=2, ge=1, le=3)
+    prioritize_visitors: bool = False
     templates: list[EventTemplate] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")

@@ -54,6 +54,32 @@ def inspect_then_wait(world):
     return world.state.village.residents["rowan"].fallback.wait
 
 
+def test_iona_prefers_garden_during_downtime_and_harvests_before_retending(tmp_path):
+    value = build_scenario(scenario(), purposeful_downtime=True)
+    value.village.start_minute = 600
+    value.village.breakfast = False
+    value.village.events = None
+    for agent in value.agents:
+        agent.start_location = value.village.residents[agent.id].work
+    world = World(value, tmp_path / "garden.json", "garden", "iona", "session-iona")
+    for agent in value.agents:
+        world.bind(agent.id, f"session-{agent.id}")
+    state = world.state.village
+    site = world.actor.location_id
+    village_goods.put(world, site, "manure", 1)
+
+    def garden_choices():
+        return [choice["task_id"] for choice in village_fallback.candidates(world)
+                if choice["task_id"] in {"garden:harvest", "leisure:herb-garden-care"}]
+
+    assert garden_choices() == ["leisure:herb-garden-care"]
+    state.social.garden_yields[site] = state.minute + 5
+    assert garden_choices() == []
+    assert village_social.observation(world)["social"]["activities"]["herb-garden-care"]["reason"] == "GARDEN_YIELD_PENDING"
+    state.social.garden_yields[site] = state.minute
+    assert garden_choices() == ["garden:harvest"]
+
+
 def test_innkeeper_can_request_tomorrow_food_at_physical_board(tmp_path):
     value = build_scenario(scenario(), purposeful_downtime=True)
     value.village.start_minute = 1200

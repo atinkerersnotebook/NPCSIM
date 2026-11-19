@@ -117,6 +117,24 @@ function actionLabel(action: string, args: Record<string, unknown>, state: State
   return target && ["go", "look", "read", "take", "drop"].includes(action) ? `${label}: ${target}` : label;
 }
 
+function recipientName(args: Record<string, unknown>, state: State, actors: readonly GanttAgent[]): string | null {
+  const recipient = typeof args.recipient === "string" ? args.recipient
+    : typeof args.target === "string" ? args.target : null;
+  if (!recipient) return null;
+  const name = actors.find(actor => actor.id === recipient)?.name
+    ?? state.world?.entities[recipient]?.name
+    ?? state.world?.village?.dashboard?.visitors?.find(visitor => visitor.id === recipient)?.name
+    ?? recipient;
+  return name === recipient ? name.replaceAll("-", " ").replaceAll("_", " ")
+    .replace(/\b\w/g, char => char.toUpperCase()) : name;
+}
+
+function speakerName(row: { id: string; name: string }): string {
+  if (row.name !== row.id) return row.name;
+  return row.id.replaceAll("-", " ").replaceAll("_", " ")
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
 function researchDetail(project: z.infer<typeof researchProjectSchema>): string {
   const inputs = Object.entries(project.inputs).map(([item, quantity]) => `${quantity} ${item}`).join(", ") || "none";
   return `Study: ${project.worked_minutes}/${project.required_minutes} min; trials: ${project.successes}/${project.attempts} successful (${project.required_successes} required). `
@@ -235,6 +253,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       if (kind !== "sleep") row.spans.push({
         start, end: Math.max(start, Math.min(now, end)), location: result.observation.self.location_id,
         label: waitLabel ? waitLabel
+          : action === "say" && recipientName(args, state, cast) ? `${speakerName(row)} → ${recipientName(args, state, cast)}`
           : research ? `Research: ${research.title}`
           : walkingPlan ? `Walk to ${state.world?.entities[walkingPlan.destination]?.name ?? walkingPlan.destination}`
           : actionLabel(action, args, state, event.actor_id),

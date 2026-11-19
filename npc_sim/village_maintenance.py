@@ -35,6 +35,17 @@ def example_config(scenario: Scenario) -> dict[str, Any]:
                            "assignee": base.carpenter, "location": carpenter.work,
                            "equipment": [carpenter.job.equipment]
                            if carpenter.job and carpenter.job.equipment else []},
+        "farm-fence": {"title": "Inspect the farm fence",
+                       "assignee": "ada", "location": "farm",
+                       "duration": 20, "release_minute": 540, "due_minute": 1080},
+        "cottage-upkeep": {"title": "Service the village cottage weatherboards and railings",
+                           "assignee": base.carpenter, "location": "cottages",
+                           "duration": 30, "release_minute": 1020, "due_minute": 1140,
+                           "equipment": [base.hammer]},
+        "farm-railings": {"title": "Tighten the farm fence posts and railings",
+                          "assignee": base.carpenter, "location": "farm",
+                          "duration": 20, "release_minute": 540, "due_minute": 1080,
+                          "equipment": [base.hammer]},
     }}
 
 

@@ -9,6 +9,23 @@ test("supply navigation opens the read-only dashboard and handles an absent town
   assert.match(townSupplyMarkup(townSupplySchema.parse(null)), /Start or load a village adventure/);
 });
 
+test("tomorrow's upkeep is visible and scoped without becoming active work", () => {
+  const data = townSupplySchema.parse({ title: "Millhaven", revision: 1, minute: 2235, horizons: [2595, 3675, 5115],
+    sites: { cottages: "Village cottages", farm: "Farm", forge: "Forge" }, fixtures: {}, residents: { hobb: "Hobb", ada: "Ada" },
+    inventory: [], orders: [], requests: [], needs: [], cargo: [], production: [], risks: [], maintenance: [], projects: [], notes: [],
+    upcoming_maintenance: [
+      { id: "preview:cottage", title: "Service cottage railings", assignee: "hobb", location: "cottages",
+        day: 3, release_at: 3900, due_at: 4020, required_minutes: 30, supplies: {}, status: "upcoming" },
+      { id: "preview:fence", title: "Inspect the farm fence", assignee: "ada", location: "farm",
+        day: 3, release_at: 3420, due_at: 3960, required_minutes: 20, supplies: {}, status: "upcoming" },
+    ],
+  });
+  const markup = townSupplyMarkup(data);
+  assert.match(markup, /Tomorrow.s routine upkeep/);
+  assert.match(markup, /Service cottage railings[\s\S]*Inspect the farm fence/);
+  assert.doesNotMatch(markup, /preview:cottage[^>]*active work/);
+});
+
 test("posted notes are grouped by their physical site and escaped without hiding stale copies", () => {
   const data = townSupplySchema.parse({ title: "Millhaven", revision: 1, minute: 480, horizons: [840, 1920, 3360],
     sites: { square: "Village Square", farm: "Farm Site" }, fixtures: { board: "Board", box: "Inbox" }, residents: {},

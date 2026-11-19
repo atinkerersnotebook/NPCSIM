@@ -328,12 +328,33 @@ def _details(world, config, horizons, inventory, orders, cargo_rows, production,
                          "due": None, "progress": None, "blocker": None})
     dashboard = state.dashboard
     maintenance = [job.model_dump() for job in dashboard.maintenance] if dashboard else []
+    upcoming_maintenance = []
+    upkeep = state.maintenance
+    maintenance_config = upkeep.config if upkeep else config.maintenance if config else None
+    if maintenance_config and maintenance_config.enabled:
+        tomorrow = state.minute // 1440 + 1
+        for template, definition in sorted(maintenance_config.tasks.items()):
+            previous = [job for job in upkeep.jobs.values() if job.template == template] if upkeep else []
+            if any(job.day == tomorrow for job in previous):
+                continue
+            unfinished = next((job for job in previous if job.completed_at is None), None)
+            if unfinished is not None:
+                continue
+            upcoming_maintenance.append({
+                "id": f"preview:maintenance:{tomorrow}:{template}", "title": definition.title,
+                "assignee": definition.assignee, "location": definition.location, "day": tomorrow + 1,
+                "release_at": tomorrow * 1440 + definition.release_minute,
+                "due_at": tomorrow * 1440 + definition.due_minute, "worked_minutes": 0,
+                "required_minutes": definition.duration, "supplies": definition.supplies,
+                "status": "upcoming", "completed_at": None, "blocker": None,
+            })
     return {"minute": state.minute, "revision": world.revision, "horizons": horizons, "inventory": inventory,
             "orders": [{**order.model_dump(), "remaining": order.remaining, "open": order.status in ACTIVE}
                        for order in orders],
             "requests": requests, "needs": needs, "cargo": cargo_rows, "production": production,
             "replenishment": replenishment,
-            "risks": risks, "maintenance": maintenance, "projects": projects, "notes": notes,
+            "risks": risks, "maintenance": maintenance, "upcoming_maintenance": upcoming_maintenance,
+            "projects": projects, "notes": notes,
             "sites": {key: entity.name for key, entity in world.entities.items() if entity.kind == "location"},
             "fixtures": {note["fixture"]: world.entities[note["fixture"]].name for note in notes
                          if note["fixture"] in world.entities},

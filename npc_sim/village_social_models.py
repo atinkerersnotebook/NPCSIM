@@ -37,7 +37,8 @@ class SocialActivity(SocialModel):
     skill: str | None = None
     project: str | None = None
     chapter: str | None = None
-    recipe: Literal["bread_test", "tea_blending", "plank_practice", "garden_tending", "furniture", "tackle", "smoked_fish", "herb_garden"] | None = None
+    recipe: Literal["bread_test", "tea_blending", "plank_practice", "garden_tending", "furniture", "tackle",
+                    "smoked_fish", "herb_garden", "wooden_cup", "herbal_remedy"] | None = None
     repair_target: str | None = None
     discovery: str | None = None
 

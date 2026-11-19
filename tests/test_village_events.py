@@ -79,10 +79,18 @@ def test_optional_merchant_goods_require_explicit_offer_and_real_trade(world):
         VillageEventsConfig(templates=[template]).model_dump(), scheduled_at=600)
     offered = VillageEventsConfig.model_validate(configured).templates[0]
     assert offered.scheduled_at == 600 and not offered.random
-    assert offered.visitor.merchant.buy_prices["tackle"] == 5
-    assert offered.visitor.merchant.demand["preserved-fish"] == 2
-    world.scenario.village.prices.update(furniture=8, tackle=5, **{"preserved-fish": 6})
-    world.state.village.stocks.setdefault("forge", {}).update(furniture=0, tackle=0, **{"preserved-fish": 0})
+    assert offered.visitor.merchant.buy_prices["tackle"] == 8
+    assert offered.visitor.merchant.demand["preserved-fish"] == 1
+    assert offered.visitor.merchant.buy_prices["wooden-cup"] == 4
+    assert offered.visitor.merchant.buy_prices["herbal-remedy"] == 5
+    assert configured["daily_min"] == 3 and configured["daily_max"] == 4
+    assert configured["prioritize_visitors"] is True
+    assert {item["id"] for item in configured["templates"]} >= {
+        "herbal-tourist", "woodcraft-tourist", "fishing-crafts-tourist"}
+    world.scenario.village.prices.update(
+        furniture=8, tackle=6, **{"preserved-fish": 6, "wooden-cup": 3, "herbal-remedy": 4})
+    world.state.village.stocks.setdefault("forge", {}).update(
+        furniture=0, tackle=0, **{"preserved-fish": 0})
     configure(world, offered)
     village_events.advance(world)
     world.state.village.minute += 5
@@ -313,6 +321,24 @@ def test_scheduled_merchant_bypasses_zero_random_limits_and_survives_reload(worl
     village_events.advance(world)
     assert len(world.state.village.incidents.visitors) == 1
     assert not any(i.template.id == "random-rain" for i in world.state.village.incidents.instances.values())
+
+
+def test_optional_tourists_are_bounded_producer_sales_not_fabricated_stock(world):
+    from npc_sim.living_village import build_scenario
+
+    base = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-expanded.json"))
+    generated = build_scenario(base, purposeful_downtime=True)
+    config = generated.village.events
+    assert config.daily_min == 3 and config.daily_max == 4 and config.prioritize_visitors
+    tourists = {item.id: item for item in config.templates if item.kind == "traveller" and item.demand}
+    assert set(tourists) == {"passing-traveller", "herbal-tourist", "woodcraft-tourist",
+                             "fishing-crafts-tourist"}
+    assert tourists["herbal-tourist"].demand == {"tea": 1, "herbal-remedy": 1}
+    assert tourists["woodcraft-tourist"].demand == {"furniture": 1, "wooden-cup": 1}
+    assert tourists["fishing-crafts-tourist"].demand == {"tackle": 1, "preserved-fish": 1}
+    assert all(sum(item.demand.values()) <= item.visitor.capacity for item in tourists.values())
+    assert all(sum(quantity * generated.village.prices[good] for good, quantity in item.demand.items())
+               <= item.visitor.funds for item in tourists.values())
 
 
 def test_scheduled_merchant_retries_safety_and_records_missed_reason(world):

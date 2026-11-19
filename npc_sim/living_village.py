@@ -161,7 +161,9 @@ def separate_herbal_workshop(scenario: Scenario) -> None:
         if item in scenario.entities:
             scenario.entities[item].location = "herbal-workshop"
     stock = config.stocks["cottages"]
-    config.stocks["herbal-workshop"] = {key: stock.pop(key) for key in ("herbs", "tea", "manure") if key in stock}
+    config.stocks["herbal-workshop"] = {
+        key: stock.pop(key) for key in ("herbs", "tea", "manure", "herbal-remedy") if key in stock
+    }
     for key in ("plant-scraps", "compost-material", "compost"):
         if key in stock:
             config.stocks["herbal-workshop"][key] = 0
@@ -170,7 +172,8 @@ def separate_herbal_workshop(scenario: Scenario) -> None:
     if config.social:
         for activity in config.social.activities.values():
             if activity.location == "cottages" and (activity.project == "iona-herbal-book"
-                    or "plant-notes" in activity.equipment or activity.recipe == "herb_garden"):
+                    or "plant-notes" in activity.equipment
+                    or activity.recipe in {"herb_garden", "herbal_remedy"}):
                 activity.location = "herbal-workshop"
     if config.firewood:
         config.firewood.household_location = "cottages"

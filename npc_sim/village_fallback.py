@@ -930,11 +930,22 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
         from npc_sim import village_social
         social = village_social.observation(world).get("social", {})
         activities = social.get("activities", {})
-        chosen = next(((key, activity) for key, activity in activities.items()
+        garden = activities.get("herb-garden-care") if world.actor_id == "iona" else None
+        limits = _obligation_limits(world)
+        if (garden and state.minute % 1440 >= 540 and state.minute % 1440 + 5 <= 1080
+                and (not limits or state.minute + 5 <= min(limits))
+                and village_social.harvest_blocker(world) is None
+                and action_blocker(world, "village_garden_harvest", {}, check_wait=False) is None):
+            choices.append({"task_id": "garden:harvest", "action_id": "village_garden_harvest",
+                            "arguments": {}, "priority": "P5",
+                            "reason": "Harvest the ripe herb before tending the plot again."})
+        options = list(activities.items())
+        if garden:
+            options.sort(key=lambda option: option[0] != "herb-garden-care")
+        chosen = None if choices else next(((key, activity) for key, activity in options
                        if activity["available"] and activity["preferred"]
                        and activity["location"] == location
-                       and (not _obligation_limits(world) or
-                            state.minute + activity["duration"] <= min(_obligation_limits(world)))
+                       and (not limits or state.minute + activity["duration"] <= min(limits))
                        and action_blocker(world, "village_leisure", {"activity": key, "companions": []},
                                           check_wait=False) is None), None)
         if chosen:

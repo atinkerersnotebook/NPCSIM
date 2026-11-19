@@ -553,21 +553,34 @@ def test_optional_crafts_consume_finite_inputs_and_survive_reload(cast):
     assert stocks["workshop"].get("furniture", 0) == 0
     tick(cast, 945)
     assert stocks["workshop"]["furniture"] == 1
-    assert leisure(cast, "furniture-making", "hobb")[1] == "NO_SUPPLIES"
+    stocks["workshop"]["timber"] = 1
+    assert leisure(cast, "wooden-cup-making", "hobb")[0] == "APPLIED"
+    tick(cast, 960)
+    assert stocks["workshop"]["wooden-cup"] == 1
+    assert stocks["workshop"]["timber"] == 0
     place(cast, "finn", "riverbank")
     stocks["riverbank"].update(timber=1, iron=1, logs=1, fish=2)
     assert leisure(cast, "fly-tying", "finn")[0] == "APPLIED"
-    tick(cast, 975)
+    tick(cast, 990)
     assert stocks["riverbank"]["tackle"] == 1
     assert stocks["riverbank"]["timber"] == stocks["riverbank"]["iron"] == 0
-    assert leisure(cast, "fish-smoking", "finn")[0] == "APPLIED"
+    result = leisure(cast, "fish-smoking", "finn")
+    assert result[0] == "APPLIED", result
     assert stocks["riverbank"]["fish"] == 0
-    tick(cast, 1020)
-    assert stocks["riverbank"]["preserved-fish"] == 1
+    tick(cast, 1035)
+    assert stocks["riverbank"].get("preserved-fish") == 1
     assert stocks["riverbank"]["logs"] == 0
     saved = VillageSocialState.model_validate_json(world.state.village.social.model_dump_json())
-    assert [entry.produced for entry in saved.intervals[-3:]] == [
-        {"furniture": 1}, {"tackle": 1}, {"preserved-fish": 1}]
+    assert [entry.produced for entry in saved.intervals[-4:]] == [
+        {"furniture": 1}, {"wooden-cup": 1}, {"tackle": 1}, {"preserved-fish": 1}]
+    place(cast, "iona", "herbal-workshop" if "herbal-workshop" in world.state.village.stocks else "cottages")
+    site = cast["iona"].actor.location_id
+    stocks.setdefault(site, {}).setdefault("herbal-remedy", 0)
+    stocks[site]["herbs"] = 2
+    world.state.entities["mortar"].location = site
+    assert leisure(cast, "herbal-remedy-making")[0] == "APPLIED"
+    tick(cast, 1065)
+    assert stocks[site]["herbal-remedy"] == 1 and stocks[site]["herbs"] == 0
 
 
 def test_optional_goods_disabled_and_missing_tool_or_fuel(cast):

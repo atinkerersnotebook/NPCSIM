@@ -35,6 +35,15 @@ def job(world):
     return next(iter(world.state.village.maintenance.jobs.values()))
 
 
+def test_default_upkeep_covers_cottages_farm_fences_and_railings():
+    value = scenario()
+    config = VillageMaintenanceConfig.model_validate(village_maintenance.example_config(value))
+    assert {(key, task.assignee) for key, task in config.tasks.items()} >= {
+        ("farm-fence", "ada"), ("farm-railings", "hobb"), ("cottage-upkeep", "hobb")}
+    assert all(task.location in {"farm", "cottages"} for task in config.tasks.values()
+               if task.title.lower().find("fence") >= 0 or "cottage" in task.title.lower())
+
+
 def start(world):
     return act(world, "village_maintain", job=next(iter(world.state.village.maintenance.jobs)))
 
@@ -156,9 +165,9 @@ def test_legacy_is_opt_out_and_living_defaults_assign_both_workers():
     assert legacy.village.maintenance is None
     living = build_scenario(legacy)
     tasks = living.village.maintenance.tasks
-    assert len(tasks) == 4
+    assert len(tasks) == 7
     assert sum(task.duration for task in tasks.values() if task.assignee == "torvin") == 60
-    assert sum(task.duration for task in tasks.values() if task.assignee == "hobb") == 60
+    assert sum(task.duration for task in tasks.values() if task.assignee == "hobb") == 110
     with pytest.raises(ValidationError):
         VillageMaintenanceConfig.model_validate({"tasks": {
             "bad": {"title": "Bad quantities", "assignee": "torvin", "location": "forge", "supplies": {"iron": True}}}})

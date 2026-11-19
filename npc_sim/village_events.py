@@ -426,6 +426,8 @@ def advance(world: "World") -> None:
         return
     candidates = config.templates.copy()
     rng.shuffle(candidates)
+    if config.prioritize_visitors:
+        candidates.sort(key=lambda item: item.visitor is None)
     for item in candidates:
         if (not item.enabled or (item.kind == "merchant" and item.scheduled_at is not None)
                 or state.minute - incidents.last_activation.get(item.id, -10**9) < item.cooldown):
@@ -645,15 +647,41 @@ def offer_optional_goods(config: dict[str, Any], *, scheduled_at: int | None = N
         raise ValueError("An existing visiting merchant profile is required")
     offer = merchant.model_copy(deep=True)
     profile = offer.visitor.merchant
-    profile.buy_prices.update({"furniture": 8, "tackle": 5, "preserved-fish": 6})
-    profile.demand.update({"furniture": 2, "tackle": 2, "preserved-fish": 2})
+    profile.buy_prices.update({"furniture": 9, "tackle": 8, "preserved-fish": 8,
+                               "wooden-cup": 4, "herbal-remedy": 5})
+    profile.demand.update({"furniture": 1, "tackle": 1, "preserved-fish": 1,
+                           "wooden-cup": 1, "herbal-remedy": 1})
     if scheduled_at is not None:
         if scheduled_at < 0 or scheduled_at % 5:
             raise ValueError("Choose a nonnegative five-minute scheduled arrival")
         offer.random = False
         offer.scheduled_at = scheduled_at
-    parsed.templates = [offer if item.id == offer.id else item for item in parsed.templates]
-    return parsed.model_dump()
+    templates = [offer if item.id == offer.id else item for item in parsed.templates]
+    producer_visitors = {
+        "herbal-tourist": ("A touring buyer seeks Iona's tea and fictional herbal remedy", "iona",
+                          "herbal-workshop", "Mara Venn", {"tea": 1, "herbal-remedy": 1}, 8),
+        "woodcraft-tourist": ("A tourist seeks one locally made furniture piece", "hobb",
+                              "workshop", "Pella Quill", {"furniture": 1, "wooden-cup": 1}, 12),
+        "fishing-crafts-tourist": ("A river tourist seeks local tackle and preserved fish", "finn",
+                                   "riverbank", "Corin Vale", {"tackle": 1, "preserved-fish": 1}, 16),
+    }
+    for iid, (title, rid, location, name, demand, funds) in producer_visitors.items():
+        if iid in {item.id for item in templates}:
+            continue
+        templates.append(EventTemplate(
+            id=iid, kind="traveller", title=title, location=location, residents=[rid],
+            responses=["deliver", "decline"], demand=demand, visitor=VisitorPlan(
+                name=name, entry="village-square", destination=location,
+                departure="village-square", stay_minutes=75, funds=funds,
+                capacity=sum(demand.values()), meal_location="tavern",
+                source=f"{name}'s recorded tourist purse"),
+            window_start=540, window_end=1050, cooldown=1440,
+        ))
+    values = parsed.model_dump()
+    values.update(daily_min=3, daily_max=4, max_active=3,
+                  prioritize_visitors=True,
+                  templates=[item.model_dump() for item in templates])
+    return VillageEventsConfig.model_validate(values).model_dump()
 
 
 def actions(world: "World") -> list[dict[str, Any]]:

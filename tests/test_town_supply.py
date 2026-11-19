@@ -61,6 +61,7 @@ def test_forecast_does_not_double_count_batches_or_allocate_expired_or_reserved_
     assert {(risk["id"], risk["kind"], risk["missing"]) for risk in snapshot["risks"]} == {
         ("bread", "delivery", 1), ("flour", "production input", 1), ("grain-b", "delivery", 2)}
     assert next(item["inputs"] for item in snapshot["production"] if item["id"] == "bread") == {"flour": 2}
+    assert snapshot["upcoming_maintenance"] == []  # Unfinished current jobs carry forward; no duplicate preview.
     assert state.model_dump() == before
 
 

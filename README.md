@@ -908,6 +908,11 @@ and household memberships cannot be replaced through a later patch.
 
 Generate a **new** Living Millhaven scenario with `python -m npc_sim.living_village --purposeful-downtime --output PATH`. This enables anti-idle planning and its shorter daytime reviews, physical noticeboard checks and mill rendezvous suggestions. It also installs finite furniture, tackle and smoked-fish crafts, catch-and-release fishing, Iona's herbal garden and gardening aptitude (without farming privileges), and a scheduled visiting merchant with explicit offers for those goods. Garden tending consumes actual manure carried from the cared-for hens and yields one herb only after a day; checking the woods and harvesting herbs remain separate actions. Bread-delivery and blocked-order suggestions require real stock, routes, knowledge and deadlines. Activities, visiting sales and repair are not automatic: residents must execute eligible actions. Existing saved episodes are unchanged; generate into a new path rather than overwriting them. See [the enhancement spec](ANTI-IDLE-ENHANCEMENT-SPEC.md) for limitations.
 
+When Iona has spare daylight at the herbal workshop, the downtime planner suggests
+tending her plot before other optional activities there, provided she has the actual
+supplies and enough time. When the herb is ripe, the planner suggests harvesting
+before tending again. Tending does not create immediate stock or reset a growing crop.
+
 ### Occupation fallback / anti-idle planning (Phase 1)
 
 This is opt-in. Set `day_policy.anti_idle` to `true` using the paused-world
