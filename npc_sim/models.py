@@ -415,6 +415,13 @@ class VillageResident(StrictModel):
     bed_minute: int = Field(default=1320, gt=1080, lt=1440, multiple_of=5)
 
 
+class VillageInvestigationConfig(StrictModel):
+    investigator: str
+    evidence_entity: str
+    required_interviews: list[str]
+    conclusion: str = Field(min_length=1)
+
+
 class VillageFamily(StrictModel):
     history: str = Field(min_length=1)
     inherited_skill: str = Field(min_length=1)
@@ -740,6 +747,9 @@ class VillageConfig(VillageDayPolicy):
     hammer: str
     start_minute: int = Field(default=480, ge=0)
     breakdown_minute: int = Field(default=840, ge=0)
+    stationary_residents: list[str] = Field(default_factory=list)
+    interview_answers: dict[str, dict[str, str]] = Field(default_factory=dict)
+    investigation: VillageInvestigationConfig | None = None
 
 
 class VillageMeal(StrictModel):

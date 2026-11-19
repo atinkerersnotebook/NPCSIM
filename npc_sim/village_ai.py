@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
 
 VERBS = {"village_wait", "village_ask", "village_tell", "village_observe", "village_work",
+         "village_close_investigation",
          "village_load", "village_deliver", "village_project", "village_patrol", "village_eat", "village_sleep",
          "village_daytime_rest",
          "village_meeting", "village_cook_fish", "village_share_route", "village_split_firewood",
@@ -211,8 +212,11 @@ def actions(world: "World") -> list[dict[str, Any]]:
         add("village_daytime_rest", "Rest at home for 15 minutes during the day without satisfying overnight sleep; once per day.", {})
     if nearby:
         target = {"type": "string", "enum": nearby}
+        topics = ["shovel", "work", "news", *sorted({
+            topic for other in nearby for topic in config.interview_answers.get(other, {})
+        })]
         add("village_ask", "Ask a nearby resident about their own shovel knowledge, work or witnessed news.",
-            {"target": target, "topic": {"type": "string", "enum": ["shovel", "work", "news"]}})
+            {"target": target, "topic": {"type": "string", "enum": list(dict.fromkeys(topics))}})
         subjects = sorted(state.residents[rid].beliefs)
         if subjects:
             add("village_tell", "Share one of your existing tool beliefs as unverified testimony.",
@@ -322,6 +326,10 @@ def actions(world: "World") -> list[dict[str, Any]]:
             "A project requires six contributions, including at least two from each partner.",
             {"project": {"type": "string", "enum": projects}})
     result.extend(village_extensions.actions(world))
+    investigation = config.investigation
+    if investigation is not None and rid == investigation.investigator:
+        add("village_close_investigation",
+            "Close the investigation after interviewing every required witness and personally inspecting the evidence.", {})
     return result
 
 
@@ -395,6 +403,18 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
 
     if action in village_replenishment.VERBS:
         return village_replenishment.apply(world, action, args)
+    if action == "village_close_investigation":
+        investigation = config.investigation
+        if investigation is None or rid != investigation.investigator:
+            return reject("NOT_ASSIGNED", "You are not the assigned investigator.")
+        interviewed = {event.target for event in state.events
+                       if event.actor == rid and event.action == "village_ask"}
+        missing = sorted(set(investigation.required_interviews) - interviewed)
+        if missing:
+            return reject("WITNESSES_PENDING", f"Interview these residents first: {', '.join(missing)}.")
+        if investigation.evidence_entity not in world.actor.inspected:
+            return reject("EVIDENCE_PENDING", "Personally inspect the physical evidence before closing the case.")
+        return done("INVESTIGATION_CLOSED", investigation.conclusion, investigation.evidence_entity)
     if action == "village_plan_walk":
         from npc_sim import village_walking
         return village_walking.plan(world, args)
@@ -482,6 +502,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         elif args["topic"] == "work":
             text = (f"I am the {config.residents[target].occupation}. "
                     f"My workplace is {world.state.entities[config.residents[target].work].name}.")
+        elif args["topic"] in config.interview_answers.get(target, {}):
+            text = config.interview_answers[target][args["topic"]]
         else:
             news = [state.events[index].result for index in other.memories
                     if state.events[index].action in {
@@ -791,6 +813,23 @@ def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
 
 def evaluate_goal(world: "World") -> dict[str, Any]:
     config, state = village.context(world)
+    if config.investigation is not None:
+        investigation = config.investigation
+        interviewed = {event.target for event in state.events
+                       if event.actor == investigation.investigator and event.action == "village_ask"}
+        closed = any(event.actor == investigation.investigator
+                     and event.action == "village_close_investigation" for event in state.events)
+        actor = world.state.actors.get(investigation.investigator)
+        checks = {
+            "required_witnesses_interviewed": set(investigation.required_interviews) <= interviewed,
+            "physical_evidence_inspected": bool(actor and investigation.evidence_entity in actor.inspected),
+            "investigation_closed": closed,
+        }
+        return {"status": "achieved" if all(checks.values()) else "active",
+                "reason": (investigation.conclusion if all(checks.values()) else
+                           "The investigator must interview all required witnesses, inspect the evidence and close the case."),
+                "evidence": {"checks": checks, "minute": state.minute},
+                "observation_revision": world.revision()}
     checks = {"shovel_recovered": state.shovel_recovered, "well_dug": state.well_dug,
               "mill_repaired": state.repaired,
               "bread_supply_resumed": (state.bread_deliveries if config.time_based_turns else state.bread_after_repair) > 0,

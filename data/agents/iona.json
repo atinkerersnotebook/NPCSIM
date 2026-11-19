@@ -19,9 +19,10 @@
     "capabilities": [
       "move",
       "manipulate",
-      "herbalism"
+      "herbalism",
+      "gardening"
     ],
-    "capacity": 4,
+    "capacity": 3,
     "size": "medium",
     "grips": [
       "hand"

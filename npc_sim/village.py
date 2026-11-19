@@ -48,6 +48,21 @@ def validate_config(scenario: Scenario) -> None:
             or "noticeboard" not in entities or entities["wagon"].location != "forge"):
         raise ValueError("Timed Millhaven needs its supply circuit, noticeboard and a wagon at the forge")
     residents = set(config.residents)
+    if len(config.stationary_residents) != len(set(config.stationary_residents)) or not set(
+            config.stationary_residents) <= residents:
+        raise ValueError("Stationary residents must name distinct village residents")
+    for rid, topics in config.interview_answers.items():
+        if rid not in residents or any(not topic.strip() or not answer.strip() for topic, answer in topics.items()):
+            raise ValueError("Interview answers require a resident and nonblank topics and testimony")
+    investigation = config.investigation
+    if investigation is not None:
+        if (investigation.investigator not in residents
+                or investigation.investigator in config.stationary_residents
+                or not investigation.required_interviews
+                or not set(investigation.required_interviews) <= residents
+                or len(investigation.required_interviews) != len(set(investigation.required_interviews))
+                or investigation.evidence_entity not in entities):
+            raise ValueError("Investigations require a mobile investigator, real evidence and resident witnesses")
     if config.ai_controlled:
         if residents != {agent.id for agent in scenario.agents}:
             raise ValueError("Every AI village resident must have exactly one agent slot")

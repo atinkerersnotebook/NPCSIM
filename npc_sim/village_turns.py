@@ -13,7 +13,8 @@ def next_actor(world: "World", stop_at_minute: int | None = None) -> str | None:
     if stop_at_minute is not None and state.minute >= stop_at_minute:
         world.save()
         return None
-    ids = [rid for rid in config.residents if rid in state.residents and rid in world.state.actors]
+    ids = [rid for rid in config.residents if rid in state.residents and rid in world.state.actors
+           and rid not in config.stationary_residents]
     if not ids:
         raise ValueError("The timed village has no bound residents to schedule")
     # A recovered conversation must not dereference an actor absent from this world.

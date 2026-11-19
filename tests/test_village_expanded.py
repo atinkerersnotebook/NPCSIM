@@ -71,6 +71,46 @@ def test_twelve_real_actors_without_duplicate_positions_and_private_context(cast
     assert all(value["personal"]["deliveries"] == [] for rid, value in contexts.items() if rid != "nella")
 
 
+def test_stationary_residents_are_not_scheduled_or_movable_and_support_interviews(tmp_path):
+    value = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "grand-theft-millhaven.json"))
+    world = World(value, tmp_path / "theft.json", "theft", "garrick", "session-garrick")
+    from npc_sim import village_turns
+
+    assert world.state.village.minute == 660
+    assert village_turns.next_actor(world) == "garrick"
+    elsie = world.bind("elsie", "session-elsie")
+    blocked = act(elsie, "go", target="square-tavern")
+    assert blocked["code"] == "STATIONARY_RESIDENT"
+    assert elsie.actor.location_id == "tavern"
+    garrick = world.bind("garrick", "session-garrick")
+    garrick.actor.location_id = "tavern"
+    answer = act(garrick, "village_ask", target="elsie", topic="theft")
+    assert answer["code"] == "VILLAGER_ANSWERED"
+    assert "10:55" in answer["explanation"]
+
+
+def test_theft_investigation_closes_only_after_witnesses_and_evidence(tmp_path):
+    value = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "grand-theft-millhaven.json"))
+    world = World(value, tmp_path / "investigation.json", "investigation", "garrick", "session-garrick")
+    for rid in value.village.stationary_residents:
+        actor = world.state.actors.get(rid) or world.bind(rid, f"session-{rid}").actor
+        assert actor.location_id == value.village.residents[rid].work
+    garrick = world.bind("garrick", "session-garrick")
+    assert act(garrick, "village_close_investigation")["code"] == "WITNESSES_PENDING"
+    for rid in value.village.investigation.required_interviews:
+        garrick.actor.location_id = value.village.residents[rid].work
+        world.state.village.residents["garrick"].available_at = world.state.village.minute
+        result = act(garrick, "village_ask", target=rid, topic="theft")
+        assert result["code"] == "VILLAGER_ANSWERED"
+    garrick.actor.location_id = "general-store"
+    world.state.village.residents["garrick"].available_at = world.state.village.minute
+    assert act(garrick, "village_close_investigation")["code"] == "EVIDENCE_PENDING"
+    assert act(garrick, "look", target="coin-box")["outcome"] == "APPLIED"
+    closed = act(garrick, "village_close_investigation")
+    assert closed["code"] == "INVESTIGATION_CLOSED"
+    assert garrick.evaluate_goal("village_restored")["status"] == "achieved"
+
+
 def test_wait_advances_clock_and_failure_not_other_ai_actions_or_remote_news(cast):
     world = cast["torvin"]
     before = {rid: actor.location_id for rid, actor in world.state.actors.items()}

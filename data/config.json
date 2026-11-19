@@ -8,15 +8,15 @@
   },
   "world": {
     "transport": "stdio",
-    "scenario": "escape-room",
+    "scenario": "grand-theft-millhaven",
     "command": null,
     "args": [],
     "url": null
   },
   "budgets": {
-    "max_actions": 30,
-    "max_model_calls": 40,
-    "max_seconds": 120.0,
-    "repetition_window": 3
+    "max_actions": 180,
+    "max_model_calls": 240,
+    "max_seconds": 14400.0,
+    "repetition_window": 24
   }
 }

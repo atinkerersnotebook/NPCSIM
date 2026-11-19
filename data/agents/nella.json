@@ -15,13 +15,13 @@
     "Never claim success before authoritative world verification."
   ],
   "body": {
-    "description": "An exacting merchant carrying one shipment at a time.",
+    "description": "An exacting merchant driving a six-unit wagon.",
     "capabilities": [
       "move",
       "manipulate",
       "trade"
     ],
-    "capacity": 4,
+    "capacity": 3,
     "size": "medium",
     "grips": [
       "hand"

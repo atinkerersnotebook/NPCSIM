@@ -50,7 +50,8 @@ def _context_values(world: "World") -> dict[str, Any]:
     economy = village_economy.config(world)
     known = state.communication.knowledge.get(world.actor_id, {}) if state.communication else {}
     return {
-        "location": location, "inventory": world.actor.inventory, "body": world.actor.body.model_dump(),
+        "location": location, "inventory": world.actor.inventory, "inspected": world.actor.inspected,
+        "body": world.actor.body.model_dump(),
         "stock": state.stocks.get(location, {}), "cargo": person.cargo,
         "coins": state.coins.get(world.actor_id),
         "meal_funded": village_economy.meal_affordable(world, world.actor_id) if location == "tavern" else None,

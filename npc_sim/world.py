@@ -848,6 +848,8 @@ class World:
     def _village_action_blocker(self, action: str, args: dict[str, Any]) -> tuple[str, str] | None:
         from npc_sim import village_fallback, village_firewood, village_life, village_precheck
 
+        if action == "go" and self.actor_id in self.scenario.village.stationary_residents:
+            return "STATIONARY_RESIDENT", "This resident must remain at their current work spot."
         if self.scenario.village.time_based_turns and action not in {
                 "look", "read", "village_stop_route", "village_maintenance_pause", "village_research_pause",
                 "village_mining_pause", "village_livestock_pause"}:
