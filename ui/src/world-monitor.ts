@@ -11,6 +11,7 @@ import type { TownMapOptions } from "./town-map.ts";
 import { tradeNote } from "./trade-notes.ts";
 import { npcPortrait } from "./npc-sprite.ts";
 import { sectionTabPanel, sectionTabs } from "./section-tabs.ts";
+import { sceneAnchors, sceneHeight, sceneWidth } from "./millhaven-orthographic.ts";
 
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
@@ -153,7 +154,7 @@ function worldNowMarkup(state: State, events: readonly RunEvent[], agents: Retur
 
 export function worldMonitorMarkup(
   state: State, events: readonly RunEvent[] = [], scale: GanttScale = {}, map: TownMapOptions = {},
-  historyReady = true
+  historyReady = true, sceneZoom = 1
 ): string {
   const agents = monitoredAgents(state);
   const clock = simulationClock(state.world ?? state.observation, state.observation);
@@ -189,7 +190,8 @@ export function worldMonitorMarkup(
   ${!active && agents.length ? '<p class="muted">Last recorded world state. The adventure is not running.</p>' : ""}
   ${!state.world && agents.length ? '<p class="muted">World snapshot unavailable. Locations below are last observed, not live positions.</p>' : ""}
   </section>
-  ${state.world?.village ? `<section ${sectionTabPanel("monitor-map", "Map")}>${townMapMarkup(state, agents, map)}</section>` : ""}
+  ${state.world?.village ? `<section ${sectionTabPanel("monitor-map", "Map")}>${townMapMarkup(state, agents, map)}</section>
+  <section ${sectionTabPanel("monitor-scene", "Millhaven Scene")}>${townMapMarkup(state, agents, { ...map, zoom: sceneZoom, presentation: "scene" })}</section>` : ""}
   ${timeline ? `<section ${sectionTabPanel("monitor-timeline", "Timeline")}>${timeline}</section>` : ""}
   <section ${sectionTabPanel("monitor-residents", "Residents")}><h2 id="monitor-residents-title">Residents &amp; agents</h2>
   <div class="monitor-locations">${[...groups.values()].map(group =>
@@ -236,17 +238,26 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   let recent = false;
   let activity: GanttActivity = "all";
   let resetTimelineScroll = false;
-  let mapZoom = 1;
-  let mapLeft = 0;
-  let mapTop = 0;
+  const mapViews = {
+    "monitor-map": { zoom: 1, left: 0, top: 0 },
+    "monitor-scene": { zoom: 1, left: 0, top: 0 }
+  };
+  const activeMapScroll = () => content.querySelector<HTMLDivElement>(
+    ":is(#monitor-map, #monitor-scene):not([hidden]) .town-map-scroll");
+  const mapView = (element: Element) => element.closest("#monitor-scene")
+    ? mapViews["monitor-scene"] : mapViews["monitor-map"];
+  let centerScene = true;
+  let sceneZoomCenter: { x: number; y: number } | undefined;
+  let sceneDrag: { pointer: number; x: number; y: number; left: number; top: number } | undefined;
   let timelineLeft = 0;
   let timelineCentre = 0.5;
   let followingTimeline = true;
   const rememberScroll = () => {
-    const mapScroll = content.querySelector<HTMLDivElement>("#monitor-map:not([hidden]) .town-map-scroll");
+    const mapScroll = activeMapScroll();
     if (mapScroll) {
-      mapLeft = mapScroll.scrollLeft;
-      mapTop = mapScroll.scrollTop;
+      const view = mapView(mapScroll);
+      view.left = mapScroll.scrollLeft;
+      view.top = mapScroll.scrollTop;
     }
     const scroll = content.querySelector<HTMLDivElement>("#monitor-timeline:not([hidden]) .gantt-scroll");
     if (scroll?.clientWidth) {
@@ -256,7 +267,23 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     }
   };
   const restoreScroll = () => {
-    content.querySelector<HTMLDivElement>("#monitor-map:not([hidden]) .town-map-scroll")?.scrollTo(mapLeft, mapTop);
+    const mapScroll = activeMapScroll();
+    if (mapScroll) {
+      const view = mapView(mapScroll);
+      const scene = view === mapViews["monitor-scene"];
+      if (scene && (centerScene || sceneZoomCenter)) {
+        const square = sceneAnchors["village-square"];
+        const center = centerScene ? { x: square.x / sceneWidth, y: square.y / sceneHeight } : sceneZoomCenter!;
+        const canvas = mapScroll.querySelector(".town-map-canvas")!.getBoundingClientRect();
+        const viewport = mapScroll.getBoundingClientRect();
+        mapScroll.scrollTo(center.x * canvas.width + canvas.left - viewport.left + mapScroll.scrollLeft - mapScroll.clientWidth / 2,
+          center.y * canvas.height + canvas.top - viewport.top + mapScroll.scrollTop - mapScroll.clientHeight / 2);
+        centerScene = false;
+        sceneZoomCenter = undefined;
+      } else {
+        mapScroll.scrollTo(view.left, view.top);
+      }
+    }
     const scroll = content.querySelector<HTMLDivElement>("#monitor-timeline:not([hidden]) .gantt-scroll");
     if (scroll) scroll.scrollLeft = followingTimeline || resetTimelineScroll ? scroll.scrollWidth
       : renderedZoom !== zoom ? timelineCentre * scroll.scrollWidth - scroll.clientWidth / 2 : timelineLeft;
@@ -277,27 +304,29 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   let pointerPosition: { x: number; y: number } | null = null;
   const draw = () => {
     frame = null;
-    if (!state) return;
+    if (!state || sceneDrag) return;
     historyReady ||= seen.size >= state.event_count;
     const old = content.querySelector<HTMLDivElement>("#monitor-timeline:not([hidden]) .gantt-scroll");
     const viewportWidth = old?.clientWidth || content.clientWidth - (window.matchMedia("(max-width: 700px)").matches ? 102 : 132);
     const now = Date.now();
     const markup = worldMonitorMarkup(state, historyReady ? [...events.values()] : [], { zoom, viewportWidth, recent, activity },
-      { zoom: mapZoom, selectedActorId, dialogue, now }, historyReady);
+      { zoom: mapViews["monitor-map"].zoom, selectedActorId, dialogue, now }, historyReady, mapViews["monitor-scene"].zoom);
     clearTimeout(bubbleTimer);
     const expiries = dialogue.active(now).map(line => line.expiresAt);
     if (expiries.length) bubbleTimer = setTimeout(schedule, Math.min(...expiries) - now + 1);
     if (markup !== previous) {
-      const mapScroll = content.querySelector<HTMLDivElement>(".town-map-scroll");
+      const mapScroll = activeMapScroll();
       rememberScroll();
       const openSystems = new Set([...content.querySelectorAll<HTMLDetailsElement>("#monitor-systems details[open]")]
         .map(details => details.querySelector("summary")?.textContent));
-      const mapActorFocus = document.activeElement?.getAttribute("data-map-actor");
+      const actorFocus = document.activeElement?.getAttribute("data-map-actor")
+        ?? document.activeElement?.getAttribute("data-scene-actor");
       const residentFocus = document.activeElement?.getAttribute("data-resident-select");
       const residentArea = document.activeElement?.closest("#monitor-residents, #monitor-timeline")?.id;
       const filterFocus = ["data-timeline-recent", "data-timeline-activity", "data-timeline-reset"]
         .find(attribute => document.activeElement?.hasAttribute(attribute));
       const mapZoomFocus = document.activeElement?.getAttribute("data-map-zoom");
+      const markerFocus = document.activeElement?.getAttribute("data-location-marker");
       const panelFocus = document.activeElement?.matches('[role="tabpanel"]') ? document.activeElement.id : undefined;
       const systemsFocus = document.activeElement?.matches("#monitor-systems summary") ? document.activeElement.textContent : null;
       const mapHadFocus = document.activeElement === mapScroll;
@@ -320,14 +349,19 @@ export function startWorldMonitor(app: HTMLDivElement): void {
         [...content.querySelectorAll<HTMLButtonElement>(`#${residentArea} [data-resident-select]`)]
           .find(button => button.dataset.residentSelect === residentFocus)?.focus({ preventScroll: true });
       }
-      if (mapHadFocus) content.querySelector<HTMLDivElement>(".town-map-scroll")?.focus({ preventScroll: true });
-      if (mapActorFocus) {
-        [...content.querySelectorAll<HTMLButtonElement>("[data-map-actor]")]
-          .find(button => button.dataset.mapActor === mapActorFocus)?.focus({ preventScroll: true });
+      const mapPanel = activeMapScroll()?.closest(".town-map");
+      if (mapHadFocus) activeMapScroll()?.focus({ preventScroll: true });
+      if (actorFocus && mapPanel) {
+        [...mapPanel.querySelectorAll<HTMLButtonElement>("[data-map-actor], [data-scene-actor]")]
+          .find(button => (button.dataset.mapActor ?? button.dataset.sceneActor) === actorFocus)?.focus({ preventScroll: true });
       }
-      if (mapZoomFocus) {
-        const button = content.querySelector<HTMLButtonElement>(`[data-map-zoom="${mapZoomFocus}"]`);
-        (button?.disabled ? content.querySelector<HTMLButtonElement>('[data-map-zoom="fit"]') : button)
+      if (markerFocus && mapPanel) {
+        [...mapPanel.querySelectorAll<HTMLButtonElement>("[data-location-marker]")]
+          .find(button => button.dataset.locationMarker === markerFocus)?.focus({ preventScroll: true });
+      }
+      if (mapZoomFocus && mapPanel) {
+        const button = mapPanel.querySelector<HTMLButtonElement>(`[data-map-zoom="${mapZoomFocus}"]`);
+        (button?.disabled ? mapPanel.querySelector<HTMLButtonElement>('[data-map-zoom="fit"]') : button)
           ?.focus({ preventScroll: true });
       }
       if (nameFocus) [...content.querySelectorAll<HTMLElement>("[data-gantt-name]")]
@@ -368,7 +402,12 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       seen.clear();
       historyReady = false;
       zoom = renderedZoom = 1;
-      mapZoom = 1;
+      for (const view of Object.values(mapViews)) {
+        view.zoom = 1;
+        view.left = view.top = 0;
+      }
+      centerScene = true;
+      sceneZoomCenter = undefined;
       selectedActorId = undefined;
       dialogue = new TownDialogue();
       liveAfterSequence = next.event_count;
@@ -439,7 +478,29 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       }
     }
   });
+  content.addEventListener("pointerdown", event => {
+    if (!event.isPrimary || event.button !== 0 || event.pointerType === "touch" || !(event.target instanceof Element)
+      || !event.target.closest(".scene-terrain")) return;
+    const viewport = activeMapScroll();
+    if (!viewport) return;
+    sceneDrag = { pointer: event.pointerId, x: event.clientX, y: event.clientY,
+      left: viewport.scrollLeft, top: viewport.scrollTop };
+    viewport.setPointerCapture(event.pointerId);
+    viewport.classList.add("scene-dragging");
+    viewport.focus({ preventScroll: true });
+    event.preventDefault();
+  });
+  content.addEventListener("lostpointercapture", event => {
+    if (sceneDrag?.pointer !== event.pointerId) return;
+    sceneDrag = undefined;
+    if (event.target instanceof Element) event.target.classList.remove("scene-dragging");
+    schedule();
+  });
   content.addEventListener("pointermove", event => {
+    if (sceneDrag?.pointer === event.pointerId && event.target instanceof HTMLElement) {
+      event.target.scrollTo(sceneDrag.left + sceneDrag.x - event.clientX, sceneDrag.top + sceneDrag.y - event.clientY);
+      return;
+    }
     pointerPosition = event.target instanceof Element && event.target.closest(".gantt-bar, .gantt-marker")
       ? { x: event.clientX, y: event.clientY } : null;
   });
@@ -458,6 +519,17 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     if (event.target instanceof Element && event.target.matches(".gantt-bar, .gantt-marker")) hideGanttTooltip();
   });
   content.addEventListener("scroll", hideGanttTooltip, true);
+  content.addEventListener("keydown", event => {
+    const viewport = activeMapScroll();
+    if (!viewport || event.target !== viewport || mapView(viewport) !== mapViews["monitor-scene"]
+      || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const dx = event.key === "ArrowLeft" ? -80 : event.key === "ArrowRight" ? 80 : 0;
+    const dy = event.key === "ArrowUp" ? -80 : event.key === "ArrowDown" ? 80 : 0;
+    if (dx || dy) {
+      event.preventDefault();
+      viewport.scrollBy(dx, dy);
+    }
+  });
   content.addEventListener("change", event => {
     const select = event.target;
     if (!(select instanceof HTMLSelectElement) || !select.hasAttribute("data-timeline-activity")) return;
@@ -486,16 +558,31 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       schedule();
       return;
     }
-    const actor = event.target.closest<HTMLButtonElement>("[data-map-actor]");
+    const actor = event.target.closest<HTMLButtonElement>("[data-map-actor], [data-scene-actor]");
     if (actor) {
-      selectedActorId = actor.dataset.mapActor === selectedActorId ? undefined : actor.dataset.mapActor;
+      const id = actor.dataset.mapActor ?? actor.dataset.sceneActor;
+      selectedActorId = id === selectedActorId ? undefined : id;
       schedule();
+      return;
+    }
+    if (event.target.closest("[data-scene-center]")) {
+      centerScene = true;
+      restoreScroll();
       return;
     }
     const mapButton = event.target.closest<HTMLButtonElement>("[data-map-zoom]");
     if (mapButton && !mapButton.disabled) {
-      mapZoom = mapButton.dataset.mapZoom === "fit" ? 1
-        : mapButton.dataset.mapZoom === "in" ? Math.min(3, mapZoom + 0.5) : Math.max(1, mapZoom - 0.5);
+      const view = mapView(mapButton);
+      const viewport = activeMapScroll();
+      const next = mapButton.dataset.mapZoom === "fit" ? 1
+        : mapButton.dataset.mapZoom === "in" ? Math.min(3, view.zoom + 0.5) : Math.max(1, view.zoom - 0.5);
+      if (viewport && next !== view.zoom && view === mapViews["monitor-scene"]) {
+        const canvas = viewport.querySelector(".town-map-canvas")!.getBoundingClientRect();
+        const bounds = viewport.getBoundingClientRect();
+        sceneZoomCenter = { x: (bounds.left + viewport.clientWidth / 2 - canvas.left) / canvas.width,
+          y: (bounds.top + viewport.clientHeight / 2 - canvas.top) / canvas.height };
+      }
+      view.zoom = next;
       schedule();
       return;
     }

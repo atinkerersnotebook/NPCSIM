@@ -10,10 +10,14 @@ if TYPE_CHECKING:
     from npc_sim.world import World
 
 
+def living_scenario(scenario: Any) -> bool:
+    return scenario.id in {"millhaven-living", "millhaven-instant"}
+
+
 def enabled(world: "World") -> bool:
     config = world.scenario.village
     return bool(config and config.ai_controlled and config.time_based_turns
-                and world.scenario.id == "millhaven-living")
+                and living_scenario(world.scenario))
 
 
 def _status(world: "World") -> tuple[str, bool, bool, str]:

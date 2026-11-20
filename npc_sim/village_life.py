@@ -21,6 +21,7 @@ WORK_ACTIONS |= {"village_draw_livestock_water", "village_care_cow", "village_ca
 PRODUCTION = {"village_work", "village_cook_fish", "village_grow_hay", "village_gather_herbs", "village_fell_logs",
               "village_split_firewood"}
 WORK_ACTIONS |= {"village_split_firewood", "village_execute_fuel_delivery"}
+WORK_ACTIONS.add("village_upgrade_equipment")
 
 
 def production_closing_minute(world: "World", rid: str) -> int:
@@ -300,6 +301,11 @@ def action_blocker(world: "World", action: str, rid: str | None = None, *,
     if state.mining is not None:
         from npc_sim import village_mining
         blocked = village_mining.action_blocker(world, action, rid)
+        if blocked:
+            return blocked
+    if state.equipment is not None:
+        from npc_sim import village_equipment
+        blocked = village_equipment.action_blocker(world, action, rid)
         if blocked:
             return blocked
     if (action.startswith("village_research") and config.residents[rid].work == "tavern"

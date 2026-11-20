@@ -36,6 +36,11 @@ export function communicationMarkup(view: VillageCommunication, operator = false
     <h3>${operator ? "Operator: noticeboard, commitments & appointments" : "Your learned notices, commitments & appointments"}</h3>
     <p class="muted">${operator ? "Privileged world view. This is not shared NPC knowledge." :
       "Personally received snapshots only. Absence of a reply is not rejection; old versions may be stale."}</p>
+    ${view.network ? `<aside class="tin-can-network"><h4>${escape(view.network.name)}</h4>
+      <p>${view.network.lines} taut-string lines converge on ${escape(view.network.hub)}.
+      Named recipients hear requests and replies immediately; stock and whereabouts remain private.</p>
+      <details><summary>Tin-can stations (${view.network.stations.length})</summary>
+        <p>${view.network.stations.map(escape).join(" · ")}</p></details></aside>` : ""}
     ${view.notices.map(notice => `<article class="communication-notice">
       <h4>${escape(notice.subject)} / ${label(notice.status)} / version ${notice.version}</h4>
       <p>${escape(notice.author)} → ${notice.recipients.map(escape).join(", ") || "Public"}${notice.private ? " / Private" : ""}</p>
@@ -58,11 +63,11 @@ export function communicationMarkup(view: VillageCommunication, operator = false
         ${label(notice.appointment.status)} / confirmed by ${notice.appointment.accepted.map(escape).join(", ")}.
         Each worker must actually attend with supplies.</p>` : ""}
     </article>`).join("") || `<p class="muted">${operator ? "No notices posted yet." : "No notices received yet."}</p>`}
-    <details><summary>Physical workplace inboxes</summary>
+    ${view.network ? "" : `<details><summary>Physical workplace inboxes</summary>
       ${view.boxes.map(box => `<p>${escape(box.owner)} / ${escape(box.place)} /
         ${operator ? `${box.notes ?? 0} physical notes` : box.here ? box.can_read ? "Here; yours to read" : "Here; owner-only reading" : "Visit in person to read"}.
         No remote delivery.</p>`).join("") || "<p>No boxes configured.</p>"}
-    </details>
+    </details>`}
   </section>`;
 }
 
@@ -151,6 +156,17 @@ export function villageMarkup(village: VillageObservation): string {
         ${label(job.location)} / ${job.worked_minutes}/${job.required_minutes} work min /
         ${escape(job.status)}${job.blocker ? ` / ${escape(job.blocker)}` : ""}</p>`).join("")
         || '<p class="muted">No maintenance assigned or observed here.</p>'}
+    </details>` : ""}
+    ${village.equipment?.enabled ? `<details><summary>Local and owned capital equipment</summary>
+      <p>${escape(village.equipment.policy)}</p>
+      ${village.equipment.assets.map(asset => `<article class="village-card">
+        <strong>${escape(asset.tier_name)}</strong>
+        <span class="tag">${label(asset.category)} / Tier ${asset.tier}</span>
+        <p>${label(asset.location)} / ${asset.communal ? "Communal" : `Owned by ${escape(asset.owner ?? "unknown")}`}</p>
+        <p>${asset.capacity ? `Capacity ${asset.capacity} / ` : ""}work factor ${asset.duration_factor} / batch size ${asset.batch_size} / fuel factor ${asset.fuel_factor}</p>
+        <p>${asset.upgrade_finishes_at !== null ? `Upgrade underway until ${time(asset.upgrade_finishes_at)}` :
+          asset.next_tier ? `Next: ${escape(asset.next_tier)} / ${asset.upgrade_cost} coins / ${stock(asset.upgrade_supplies)}` : "Maximum tier"}</p>
+      </article>`).join("") || '<p class="muted">No equipment is visible here or owned by you.</p>'}
     </details>` : ""}
     ${village.research?.enabled ? `<details><summary>Your known research projects & discoveries</summary>
       <p>${escape(village.research.policy)}</p>
@@ -407,6 +423,7 @@ export function villageSystemsMarkup(state: State, researchEnabled = false): str
   const at = (minute: number) => `day ${Math.floor(minute / 1440) + 1} ${time(minute)}`;
   const day = Math.floor((state.world?.village?.minute ?? 0) / 1440) + 1;
   const maintenance = dashboard.maintenance ?? [];
+  const equipment = dashboard.equipment ?? [];
   const current = maintenance.filter(job => job.day === day || job.status !== "completed"
     || job.completed_at !== null && job.completed_at !== undefined
       && Math.floor(job.completed_at / 1440) + 1 === day);
@@ -419,6 +436,14 @@ export function villageSystemsMarkup(state: State, researchEnabled = false): str
       || "No consumables"}</td></tr>`;
   return `${firewoodPanel}${livestockPanel}${dashboard.communication?.enabled ? communicationMarkup(dashboard.communication, true) : ""}
     <section class="village-panel" aria-label="Village economy and activities">
+    ${equipment.length ? `<h3>Village capital assets</h3>
+      <div class="maintenance-list"><table><thead><tr><th>Asset</th><th>Owner</th><th>Site</th><th>Tier</th>
+        <th>Effects</th><th>Upgrade</th></tr></thead><tbody>${equipment.map(asset => `<tr>
+        <td>${name(asset.entity)}</td><td>${asset.communal ? "Communal" : name(asset.owner ?? "unknown")}</td>
+        <td>${name(asset.location)}</td><td>${escape(asset.tier_name)} / ${asset.tier}</td>
+        <td>${asset.capacity ? `capacity ${asset.capacity} / ` : ""}batch ${asset.batch_size} / work ${asset.duration_factor} / fuel ${asset.fuel_factor}</td>
+        <td>${asset.upgrade_worker ? `${name(asset.upgrade_worker)} until ${time(asset.upgrade_finishes_at ?? 0)}` : "Idle"}</td>
+      </tr>`).join("")}</tbody></table></div>` : ""}
     ${maintenance.length ? `<h3>Town maintenance checklist</h3>
       <p class="muted">Required daily upkeep. Unfinished jobs carry forward at midnight without duplicating
         the backlog. Meals, sleep and funded commitments still take precedence.</p>

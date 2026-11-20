@@ -66,7 +66,7 @@ def protected(world, location, product):
         if product == "meals":
             quantity += sum(plan["remaining_portions"] for plan in village_economy.meal_requirements(world))
     from npc_sim import village_depot
-    if location == "farm" and product == "grain" and not village_depot.enabled(world):
+    if location == "farm" and product == "grain" and not village_depot.feed_store_enabled(world):
         from npc_sim import village_livestock
         quantity += village_livestock.feed_needs(world).get("grain", 0)
     if not policy or location != base.residents[policy.innkeeper].work:

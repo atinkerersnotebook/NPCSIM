@@ -1,40 +1,40 @@
 import { escape } from "./html.ts";
 
-const suppliedArt: Record<string, { head: string; portrait: string }> = {
+const suppliedArt: Record<string, { head: string; portrait: string; body: string }> = {
   torvin: { head: new URL("./assets/torvin-head.png", import.meta.url).href,
-    portrait: new URL("./assets/torvin-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/torvin-torso.png", import.meta.url).href, body: new URL("./assets/torvin-body.png", import.meta.url).href },
   bren: { head: new URL("./assets/bren-head.png", import.meta.url).href,
-    portrait: new URL("./assets/bren-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/bren-torso.png", import.meta.url).href, body: new URL("./assets/bren-body.png", import.meta.url).href },
   mara: { head: new URL("./assets/mara-head.png", import.meta.url).href,
-    portrait: new URL("./assets/mara-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/mara-torso.png", import.meta.url).href, body: new URL("./assets/mara-body.png", import.meta.url).href },
   elsie: { head: new URL("./assets/elsie-head.png", import.meta.url).href,
-    portrait: new URL("./assets/elsie-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/elsie-torso.png", import.meta.url).href, body: new URL("./assets/elsie-body.png", import.meta.url).href },
   hobb: { head: new URL("./assets/hobb-head.png", import.meta.url).href,
-    portrait: new URL("./assets/hobb-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/hobb-torso.png", import.meta.url).href, body: new URL("./assets/hobb-body.png", import.meta.url).href },
   jory: { head: new URL("./assets/jory-head.png", import.meta.url).href,
-    portrait: new URL("./assets/jory-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/jory-torso.png", import.meta.url).href, body: new URL("./assets/jory-body.png", import.meta.url).href },
   ada: { head: new URL("./assets/ada-head.png", import.meta.url).href,
-    portrait: new URL("./assets/ada-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/ada-torso.png", import.meta.url).href, body: new URL("./assets/ada-body.png", import.meta.url).href },
   nella: { head: new URL("./assets/nella-head.png", import.meta.url).href,
-    portrait: new URL("./assets/nella-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/nella-torso.png", import.meta.url).href, body: new URL("./assets/nella-body.png", import.meta.url).href },
   rowan: { head: new URL("./assets/rowan-head.png", import.meta.url).href,
-    portrait: new URL("./assets/rowan-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/rowan-torso.png", import.meta.url).href, body: new URL("./assets/rowan-body.png", import.meta.url).href },
   garrick: { head: new URL("./assets/garrick-head.png", import.meta.url).href,
-    portrait: new URL("./assets/garrick-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/garrick-torso.png", import.meta.url).href, body: new URL("./assets/garrick-body.png", import.meta.url).href },
   iona: { head: new URL("./assets/iona-head.png", import.meta.url).href,
-    portrait: new URL("./assets/iona-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/iona-torso.png", import.meta.url).href, body: new URL("./assets/iona-body.png", import.meta.url).href },
   finn: { head: new URL("./assets/finn-head.png", import.meta.url).href,
-    portrait: new URL("./assets/finn-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/finn-torso.png", import.meta.url).href, body: new URL("./assets/finn-body.png", import.meta.url).href },
   "iron-trader": { head: new URL("./assets/iron-trader-head.png", import.meta.url).href,
-    portrait: new URL("./assets/iron-trader-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/iron-trader-torso.png", import.meta.url).href, body: new URL("./assets/iron-trader-body.png", import.meta.url).href },
   "general-trader": { head: new URL("./assets/general-trader-head.png", import.meta.url).href,
-    portrait: new URL("./assets/general-trader-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/general-trader-torso.png", import.meta.url).href, body: new URL("./assets/general-trader-body.png", import.meta.url).href },
   "pack-trader": { head: new URL("./assets/pack-trader-head.png", import.meta.url).href,
-    portrait: new URL("./assets/pack-trader-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/pack-trader-torso.png", import.meta.url).href, body: new URL("./assets/pack-trader-body.png", import.meta.url).href },
   "visitor-man": { head: new URL("./assets/visitor-man-head.png", import.meta.url).href,
-    portrait: new URL("./assets/visitor-man-torso.png", import.meta.url).href },
+    portrait: new URL("./assets/visitor-man-torso.png", import.meta.url).href, body: new URL("./assets/visitor-man-body.png", import.meta.url).href },
   "visitor-woman": { head: new URL("./assets/visitor-woman-head.png", import.meta.url).href,
-    portrait: new URL("./assets/visitor-woman-torso.png", import.meta.url).href }
+    portrait: new URL("./assets/visitor-woman-torso.png", import.meta.url).href, body: new URL("./assets/visitor-woman-body.png", import.meta.url).href }
 };
 
 function artFor(id: string) {
@@ -77,10 +77,11 @@ function tint(color: string, toward: string, fraction: number): string {
   ).toString(16).padStart(2, "0")).join("")}`;
 }
 
-export function npcSprite(id: string): string {
-  const head = artFor(id)?.head;
-  if (head) {
-    return `<img class="npc-sprite npc-sprite-image" src="${head}" alt="" aria-hidden="true" data-sprite="${escape(id)}">`;
+export function npcSprite(id: string, fullBody = false): string {
+  const art = artFor(id);
+  const image = fullBody ? art?.body : art?.head;
+  if (image) {
+    return `<img class="npc-sprite npc-sprite-image" src="${image}" alt="" aria-hidden="true" data-sprite="${escape(id)}">`;
   }
   const { hair, coat, trim, skin, accessory, style } = paletteFor(id);
   const outline = "#292832";

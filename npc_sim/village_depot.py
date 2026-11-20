@@ -1,4 +1,4 @@
-"""Owner-accounted, physical storage for the resilient Millhaven depot."""
+"""Owner-accounted, physical storage for Millhaven."""
 
 from npc_sim import village, village_economy, village_goods
 from npc_sim.models import VillageShipment, VillageStockLot
@@ -11,11 +11,24 @@ MANAGED_SCENARIOS = {"millhaven-resilient", "millhaven-complete"}
 
 
 def enabled(world) -> bool:
+    return (world.state.village is not None and DEPOT in world.state.entities
+            and (world.scenario.id == "millhaven-instant" or feed_store_enabled(world)))
+
+
+def feed_store_enabled(world) -> bool:
     return (world.scenario.id in MANAGED_SCENARIOS and DEPOT in world.state.entities
             and FEED_STORE in world.state.entities and world.state.village is not None)
 
 
 def validate_config(scenario) -> None:
+    if scenario.id == "millhaven-instant" and DEPOT in scenario.entities:
+        base = scenario.village
+        if (base is None or base.economy is None or not base.economy.require_orders
+                or scenario.entities[DEPOT].kind != "location"
+                or set(base.stocks.get(DEPOT, {})) != PRODUCTS
+                or any(base.stocks[DEPOT].values()) or not PRODUCTS <= base.prices.keys()):
+            raise ValueError("Instant Millhaven needs an initially empty, priced depot at a real location")
+        return
     if scenario.id not in MANAGED_SCENARIOS:
         return
     base = scenario.village
@@ -123,9 +136,17 @@ def consume_feed(world, resource: str, quantity: int) -> None:
         fallback.feed_store_stock[resource] = state.stocks[FEED_STORE][resource]
 
 
+def workplace(world, actor: str, goods) -> str:
+    config = world.scenario.village
+    if (config.firewood and actor == config.firewood.household_buyer and set(goods) == {"firewood"}
+            and config.firewood.household_location):
+        return config.firewood.household_location
+    return config.residents[actor].work
+
+
 def load(world, goods: dict[str, int], withdrawal: bool, *, feed: bool = False) -> str | None:
-    if not enabled(world):
-        return "DEPOT_UNAVAILABLE: This scenario has no managed depot."
+    if not enabled(world) or (feed and not feed_store_enabled(world)):
+        return "DEPOT_UNAVAILABLE: This scenario does not have the requested managed store."
     config, state = village.context(world)
     reconcile(world)
     if not state.economy or not state.economy.config.require_orders:
@@ -135,14 +156,8 @@ def load(world, goods: dict[str, int], withdrawal: bool, *, feed: bool = False) 
     if feed and (config.livestock is None or actor != config.livestock.keeper
                  or withdrawal or not set(goods) <= {"grain", "hay"}):
         return "FEED_STORE_AUTHORITY: Only the farmer may restock feed from the farm."
-    source = store if withdrawal else config.residents[actor].work
-    destination = config.residents[actor].work if withdrawal else store
-    if (not feed and config.firewood and actor == config.firewood.household_buyer and set(goods) == {"firewood"}
-            and config.firewood.household_location):
-        if withdrawal:
-            destination = config.firewood.household_location
-        else:
-            source = config.firewood.household_location
+    work = config.residents[actor].work if feed else workplace(world, actor, goods)
+    source, destination = (store, work) if withdrawal else (work, store)
     if world.actor.location_id != source or source == destination:
         return "DEPOT_WRONG_SITE: Deposit at your workplace or withdraw at the depot."
     if not goods or any(product not in PRODUCTS or type(quantity) is not int or quantity < 1
@@ -218,13 +233,14 @@ def unload(world, carrier: str, shipments: list[VillageShipment], deliveries: li
         return "DEPOT_MIXED_CARGO: Unload depot cargo separately from ordinary deliveries."
     if any(item.destination != location for item in shipments):
         return "DEPOT_MIXED_CARGO: Unload depot cargo for one destination at a time."
+    work = workplace(world, carrier, {item.resource for item in deliveries})
     if any(item.depot_owner not in config.residents or item.seller != item.depot_owner
            or item.buyer != carrier or item.resource not in PRODUCTS
            or (item.depot_transfer == "deposit" and (location not in {DEPOT, FEED_STORE} or item.seller != carrier))
            or (item.depot_transfer == "deposit" and location == DEPOT and item.resource not in PRODUCTS)
            or (item.depot_transfer == "deposit" and location == FEED_STORE and (
                config.livestock is None or carrier != config.livestock.keeper or item.resource not in {"grain", "hay"}))
-           or (item.depot_transfer == "withdrawal" and location != config.residents[carrier].work)
+           or (item.depot_transfer == "withdrawal" and location != work)
            or item.destination != location
            for item in deliveries):
         return "DEPOT_CARGO_MISMATCH: Invalid depot ownership or destination."
@@ -236,8 +252,14 @@ def unload(world, carrier: str, shipments: list[VillageShipment], deliveries: li
               if item.depot_transfer == "withdrawal" and item.seller != carrier)
     if state.coins[carrier] < due:
         return "INSUFFICIENT_COINS: The buyer cannot pay depot owners."
-    if location == DEPOT and sum(item.quantity for item in deliveries if item.resource == "firewood") + state.stocks[DEPOT].get("firewood", 0) > FUEL_CAPACITY:
+    fuel = sum(item.quantity for item in deliveries if item.resource == "firewood")
+    if location == DEPOT and fuel + state.stocks[DEPOT].get("firewood", 0) > FUEL_CAPACITY:
         return "FIREWOOD_STORAGE_FULL: The depot woodshed holds at most 16 units."
+    if fuel:
+        from npc_sim import village_firewood
+        available = village_firewood.capacity_available(world, location)
+        if available is not None and fuel > available:
+            return "FIREWOOD_STORAGE_FULL: Destination fuel stock exceeds configured capacity."
     for item in deliveries:
         if item.depot_transfer == "withdrawal" and item.seller != carrier:
             village_economy.record_payment(world, carrier, item.seller, item.quantity * item.price, "goods")

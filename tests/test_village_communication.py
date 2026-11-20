@@ -305,6 +305,149 @@ def test_supply_and_response_intents_require_physical_receipt_and_reply(world):
     assert len(world.state.village.economy.orders) == 1
 
 
+def test_instant_supply_request_and_acceptance_keep_delivery_physical(world):
+    world.state.village.communication.config.instant_messages = True
+    buyer = actor(world, "jory", "bakery")
+    supplier = actor(world, "mara", "watermill")
+    available = world.state.village.residents["mara"].available_at
+    request = {"good": "flour", "quantity": 2, "purpose": "Bread for the tavern",
+               "deadline": 900, "required_fresh_until": 960, "preferred_supplier_id": "mara"}
+    result = comm.apply(buyer, "village_request_supply", request)
+    assert result[:2] == ("APPLIED", "NOTICE_POSTED"), result
+    state = world.state.village.communication
+    nid = next(iter(state.notices))
+    assert known(world, "mara", nid).source_type == "tin_can"
+    assert nid not in state.knowledge.get("garrick", {})
+    assert not world.state.village.economy.orders
+    assert world.state.village.residents["mara"].available_at == available
+    assert (buyer.actor.location_id, supplier.actor.location_id) == ("bakery", "watermill")
+    result = comm.apply(supplier, "village_respond_to_request", {"request_id": nid, "response": "accept"})
+    assert result[:2] == ("APPLIED", "NOTICE_UPDATED"), result
+    assert known(world, "jory", nid).snapshot.status == "accepted"
+    order = next(iter(world.state.village.economy.orders.values()))
+    assert order.delivered_quantity == 0
+    assert not state.placements
+    restored = WorldState.model_validate(world.state.model_dump(mode="json"))
+    assert restored.village.communication.knowledge["jory"][nid].source_type == "tin_can"
+
+
+def test_tin_can_channel_is_rejected_in_physical_scenario(world):
+    actor(world, "jory", "bakery")
+    result = comm.apply(world, "village_notice_post", {"channel": "tin_can", "notice": flour()})
+    assert result[:2] == ("REJECTED", "COMMUNICATION_INVALID")
+    assert not world.state.village.communication.notices
+
+
+def test_tin_can_legacy_order_action_reaches_remote_supplier(world):
+    world.state.village.communication.config.instant_messages = True
+    buyer = actor(world, "jory", "bakery")
+    actor(world, "mara", "watermill")
+    ready(world)
+    action = next(item for item in buyer.actions() if item["id"] == "village_propose_order")
+    assert action["availability"] == "available"
+    result = buyer.act("remote-order", buyer.revision(), "village_propose_order", {
+        "supplier": "mara", "product": "flour", "quantity": 2,
+        "deadline": 900, "required_fresh_until": 960})
+    assert result["outcome"] == "APPLIED", result
+    nid = next(iter(world.state.village.communication.notices))
+    assert known(world, "mara", nid).source_type == "tin_can"
+    assert not world.state.village.economy.orders
+
+
+def test_instant_expiry_and_revision_reach_both_parties(world):
+    world.state.village.communication.config.instant_messages = True
+    buyer = actor(world, "jory", "bakery")
+    actor(world, "mara", "watermill")
+    ready(world)
+    result = comm.apply(buyer, "village_request_supply", {
+        "good": "flour", "quantity": 2, "purpose": "Bread for the tavern",
+        "deadline": 900, "required_fresh_until": 960, "preferred_supplier_id": "mara"})
+    assert result[:2] == ("APPLIED", "NOTICE_POSTED"), result
+    nid = next(iter(world.state.village.communication.notices))
+    ready(world, 901)
+    comm.advance(world)
+    assert known(world, "jory", nid).snapshot.status == "expired"
+    assert known(world, "mara", nid).snapshot.status == "expired"
+    result = comm.apply(buyer, "village_update_request", {
+        "request_id": nid, "changes": {"due_at": 1050, "required_fresh_until": 1100}})
+    assert result[:2] == ("APPLIED", "NOTICE_UPDATED"), result
+    assert known(world, "mara", nid).snapshot.status == "posted"
+    assert known(world, "mara", nid).snapshot.version == 3
+
+
+def test_instant_crew_appointment_still_requires_workers_at_site(world):
+    world.state.village.communication.config.instant_messages = True
+    ready(world)
+    crew, site = comm._project(world, "dig_well")
+    proposer = actor(world, crew[0], "forge")
+    partner = actor(world, crew[1], "stable")
+    result = comm.apply(proposer, "village_schedule_crew", {
+        "project_id": "dig_well", "start": 570, "purpose": "Dig well together"})
+    assert result[:2] == ("APPLIED", "NOTICE_POSTED"), result
+    nid = next(iter(world.state.village.communication.notices))
+    result = comm.apply(partner, "village_respond_to_request", {"request_id": nid, "response": "accept"})
+    assert result[:2] == ("APPLIED", "NOTICE_UPDATED"), result
+    assert known(world, crew[0], nid).snapshot.appointment.status == "confirmed"
+    ready(world, 570)
+    assert comm.project_blocker(proposer, "dig_well") == "Both actual workers must be at the agreed site"
+    assert proposer.actor.location_id != site and partner.actor.location_id != site
+
+
+def test_instant_scenario_is_available_and_preserves_living_rules():
+    from npc_sim import village_walking
+    from npc_sim.living_village import build_instant_scenario
+
+    base = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-living.json"))
+    actual = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-instant.json"))
+    assert actual == build_instant_scenario(base)
+    assert village_walking.living_scenario(actual)
+    assert actual.village.communication.instant_messages
+    assert not base.village.communication.instant_messages
+    assert {site: stock for site, stock in actual.village.stocks.items() if site != "supply-depot"} == base.village.stocks
+    assert "supply-depot" not in base.entities
+    assert actual.entities["tavern"].name == "Elsie's tavern and communal kitchen"
+    assert actual.entities["tavern-hearth"].location == actual.village.residents["elsie"].work == "tavern"
+    assert actual.village.residents == base.village.residents
+    assert all("No remote messages" not in agent.role for agent in actual.agents)
+
+
+def test_instant_scenario_world_action_and_restart(workspace):
+    scenario = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-instant.json"))
+    world = create_world(workspace / "instant.json", communication=False, value=scenario)
+    buyer = actor(world, "jory", "bakery")
+    actor(world, "mara", "watermill")
+    ready(world)
+    assert "village_plan_walk" in {action["id"] for action in buyer.actions()}
+    result = buyer.act("remote-request", buyer.revision(), "village_request_supply", {
+        "good": "flour", "quantity": 2, "purpose": "Bread for the tavern",
+        "deadline": 900, "required_fresh_until": 960, "preferred_supplier_id": "mara"})
+    assert result["outcome"] == "APPLIED", result
+    nid = next(iter(world.state.village.communication.notices))
+    assert known(world, "mara", nid).source_type == "tin_can"
+    assert world.state.village.residents["jory"].available_at == 485
+    world.save()
+    restored = World(world.scenario, world.path, "communication", "jory", "session-jory")
+    assert restored.state.village.communication.config.instant_messages
+    assert known(restored, "mara", nid).snapshot.version == 1
+
+
+def test_instant_communal_kitchen_cooks_and_serves_real_food(workspace):
+    scenario = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-instant.json"))
+    scenario.village.breakfast = False
+    world = create_world(workspace / "kitchen.json", communication=False, value=scenario, start_minute=1080)
+    cook = actor(world, "elsie", "tavern")
+    goods.put(world, "tavern", "fish", 2)
+    result = cook.act("cook", cook.revision(), "village_cook_fish", {})
+    assert result["outcome"] == "APPLIED", result
+    village.advance(world, 60)
+    meals = world.state.village.stocks["tavern"]["meals"]
+    assert meals > 0
+    diner = actor(world, "jory", "tavern")
+    result = diner.act("eat", diner.revision(), "village_eat", {})
+    assert result["code"] == "MEAL_EATEN", result
+    assert world.state.village.stocks["tavern"]["meals"] == meals - 1
+
+
 def test_supplier_choice_uses_only_direct_outcomes_in_the_same_deadline_window(world):
     from npc_sim.village_supplier_choice import rank
 

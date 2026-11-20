@@ -7,7 +7,7 @@ from typing import Any
 from jsonschema import ValidationError, validate
 
 from npc_sim.models import Actor, Body, ClockRequest, Entity, ERPState, RPSState, Scenario, SimulationClock, TicTacToeState, VoyageState, WorldState
-from npc_sim import bakery, bbq, equipment, erp, handling, recipes, rps, skills, spells, tic_tac_toe, village, village_conversation, voyage
+from npc_sim import bakery, bbq, equipment, erp, handling, recipes, rps, skills, spells, tic_tac_toe, village, village_conversation, voyage, village_equipment
 from npc_sim.storage import read_json
 from npc_sim.world_storage import WorldStorage
 
@@ -41,6 +41,7 @@ class World:
                 tic_tac_toe=TicTacToeState() if scenario.goal_type == "tic_tac_toe_completed" else None,
                 erp=ERPState() if scenario.erp else None,
                 bbq=bbq.initial_state(scenario.bbq) if scenario.bbq else None,
+                equipment=village_equipment.initial_world_state(scenario),
                 village=village.initial_state(scenario) if scenario.village else None,
             )
         if scenario.voyage is not None and self.state.voyage is None:
@@ -214,6 +215,10 @@ class World:
 
     def description(self, entity: Entity) -> str:
         text = entity.description
+        identifier = next((eid for eid, value in self.state.entities.items() if value is entity), None)
+        if identifier is not None and village_equipment.tier(self, identifier) is not None:
+            current = village_equipment.tier(self, identifier)
+            text += f" It is currently tier {current.level}: {current.name}."
         if entity.broken:
             text += " It is broken."
         elif entity.health is not None and entity.health < entity.max_health:
@@ -317,6 +322,14 @@ class World:
                     facts["inventory_units"] = entity.inventory_units
                     facts["carry_grips"] = entity.carry_grips.copy()
                 facts["use_grips"] = entity.use_grips.copy()
+                current = village_equipment.tier(self, eid)
+                if current is not None:
+                    facts["equipment"] = {
+                        "tier": current.level, "tier_name": current.name,
+                        "duration_factor": current.duration_factor, "batch_size": current.batch_size,
+                        "capacity": current.capacity, "fuel_factor": current.fuel_factor,
+                        "effects": current.effects.copy(),
+                    }
                 if entity.kind != "door" and entity.location is not None:
                     facts["location"] = entity.location
                 entities.append(facts)
@@ -550,8 +563,8 @@ class World:
                                     if (action.get("availability") != "blocked" and action["targets"]
                                             and len(action.get("target_requirements", {})) == len(action["targets"])):
                                         action["availability"], action["reason"] = "blocked", next(iter(action["target_requirements"].values()))
-        if self.scenario.village and self.scenario.village.ai_controlled and self.scenario.id == "millhaven-living":
-            from npc_sim import village_walking
+        from npc_sim import village_walking
+        if village_walking.enabled(self):
             for action in actions:
                 if action["id"] != "go":
                     continue

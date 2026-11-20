@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any
 
 from npc_sim import handling, village, village_goods, village_life, village_services, village_wagon, village_extensions, village_communication, village_depot
-from npc_sim import village_replenishment
+from npc_sim import village_replenishment, village_walking
 from npc_sim.models import VillageCommittedWork, VillageCrewSession, VillageJob
 
 if TYPE_CHECKING:
@@ -83,7 +83,7 @@ def observation(world: "World") -> dict[str, Any]:
                      "Follow walking_plan.doors[walking_plan.next_step], even through intermediate stops; do not wander or "
                      "reverse course for a new whim. A new task, due meal, rest, schedule change or fresh "
                      "message permits a justified replan; a blocked route permits a detour. "
-                     if world.scenario.id == "millhaven-living" and config.time_based_turns else "")
+                     if village_walking.enabled(world) else "")
                   + "Schedules are commitments, never automatic movement. Looking and reading are free. "
                   + ("The earliest available villager acts next; work and travel reserve only that person's time. "
                      "Sleeping, committed baking and the accepted standing wagon route skip AI turns. "
@@ -103,7 +103,10 @@ def observation(world: "World") -> dict[str, Any]:
                   "Gather the portable supplies at the work site or carry them there. "
                   "For a broken mill, schedule the real 60-minute crew window while both partners can respond and "
                   "work before closing; bring the plank, beam and hammer. An open proposal needs the other worker's "
-                  "physical acceptance; an accepted booking needs both workers at the site for confirmation. "
+                  + ("remote acceptance; both workers must still be at the site to work. "
+                     if village_communication.instant(world) else
+                     "physical acceptance; an accepted booking needs both workers at the site for confirmation. ")
+                  +
                   "Do not duplicate an open booking: cancel a missed plan through a real channel or reschedule "
                   "after expiry, then obtain fresh consent. A posted notice is not completed repair work. "
                   "village_observe checks local tools; village_ask shares only the target's own knowledge. "
@@ -120,9 +123,14 @@ def observation(world: "World") -> dict[str, Any]:
                   "Never quote internal action results, audit notes or belief-source codes as speech. "
                   "A personally posted open supply need already has a request: keep useful work or rest instead of "
                   "repeatedly searching for its supplier. Revisit only after new local evidence, a credible meeting, "
-                  "an urgent deadline, or rejection/expiry. Check physical messages when a response is expected, "
-                  "not on every short turn; do not make a trip solely to recheck a paper version already read. "
-                  "Use a locally accessible inbox or board only when its version has changed; never infer a remote reply from authoritative records. "
+                  "an urgent deadline, or rejection/expiry. "
+                  + ("Named requests and replies arrive immediately, without revealing remote stock or whereabouts. "
+                     if village_communication.instant(world) else
+                     "Check physical messages when a response is expected, not on every short turn; "
+                     "do not make a trip solely to recheck a paper version already read. "
+                     "Use a locally accessible inbox or board only when its version has changed; "
+                     "never infer a remote reply from authoritative records. ")
+                  +
                   "Say I and my for yourself, and you and your for the person addressed. Use their actual occupation. "
                   "If a conversation reply opportunity is present, consider a brief acknowledgement, answer, question, "
                   "or polite departure before leaving. Hearing or replying never accepts a funded order; use the "
@@ -149,17 +157,19 @@ def observation(world: "World") -> dict[str, Any]:
                      "Bren may collect well timber and rope while Torvin retrieves the shovel. Hobb must also deliver "
                      "one real plank unit for the mill repair. Use manure for faster harvests, tea for tiredness, "
                      "grow hay and gather herbs to replenish inputs. The noon trader supplies paid iron. "
-                     + ("Read physically posted versions, not global stock/project reports. "
+                     + ("Read your received messages, not global stock/project reports. "
+                        if village_communication.instant(world) else
+                        "Read physically posted versions, not global stock/project reports. "
                         if village_communication.enabled(world)
                         else "Read the board for stocks, project progress and deadlines. ")
                      + "Fees go to the actual carrier. "
-                     + ("The shared depot and farm feed store contain only real local stock. At the depot, "
-                           "check the local owner ledger before withdrawing; purchase only affordable stock you can "
-                           "carry back to your workplace. Deposit only unreserved workplace surplus and unload it "
-                           "physically at the depot; the owner keeps title until a paid withdrawal is unloaded. "
-                           "Ada: replenish the separate feed store from unreserved farm grain and hay before the "
-                           "cow or hens run short, by carrying and unloading real feed there. "
-                        if village_depot.enabled(world) else "")
+                     + ("At the shared depot, check the local owner ledger before withdrawing; purchase only "
+                        "affordable stock you can carry back to your workplace. Deposit only unreserved workplace "
+                        "surplus and unload it physically at the depot; the owner keeps title until a paid withdrawal "
+                        "is unloaded. " if village_depot.enabled(world) else "")
+                     + ("Ada: replenish the separate feed store from unreserved farm grain and hay before the "
+                        "cow or hens run short, by carrying and unloading real feed there. "
+                        if village_depot.feed_store_enabled(world) else "")
                      +
                      "Each partner must explicitly choose village_urgent_work to override bedtime until 02:00. "
                      "Hunger and tiredness slowdowns stack; tea relieves tiredness but never replaces sleep."
@@ -192,8 +202,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
     if village_replenishment.personal(world):
         add(village_replenishment.CANCEL, "Cancel your own outstanding replenishment plan; no supplies move.", {})
     add("village_observe", "Check local tools and correct your own stale location beliefs.", {})
-    if config.time_based_turns and world.scenario.id == "millhaven-living":
-        from npc_sim import village_walking
+    if village_walking.enabled(world):
         plan = state.residents[rid].walking_plan
         if not plan or village_walking._interruption(world, plan) or village_walking._blocked_step(world, plan):
             destinations = [eid for eid, entity in world.state.entities.items()
@@ -232,10 +241,13 @@ def actions(world: "World") -> list[dict[str, Any]]:
             add("village_start_route", "Drive the automatic farm, mill, bakery, tavern, square supply circuit.", {})
             add("village_stop_route", "Park the wagon here, retaining all cargo.", {})
             add("village_drive_wagon", "Take the wagon for manual driving; go actions move both you and the wagon.", {})
-            add("village_load_wagon", "Load mixed goods into the six-unit wagon in one action.",
+            from npc_sim import village_equipment
+            wagon_capacity = village_equipment.transport_capacity(world, 6)
+            add("village_load_wagon", f"Load mixed goods into the {wagon_capacity}-unit wagon in one action.",
                 {"destination": {"type": "string", "enum": sorted({r.work for r in config.residents.values()})},
                  "goods": {"type": "object", "minProperties": 1,
-                           "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 6}}})
+                           "additionalProperties": {"type": "integer", "minimum": 1,
+                                                    "maximum": wagon_capacity}}})
             add("village_unload_wagon", "Unload all cargo for this destination in one action; settle actual payments.", {})
         meetings = []
         if rid in {config.smith, config.helper}:
@@ -282,11 +294,11 @@ def actions(world: "World") -> list[dict[str, Any]]:
                 {"goods": {"type": "object", "minProperties": 1,
                            "propertyNames": {"enum": sorted(depot_goods)},
                            "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}}})
-            if rid == config.livestock.keeper:
-                add("village_store_feed", "Carry unreserved farm grain and hay to the separate livestock feed store.",
-                    {"goods": {"type": "object", "minProperties": 1,
-                               "propertyNames": {"enum": ["grain", "hay"]},
-                               "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}}})
+        if village_depot.feed_store_enabled(world) and rid == config.livestock.keeper:
+            add("village_store_feed", "Carry unreserved farm grain and hay to the separate livestock feed store.",
+                {"goods": {"type": "object", "minProperties": 1,
+                           "propertyNames": {"enum": ["grain", "hay"]},
+                           "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}}})
         add("village_buy_iron", "Collect the visiting trader's iron consignment at noon; the forge pays three coins per unit on delivery.",
             {"quantity": {"type": "integer", "minimum": 1, "maximum": 3}})
         add("village_drink_tea", "Buy or use actual local tea to relieve today's tiredness, not hunger or the need to sleep.", {})
@@ -373,6 +385,10 @@ def production_ready(world: "World", action: str) -> tuple[str, str] | None:
         return "WORK_COOLDOWN", f"Your next batch is ready at {village.clock_time(person.next_work)}."
     if job.equipment and world.state.entities[job.equipment].broken:
         return "EQUIPMENT_BROKEN", "The equipment needs a physical repair."
+    if state.equipment is not None:
+        from npc_sim import village_equipment
+        if job.equipment and village_equipment.equipment_reserved(world, job.equipment):
+            return "EQUIPMENT_UPGRADE", "The production equipment is reserved for an active upgrade."
     if config.expanded_rules and world.actor_id == config.helper and world.state.entities["work-horse"].location != job.location:
         return "HORSE_NOT_HERE", "The working horse must actually be at the stable to be fed."
     stock = state.stocks.get(job.location, {})
@@ -550,7 +566,12 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         if job is None:
             raise ValueError("Validated production has no job")
         stock = state.stocks.setdefault(job.location, {})
-        batches = min(job.batch_size, min((stock.get(resource, 0) // amount
+        duration, equipment_batch_size = job.duration, job.batch_size
+        if state.equipment is not None:
+            from npc_sim import village_equipment
+            duration, equipment_batch_size = village_equipment.production_profile(
+                world, job.equipment, job.duration, job.batch_size)
+        batches = min(equipment_batch_size, min((stock.get(resource, 0) // amount
                                            for resource, amount in job.inputs.items()), default=1))
         if state.economy is not None:
             from npc_sim import village_economy
@@ -561,7 +582,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         outputs = {resource: amount * batches for resource, amount in job.outputs.items()}
         for resource, amount in inputs.items():
             village_goods.take(world, job.location, resource, amount)
-        interval = job.interval
+        interval = max(5, int(job.interval * duration / job.duration / 5) * 5)
         if config.expanded_rules and rid == config.helper:
             state.horse_fed_day = state.minute // 1440
         if config.expanded_rules and rid == "ada" and action == "village_work" and person.fertilized_harvests:
@@ -585,7 +606,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             if person.life is None:
                 raise ValueError("Committed work requires persistent daily-life state")
             person.life.work = VillageCommittedWork(
-                location=job.location, finishes_at=state.minute + job.duration,
+                location=job.location, finishes_at=state.minute + duration,
                 outputs=outputs, equipment=job.equipment, ingredients=list(job.inputs))
             return done("BATCH_STARTED", f"Started a non-interruptible batch, finishing at "
                         f"{village.clock_time(person.life.work.finishes_at)}; consumed {inputs}.")
@@ -757,8 +778,7 @@ def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
         origin = door.destination if door.location == destination else door.location
         if origin is not None:
             village_fallback.record_location_transition(world, origin, destination)
-            if world.scenario.id == "millhaven-living" and config.time_based_turns:
-                from npc_sim import village_walking
+            if village_walking.enabled(world):
                 village_walking.advance(world, origin, destination)
     if (action == "go" and state.wagon and state.wagon.driver == world.actor_id
             and not state.wagon.automatic):

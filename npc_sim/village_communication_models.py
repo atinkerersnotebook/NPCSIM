@@ -20,6 +20,7 @@ class CommunicationModel(BaseModel):
 class VillageCommunicationConfig(CommunicationModel):
     board_id: Text = "noticeboard"
     workplace_boxes: bool = True
+    instant_messages: bool = False
     max_hops: Positive = Field(default=8, le=8)
     cooldown_minutes: Positive = Field(default=15, le=1440)
 
@@ -75,7 +76,7 @@ class NoticeVersion(CommunicationModel):
 class NoticeKnowledge(CommunicationModel):
     snapshot: NoticeVersion
     heard_at: Number
-    source_type: Literal["noticeboard", "inbox", "conversation", "author", "witness"]
+    source_type: Literal["noticeboard", "inbox", "conversation", "author", "witness", "remote", "tin_can"]
     source_actor: Text | None = None
     confidence: Literal["direct", "secondhand"] = "direct"
     source_chain: list[Text] = Field(default_factory=list, max_length=4)
@@ -115,7 +116,7 @@ class VillageCommunicationState(CommunicationModel):
 
 
 class Channel(CommunicationModel):
-    channel: Literal["board", "inbox", "conversation"] = "board"
+    channel: Literal["board", "inbox", "conversation", "tin_can", "remote"] = "board"
     inbox_id: Text | None = None
     listener: Text | None = None
 
@@ -270,10 +271,18 @@ class ListenerCandidates(CommunicationModel):
     candidates: list[ShareCandidate]
 
 
+class CommunicationNetwork(CommunicationModel):
+    name: str
+    hub: str
+    stations: list[str]
+    lines: Number
+
+
 class CommunicationView(CommunicationModel):
     enabled: bool
     scope: str
     policy: str
+    network: CommunicationNetwork | None = None
     notices: list[CommunicationNoticeView]
     boxes: list[InboxView]
     share_candidates: list[ListenerCandidates]

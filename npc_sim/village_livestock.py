@@ -412,7 +412,7 @@ def apply(world, action, args, *, collection_preview=False):
         grain, scraps = village_recycling.hen_ration(world)
         resource, amount = ("hay", 1) if operation == "cow" else ("grain", grain)
         from npc_sim import village_depot
-        feed_site = village_depot.FEED_STORE if village_depot.enabled(world) else "farm"
+        feed_site = village_depot.FEED_STORE if village_depot.feed_store_enabled(world) else "farm"
         protected = village_economy.protected_quantity(world, feed_site, resource)
         if resource == "hay" and town.horse_fed_day < town.minute // 1440:
             horse_stock = village_economy.usable_stock(world, base.residents[base.helper].work, "hay", town.minute)
@@ -508,7 +508,7 @@ def observation(world):
     state = _state(world)
     from npc_sim import village_depot
     feed_note = (" Feed for cow and hens is consumed from the separate farm feed store; Ada must carry unreserved farm hay and grain there using village_store_feed and unload it."
-                 if village_depot.enabled(world) else "")
+                 if village_depot.feed_store_enabled(world) else "")
     return {"livestock": {"enabled": state.config.enabled, "keeper": state.config.keeper,
                          "hen_count": state.config.hens, "cow": state.cow.model_dump(), "hens": state.hens.model_dump(),
                          "bucket_water": state.water,

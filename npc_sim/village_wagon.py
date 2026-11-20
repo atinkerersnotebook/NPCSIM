@@ -15,6 +15,8 @@ VERBS = {"village_fit_wagon", "village_start_route", "village_stop_route",
 
 def load(world: "World", goods: dict[str, int], destination: str) -> str | None:
     config, state = village.context(world)
+    from npc_sim import village_equipment
+    capacity = village_equipment.transport_capacity(world, 6)
     wagon = state.wagon
     if wagon is None:
         raise ValueError("This village has no wagon ledger")
@@ -23,7 +25,7 @@ def load(world: "World", goods: dict[str, int], destination: str) -> str | None:
             raise ValueError("A goods load has no active wagon driver")
         blocked = village_economy.load_blocker(world, village.resident_location(world, wagon.driver),
                                                destination, goods)
-        return blocked if blocked else village_goods.load(world, wagon.driver, goods, destination, wagon.loads, 6)
+        return blocked if blocked else village_goods.load(world, wagon.driver, goods, destination, wagon.loads, capacity)
     source = village.resident_location(world, config.courier)
     sellers = [rid for rid, resident in config.residents.items() if resident.work == source]
     buyers = [rid for rid, resident in config.residents.items() if resident.work == destination]
@@ -31,8 +33,8 @@ def load(world: "World", goods: dict[str, int], destination: str) -> str | None:
         return "Choose a different workplace with an identifiable buyer and seller."
     if any(resource not in config.prices or amount <= 0 for resource, amount in goods.items()) or not goods:
         return "Choose positive quantities of actual priced goods."
-    if sum(goods.values()) + sum(item.quantity for item in wagon.loads) > 6:
-        return "The wagon holds at most six units, including mixed goods already aboard."
+    if sum(goods.values()) + sum(item.quantity for item in wagon.loads) > capacity:
+        return f"The wagon holds at most {capacity} units, including mixed goods already aboard."
     stock = state.stocks.get(source, {})
     if any(stock.get(resource, 0) < amount for resource, amount in goods.items()):
         return "The source does not have the requested stock; nothing was loaded."
@@ -198,6 +200,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
 
 
 def advance(world: "World") -> None:
+    from npc_sim import village_equipment
     config, state = village.context(world)
     wagon = state.wagon
     if wagon is None or not wagon.automatic or state.minute < wagon.next_event_at:
@@ -320,7 +323,7 @@ def advance(world: "World") -> None:
         if not route:
             continue
         amount = min(state.stocks.get(location, {}).get(route.resource, 0),
-                     6 - sum(item.quantity for item in wagon.loads))
+                     village_equipment.transport_capacity(world, 6) - sum(item.quantity for item in wagon.loads))
         if amount:
             reason = load(world, {route.resource: amount}, route.destination)
             if reason:

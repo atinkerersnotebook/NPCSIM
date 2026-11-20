@@ -157,6 +157,18 @@ consumption such as meals or maintenance.
 
 ### Live town map
 
+Open **Millhaven Scene** in World view (`/?view=world#monitor-scene`) for a
+scrollable, high-resolution [orthographic village map](./ui/src/assets/millhaven-map.png)
+with full-body residents and visitors.
+Drag the terrain, use touch scrolling, or focus the scene and press the arrow keys
+to pan after zooming in. By default the uncropped illustration spans the page width;
+scroll the page to see the rest if the image is taller than the screen. Use **Fit
+scene** to return to full width or **Center village** to recenter while zoomed.
+Select a character to inspect their activity. Hover or focus a gold location marker
+for site stock and supply orders, even when no characters are present. The scene
+uses artwork-specific landmark positions based on the
+annotated reference, with approximate placements for unlabeled sites.
+
 World view displays the extended Millhaven illustration with named residents and
 present visitors grouped at their authoritative building/location. Select a marker
 for activity details; use the map zoom buttons and scroll to explore. Placement is
@@ -534,6 +546,48 @@ upstream (inn to baker, baker to miller, miller to farmer). The supplier separat
 accepts or rejects the proposed commitment. NPCs see their own buying/selling
 orders; the monitoring dashboard retains the global ledger. Deliveries still
 require real goods, collection and travel.
+
+#### Tin-cans-and-string communication test scenario
+
+Choose **Millhaven - Tin Cans and String Test** for a separate, opt-in
+`millhaven-instant` adventure derived from the current Living Millhaven setup.
+Each named location has a tin-can station, connected by taut string lines to the
+Village Square hub. A resident speaks into the local can and the named recipient
+hears the message immediately at their own station.
+Supply requests, crew appointments, replies and revisions sent through the
+intent actions immediately reach their named recipients, even at another
+location. Recipients still take their own turns to accept or reject. Sending
+is a normal five-minute actor action; receipt does not move or interrupt a
+resident's physical work or sleep. Messages do not expose remote inventory or
+whereabouts. Materials, production, travel, delivery, payment, meals, sleep,
+and in-person project work retain the Living Millhaven rules. Elsie's tavern
+also houses the communal kitchen, using the existing cooking and meal service.
+The communal granary and supply depot by the square starts empty: residents can
+physically deposit unreserved supplies and pay the owner when they deliver a
+withdrawal to their workplace. Physical communication channels remain available.
+The ordinary Living scenario and existing saves are not changed; start a new
+Tin Cans and String adventure to see the additions. The network is scenario
+machinery, not a claim that cans transmit
+actual physical goods or reveal anyone's current location.
+
+To compare long runs, start fresh `millhaven-living` and `millhaven-instant`
+adventures from matching frozen starting scenarios and use the same cast, model,
+proxy, run settings and day limit. Keep their saves and histories separate.
+Record wall-clock time, game days, action attempts, model calls, spending,
+deliveries, meals and blockers for each run. Account for depot use when comparing
+these scenarios: it is another difference from ordinary Living Millhaven.
+Repeat runs before drawing a conclusion; neither a speedup nor full-day success
+has been established. The instant version does
+not test physical communication or local-news propagation. Run-until-complete
+can incur uncapped model charges, and `stop_after_days` does not fast-forward.
+
+To regenerate the test fixture after intentionally updating Living Millhaven:
+
+```powershell
+.\.venv\Scripts\python.exe -m npc_sim.living_village --instant-from-living --base data\scenarios\millhaven-living.json --output data\scenarios\millhaven-instant.json --force
+```
+
+This overwrites only the specified scenario fixture, not existing adventures.
 
 #### Physical village communication (Phases 1 and 2)
 

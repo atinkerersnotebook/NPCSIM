@@ -187,6 +187,8 @@ const communicationAppointmentSchema = z.object({
 });
 export const communicationSchema = z.object({
   enabled: z.boolean(), scope: z.string(), policy: z.string(),
+  network: z.object({ name: z.string(), hub: z.string(), stations: z.array(z.string()),
+    lines: z.number().int().nonnegative() }).nullable().optional(),
   notices: z.array(z.object({
     id: z.string(), version: z.number().int().positive(), author: z.string(),
     recipients: z.array(z.string()), recipient_ids: z.array(z.string()).optional(),
@@ -253,6 +255,16 @@ export const villageObservationSchema = z.object({
   maintenance: z.object({
     enabled: z.boolean(), jobs: z.array(villageMaintenanceSchema), policy: z.string()
   }).optional(),
+  equipment: z.object({
+    enabled: z.boolean(), policy: z.string(), assets: z.array(z.object({
+      id: z.string(), entity: z.string(), location: z.string(), category: z.string(),
+      communal: z.boolean(), owner: z.string().nullable(), tier: z.number().int().nonnegative(),
+      tier_name: z.string(), duration_factor: z.number(), batch_size: z.number().int().positive(),
+      capacity: z.number().int().nonnegative(), fuel_factor: z.number(), next_tier: z.string().nullable(),
+      upgrade_cost: z.number().int().nonnegative().nullable(), upgrade_supplies: z.record(z.string(), z.number().int()),
+      upgrade_finishes_at: z.number().int().nonnegative().nullable()
+    }))
+  }).optional(),
   minute: z.number().int().nonnegative(), day: z.number().int().positive(), time: z.string(),
   residents: z.array(z.object({
     id: z.string(), name: z.string(), occupation: z.string(), activity: z.string()
@@ -300,6 +312,12 @@ const villageDashboardSchema = z.object({
   communication: communicationSchema.nullable().optional(),
   research: z.array(villageResearchSchema).optional(),
   maintenance: z.array(villageMaintenanceSchema).optional(),
+  equipment: z.array(z.object({
+    id: z.string(), entity: z.string(), location: z.string(), category: z.string(), communal: z.boolean(),
+    owner: z.string().nullable(), tier: z.number().int().nonnegative(), tier_name: z.string(),
+    duration_factor: z.number(), batch_size: z.number().int().positive(), capacity: z.number().int().nonnegative(),
+    fuel_factor: z.number(), upgrade_worker: z.string().nullable(), upgrade_finishes_at: z.number().int().nonnegative().nullable()
+  })).optional(),
   orders: z.array(z.object({
     id: z.string(), buyer: z.string(), seller: z.string(), product: z.string(),
     quantity: z.number().int().nonnegative(), delivered: z.number().int().nonnegative(),

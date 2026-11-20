@@ -2,13 +2,13 @@ from typing import TYPE_CHECKING, Any
 
 from npc_sim import village, village_economy, village_events, village_social, village_maintenance, village_research, village_mining, village_livestock
 from npc_sim.models import VillageConfigurationPatch, VillageDashboard, VillageDayPolicy, VillageTimeUse
-from npc_sim import village_communication, village_firewood, village_legacy
+from npc_sim import village_communication, village_firewood, village_legacy, village_equipment
 
 if TYPE_CHECKING:
     from npc_sim.world import World
 
 
-VERBS = village_economy.VERBS | village_events.VERBS | village_social.VERBS | village_maintenance.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | village_legacy.VERBS | {"village_wait_event"}
+VERBS = village_economy.VERBS | village_events.VERBS | village_social.VERBS | village_maintenance.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | village_legacy.VERBS | village_equipment.VERBS | {"village_wait_event"}
 
 
 def policy(world: "World") -> VillageDayPolicy:
@@ -26,6 +26,7 @@ def modules(world: "World") -> list[Any]:
         (village_research, state.research),
         (village_mining, state.mining),
         (village_livestock, state.livestock),
+        (village_equipment, state.equipment),
         (village_communication, state.communication),
         (village_firewood, state.firewood),
         (village_legacy, state.legacy),
@@ -165,6 +166,8 @@ def account_time(world: "World", minutes: int) -> None:
             category = "work"
         elif state.livestock is not None and village_livestock.blocked_until(world, rid) is not None:
             category = "work"
+        elif state.equipment is not None and village_equipment.blocked_until(world, rid) is not None:
+            category = "work"
         elif state.wagon and state.wagon.automatic and state.wagon.driver == rid:
             if state.wagon.phase == "travel":
                 category = "travel"
@@ -209,6 +212,7 @@ def blocked_until(world: "World", rid: str) -> int | None:
         village_research.blocked_until(world, rid) if state.research is not None else None,
         village_mining.blocked_until(world, rid) if state.mining is not None else None,
         village_livestock.blocked_until(world, rid) if state.livestock is not None else None,
+        village_equipment.blocked_until(world, rid) if state.equipment is not None else None,
     ]
     return min((time for time in times if time is not None), default=None)
 
@@ -267,7 +271,8 @@ def configure(world: "World", request_id: str, revision: str, patch: dict[str, A
             for field, module in (("economy", village_economy), ("social", village_social),
                                   ("events", village_events), ("maintenance", village_maintenance),
                                   ("research", village_research), ("mining", village_mining), ("livestock", village_livestock),
-                                  ("communication", village_communication), ("firewood", village_firewood)):
+                                  ("communication", village_communication), ("firewood", village_firewood),
+                                  ("equipment", village_equipment)):
                 value = getattr(parsed, field)
                 if value is not None:
                     module.configure(world, value.model_dump(mode="json"))

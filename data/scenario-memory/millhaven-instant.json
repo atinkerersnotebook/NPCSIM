@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "millhaven-instant",
+  "failures": [
+    {
+      "run_id": "92f293402abd49d39298f6bc3d3cd7e1",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real firewood, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Keep occupied cottage hearths and working ovens/forge supplied with paid, physically delivered firewood. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-19T23:07:29.493228+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: shovel recovered, well dug, mill repaired, bread supply resumed, every resident contributed, evening reached, everyone fed, everyone home, everyone asleep, resource reserves ready.",
+          "evidence_ids": [
+            "92f293402abd49d39298f6bc3d3cd7e1:2767"
+          ]
+        },
+        {
+          "reason": "The wagon was working, but the shovel was not recovered, the well was not dug, the mill repair did not pass verification, and bread supply had not resumed.",
+          "evidence_ids": [
+            "92f293402abd49d39298f6bc3d3cd7e1:2767"
+          ]
+        },
+        {
+          "reason": "The attempt ended at 08:40, before the 19:00 supper. The supper, resident contribution, home, and sleep checks did not pass.",
+          "evidence_ids": [
+            "92f293402abd49d39298f6bc3d3cd7e1:2764",
+            "92f293402abd49d39298f6bc3d3cd7e1:2767"
+          ]
+        },
+        {
+          "reason": "The woodlot had one usable unit of timber against a configured reserve of two.",
+          "evidence_ids": [
+            "92f293402abd49d39298f6bc3d3cd7e1:2767"
+          ]
+        }
+      ]
+    }
+  ]
+}

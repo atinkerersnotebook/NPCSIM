@@ -140,8 +140,8 @@ def validate_config(scenario: Scenario) -> None:
     if reachable != locations:
         raise ValueError("All village locations must have connected, initially passable routes")
     from npc_sim import village_economy, village_social, village_events, village_maintenance, village_research, village_mining, village_livestock
-    from npc_sim import village_communication, village_firewood, village_depot, village_legacy
-    for module in (village_economy, village_social, village_events, village_maintenance, village_research, village_mining, village_livestock, village_communication, village_firewood, village_depot, village_legacy):
+    from npc_sim import village_communication, village_firewood, village_depot, village_legacy, village_equipment
+    for module in (village_economy, village_social, village_events, village_maintenance, village_research, village_mining, village_livestock, village_communication, village_firewood, village_depot, village_legacy, village_equipment):
         module.validate_config(scenario)
     if config.breakfast and not config.daily_life:
         raise ValueError("Breakfast requires daily life")
@@ -154,7 +154,7 @@ def initial_state(scenario: Scenario) -> VillageState:
     config = scenario.village
     if config is None:
         raise ValueError("Missing village configuration")
-    from npc_sim import village_communication, village_firewood, village_legacy
+    from npc_sim import village_communication, village_firewood, village_legacy, village_equipment
     from npc_sim import village_depot
     feed_lots = {}
     if scenario.id in village_depot.MANAGED_SCENARIOS and village_depot.FEED_STORE in scenario.entities:
@@ -188,6 +188,7 @@ def initial_state(scenario: Scenario) -> VillageState:
         research=village_research.initial_state(scenario),
         mining=village_mining.initial_state(scenario),
         livestock=village_livestock.initial_state(scenario),
+        equipment=village_equipment.initial_state(scenario),
         residents={rid: VillagePersonState(
             beliefs={belief.subject: belief.model_copy(deep=True) for belief in resident.beliefs},
             trust=resident.relationships.copy(), busy_until=resident.busy_until, available_at=config.start_minute,

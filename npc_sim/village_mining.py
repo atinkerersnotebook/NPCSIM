@@ -270,6 +270,9 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             or state.wagon and state.wagon.driver == world.actor_id):
         return "REJECTED", "WORK_COMMITTED", "Finish work, routes and animal commitments first.", None
     minutes = mining.config.mining_minutes if operation == "mine" else mining.config.smelting_minutes
+    if state.equipment is not None:
+        from npc_sim import village_equipment
+        minutes, _ = village_equipment.production_profile(world, equipment, minutes, 1)
     end = state.minute + minutes * village_life.cooldown_factor(world, world.actor_id)
     home = village.route(world, location, resident.home)
     if home is None or end + 5 * len(home) + 5 > state.minute // 1440 * 1440 + resident.bed_minute:

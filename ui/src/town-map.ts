@@ -4,34 +4,13 @@ import { escape } from "./html.ts";
 import { villageClockTime } from "./view-mode.ts";
 import { actorDetailsMarkup, siteStockText } from "./actor-details.ts";
 import { npcPortrait, npcSprite } from "./npc-sprite.ts";
+import { sceneAnchors, sceneHeight, sceneTerrain, sceneWidth } from "./millhaven-orthographic.ts";
+
+import { townMapAnchors as mapAnchors, townMapWidth as mapWidth, townMapHeight as mapHeight } from "./millhaven-geography.ts";
 
 const mapImage = new URL("./assets/millhaven-extended.png", import.meta.url).href;
-const mapWidth = 1123;
-const mapHeight = 768;
 const bubbleDuration = 18_000;
-
-// Pixel anchors on the supplied 1123 x 768 illustration, not simulated indoor coordinates.
-export const townMapAnchors: Readonly<Record<string, { x: number; y: number }>> = {
-  "village-square": { x: 552, y: 443 },
-  forge: { x: 362, y: 370 },
-  stable: { x: 315, y: 265 },
-  watermill: { x: 972, y: 333 },
-  "mill-shed": { x: 1070, y: 349 },
-  farm: { x: 647, y: 214 },
-  "general-store": { x: 546, y: 344 },
-  workshop: { x: 362, y: 485 },
-  tavern: { x: 628, y: 628 },
-  bakery: { x: 704, y: 475 },
-  cottages: { x: 303, y: 612 },
-  "herbal-workshop": { x: 397, y: 606 },
-  woods: { x: 1015, y: 190 },
-  bridge: { x: 833, y: 421 },
-  riverbank: { x: 847, y: 228 },
-  "tavern-yard": { x: 803, y: 603 },
-  "supply-depot": { x: 737, y: 378 },
-  "farm-feed-store": { x: 651, y: 298 },
-  "iron-mine": { x: 117, y: 280 }
-};
+export const townMapAnchors: Readonly<Record<string, { x: number; y: number }>> = mapAnchors;
 
 export interface MapAgent {
   id: string;
@@ -106,6 +85,7 @@ export class TownDialogue {
 }
 
 export interface TownMapOptions {
+  presentation?: "map" | "scene";
   zoom?: number;
   selectedActorId?: string;
   dialogue?: TownDialogue;
@@ -164,14 +144,21 @@ function locationSupplyMarkup(state: State, locationId: string): string {
 export function townMapMarkup(state: State, agents: readonly MapAgent[], options: TownMapOptions = {}): string {
   if (!state.world?.village) return "";
   const { world } = state;
+  const scene = options.presentation === "scene";
+  const prefix = scene ? "scene" : "town";
+  const anchors = scene ? sceneAnchors : townMapAnchors;
+  const width = scene ? sceneWidth : mapWidth;
+  const height = scene ? sceneHeight : mapHeight;
   const zoom = options.zoom ?? 1;
+  const canvasStyle = scene ? `width:${zoom * 100}%;--scene-zoom:${zoom}`
+    : `width:min(${zoom * 100}%,${zoom * 113}vh);min-width:${zoom * 834}px`;
   const lines = options.dialogue?.lines ?? [];
   const active = options.dialogue?.active(options.now ?? Date.now()) ?? [];
   const present = agents.filter(agent => !agent.visitor || agent.current);
   const groups = new Map<string, MapAgent[]>();
   const offMap: MapAgent[] = [];
   for (const agent of present) {
-    if (!agent.current || !Object.hasOwn(townMapAnchors, agent.locationId)
+    if (!agent.current || !Object.hasOwn(anchors, agent.locationId)
       || world.entities[agent.locationId]?.kind !== "location") {
       offMap.push(agent);
       continue;
@@ -180,12 +167,12 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
     group.push(agent);
     groups.set(agent.locationId, group);
   }
-  const actorButton = (agent: MapAgent) => `<span class="town-map-actor-wrap"><button type="button"
-    class="town-map-actor${agent.deciding ? " deciding" : ""}${agent.visitor ? " visitor" : ""}"
-    data-map-actor="${escape(agent.id)}" aria-pressed="${agent.id === options.selectedActorId}"
-    aria-label="${escape(`${agent.name}, ${agent.location}. Select for details`)}" aria-describedby="town-actor-${escape(agent.id)}">
-    ${npcSprite(agent.id)}
-    <span>${escape(agent.name)}</span></button><span id="town-actor-${escape(agent.id)}" class="actor-details-popover" role="tooltip">
+  const actorButton = (agent: MapAgent, onScene = false) => `<span class="town-map-actor-wrap"><button type="button"
+    class="town-map-actor${onScene ? " scene-actor" : ""}${agent.deciding ? " deciding" : ""}${agent.visitor ? " visitor" : ""}"
+    ${scene ? "data-scene-actor" : "data-map-actor"}="${escape(agent.id)}" aria-pressed="${agent.id === options.selectedActorId}"
+    aria-label="${escape(`${agent.name}, ${agent.location}. Select for details`)}" aria-describedby="${prefix}-actor-${escape(agent.id)}">
+    ${npcSprite(agent.id, onScene)}
+    <span>${escape(agent.name)}</span></button><span id="${prefix}-actor-${escape(agent.id)}" class="actor-details-popover" role="tooltip">
       <strong>${escape(agent.name)}${agent.visitor ? " / Visitor" : ""}</strong>
       ${actorDetailsMarkup(state, agent)}</span></span>`;
   const nameOf = (id: string) => agents.find(agent => agent.id === id)?.name
@@ -196,44 +183,45 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
   const selectedLine = selected ? lines.filter(line => line.actorId === selected.id).at(-1) : undefined;
   const traderEnquiries = world.village!.events.filter(event => event.actor === "iron-trader"
     && event.action === "visitor_trade_enquiry").slice(-8).reverse();
-  return `<section class="town-map" aria-label="Live Millhaven town map">
+  return `<section class="town-map${scene ? " town-scene" : ""}" aria-label="Live Millhaven ${scene ? "scene" : "town map"}">
     <div class="town-map-heading"><div><span class="eyebrow">MILLHAVEN / LIVE LOCATIONS</span>
-      <h2>Town map</h2></div>
-      <div class="town-map-tools" role="group" aria-label="Map zoom">
-        <button type="button" class="button" data-map-zoom="out" ${zoom <= 1 ? "disabled" : ""} aria-label="Zoom map out">-</button>
-        <output aria-label="Map zoom level">${Math.round(zoom * 100)}%</output>
-        <button type="button" class="button" data-map-zoom="in" ${zoom >= 3 ? "disabled" : ""} aria-label="Zoom map in">+</button>
-        <button type="button" class="button" data-map-zoom="fit">Fit map</button>
+      <h2>${scene ? "Millhaven Scene" : "Town map"}</h2></div>
+      <div class="town-map-tools" role="group" aria-label="${scene ? "Scene" : "Map"} zoom">
+        <button type="button" class="button" data-map-zoom="out" ${zoom <= 1 ? "disabled" : ""} aria-label="Zoom ${scene ? "scene" : "map"} out">-</button>
+        <output aria-label="${scene ? "Scene" : "Map"} zoom level">${Math.round(zoom * 100)}%</output>
+        <button type="button" class="button" data-map-zoom="in" ${zoom >= 3 ? "disabled" : ""} aria-label="Zoom ${scene ? "scene" : "map"} in">+</button>
+        <button type="button" class="button" data-map-zoom="fit">${scene ? "Fit scene" : "Fit map"}</button>
+        ${scene ? '<button type="button" class="button" data-scene-center>Center village</button>' : ""}
       </div>
     </div>
-    <p class="town-map-help">Actual recorded locations; markers are grouped at buildings, not exact indoor positions.
-      Hover or focus a location for its site stock, supply requests and outstanding orders; select a character for details.
-      Scroll to explore; zoom for a closer look.
+    <p class="town-map-help">${scene ? "Drag the terrain, scroll, or focus the scene and use the arrow keys to explore. Hover or focus a gold marker for the location name and site stock. Select a character for details. Positions are approximate."
+      : "Actual recorded locations; markers are grouped at buildings, not exact indoor positions. Hover or focus a location for its site stock, supply requests and outstanding orders; select a character for details. Scroll to explore; zoom for a closer look."}
       Speech bubbles show confirmed spoken words for 18 seconds, never private thoughts.</p>
-    <div class="town-map-scroll" tabindex="0" role="region" aria-label="Scrollable town map">
-      <div class="town-map-canvas" style="width:min(${zoom * 100}%,${zoom * 113}vh);min-width:${zoom * 834}px">
-        <img src="${escape(mapImage)}" width="${mapWidth}" height="${mapHeight}" alt="Illustrated map of Millhaven, with Torvin's iron mine, village square, farms, workshops, tavern and river." draggable="false">
-        ${Object.entries(townMapAnchors).filter(([id]) => world.entities[id]?.kind === "location")
+    <div class="town-map-scroll${scene && zoom === 1 ? " scene-fit" : ""}" tabindex="0" role="region" aria-label="Scrollable ${scene ? "Millhaven scene" : "town map"}">
+      <div class="town-map-canvas" style="${canvasStyle}">
+        ${scene ? sceneTerrain : `<img src="${escape(mapImage)}" width="${mapWidth}" height="${mapHeight}" alt="Illustrated map of Millhaven, with Torvin's iron mine, village square, farms, workshops, tavern and river." draggable="false">`}
+        ${Object.entries(anchors).filter(([id]) => world.entities[id]?.kind === "location")
+          .sort(([, a], [, b]) => scene ? a.y - b.y : 0)
           .map(([locationId, anchor]) => {
           const group = groups.get(locationId) ?? [];
           const name = world.entities[locationId].name;
           const stock = world.village!.stocks[locationId];
           const bubbles = active.filter(line => line.locationId === locationId
             && group.some(agent => agent.id === line.actorId));
-          return `<div class="town-map-place${anchor.y < 240 ? " bubbles-below" : ""}${anchor.x < 160 ? " align-left" : anchor.x > 860 ? " align-right" : ""}"
-            style="left:${anchor.x / mapWidth * 100}%;top:${anchor.y / mapHeight * 100}%"
+          return `<div class="town-map-place${anchor.y < 240 ? " bubbles-below" : ""}${anchor.x < 160 ? " align-left" : anchor.x > width - (scene ? 200 : 263) ? " align-right" : ""}"
+            style="left:${anchor.x / width * 100}%;top:${anchor.y / height * 100}%"
             data-map-location="${escape(locationId)}">
             ${bubbles.length ? `<div class="town-map-bubbles" aria-live="polite">
               ${bubbles.map(line => `<div class="town-map-bubble" data-map-speech="${escape(line.id)}">${lineMarkup(line)}</div>`).join("")}
             </div>` : ""}
-            <span class="town-map-location-wrap"><button type="button" class="town-map-location"
-              aria-label="${escape(`${name}. Current site stock`)}" aria-describedby="town-stock-${escape(locationId)}">
-              ${escape(name)}${group.length ? ` / ${group.length}` : ""}</button>
-              <span id="town-stock-${escape(locationId)}" class="actor-details-popover town-map-stock" role="tooltip">
+            <span class="town-map-location-wrap${scene ? " scene-location-wrap" : ""}"><button type="button" class="town-map-location${scene ? " scene-location" : ""}"
+              data-location-marker="${escape(locationId)}" aria-label="${escape(`${name}. Current site stock`)}" aria-describedby="${prefix}-stock-${escape(locationId)}">
+              ${scene ? '<span aria-hidden="true"></span>' : `${escape(name)}${group.length ? ` / ${group.length}` : ""}`}</button>
+              <span id="${prefix}-stock-${escape(locationId)}" class="actor-details-popover town-map-stock" role="tooltip">
                 <strong>${escape(name)}</strong><span>Current site stock: ${escape(stock ? siteStockText(stock) : "No stock recorded")}</span>
                 ${locationSupplyMarkup(state, locationId)}
               </span></span>
-            ${group.length ? `<div class="town-map-cast">${group.map(actorButton).join("")}</div>` : ""}
+            ${group.length ? `<div class="town-map-cast">${group.map(agent => actorButton(agent, scene)).join("")}</div>` : ""}
           </div>`;
         }).join("")}
       </div>

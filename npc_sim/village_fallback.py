@@ -269,7 +269,7 @@ def record_location_transition(world: "World", origin: str, destination: str) ->
     config, state = village.context(world)
     fallback = state.residents[world.actor_id].fallback
     from npc_sim import village_depot
-    if village_depot.enabled(world) and world.actor_id == config.livestock.keeper:
+    if village_depot.feed_store_enabled(world) and world.actor_id == config.livestock.keeper:
         if destination == village_depot.FEED_STORE:
             fallback.feed_store_stock = state.stocks[destination].copy()
             fallback.feed_store_checked_day = state.minute // 1440
@@ -591,7 +591,7 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
             < village_life.production_closing_minute(world, world.actor_id)):
         return choices
     from npc_sim import village_depot
-    if village_depot.enabled(world) and world.actor_id == config.livestock.keeper:
+    if village_depot.feed_store_enabled(world) and world.actor_id == config.livestock.keeper:
         choices.extend(_feed_store_choices(world))
     choices.extend(_egg_negotiation_choices(world))
     if state.research and state.research.config.enabled and state.economy:
@@ -1115,6 +1115,24 @@ def candidates(world: "World") -> list[dict[str, Any]]:
                     choices.append({"task_id": f"maintenance:{job['id']}", "action_id": "village_maintain",
                                     "arguments": args, "priority": "P2",
                                     "reason": "Assigned local maintenance is ready before the next obligation."})
+    if state.equipment is not None:
+        from npc_sim import village_equipment
+        for action in village_equipment.actions(world):
+            for identifier in action["arguments_schema"]["properties"]["asset"]["enum"]:
+                definition = state.equipment.config.assets[identifier]
+                if definition.location != world.actor.location_id:
+                    continue
+                current = state.equipment.assets[identifier].tier
+                if current + 1 >= len(definition.tiers):
+                    continue
+                payers = action["arguments_schema"]["properties"]["payer"]["enum"]
+                payer = definition.owner if definition.owner in payers else payers[0]
+                args = {"asset": identifier, "payer": payer}
+                if action_blocker(world, action["id"], args, check_wait=False) is None:
+                    choices.append({"task_id": f"equipment:{identifier}",
+                                    "action_id": action["id"], "arguments": args,
+                                    "priority": "P4",
+                                    "reason": "A funded local equipment upgrade improves real future capacity."})
     for action in village_ai.actions(world):
         action_id = action["id"]
         if action_id not in village_life.PRODUCTION:
@@ -1347,7 +1365,7 @@ def observation(world: "World") -> dict[str, Any]:
     revision = context_revision(world)
     feed_plan = None
     from npc_sim import village_depot
-    if village_depot.enabled(world) and world.actor_id == world.scenario.village.livestock.keeper:
+    if village_depot.feed_store_enabled(world) and world.actor_id == world.scenario.village.livestock.keeper:
         ration = _feed_ration(world)
         if world.actor.location_id == village_depot.FEED_STORE:
             fallback.feed_store_stock = state.stocks[village_depot.FEED_STORE].copy()

@@ -492,10 +492,20 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
             if (equipment.location != job.location
                     and job.equipment not in world.state.actors[order.supplier].inventory):
                 return {}, "Production equipment cannot be reached at the workplace"
+            if state.equipment is not None:
+                from npc_sim import village_equipment
+                if village_equipment.equipment_reserved(world, job.equipment):
+                    return {}, "Production equipment is reserved for an active upgrade"
         if fuel_world is not None and village_firewood.production_potential(fuel_world, deadline) < missing:
             return {}, "Insufficient timed felling and splitting capacity before delivery"
-        batches = ceil(missing / job.outputs[order.product])
-        interval = max(5, job.interval, job.duration) * village_life.cooldown_factor(world, order.supplier)
+        duration, batch_size = job.duration, job.batch_size
+        if state.equipment is not None:
+            from npc_sim import village_equipment
+            duration, batch_size = village_equipment.production_profile(
+                world, job.equipment, duration, batch_size)
+        upgraded_capacity = batch_size if batch_size > job.batch_size else job.batch_size
+        batches = ceil(missing / (job.outputs[order.product] * upgraded_capacity))
+        interval = max(5, job.interval * duration // job.duration, duration) * village_life.cooldown_factor(world, order.supplier)
         earliest = max(earliest, max((other.production_plan.get("finish", 0) for other in pending), default=0))
         if production_day > state.minute // 1440:
             earliest = max(earliest, production_day * 1440 + resident.wake_minute)
@@ -505,7 +515,7 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
         inputs = {}
         gather_needed = 0
         for product, amount in job.inputs.items():
-            required = batches * amount
+            required = ceil(missing / job.outputs[order.product]) * amount
             reserved = sum(other.production_plan.get(f"input:{product}", 0) for other in pending
                            if other.source == order.source)
             available_input = available_for_order(world, order.source, product, finish) - reserved
@@ -520,7 +530,7 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
             elif available_input < required:
                 return {}, f"Insufficient uncommitted {product} inputs above reserves"
             inputs[f"input:{product}"] = required
-        return {"finish": finish, "output": batches * job.outputs[order.product],
+        return {"finish": finish, "output": missing,
                 "gather:logs": gather_needed, **inputs}, ""
     livestock = state.livestock
     if (livestock and livestock.config.enabled and order.supplier == livestock.config.keeper
@@ -548,7 +558,7 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
         care_finish = max(earliest, day * 1440 + resident.wake_minute) + len(approach) * 5
         if not cared:
             from npc_sim import village_depot, village_recycling
-            feed_site = village_depot.FEED_STORE if village_depot.enabled(world) else "farm"
+            feed_site = village_depot.FEED_STORE if village_depot.feed_store_enabled(world) else "farm"
             resource, amount = ("hay", 1) if operation == "milk" else ("grain", village_recycling.hen_ration(world)[0])
             if not (care_today and care.fed) and (usable_stock(world, feed_site, resource, care_finish) - amount
                                                   < protected_quantity(world, feed_site, resource)):
@@ -1264,7 +1274,9 @@ def _propose(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]
             and fresh // 1440 == state.minute // 1440
             and state.minute > fresh - policy.cooking_lead_minutes - policy.delivery_lead_minutes):
         return "REJECTED", "ORDER_WINDOW_CLOSED", "Milk and eggs need physical delivery and cooking time before service.", None
-    blocked = _contact_attempt(world, supplier)
+    from npc_sim import village_communication
+    blocked = (_speaker_blocker(world, buyer) if village_communication.instant(world)
+               else _contact_attempt(world, supplier))
     if blocked:
         return "REJECTED", blocked[0], blocked[1], None
     destination = base.residents[buyer].work
@@ -1275,10 +1287,10 @@ def _propose(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]
                      if order.request_key == key and order.status not in {"cancelled", "failed", "rejected"}), None)
     if existing:
         return "APPLIED", "ORDER_EXISTS", f"Existing order {existing.id}; no duplicate purchase.", None
-    from npc_sim import village_communication
     if village_communication.enabled(world):
         return village_communication.apply(world, "village_notice_post", {
-            "channel": "conversation", "listener": supplier,
+            **({"channel": "tin_can"} if village_communication.instant(world)
+               else {"channel": "conversation", "listener": supplier}),
             "notice": {"type": "supply_request", "subject": product,
                        "description": f"Please supply {quantity} {product} for my workplace.",
                        "recipients": [supplier], "quantity": quantity, "destination": destination,
@@ -1327,18 +1339,20 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                 return "REJECTED", blocked[0], blocked[1], None
             requests = suggestions(world, personal=True)
             from npc_sim import village_communication
-            lead = "Post one physical request addressed to" if village_communication.enabled(world) else "Find"
+            lead = ("Speak a tin-can request to" if village_communication.instant(world) else
+                    "Post one physical request addressed to" if village_communication.enabled(world) else "Find")
             tail = "" if village_communication.enabled(world) else " and ask in person"
             text = "; ".join(f"{lead} {village.resident_name(world, request['supplier'])}{tail} "
                              f"for {request['quantity']} {request['product']} by "
                              f"{village.clock_time(request['deadline'])}."
                              for request in requests) or "Usable stock and existing commitments cover demand."
             return "APPLIED", "SUPPLIES_PLANNED", text + " No orders were placed.", None
-        blocked = _contact_attempt(world, supplier)
+        from npc_sim import village_communication
+        blocked = (_speaker_blocker(world, rid) if village_communication.instant(world)
+                   else _contact_attempt(world, supplier))
         if blocked:
             return "REJECTED", blocked[0], blocked[1], None
         requests = [request for request in suggestions(world, personal=True) if request["supplier"] == supplier]
-        from npc_sim import village_communication
         if village_communication.enabled(world):
             requests = requests[:1]
         proposed = [_propose(world, request) for request in requests]
@@ -1474,12 +1488,12 @@ def _return_cargo(world: "World", args: dict[str, Any]) -> tuple[str, str, str, 
         shipments = state.residents[world.actor_id].shipments
     economy = _state(world)
     returned = []
+    depot_goods = {item.resource for item in shipments if item.depot_transfer == "deposit"}
     for item in shipments[:]:
         if item.depot_transfer:
             from npc_sim import village_depot
-            source = (world.scenario.village.residents[world.actor_id].work
-                      if item.depot_transfer == "deposit" else
-                      village_depot.FEED_STORE if item.destination == village_depot.FEED_STORE else village_depot.DEPOT)
+            source = (village_depot.workplace(world, world.actor_id, depot_goods)
+                      if item.depot_transfer == "deposit" else village_depot.DEPOT)
             if source != world.actor.location_id:
                 continue
             if any(lot.expires_at is not None and lot.expires_at <= state.minute for lot in item.lots):
@@ -1815,13 +1829,15 @@ def production_blocker(world: "World", action: str, *, personal: bool = False) -
 
 def delivery_runs(world: "World", carrier: str | None = None) -> list[dict[str, Any]]:
     from npc_sim.village_services import foot_capacity
+    from npc_sim import village_equipment
     state, economy = world.state.village, _state(world)
     if economy is None:
         return []
     carrier = carrier or world.actor_id
     wagon = bool(state.wagon and state.wagon.driver == carrier)
     loads = state.wagon.loads if wagon else state.residents[carrier].shipments
-    capacity = (6 if wagon else foot_capacity(world, carrier)) - sum(item.quantity for item in loads)
+    capacity = (village_equipment.transport_capacity(world, 6) if wagon else foot_capacity(world, carrier)) - sum(
+        item.quantity for item in loads)
     location = village.resident_location(world, carrier)
     runs: dict[str, dict[str, Any]] = {}
     for order in sorted(economy.orders.values(), key=lambda order: (order.deadline, order.id)):
@@ -1963,14 +1979,17 @@ def observation(world: "World") -> dict[str, Any]:
         if village_communication.enabled(world):
             report["meal_delivery_forecast"] = [{"service": plan["id"], "due": plan["due"],
                 "shortfall": max(0, plan["remaining_portions"] - plan["covered_portions"]),
-                "blocker": "Check the bakery through a physical channel for stock and a confirmed order."
+                "blocker": ("Speak a tin-can request; acceptance and delivery still require real stock."
+                            if village_communication.instant(world) else
+                            "Check the bakery through a physical channel for stock and a confirmed order.")
                 } for plan in meal_requirements(world)]
         else:
             report["meal_delivery_forecast"] = meal_delivery_forecast(world)
     if _food_policy(world):
         report["meal_delivery_actions"] = meal_delivery_actions(world)
     for request in report["suggestions"]:
-        blocked = _conversation_blocker(world, request["supplier"])
+        blocked = (_speaker_blocker(world, rid) if village_communication.instant(world)
+                   else _conversation_blocker(world, request["supplier"]))
         request["order_availability"] = "blocked" if blocked else "available"
         request["order_reason"] = blocked[1] if blocked else None
         request["order_code"] = blocked[0] if blocked else None
@@ -1985,7 +2004,7 @@ def observation(world: "World") -> dict[str, Any]:
         and project.owner in base.residents and project.location == base.residents[project.owner].work
         and project.location != base.residents[rid].work
     ]
-    report["ordering_guidance"] = village_communication.GUIDANCE if village_communication.enabled(world) else (
+    report["ordering_guidance"] = village_communication.guidance(world) if village_communication.enabled(world) else (
         "Planning alone places no orders. Find each supplier and speak face-to-face using "
         "village_plan_supplies with supplier, or village_propose_order. Suppliers respond "
         "separately to their own proposals; upstream input suggestions also require an in-person request.")
@@ -2025,7 +2044,7 @@ def monitor(world: "World") -> dict[str, Any]:
 
 
 def actions(world: "World") -> list[dict[str, Any]]:
-    from npc_sim import village_research
+    from npc_sim import village_communication, village_research
     economy = _state(world)
     if config(world) is None or economy is None:
         return []
@@ -2047,10 +2066,19 @@ def actions(world: "World") -> list[dict[str, Any]]:
     manual_blocked = (_speaker_blocker(world, world.actor_id) or (
         _conversation_blocker(world, nearby[0]) if nearby else (
             "OUT_OF_REACH", "Find a supplier and speak face-to-face; no supplier is here."))) if not ready else None
-    add("village_plan_supplies", "Read demand suggestions without ordering. With supplier, tell only that present supplier your planned requirements.",
+    if village_communication.instant(world):
+        ready = suppliers
+        manual_blocked = _speaker_blocker(world, world.actor_id)
+    add("village_plan_supplies",
+        ("Read demand suggestions; with supplier, send that resident a tin-can request immediately."
+         if village_communication.instant(world) else
+         "Read demand suggestions without ordering. With supplier, tell only that present supplier your planned requirements."),
         {"supplier": {"type": "string", "enum": suppliers}}, required=[],
         blocked=_speaker_blocker(world, world.actor_id))
-    add("village_propose_order", "Tell a present, awake, available supplier the quantity, price and deadline; supplier accepts separately.",
+    add("village_propose_order",
+        ("Send a supplier a request immediately; the supplier accepts separately and delivery remains physical."
+         if village_communication.instant(world) else
+         "Tell a present, awake, available supplier the quantity, price and deadline; supplier accepts separately."),
         {"supplier": {"type": "string", "enum": ready or suppliers},
          "product": {"type": "string", "enum": sorted(village_research.prices(world))},
          "quantity": {"type": "integer", "minimum": 1},

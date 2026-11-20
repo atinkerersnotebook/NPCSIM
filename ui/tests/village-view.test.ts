@@ -97,6 +97,21 @@ test("commitment UI never describes acceptance as delivery and escapes reply tex
       commitment: { status: "accepted", delivered: 0, paid: 0, buyer: "Jory", supplier: "Mara" }
     }], boxes: [], share_candidates: []
   });
+
+  test("tin-can scenario shows its string network without presenting physical inboxes", () => {
+    const communication = communicationSchema.parse({
+      enabled: true, scope: "operator world view", policy: "Tin cans and string.",
+      network: { name: "Millhaven tin-can-and-string network", hub: "Village Square",
+        stations: ["Bakery", "Forge", "Village Square"], lines: 2 },
+      notices: [], boxes: [{ id: "workplace-inbox-jory", owner: "Jory", place: "Bakery",
+        here: false, can_read: false, notes: 0 }], share_candidates: []
+    });
+    const markup = communicationMarkup(communication, true);
+    for (const text of ["Millhaven tin-can-and-string network", "2 taut-string lines",
+      "Tin-can stations (3)", "Village Square"]) assert.ok(markup.includes(text), text);
+    assert.ok(!markup.includes("Physical workplace inboxes"));
+    assert.ok(!markup.includes("workplace-inbox-jory"));
+  });
   const markup = communicationMarkup(communication);
   assert.ok(markup.includes("0 units unloaded"));
   assert.ok(markup.includes("0 coins paid"));
@@ -1173,8 +1188,8 @@ test("World separates the overview, map, residents, and village systems and omit
   state.world!.village!.dashboard = { orders: [], products: [], accounts: [], projects: [], quests: [], activities: [], incidents: [], visitors: [], time_use: {} };
   const markup = worldMonitorMarkup(state);
   const panels = [...markup.matchAll(/<section id="([^"]+)"[^>]+role="tabpanel"/g)].map(match => match[1]);
-  assert.deepEqual(panels, ["monitor-overview", "monitor-map", "monitor-timeline", "monitor-residents", "monitor-systems"]);
-  assert.match(markup.split('id="monitor-map"')[1].split('id="monitor-timeline"')[0], /class="town-map"/);
+  assert.deepEqual(panels, ["monitor-overview", "monitor-map", "monitor-scene", "monitor-timeline", "monitor-residents", "monitor-systems"]);
+  assert.match(markup.split('id="monitor-map"')[1].split('id="monitor-scene"')[0], /class="town-map"/);
 });
 
 test("World timeline filters recent activity and highlights the selected resident across views", () => {

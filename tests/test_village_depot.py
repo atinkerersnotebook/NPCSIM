@@ -183,6 +183,80 @@ def test_depot_preserves_owner_freshness_and_requires_funded_withdrawal(tmp_path
     assert not village_economy.reconcile_inventory(world)
 
 
+def test_instant_granary_transfers_real_grain_without_a_feed_store(tmp_path):
+    scenario = Scenario.model_validate(json.loads(
+        (ROOT / "data" / "scenarios" / "millhaven-instant.json").read_text(encoding="utf-8")))
+    scenario.village.start_minute = 600
+    scenario.village.breakfast = False
+    for agent in scenario.agents:
+        agent.start_location = scenario.village.residents[agent.id].work
+    farm = World(scenario, tmp_path / "instant.json", "instant", "ada", "session-ada")
+    mill = farm.bind("mara", "session-mara")
+    state = farm.state.village
+    depot = village_depot.DEPOT
+    def walk(resident, destination):
+        person = state.residents[resident.actor_id]
+        if wait := max(0, person.available_at - state.minute):
+            village.advance(resident, wait)
+        applied(resident, "village_plan_walk", destination=destination, purpose="Haul grain")
+        while plan := person.walking_plan:
+            if wait := max(0, person.available_at - state.minute):
+                village.advance(resident, wait)
+            applied(resident, "go", target=plan.doors[plan.next_step])
+        if wait := max(0, person.available_at - state.minute):
+            village.advance(resident, wait)
+        assert resident.actor.location_id == destination
+
+    assert not any(state.stocks[depot].values())
+    assert "village_store_feed" not in {action["id"] for action in farm.actions()}
+    village_goods.put(farm, "farm", "grain", 5)
+    applied(farm, "village_depot_load", goods={"grain": 1})
+    assert state.stocks[depot]["grain"] == 0
+    walk(farm, depot)
+    applied(farm, "village_unload_goods")
+    assert state.depot_lots[depot]["ada"]["grain"][0].quantity == 1
+    walk(mill, depot)
+    price = village_economy.unit_price(mill, "grain")
+    ada_balance = state.coins["ada"]
+    mill_grain = state.stocks["watermill"]["grain"]
+    applied(mill, "village_depot_withdraw", goods={"grain": 1})
+    walk(mill, "watermill")
+    applied(mill, "village_unload_goods")
+    assert state.coins["ada"] == ada_balance + price
+    assert state.stocks["watermill"]["grain"] == mill_grain + 1
+    mill.save()
+    restored = World(scenario, mill.path, "instant", "mara", "session-mara")
+    assert restored.state.village.stocks[depot]["grain"] == 0
+    village_depot.reconcile(restored)
+
+
+def test_instant_depot_firewood_withdrawal_can_supply_shared_cottage_hearths(tmp_path):
+    scenario = Scenario.model_validate(json.loads(
+        (ROOT / "data" / "scenarios" / "millhaven-instant.json").read_text(encoding="utf-8")))
+    scenario.village.start_minute = 600
+    scenario.village.breakfast = False
+    for agent in scenario.agents:
+        agent.start_location = scenario.village.residents[agent.id].work
+    rowan = World(scenario, tmp_path / "fuel.json", "instant", "rowan", "session-rowan")
+    iona = rowan.bind("iona", "session-iona")
+    state = rowan.state.village
+    depot = village_depot.DEPOT
+    village_goods.take(rowan, "cottages", "firewood", 1)
+    village_goods.put(rowan, "woods", "firewood", 10)
+    applied(rowan, "village_depot_load", goods={"firewood": 1})
+    rowan.actor.location_id = depot
+    village.advance(rowan, 5)
+    applied(rowan, "village_unload_goods")
+    iona.actor.location_id = depot
+    applied(iona, "village_depot_withdraw", goods={"firewood": 1})
+    iona.actor.location_id = "cottages"
+    village.advance(iona, 5)
+    opening_fuel = state.stocks["cottages"]["firewood"]
+    applied(iona, "village_unload_goods")
+    assert state.stocks["cottages"]["firewood"] == opening_fuel + 1
+    assert state.stocks[depot]["firewood"] == 0
+
+
 def test_livestock_consumes_shed_feed_not_farm_feed(tmp_path):
     world = make_world(tmp_path)
     state = world.state.village

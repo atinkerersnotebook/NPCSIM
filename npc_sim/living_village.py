@@ -1,8 +1,10 @@
 import argparse
 from pathlib import Path
 
-from npc_sim import village_economy, village_events, village_social, village_maintenance, village_mining, village_livestock, village_communication, village_firewood
+from npc_sim import village_economy, village_events, village_social, village_maintenance, village_mining, village_livestock, village_communication, village_firewood, village_equipment
+from npc_sim import village_depot
 from npc_sim.models import Entity, Scenario, VillageEconomyConfig, VillageEventsConfig, VillageSocialConfig, VillageMaintenanceConfig, VillageResearchConfig
+from npc_sim.village_equipment_models import VillageEquipmentConfig
 from npc_sim.storage import read_json, write_json
 
 
@@ -43,6 +45,7 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
     config.maintenance = VillageMaintenanceConfig.model_validate(village_maintenance.example_config(scenario))
     config.research = VillageResearchConfig()
     village_mining.install_scenario(scenario)
+    config.equipment = VillageEquipmentConfig.model_validate(village_equipment.recommended_config(scenario))
     if livestock:
         village_livestock.install_scenario(scenario)
     village_communication.install_scenario(scenario)
@@ -185,6 +188,58 @@ def separate_herbal_workshop(scenario: Scenario) -> None:
         "The villagers are asleep at home, including Iona in her herbal workshop and Elsie at the tavern.")
 
 
+def build_instant_scenario(base: Scenario) -> Scenario:
+    if base.id != "millhaven-living" or not base.village or not base.village.communication:
+        raise ValueError("Instant Millhaven requires the existing living scenario with communication enabled")
+    scenario = base.model_copy(deep=True)
+    scenario.id = "millhaven-instant"
+    scenario.title = "Millhaven - Tin Cans and String Test"
+    scenario.village.communication.instant_messages = True
+    depot = village_depot.DEPOT
+    scenario.entities.update({
+        depot: Entity(name="Communal granary and supply depot", kind="location", village_road=True,
+                      description="Dry storage for physically delivered grain, flour, timber, firewood and hay."),
+        "square-depot": Entity(name="Depot approach", kind="door", location="village-square",
+                               destination=depot, open=True, village_road=True,
+                               description="A short lane from the square to the communal granary."),
+        "depot-ledger": Entity(name="Communal depot ledger", kind="item", location=depot, takable=False,
+                               description="A fixed ledger for the shared depot's owner-accounted stock.",
+                               readable_text="Check the local owner ledger before withdrawing supplies. Deposits "
+                               "must be carried here; purchases are paid on delivery to your workplace."),
+        "depot-woodshed": Entity(name="Depot woodshed", kind="fixture", location=depot,
+                                 description=f"Sheltered storage for up to {village_depot.FUEL_CAPACITY} units of firewood."),
+    })
+    scenario.village.stocks[depot] = dict.fromkeys(sorted(village_depot.PRODUCTS), 0)
+    tavern = scenario.entities["tavern"]
+    tavern.name = "Elsie's tavern and communal kitchen"
+    tavern.description += " Elsie runs the communal kitchen here, cooking and serving meals from delivered supplies."
+    scenario.entities["tavern-hearth"].name = "Communal kitchen hearth"
+    scenario.opening_narrative = (
+        "This test version of Millhaven connects every location with tin cans and taut string. "
+        "Requests and replies reach named residents instantly through the line. "
+        "They must still accept requests and perform all work, travel and deliveries physically. "
+        "The communal granary by the square starts empty; Elsie's tavern houses the communal kitchen. "
+        "Remote stock and whereabouts are not shared. " + scenario.opening_narrative.replace(
+            "Buyers may post one funded supply request at the physical square board or "
+            "write at the supplier's physical workplace inbox. Only actual readers or listeners learn it; "
+            "replies and project appointments need real channels. ",
+            "Buyers may speak funded supply requests and project appointments into their tin cans. ")
+    )
+    for agent in scenario.agents:
+        agent.role = agent.role.replace(
+            "Use the shared physical communication policy: one board or workplace-inbox "
+            "request per need, personally learned replies, relevant local sharing, and useful work "
+            "while waiting. In-person ordering remains possible, but do not chase absent suppliers "
+            "repeatedly. No remote messages or knowledge of anyone's current whereabouts.",
+            "Use the tin-can-and-string phone network for named residents, one request per need. "
+            "Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent."
+        ).replace(
+            "use a physical board, inbox or conversation to request funded deliveries",
+            "send a tin-can request for funded deliveries"
+        ).replace("through a valid physical channel", "through a tin-can request")
+    return Scenario.model_validate(scenario.model_dump(mode="json"))
+
+
 def main() -> None:
     root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description="Generate an opt-in living Millhaven scenario; never alter a saved adventure.")
@@ -194,11 +249,17 @@ def main() -> None:
     parser.add_argument("--anti-idle", action="store_true", help="Enable Phase 1 fallback planning and anti-idle guards.")
     parser.add_argument("--purposeful-downtime", action="store_true", help="Opt in purposeful planning, optional crafts and a scheduled merchant.")
     parser.add_argument("--firewood", action="store_true", help="Require real firewood for shared cottage fires, ovens and forge work.")
+    parser.add_argument("--instant-from-living", action="store_true",
+                        help="Derive the tin-cans-and-string test scenario from --base living JSON.")
     args = parser.parse_args()
+    if args.instant_from_living and args.output.resolve() == args.base.resolve():
+        parser.error("Instant scenario output must differ from its living scenario base")
     if args.output.exists() and not args.force:
         parser.error("Output already exists; use --force only to regenerate this scenario")
-    scenario = build_scenario(Scenario.model_validate(read_json(args.base)), anti_idle=args.anti_idle,
-                              firewood=args.firewood, purposeful_downtime=args.purposeful_downtime)
+    base = Scenario.model_validate(read_json(args.base))
+    scenario = (build_instant_scenario(base) if args.instant_from_living else
+                build_scenario(base, anti_idle=args.anti_idle,
+                               firewood=args.firewood, purposeful_downtime=args.purposeful_downtime))
     write_json(args.output, scenario.model_dump(mode="json"))
     print(f"Generated {scenario.id}: {args.output}")
 

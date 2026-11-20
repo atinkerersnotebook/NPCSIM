@@ -62,6 +62,38 @@
 .town-map-actor.deciding, .town-map-actor[aria-pressed=true] { border-color: #9ffff0; background: #255a51; }
 .town-map-actor.visitor { border-style: dashed; }
 .town-map-actor:focus-visible, .town-map-scroll:focus-visible { outline: 3px solid var(--teal); outline-offset: -2px; }
+.town-scene .town-map-scroll { height: max(260px, calc(100dvh - var(--dashboard-header-height, 120px) - 24px)); max-height: none; background: #283f35; overscroll-behavior: contain; }
+.town-scene .town-map-scroll.scene-fit { height: auto; }
+.town-scene .town-map-canvas { --scene-zoom: 1; }
+.scene-terrain { display: block; width: 100%; height: auto; user-select: none; cursor: grab; background: radial-gradient(ellipse at center, #5d774a, #283f35 76%); }
+.town-scene .scene-dragging, .town-scene .scene-dragging * { cursor: grabbing; user-select: none; }
+.town-scene .town-map-place { transform: translate(-50%, calc(-100% + 24px)); max-width: none; }
+.town-scene .scene-location-wrap { position: absolute; top: calc(100% - 28px); left: 50%; transform: translate(-50%, -100%); z-index: 1; }
+.town-scene .align-left .scene-location-wrap { left: 0; }
+.town-scene .align-right .scene-location-wrap { left: 100%; }
+.town-scene .scene-location {
+  display: grid; place-items: center; width: 26px; height: 26px; padding: 0;
+  border-color: #f0c77d; border-radius: 50%; background: #312719f5;
+}
+.scene-location > span { width: 8px; height: 8px; background: #ffd887; transform: rotate(45deg); }
+.scene-location:is(:hover, :focus-visible) { background: #5b4426; }
+.town-scene .scene-location-wrap .town-map-stock { bottom: auto; top: calc(100% + 6px); }
+.town-scene .town-map-place.align-left { transform: translate(0, calc(-100% + 24px)); }
+.town-scene .town-map-place.align-right { transform: translate(-100%, calc(-100% + 24px)); }
+.town-scene .town-map-cast { gap: 2px; margin: 0; }
+.town-scene .scene-actor {
+  display: grid; justify-items: center; align-content: end; gap: 2px; width: clamp(88px, calc(108px * var(--scene-zoom)), 180px); max-width: none;
+  padding: 0 0 2px; border: 0; border-radius: 6px; background: none; box-shadow: none;
+}
+.town-scene .scene-actor .npc-sprite {
+  width: 100%; height: clamp(112px, calc(158px * var(--scene-zoom)), 288px); object-fit: contain; object-position: center bottom;
+  filter: saturate(.86) sepia(.09) drop-shadow(2px 3px 2px #1e150d99);
+}
+.town-scene .scene-actor > span:last-child {
+  max-width: 100%; padding: 2px 5px; background: #302719e8; color: #fff4d3; border-radius: 5px; font-size: 11px;
+}
+.town-scene .scene-actor:is(:hover, :focus-visible, [aria-pressed=true], .deciding) > span:last-child { background: #255a51; color: #fff; }
+.town-scene .scene-actor.visitor > span:last-child { outline: 1px dashed #e8cf89; outline-offset: -1px; }
 .town-map-bubbles { position: absolute; bottom: calc(100% + 10px); width: 290px; max-height: 230px; overflow: auto; padding: 3px 4px 10px; scrollbar-width: thin; }
 .bubbles-below .town-map-bubbles { bottom: auto; top: calc(100% + 8px); }
 .town-map-bubble { position: relative; padding: 10px 12px; margin: 6px 0 10px; border-radius: 12px; background: #fffae9; color: #2f291f; border: 1px solid #8e7446; box-shadow: 0 3px 10px #0005; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
@@ -209,7 +241,8 @@ main{max-width:none}
 .communication-notice h4 { margin: 0 0 0.4rem; }
 
 /* Dashboard navigation keeps the existing palette and typography. */
-.dashboard-page { margin: 0; width: 100%; max-width: none; padding: 18px 30px 0; }
+.dashboard-page { --dashboard-gutter: 30px; margin: 0; width: 100%; max-width: none; padding: 18px var(--dashboard-gutter) 0; }
+#monitor-scene .town-scene { margin-inline: calc(-1 * var(--dashboard-gutter)); border-inline: 0; border-radius: 0; }
 .command-shell{position:sticky;top:0;z-index:10;background:#101519}.dashboard-masthead{margin:0;gap:20px;flex-wrap:wrap}
 .masthead-title{display:flex;align-items:center;gap:18px;min-width:0}.masthead-title .brand{margin:0;font-size:23px;letter-spacing:-1px}.masthead-title h1{font-size:19px;margin:2px 0;max-width:38ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.masthead-title .tag{margin:0}.header-right{flex-wrap:wrap}
 .admin-view .toolbar,.player-view .toolbar{position:static;background:#101519;padding:9px 0;gap:10px;flex-wrap:wrap}.toolbar .episode{display:flex;align-items:center;gap:9px;min-width:0}.toolbar .episode select{margin:0;width:min(28vw,250px)}.toolbar .episode>div{margin:0;max-width:22ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.toolbar .controls{gap:5px}.toolbar .button,.player-view .toolbar .button{padding:7px 9px;font-size:11px}
@@ -225,7 +258,7 @@ main{max-width:none}
 #panel-cast .agent-setup{margin-bottom:18px}#panel-cast .agent-assignment-grid{max-height:65vh;overflow:auto}
 #panel-cast #dungeon-master-rulings{max-height:min(55vh,620px);overflow:auto}
 .dashboard-panel>.team-overview[hidden],.dashboard-panel>.panel[hidden]{display:none!important}.player-view #panel-technical{display:none}
-@media(max-width:900px){.dashboard-page { padding: 10px 15px 0; }.command-shell{max-height:45vh;overflow-y:auto}.dashboard-tabs{position:static}#panel-story,#panel-technical{display:block}#panel-story>.panel,#panel-technical>.panel{margin-bottom:18px}.toolbar .episode{flex-wrap:wrap}.toolbar .episode select{width:min(70vw,280px)}.toolbar .episode>div{display:none}}
+@media(max-width:900px){.dashboard-page { --dashboard-gutter: 15px; padding-top: 10px; }.command-shell{max-height:45vh;overflow-y:auto}.dashboard-tabs{position:static}#panel-story,#panel-technical{display:block}#panel-story>.panel,#panel-technical>.panel{margin-bottom:18px}.toolbar .episode{flex-wrap:wrap}.toolbar .episode select{width:min(70vw,280px)}.toolbar .episode>div{display:none}}
 @media(max-width:900px){.dashboard-masthead .header-right{min-width:0;width:100%;justify-content:flex-start}.dashboard-masthead .masthead-title{flex-wrap:wrap}.dashboard-masthead .view-navigation{min-width:0;max-width:100%}.admin-view .toolbar,.player-view .toolbar{min-width:0}}
 @media(max-width:900px){#budget-controls{scroll-margin-top:45vh}}
 

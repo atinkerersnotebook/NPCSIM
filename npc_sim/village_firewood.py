@@ -936,6 +936,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
 
 
 def _view(world: "World", *, local: bool) -> dict[str, Any]:
+    from npc_sim import village_communication
     config = world.state.village.firewood.config
     base, state = village.context(world)
     buyers = list(dict.fromkeys([*config.businesses, config.household_buyer]))
@@ -951,7 +952,10 @@ def _view(world: "World", *, local: bool) -> dict[str, Any]:
                   if not local or _household_location(world) == world.actor.location_id]
     return {"enabled": config.enabled, "season": config.season, "supplier": config.supplier,
             "firewood_per_log": config.firewood_per_log, "split_minutes": config.split_minutes,
-            "sites": sites, "households": households, "policy": POLICY}
+            "sites": sites, "households": households,
+            "policy": (POLICY.replace("use a physical board, inbox or conversation to request funded deliveries",
+                                      "speak a tin-can request for funded deliveries")
+                       if village_communication.instant(world) else POLICY)}
 
 
 def observation(world: "World") -> dict[str, Any]:

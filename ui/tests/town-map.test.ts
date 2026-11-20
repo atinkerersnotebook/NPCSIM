@@ -8,6 +8,7 @@ import { monitoredAgents, worldMonitorMarkup } from "../src/world-monitor.ts";
 import type { MapAgent } from "../src/town-map.ts";
 import { actorDetailsMarkup } from "../src/actor-details.ts";
 import { npcPortrait, npcSprite } from "../src/npc-sprite.ts";
+import { sceneAnchors, sceneHeight, sceneTerrain, sceneWidth } from "../src/millhaven-scene.ts";
 
 function fixture() {
   const scenario = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "millhaven-expanded.json"), "utf8"));
@@ -184,6 +185,127 @@ test("World view renders each resident once on the map without changing state or
   assert.ok(markup.includes('data-map-zoom="fit"'));
   assert.ok(!markup.includes("data-command"));
   assert.equal(JSON.stringify(state), before);
+});
+
+test("Millhaven Scene projects every illustrated location on the same pair of isometric axes", () => {
+  const origin = townMapAnchors["village-square"];
+  const center = sceneAnchors["village-square"];
+  const east = sceneAnchors.forge.x - center.x;
+  const south = sceneAnchors.forge.y - center.y;
+  const scaleX = east / ((townMapAnchors.forge.x - origin.x) - (townMapAnchors.forge.y - origin.y));
+  const scaleY = south / ((townMapAnchors.forge.x - origin.x) + (townMapAnchors.forge.y - origin.y));
+  assert.ok(scaleX > 0 && scaleY > 0);
+  assert.equal(Object.keys(sceneAnchors).length, Object.keys(townMapAnchors).length);
+  for (const [id, point] of Object.entries(townMapAnchors)) {
+    const dx = point.x - origin.x;
+    const dy = point.y - origin.y;
+    const projected = sceneAnchors[id];
+    assert.ok(projected.x > 0 && projected.x < sceneWidth && projected.y > 0 && projected.y < sceneHeight, id);
+    assert.ok(Math.abs(projected.x - center.x - scaleX * (dx - dy)) < 1e-8, id);
+    assert.ok(Math.abs(projected.y - center.y - scaleY * (dx + dy)) < 1e-8, id);
+  }
+});
+
+test("Millhaven Scene projects its ground materials on the landmark grid", () => {
+  const fills = [...sceneTerrain.matchAll(/(?:fill|stroke)="url\(#(scene-tile-[\w-]+)\)"/g)].map(([, id]) => id);
+  const patterns = [...sceneTerrain.matchAll(/<pattern id="(scene-tile-[\w-]+)"[^>]+patternTransform="matrix\(([^)]+)\)"/g)];
+  assert.deepEqual(new Set(fills), new Set(patterns.map(([, id]) => id)));
+  for (const material of ["grass", "stone", "furrows", "dirt", "water", "planks"]) {
+    assert.ok(fills.includes(`scene-tile-${material}`), material);
+  }
+  const square = townMapAnchors["village-square"];
+  for (const [, id, transform] of patterns) {
+    const [a, b, c, d, x, y] = transform.split(" ").map(Number);
+    assert.ok(Math.abs((a * square.x + c * square.y) / 56 + x - sceneAnchors["village-square"].x) < 1e-8, id);
+    assert.ok(Math.abs((b * square.x + d * square.y) / 56 + y - sceneAnchors["village-square"].y) < 1e-8, id);
+  }
+});
+
+test("road and bridge edges follow the two isometric axes", () => {
+  for (const [layer, material] of [["roads", "dirt"], ["bridge", "planks"]]) {
+    const group = sceneTerrain.split(`<g class="scene-${layer}">`)[1].split("</g>")[0];
+    const footprints = [...group.matchAll(new RegExp(`<polygon points="([^"]+)" fill="url\\(#scene-tile-${material}\\)"`, "g"))];
+    assert.ok(footprints.length > 0, layer);
+    for (const [, points] of footprints) {
+      const vertices = points.split(" ").map(point => point.split(",").map(Number));
+      assert.equal(vertices.length, 4);
+      for (const [i, [x, y]] of vertices.entries()) {
+        const [nextX, nextY] = vertices[(i + 1) % vertices.length];
+        assert.ok(Math.abs((nextY - y) / (nextX - x) - (i % 2 === 0 ? .5 : -.5)) < 1e-8, layer);
+      }
+    }
+  }
+});
+
+test("Millhaven Scene leaves clear space between building sprites", () => {
+  const lots = [...sceneTerrain.matchAll(/<image href="[^"]*scene-(?!trees)(\w+)\.png" x="([^"]+)" y="([^"]+)" width="(\d+)" height="(\d+)"/g)]
+    .map(([, kind, x, y, width, height]) => ({ kind, x: Number(x), y: Number(y), width: Number(width), height: Number(height) }));
+  assert.ok(lots.length > 1);
+  for (const [i, a] of lots.entries()) {
+    for (const b of lots.slice(i + 1)) {
+      assert.ok(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y,
+        `${a.kind} overlaps ${b.kind}`);
+    }
+  }
+});
+
+test("Millhaven Scene follows recorded locations using full bodies without changing the map", () => {
+  const state = fixture();
+  state.world!.actors.torvin.location_id = "forge";
+  const markup = worldMonitorMarkup(state, [], {}, { selectedActorId: "torvin" });
+  const [map, scene] = markup.split('id="monitor-scene"');
+  assert.match(map, /data-map-actor="torvin"[\s\S]*?torvin-head\.png/);
+  assert.match(map, /millhaven-extended\.png/);
+  assert.match(scene, /<img class="scene-terrain"[^>]+millhaven-map\.png/);
+  assert.match(scene, /class="town-map-scroll scene-fit"/);
+  assert.match(scene, /class="town-map-canvas" style="width:100%;/);
+  const zoomed = townMapMarkup(state, monitoredAgents(state), { presentation: "scene", zoom: 1.5 });
+  assert.doesNotMatch(zoomed, /class="town-map-scroll scene-fit"/);
+  assert.match(zoomed, /class="town-map-canvas" style="width:150%;/);
+  assert.match(scene, /data-map-zoom="fit">Fit scene/);
+  assert.doesNotMatch(map, /millhaven-map\.png/);
+  assert.doesNotMatch(scene, /<svg class="scene-terrain"/);
+  assert.doesNotMatch(scene, /millhaven-extended\.png/);
+  assert.match(scene, /data-scene-center/);
+  const forge = scene.split('data-map-location="forge"')[1].split('data-map-location=')[0];
+  assert.match(forge, /data-scene-actor="torvin" aria-pressed="true"[^]*?torvin-body\.png/);
+  const backdrop = readFileSync(new URL("../src/assets/millhaven-map.png", import.meta.url));
+  const width = backdrop.readUInt32BE(16);
+  const height = backdrop.readUInt32BE(20);
+  assert.match(scene, new RegExp(`<img class="scene-terrain"[^>]+width="${width}" height="${height}"`));
+  for (const [id, x, y] of [["forge", 268, 352], ["farm", 614, 293], ["bridge", 685, 416],
+    ["tavern", 459, 575], ["riverbank", 746, 310], ["watermill", 787, 432], ["mill-shed", 880, 432]] as const) {
+    const placement = scene.match(new RegExp(`style="left:([\\d.]+)%;top:([\\d.]+)%"\\s+data-map-location="${id}"`));
+    assert.ok(placement, id);
+    assert.ok(Math.abs(Number(placement[1]) / 100 * 989 - x) < 1e-8, id);
+    assert.ok(Math.abs(Number(placement[2]) / 100 * 768 - y) < 1e-8, id);
+  }
+  assert.match(scene, /aria-describedby="scene-actor-torvin"/);
+  assert.doesNotMatch(scene, /id="town-actor-torvin"|id="town-stock-/);
+  assert.match(scene, /data-location-marker="forge"[^>]+aria-describedby="scene-stock-forge"/);
+  const emptyScene = townMapMarkup(state, [], { presentation: "scene" });
+  assert.match(emptyScene, /data-location-marker="forge"/);
+  assert.match(emptyScene, /id="scene-stock-forge"[^>]*>\s*<strong>[^<]+<\/strong><span>Current site stock:/);
+  assert.doesNotMatch(emptyScene, /data-scene-actor=/);
+
+  state.world!.actors.torvin.location_id = "village-square";
+  const updated = townMapMarkup(state, monitoredAgents(state), { presentation: "scene" });
+  const square = updated.split('data-map-location="village-square"')[1].split('data-map-location=')[0];
+  assert.match(square, /data-scene-actor="torvin"/);
+  assert.equal((updated.match(/data-scene-actor="torvin"/g) ?? []).length, 1);
+});
+
+test("Millhaven Scene uses full-body visitor art and leaves unverified residents off scene", () => {
+  const state = fixture();
+  const scene = townMapMarkup(state, [
+    { id: "visitor:visiting-merchant:735", name: "Trader", locationId: "forge", location: "Forge",
+      activity: "Visiting", current: true, deciding: false, visitor: true },
+    { id: "torvin", name: "Torvin", locationId: "forge", location: "Forge", activity: "Unknown", current: false, deciding: false }
+  ], { presentation: "scene" });
+  const [onScene, offScene] = scene.split("Off map / location unverified");
+  assert.match(onScene, /general-trader-body\.png/);
+  assert.doesNotMatch(onScene, /data-scene-actor="torvin"/);
+  assert.match(offScene, /data-scene-actor="torvin"[^]*?last observed \/ not live/);
 });
 
 test("each resident has distinct artwork across the map and world view", () => {

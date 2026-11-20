@@ -9,6 +9,7 @@ from npc_sim.village_social_models import VillageSocialConfig, VillageSocialStat
 from npc_sim.village_events_models import VillageEventsConfig, VillageEventsState
 from npc_sim.village_research_models import VillageResearchConfig, VillageResearchState, VillageResearchView
 from npc_sim.village_livestock_models import VillageLivestockConfig, VillageLivestockState
+from npc_sim.village_equipment_models import VillageEquipmentConfig, VillageEquipmentState
 
 
 class StrictModel(BaseModel):
@@ -696,6 +697,7 @@ class VillageConfigurationPatch(StrictModel):
     research: VillageResearchConfig | None = None
     mining: VillageMiningConfig | None = None
     livestock: VillageLivestockConfig | None = None
+    equipment: VillageEquipmentConfig | None = None
     day_policy: VillageDayPolicy | None = None
 
 
@@ -720,6 +722,7 @@ class VillageConfig(VillageDayPolicy):
     research: VillageResearchConfig | None = None
     mining: VillageMiningConfig | None = None
     livestock: VillageLivestockConfig | None = None
+    equipment: VillageEquipmentConfig | None = None
     legacy: VillageLegacyConfig | None = None
     delivery_fee: int = Field(default=0, ge=0)
     meal_price: int = Field(default=0, ge=0)
@@ -1120,6 +1123,7 @@ class VillageDashboard(StrictModel):
     incidents: list[VillageIncidentView] = Field(default_factory=list)
     maintenance: list[VillageMaintenanceView] = Field(default_factory=list)
     research: list[VillageResearchView] = Field(default_factory=list)
+    equipment: list[dict[str, Any]] = Field(default_factory=list)
     time_use: dict[str, VillageTimeUse] = Field(default_factory=dict)
     daily_time_use: dict[int, dict[str, VillageTimeUse]] = Field(default_factory=dict)
     day_policy: VillageDayPolicy | None = None
@@ -1190,6 +1194,7 @@ class VillageState(StrictModel):
     research: VillageResearchState | None = None
     mining: VillageMiningState | None = None
     livestock: VillageLivestockState | None = None
+    equipment: VillageEquipmentState | None = None
     legacy: VillageLegacyState | None = None
     day_policy: VillageDayPolicy | None = None
     configuration_requests: dict[str, dict[str, Any]] = Field(default_factory=dict)
@@ -1225,6 +1230,7 @@ class Scenario(StrictModel):
     erp: ERPConfig | None = None
     bbq: BBQConfig | None = None
     village: VillageConfig | None = None
+    equipment: VillageEquipmentConfig | None = None
     budgets: Budgets | None = None
     agents: list[ScenarioAgent] = Field(default_factory=list, max_length=12)
     skill_mode: SkillMode = "scenario"
@@ -1280,6 +1286,8 @@ class Scenario(StrictModel):
                      "village_cancel_replenishment"}
         from npc_sim import village_economy, village_social, village_events, village_research, village_mining, village_livestock, village_communication, village_legacy
         core_ids |= village_economy.VERBS | village_social.VERBS | village_events.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | village_legacy.VERBS | {"village_wait_event"}
+        from npc_sim import village_equipment
+        core_ids |= village_equipment.VERBS
         if len(recovery_ids) != len(set(recovery_ids)) or set(recovery_ids) & core_ids:
             raise ValueError("Recovery action IDs must be unique and not conflict with core world verbs")
         if set(self.recipe_actions) & (core_ids | set(recovery_ids)):
@@ -1326,6 +1334,10 @@ class Scenario(StrictModel):
             raise ValueError("A goal output cannot also be a failure output")
         if not set(self.required_intact_entities) <= prototypes.keys():
             raise ValueError("Required intact entities must name existing entities or recipe outputs")
+        if self.village and self.village.equipment and self.equipment:
+            raise ValueError("World equipment must be configured either globally or by the village, not both")
+        from npc_sim import village_equipment
+        village_equipment.validate_config(self)
         for entity in self.entities.values():
             if entity.traversal_capabilities and entity.kind != "door":
                 raise ValueError("Traversal capabilities apply only to doors")
@@ -1576,6 +1588,7 @@ class WorldState(StrictModel):
     tic_tac_toe: TicTacToeState | None = None
     erp: ERPState | None = None
     bbq: BBQState | None = None
+    equipment: VillageEquipmentState | None = None
     village: VillageState | None = None
 
 

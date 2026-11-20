@@ -41,10 +41,44 @@ GUIDANCE = (
     "Appointments are personal plans, not automatic travel: confirm through a real channel, "
     "arrive at the due site with actual tools and supplies, and each worker must act."
 )
+INSTANT_GUIDANCE = (
+    "Tin cans joined by taut string connect every Millhaven location through the village square. "
+    "Requests and replies reach their named recipients immediately. "
+    "Use village_request_supply, village_schedule_crew and village_respond_to_request; "
+    "recipients still decide whether to accept. Messages do not reveal remote stock or whereabouts. "
+    "Acceptance is not delivery: production, cargo, unloading, payment and project work remain physical."
+)
 
 
 def enabled(world: "World") -> bool:
     return world.state.village is not None and world.state.village.communication is not None
+
+
+def instant(world: "World") -> bool:
+    return enabled(world) and _state(world).config.instant_messages
+
+
+def guidance(world: "World") -> str:
+    return INSTANT_GUIDANCE if instant(world) else GUIDANCE
+
+
+def _tin_can_network(world: "World") -> dict[str, Any]:
+    locations = sorted(
+        world.state.entities[eid].name
+        for eid, entity in world.state.entities.items()
+        if entity.kind == "location" and not entity.hidden)
+    hub = world.state.entities.get("village-square")
+    hub_name = hub.name if hub else "Village Square"
+    return {
+        "name": "Millhaven tin-can-and-string network",
+        "hub": hub_name,
+        "stations": locations,
+        "lines": sum(location != hub_name for location in locations),
+    }
+
+
+def _uses_tin_can(request: Channel) -> bool:
+    return request.channel in {"tin_can", "remote"}
 
 
 def _state(world: "World") -> VillageCommunicationState:
@@ -141,6 +175,12 @@ def _local_listener(world: "World", listener: str) -> None:
 def _channel(world: "World", request: Channel, terms: NoticeTerms,
              author: str, *, replying: bool = False) -> str | None:
     state = _state(world)
+    if _uses_tin_can(request):
+        if not state.config.instant_messages or request.inbox_id is not None or request.listener is not None:
+                raise ValueError("Tin-can messaging is not available on this channel")
+        if not terms.recipients:
+            raise ValueError("Tin-can messages require named recipients")
+        return None
     if request.channel == "board":
         if request.inbox_id is not None or request.listener is not None or terms.private:
             raise ValueError("Private/restricted notes cannot be placed on the public board")
@@ -270,10 +310,19 @@ def _publish(world: "World", notice: NoticeVersion, request: Channel, fixture: s
     state = _state(world)
     if fixture:
         state.placements.setdefault(fixture, {})[notice.id] = notice.version
+    elif _uses_tin_can(request):
+        for recipient in sorted({notice.author, *notice.terms.recipients} - {world.actor_id}):
+            _receive(world, recipient, notice, "tin_can", world.actor_id)
     else:
         _receive(world, request.listener, notice, "conversation", world.actor_id)
         world.state.village.residents[request.listener].available_at = world.state.village.minute + 5
     _receive(world, world.actor_id, notice, "author")
+
+
+def _message_listeners(world: "World", notice: NoticeVersion, request: Channel) -> list[str]:
+    if _uses_tin_can(request):
+        return sorted({notice.author, *notice.terms.recipients} - {world.actor_id})
+    return [request.listener] if request.listener else []
 
 
 def _new_version(world: "World", notice: NoticeVersion, **changes: Any) -> NoticeVersion:
@@ -303,7 +352,9 @@ def _known_current(world: "World", request: ChangeNotice, *, allow_closed: bool 
             or not (knowledge and knowledge.snapshot.version == request.expected_version or local_original)):
         raise ValueError("A compatible personally received version or your current original posting is required; check through a real channel")
     notice = history[-1]
-    revising_expired_original = (request.channel == "board" and local_original
+    revising_expired_original = ((request.channel == "board" and local_original
+                                  or _uses_tin_can(request) and state.config.instant_messages
+                                  and notice.author == world.actor_id and knowledge is not None)
                                  and notice.status == "expired"
                                  and isinstance(request, UpdateNotice) and request.notice is not None)
     revising_counteroffer = (isinstance(request, UpdateNotice) and request.notice is not None
@@ -379,6 +430,8 @@ class ChannelUnavailable(ValueError):
 
 def _intent_channel(world: "World", terms: NoticeTerms, *, author: str | None = None) -> dict[str, str]:
     state = _state(world)
+    if state.config.instant_messages:
+        return {"channel": "tin_can"}
     location = world.actor.location_id
     recipients = [author] if author else terms.recipients
     for listener in recipients:
@@ -541,7 +594,8 @@ def _intent_request(world: "World", action: str, request: Any) -> tuple[str, str
             fixture = next((fixture for fixture, papers in state.placements.items()
                             if papers.get(duplicate.id) == duplicate.version
                             and world.state.entities[fixture].location == world.actor.location_id), None)
-            option = "edit it here" if fixture else "travel to its current posting to edit it"
+            option = ("update it remotely" if state.config.instant_messages else
+                      "edit it here" if fixture else "travel to its current posting to edit it")
             return "EXISTING_NEED", f"Open equivalent need {duplicate.id}; {option}."
         channel = _intent_channel(world, terms)
         return _apply(world, "village_notice_post", PostNotice(notice=terms, **channel))
@@ -649,7 +703,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             result = _intent_request(world, action, request)
         else:
             if (action not in {"village_notice_read", "village_inbox_read", "village_notice_tell"}
-                    and request.channel != "conversation"
+                    and request.channel != "conversation" and not _uses_tin_can(request)
                     and "manipulate" not in world.actor.body.capabilities):
                 raise ValueError("Writing a physical note requires actual manipulation capability")
             result = _apply(world, action, request)
@@ -766,8 +820,9 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
         state.next_notice += 1
         state.cooldowns[f"post:{actor}"] = minute + state.config.cooldown_minutes
         _publish(world, notice, request, fixture)
-        _emit(world, "notice_posted", notice, listeners=[request.listener] if request.listener else [])
-        return "NOTICE_POSTED", f"Posted {nid}; absent recipients have not learned it."
+        _emit(world, "notice_posted", notice, listeners=_message_listeners(world, notice, request))
+        return ("NOTICE_POSTED", f"Sent {nid} to its named recipients immediately."
+                if _uses_tin_can(request) else f"Posted {nid}; absent recipients have not learned it.")
     notice = _known_current(world, request, allow_closed=(
         action == "village_notice_update" and request.notice is None))
     fixture = _channel(world, request, notice.terms, notice.author, replying=actor != notice.author)
@@ -780,11 +835,15 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
                 raise ValueError("This unchanged version is already present here")
             _publish(world, notice, request, fixture)
             _emit(world, "notice_updated", notice,
-                  listeners=[request.listener] if request.listener else [])
-            return "NOTICE_PUBLISHED", "Published the personally known verified version at this physical channel."
+                  listeners=_message_listeners(world, notice, request))
+            return ("NOTICE_PUBLISHED", "Sent the personally known verified version to its named recipients."
+                    if _uses_tin_can(request) else
+                    "Published the personally known verified version at this physical channel.")
         if (actor != notice.author or notice.linked_order_id
                 or notice.status not in {"posted", "seen", "expired"}
-                or notice.status == "expired" and not (fixture == state.config.board_id
+                or notice.status == "expired" and not (
+                    _uses_tin_can(request) and state.config.instant_messages
+                    or fixture == state.config.board_id
                     and state.placements.get(fixture, {}).get(notice.id) in {notice.version, notice.version - 1})):
             raise ValueError("Only the author can change uncommitted terms at their current posting; cancel commitments explicitly")
         request.notice = _priced_terms(world, request.notice)
@@ -907,10 +966,12 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
     value = _new_version(world, notice, **changes)
     _publish(world, value, request, fixture)
     _emit(world, "notice_reply_posted" if action == "village_notice_reply" else "notice_updated",
-          value, listeners=[request.listener] if request.listener else [])
+          value, listeners=_message_listeners(world, value, request))
     if changes.get("status") == "accepted":
-        _emit(world, "commitment_accepted", value, listeners=[request.listener] if request.listener else [])
-    return "NOTICE_UPDATED", f"Recorded {value.id} version {value.version}; others learn only by receipt."
+        _emit(world, "commitment_accepted", value, listeners=_message_listeners(world, value, request))
+    return ("NOTICE_UPDATED", f"Recorded {value.id} version {value.version}; named recipients received it."
+            if _uses_tin_can(request) else
+            f"Recorded {value.id} version {value.version}; others learn only by receipt.")
 
 
 def candidates(world: "World", listener: str) -> list[dict[str, Any]]:
@@ -1133,7 +1194,10 @@ def sync_order(world: "World", order: Any, event: str, location: str) -> None:
                  and (not notice.terms.private or rid in {notice.author, notice.responder, *notice.terms.recipients})]
     for rid in witnesses:
         _receive(world, rid, value, "witness")
-    # No placement update: absent buyers/suppliers and the old paper remain stale.
+    if instant(world):
+        for rid in sorted({value.author, *value.terms.recipients}):
+            _receive(world, rid, value, "tin_can")
+    # Physical paper remains stale; instant-mode participants received the update above.
     _emit(world, event, value, listeners=witnesses, include_actor=False)
 
 
@@ -1149,6 +1213,9 @@ def _expire_missed_appointment(world: "World", notice: NoticeVersion) -> bool:
         return False
     value = _new_version(world, notice, status="expired", appointment=plan.model_copy(update={
         "version": plan.version + 1, "status": "expired"}))
+    if instant(world):
+        for rid in sorted({value.author, *value.terms.recipients}):
+            _receive(world, rid, value, "tin_can")
     _emit(world, "notice_expired", value, include_actor=False)
     return True
 
@@ -1172,6 +1239,9 @@ def advance(world: "World") -> None:
                     if (not (village_state.residents[rid].life and village_state.residents[rid].life.sleeping)
                             and (not notice.terms.private or rid in notice.appointment.members)):
                         _receive(world, rid, value, "witness")
+                if instant(world):
+                    for rid in sorted({value.author, *value.terms.recipients}):
+                        _receive(world, rid, value, "tin_can")
                 _emit(world, "job_completed", value, include_actor=False,
                       listeners=[rid for rid in value.appointment.members
                                  if village.resident_location(world, rid) == value.appointment.place
@@ -1204,6 +1274,9 @@ def advance(world: "World") -> None:
                     changes["appointment"] = notice.appointment.model_copy(update={
                         "version": notice.appointment.version + 1, "status": "expired"})
                 value = _new_version(world, notice, **changes)
+                if instant(world):
+                    for rid in sorted({value.author, *value.terms.recipients}):
+                        _receive(world, rid, value, "tin_can")
                 _emit(world, "notice_expired", value, include_actor=False)
 
 
@@ -1256,7 +1329,8 @@ def observation(world: "World") -> dict[str, Any]:
         item.snapshot.terms.due_at if item.snapshot.terms.due_at is not None else 10**9,
         -item.heard_at, item.snapshot.id))
     return {"communication": {
-        "enabled": True, "scope": "personal received snapshots", "policy": GUIDANCE,
+        "enabled": True, "scope": "personal received snapshots", "policy": guidance(world),
+        "network": _tin_can_network(world) if instant(world) else None,
         "recent_blocker": state.recent_blockers.get(world.actor_id),
         "notices": [_view(world, item.snapshot, item) for item in ordered[:12]],
         "boxes": [{"id": box, "owner": village.resident_name(world, owner),
@@ -1275,7 +1349,8 @@ def observation(world: "World") -> dict[str, Any]:
 def monitor(world: "World") -> dict[str, Any]:
     state = _state(world)
     return {"communication": {
-        "enabled": True, "scope": "privileged operator world view", "policy": GUIDANCE,
+        "enabled": True, "scope": "privileged operator world view", "policy": guidance(world),
+        "network": _tin_can_network(world) if instant(world) else None,
         "notices": [_view(world, history[-1]) for history in state.notices.values()],
         "boxes": [{"id": box, "owner": village.resident_name(world, owner),
                    "place": world.state.entities[world.state.entities[box].location].name,
@@ -1306,6 +1381,22 @@ def actions(world: "World") -> list[dict[str, Any]]:
         "village_share_known_information": (ShareIntent, "Share a personally received, non-private notice with an actually present and available resident; no remote updates."),
     }
     for verb, (model, text) in descriptions.items():
+        if instant(world) and verb in {"village_notice_post", "village_notice_reply",
+                                      "village_notice_update", "village_notice_close",
+                                      "village_request_supply", "village_propose_meeting",
+                                      "village_schedule_crew", "village_respond_to_request",
+                                      "village_update_request"}:
+            text = {
+                "village_notice_post": "Speak into the connected tin-can phone; name the intended recipients.",
+                "village_notice_reply": "Reply through the connected tin-can phone; acceptance does not deliver goods.",
+                "village_notice_update": "Send a status or revised uncommitted terms through the tin-can network.",
+                "village_notice_close": "Cancel through the tin-can network; physical cargo must still be resolved.",
+                "village_request_supply": "Send a priced supply request immediately to the named supplier; acceptance and physical delivery are separate.",
+                "village_propose_meeting": "Send a project appointment immediately to the actual partner; both must still attend and work.",
+                "village_schedule_crew": "Send a crew appointment immediately to the actual partner; both must still accept, attend and work.",
+                "village_respond_to_request": "Send your response immediately to the requester; accepting supply validates real funding and stock.",
+                "village_update_request": "Send changed terms for your uncommitted request immediately to its named recipients.",
+            }[verb]
         result.append({"id": verb, "description": text, "targets": [],
                        "arguments_schema": model.model_json_schema(),
                        "availability": "available", "reason": None})
