@@ -836,6 +836,17 @@ class VillageLocationTransition(StrictModel):
     minute: int
 
 
+class VillageTravelEvent(StrictModel):
+    actor: str
+    origin: str
+    destination: str
+    edge: str
+    started_at: int
+    ended_at: int
+    status: Literal["completed", "cancelled"] = "completed"
+    current_location: str
+
+
 class VillageSupplierSearch(StrictModel):
     visits: int = 0
     evidence: str = ""
@@ -1161,6 +1172,7 @@ class VillageState(StrictModel):
     coins: dict[str, int]
     tasks: dict[str, VillageTask] = Field(default_factory=dict)
     events: list[VillageEvent] = Field(default_factory=list)
+    travel_events: list[VillageTravelEvent] = Field(default_factory=list)
     breakdown: bool = False
     repaired: bool = False
     well_dug: bool = False

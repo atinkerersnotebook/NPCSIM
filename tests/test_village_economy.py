@@ -5,7 +5,9 @@ from pydantic import ValidationError
 
 from npc_sim import village, village_economy as economy, village_goods as goods
 from npc_sim.models import Scenario, VillageCommittedWork, VillageMeal, VillageStockLot
-from npc_sim.village_economy_models import VillageEconomyConfig, VillageEconomyState, VillageMealPlan
+from npc_sim.village_economy_models import (
+    VillageEconomyConfig, VillageEconomyState, VillageMealPlan, VillageSupplierOrder,
+)
 from npc_sim.world import World
 from test_village_expanded import scenario
 from test_world import act
@@ -72,6 +74,46 @@ def test_standalone_strict_models_and_legacy_opt_out(world):
     assert economy.initial_state(legacy) is None
     legacy.village.economy = VillageEconomyConfig()
     assert economy.initial_state(legacy) is not None
+
+
+def test_generation_17_production_stops_at_target_and_capacity(world):
+    supplier = actor(world, "jory")
+    world.state.village.economy.config.reserve_targets = {"bakery": {"bread": 5}}
+    world.state.village.economy.config.stock_capacities = {"bakery": {"bread": 5}}
+    add(world, "bakery", "flour", 5)
+    assert economy.production_batch_limit(supplier, "village_work") == 2
+    add(world, "bakery", "bread", 4, expiry=2000)
+    assert economy.production_batch_limit(supplier, "village_work") == 1
+    goods.put(world, "bakery", "bread", 1, kind="imported")
+    assert economy.production_blocker(supplier, "village_work")[0] == "DEMAND_MET"
+
+
+def test_general_store_sale_uses_paid_physical_stock_without_double_counting(world):
+    state = world.state.village
+    policy = state.economy.config
+    policy.reserve_targets = {"general-store": {"bread": 1}}
+    policy.stock_capacities = {"general-store": {"bread": 4}}
+    policy.suppliers["bread"] = "nella"
+    add(world, "general-store", "bread", 3, expiry=1200)
+    order = VillageSupplierOrder(
+        id="store-sale", request_key="sale", buyer="elsie", supplier="nella",
+        source="general-store", destination="tavern", product="bread", quantity=2,
+        price=policy.prices.get("bread", 3), delivery_fee=policy.delivery_fee or 0,
+        deadline=1110, required_fresh_until=1140, created_at=state.minute,
+        status="accepted")
+    state.economy.orders[order.id] = order
+    carrier = actor(world, "nella", "general-store")
+    before = state.coins.copy()
+    shipments = state.residents["nella"].shipments
+    assert goods.load(carrier, "nella", {"bread": 2}, "tavern", shipments, 3) is None
+    assert state.stocks["general-store"]["bread"] == 1
+    carrier.actor.location_id = "tavern"
+    assert goods.unload(carrier, "nella", shipments) is None
+    assert state.stocks["tavern"]["bread"] == 2
+    assert state.coins["elsie"] == before["elsie"] - 6
+    assert state.coins["nella"] == before["nella"] + 6
+    assert order.status == "fulfilled" and order.paid == 6
+    assert sum(item.amount for item in state.economy.payments if item.kind == "goods") == 6
 
 
 def test_alternative_recipes_fresh_stock_and_incoming_reduce_demand(world):

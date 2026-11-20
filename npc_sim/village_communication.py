@@ -496,6 +496,20 @@ def preferred_supply_contact(world: "World", terms: NoticeTerms) -> NoticeTerms 
             _validate_terms(world, priced, world.actor_id)
         except ValueError:
             continue
+        if recipient == "nella" and world.scenario.village.residents[recipient].work == "general-store":
+            from npc_sim.village_economy_models import VillageSupplierOrder
+            order = VillageSupplierOrder(
+                id=f"candidate:{recipient}:{terms.subject}", request_key="candidate",
+                buyer=world.actor_id, supplier=recipient,
+                source=world.scenario.village.residents[recipient].work,
+                destination=terms.destination, product=terms.subject,
+                quantity=terms.quantity, price=priced.unit_price, delivery_fee=priced.delivery_fee,
+                deadline=terms.due_at, required_fresh_until=terms.required_fresh_until,
+                created_at=world.state.village.minute)
+            if recipient in world.state.actors:
+                feasible, _ = village_economy.order_feasibility(world, order)
+                if not feasible:
+                    continue
         eligible[recipient] = candidate
         try:
             _intent_channel(world, candidate)

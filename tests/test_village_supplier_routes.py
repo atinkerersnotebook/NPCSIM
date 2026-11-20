@@ -24,6 +24,11 @@ def test_repeated_supplier_route_tracks_personal_need_and_persists(tmp_path):
     assert len(fallback.recent_locations) == 4
     assert [(step.origin, step.destination) for step in fallback.recent_locations[-2:]] == [
         ("watermill", "bakery"), ("bakery", "village-square")]
+    assert world.state.village.travel_events[-1].model_dump() == {
+        "actor": "jory", "origin": "bakery", "destination": "village-square",
+        "edge": "square-bakery", "started_at": world.state.village.minute - 5,
+        "ended_at": world.state.village.minute, "status": "completed",
+        "current_location": "village-square"}
     assert not village_fallback.repeated_supplier_searches(jory)
     travel(world, "jory", "village-square", "square-bakery")
     travel(world, "jory", "bakery", "mill-bakery")
@@ -36,6 +41,7 @@ def test_repeated_supplier_route_tracks_personal_need_and_persists(tmp_path):
     assert world.state.village.residents["mara"].fallback.recent_locations == []
     world.save()
     reloaded = World(world.scenario, world.path, "communication", "jory", "session-jory")
+    assert reloaded.state.village.travel_events == world.state.village.travel_events
     assert village_fallback.repeated_supplier_searches(reloaded) == village_fallback.repeated_supplier_searches(jory)
     village_goods.put(jory, "watermill", "flour", 1)
     assert not village_fallback.repeated_supplier_searches(jory)

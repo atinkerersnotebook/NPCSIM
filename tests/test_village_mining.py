@@ -25,6 +25,15 @@ def make_world(tmp_path, mining=True):
     return world
 
 
+def test_mining_install_includes_the_physical_ore_loading_dock():
+    value = scenario()
+    village_mining.install_scenario(value)
+    dock = value.entities[village_mining.ORE_DOCK]
+    assert dock.name == "Ore Loading Dock"
+    assert dock.kind == "fixture"
+    assert dock.location == village_mining.MINE
+
+
 def perform(world, action, minutes=5, **args):
     result = act(world, action, **args)
     assert result["outcome"] == "APPLIED", (result["code"], result["explanation"])

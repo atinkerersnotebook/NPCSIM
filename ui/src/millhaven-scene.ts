@@ -66,7 +66,9 @@ const roads: Site[][] = [
   ["iron-mine", "stable", "forge", "village-square", "bakery", "bridge", "watermill", "mill-shed"],
   ["forge", "workshop", "cottages", "herbal-workshop", "tavern", "tavern-yard"],
   ["tavern", "bakery", "village-square", "general-store", "farm-feed-store", "farm"],
-  ["general-store", "supply-depot", "bridge"], ["bridge", "riverbank"], ["watermill", "woods"]
+  ["farm", "north-fields", "north-pasture"], ["farm", "farm-cistern"],
+  ["general-store", "communal-granary", "supply-depot", "bridge"], ["bridge", "riverbank"],
+  ["watermill", "woods"], ["tavern", "communal-kitchen"]
 ];
 
 const artwork = {
@@ -87,7 +89,10 @@ function prop(kind: keyof typeof artwork, x: number, y: number, width: number, h
 // Move the artwork onto lots beside the road without moving the NPC/location anchor.
 const lotOffsets: Partial<Record<Site, [number, number]>> = {
   stable: [.50, -.48], "mill-shed": [-.05, -.68],
-  workshop: [-.66, -.28], "herbal-workshop": [-.25, -.15]
+  workshop: [-.66, -.28], "herbal-workshop": [-.25, -.15],
+  "communal-granary": [-.10, -.80], "supply-depot": [.55, .10],
+  "farm-feed-store": [.25, -1.60], "farm-cistern": [.80, .20],
+  "communal-kitchen": [.45, -.10]
 };
 
 const buildings: [Site, keyof typeof artwork, number, number, number?][] = [
@@ -95,7 +100,9 @@ const buildings: [Site, keyof typeof artwork, number, number, number?][] = [
   ["mill-shed", "barn", 93, 79, .13], ["general-store", "cottage", 139, 138],
   ["workshop", "forge", 114, 118, .10], ["tavern", "inn", 188, 188], ["bakery", "cottage", 130, 130, .08],
   ["cottages", "cottage", 137, 137, .11], ["herbal-workshop", "cottage", 117, 117],
-  ["supply-depot", "barn", 128, 104], ["farm-feed-store", "barn", 89, 73], ["iron-mine", "forge", 126, 128, .22]
+  ["communal-granary", "barn", 128, 104], ["supply-depot", "barn", 104, 88],
+  ["communal-kitchen", "cottage", 104, 104], ["farm-feed-store", "barn", 89, 73],
+  ["farm-cistern", "barn", 78, 60, .08], ["iron-mine", "forge", 126, 128, .22]
 ];
 
 function buildTerrain(): string {

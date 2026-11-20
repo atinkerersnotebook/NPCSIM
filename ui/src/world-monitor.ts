@@ -185,7 +185,7 @@ export function worldMonitorMarkup(
   <section ${sectionTabPanel("monitor-overview", "Overview")}>
   ${worldNowMarkup(state, events, agents, active, historyReady)}
   ${state.run?.reason ? `<p class="notice">${escape(villageClockText(state.run.reason))}</p>` : ""}
-  ${status === "budget_exceeded" ? '<p class="muted">Keep this world and continue: <a class="button" href="/?view=admin&amp;budget=extend">Extend budget in Admin view</a></p>' : ""}
+  ${status === "budget_exceeded" ? '<p class="muted">Keep this world and continue: <a class="button" href="/?budget=extend">Extend budget in Admin view</a></p>' : ""}
   ${canReopenAdventure(state.run, Boolean(state.world)) ? `<p class="muted">The day is unfinished. <a class="button" href="/">${status === "error" ? "Recover the interrupted day in Player view" : "Continue the unfinished day in Player view"}</a></p>` : ""}
   ${!active && agents.length ? '<p class="muted">Last recorded world state. The adventure is not running.</p>' : ""}
   ${!state.world && agents.length ? '<p class="muted">World snapshot unavailable. Locations below are last observed, not live positions.</p>' : ""}

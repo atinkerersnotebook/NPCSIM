@@ -4,11 +4,13 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { eventSchema, stateSchema } from "../src/contracts.ts";
 import { TownDialogue, townMapAnchors, townMapMarkup } from "../src/town-map.ts";
+import { townMapFixtureAnchors } from "../src/millhaven-geography.ts";
 import { monitoredAgents, worldMonitorMarkup } from "../src/world-monitor.ts";
 import type { MapAgent } from "../src/town-map.ts";
 import { actorDetailsMarkup } from "../src/actor-details.ts";
 import { npcPortrait, npcSprite } from "../src/npc-sprite.ts";
 import { sceneAnchors, sceneHeight, sceneTerrain, sceneWidth } from "../src/millhaven-scene.ts";
+import { sceneAnchors as orthographicSceneAnchors } from "../src/millhaven-orthographic.ts";
 
 function fixture() {
   const scenario = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "millhaven-expanded.json"), "utf8"));
@@ -57,7 +59,8 @@ function speak(dialogue: TownDialogue, sequence = 1, live = true, now = 1_000,
 
 test("map anchors cover every town location using the extended illustration's bounds", () => {
   const state = fixture();
-  for (const scenarioId of ["millhaven-expanded", "millhaven-living", "millhaven-resilient", "millhaven-complete"]) {
+  for (const scenarioId of ["millhaven-expanded", "millhaven-living", "millhaven-resilient", "millhaven-complete",
+    "millhaven-generation-17"]) {
     const scenario = JSON.parse(readFileSync(resolve("..", "data", "scenarios", `${scenarioId}.json`), "utf8"));
     if (scenarioId !== "millhaven-expanded") {
       assert.equal(scenario.entities["iron-mine"].name, "Torvin's Iron Mine");
@@ -67,21 +70,27 @@ test("map anchors cover every town location using the extended illustration's bo
     }
   }
   for (const anchor of Object.values(townMapAnchors)) {
-    assert.ok(anchor.x > 0 && anchor.x < 1123);
-    assert.ok(anchor.y > 0 && anchor.y < 768);
+    assert.ok(anchor.x > 0 && anchor.x < 1516);
+    assert.ok(anchor.y > 0 && anchor.y < 1037);
   }
   assert.ok(townMapAnchors["iron-mine"]);
   const generations = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "millhaven-generations.json"), "utf8"));
   assert.equal(generations.entities["iron-mine"].name, "Torvin's Iron Mine");
-  assert.deepEqual(townMapAnchors["village-square"], { x: 552, y: 443 });
+  assert.deepEqual(townMapAnchors["village-square"], { x: 745, y: 598 });
   assert.ok(townMapAnchors["herbal-workshop"].x !== townMapAnchors.cottages.x);
-  assert.deepEqual(townMapAnchors["supply-depot"], { x: 737, y: 378 });
-  assert.deepEqual(townMapAnchors.woods, { x: 1015, y: 190 });
-  const image = readFileSync(new URL("../src/assets/millhaven-extended.png", import.meta.url));
+  assert.deepEqual(townMapAnchors["supply-depot"], { x: 995, y: 524 });
+  const generation17 = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "millhaven-generation-17.json"), "utf8"));
+  for (const id of ["north-fields", "north-pasture", "farm-feed-store", "communal-granary",
+    "supply-depot", "communal-kitchen"]) {
+    assert.equal(generation17.entities[id].kind, "location");
+    assert.ok(townMapAnchors[id], id);
+  }
+  assert.deepEqual(townMapAnchors.woods, { x: 1370, y: 257 });
+  const image = readFileSync(new URL("../src/assets/millhaven-extended-new.png", import.meta.url));
   assert.equal(image.subarray(1, 4).toString(), "PNG");
-  assert.equal(image.readUInt32BE(16), 1123);
-  assert.equal(image.readUInt32BE(20), 768);
-  assert.match(townMapMarkup(state, []), /width="1123" height="768"/);
+  assert.equal(image.readUInt32BE(16), 1516);
+  assert.equal(image.readUInt32BE(20), 1037);
+  assert.match(townMapMarkup(state, []), /width="1516" height="1037"/);
 });
 
 test("Iona appears at her distinct workshop on a new living village map", () => {
@@ -103,11 +112,11 @@ test("resilient and living scenarios use the extended map and place depot visito
   };
   const markup = townMapMarkup(state, [{ id: "nella", name: "Nella", locationId: "supply-depot",
     location: "Communal granary and supply depot", activity: "Counting stock", current: true, deciding: false }]);
-  assert.match(markup, /millhaven-extended\.png/);
+  assert.match(markup, /millhaven-extended-new\.png/);
   assert.match(markup, /data-map-location="supply-depot"/);
   assert.ok(!markup.includes("Off map / location unverified"));
   state.run!.scenario_id = "millhaven-living";
-  assert.match(townMapMarkup(state, []), /millhaven-extended\.png/);
+  assert.match(townMapMarkup(state, []), /millhaven-extended-new\.png/);
 });
 
 test("every pictured location exposes its live site stock even without a visitor", () => {
@@ -130,6 +139,22 @@ test("every pictured location exposes its live site stock even without a visitor
   assert.ok(!secondary.includes("<script>"));
   state.world!.village!.stocks["farm-feed-store"]["hay<script>"] = 1;
   assert.match(townMapMarkup(state, []), /hay&lt;script&gt;: 1/);
+});
+
+test("detailed map labels identify physical fixtures at their parent sites", () => {
+  const state = fixture();
+  state.world!.entities["ore-loading-dock"] = {
+    name: "Ore Loading Dock", kind: "fixture", description: "Ore staging point.", location: "iron-mine"
+  };
+  state.world!.entities["forge-woodshed"] = {
+    name: "Forge woodshed", kind: "fixture", description: "Forge fuel store.", location: "forge"
+  };
+  const markup = townMapMarkup(state, []);
+  assert.match(markup, /data-map-fixture="ore-loading-dock"[\s\S]*?Ore Loading Dock/);
+  assert.match(markup, /data-map-fixture="forge-woodshed"[\s\S]*?Located at Torvin&#39;s forge/);
+  assert.ok(townMapFixtureAnchors["ore-loading-dock"].x < townMapFixtureAnchors["forge-woodshed"].x);
+  assert.deepEqual(townMapFixtureAnchors["village-pump"], { x: 745, y: 620 });
+  assert.deepEqual(townMapAnchors["farm-cistern"], { x: 799, y: 224 });
 });
 
 test("location hover separates requested supplies, accepted deliveries and unscheduled production", () => {
@@ -206,6 +231,19 @@ test("Millhaven Scene projects every illustrated location on the same pair of is
   }
 });
 
+test("Millhaven Scene uses artwork-specific positions rather than flat map coordinates", () => {
+  for (const id of Object.keys(townMapAnchors)) {
+    const point = orthographicSceneAnchors[id];
+    assert.ok(point, id);
+    assert.ok(point.x > 0 && point.x < 5692, id);
+    assert.ok(point.y > 0 && point.y < 4420, id);
+  }
+  assert.deepEqual(orthographicSceneAnchors["farm-cistern"], {
+    x: 655 / 989 * 5692, y: 315 / 768 * 4420
+  });
+  assert.notDeepEqual(orthographicSceneAnchors["farm-cistern"], sceneAnchors["farm-cistern"]);
+});
+
 test("Millhaven Scene projects its ground materials on the landmark grid", () => {
   const fills = [...sceneTerrain.matchAll(/(?:fill|stroke)="url\(#(scene-tile-[\w-]+)\)"/g)].map(([, id]) => id);
   const patterns = [...sceneTerrain.matchAll(/<pattern id="(scene-tile-[\w-]+)"[^>]+patternTransform="matrix\(([^)]+)\)"/g)];
@@ -255,7 +293,7 @@ test("Millhaven Scene follows recorded locations using full bodies without chang
   const markup = worldMonitorMarkup(state, [], {}, { selectedActorId: "torvin" });
   const [map, scene] = markup.split('id="monitor-scene"');
   assert.match(map, /data-map-actor="torvin"[\s\S]*?torvin-head\.png/);
-  assert.match(map, /millhaven-extended\.png/);
+  assert.match(map, /millhaven-extended-new\.png/);
   assert.match(scene, /<img class="scene-terrain"[^>]+millhaven-map\.png/);
   assert.match(scene, /class="town-map-scroll scene-fit"/);
   assert.match(scene, /class="town-map-canvas" style="width:100%;/);
@@ -265,10 +303,10 @@ test("Millhaven Scene follows recorded locations using full bodies without chang
   assert.match(scene, /data-map-zoom="fit">Fit scene/);
   assert.doesNotMatch(map, /millhaven-map\.png/);
   assert.doesNotMatch(scene, /<svg class="scene-terrain"/);
-  assert.doesNotMatch(scene, /millhaven-extended\.png/);
+  assert.doesNotMatch(scene, /millhaven-extended-new\.png/);
   assert.match(scene, /data-scene-center/);
   const forge = scene.split('data-map-location="forge"')[1].split('data-map-location=')[0];
-  assert.match(forge, /data-scene-actor="torvin" aria-pressed="true"[^]*?torvin-body\.png/);
+  assert.match(forge, /data-scene-actor="torvin" aria-pressed="true"[^]*?torvin-torso\.png/);
   const backdrop = readFileSync(new URL("../src/assets/millhaven-map.png", import.meta.url));
   const width = backdrop.readUInt32BE(16);
   const height = backdrop.readUInt32BE(20);
@@ -295,7 +333,7 @@ test("Millhaven Scene follows recorded locations using full bodies without chang
   assert.equal((updated.match(/data-scene-actor="torvin"/g) ?? []).length, 1);
 });
 
-test("Millhaven Scene uses full-body visitor art and leaves unverified residents off scene", () => {
+test("Millhaven Scene uses torso-up visitor art and leaves unverified residents off scene", () => {
   const state = fixture();
   const scene = townMapMarkup(state, [
     { id: "visitor:visiting-merchant:735", name: "Trader", locationId: "forge", location: "Forge",
@@ -303,7 +341,7 @@ test("Millhaven Scene uses full-body visitor art and leaves unverified residents
     { id: "torvin", name: "Torvin", locationId: "forge", location: "Forge", activity: "Unknown", current: false, deciding: false }
   ], { presentation: "scene" });
   const [onScene, offScene] = scene.split("Off map / location unverified");
-  assert.match(onScene, /general-trader-body\.png/);
+  assert.match(onScene, /general-trader-torso\.png/);
   assert.doesNotMatch(onScene, /data-scene-actor="torvin"/);
   assert.match(offScene, /data-scene-actor="torvin"[^]*?last observed \/ not live/);
 });
@@ -533,7 +571,7 @@ test("map, bubble and selection text is escaped and only public speech is expose
   assert.ok(markup.includes("&lt;img src=x onerror=&quot;evil&quot;&gt;"));
   assert.ok(markup.includes('aria-label="Selected character"'));
   assert.ok(markup.includes('aria-pressed="true"'));
-  assert.ok(markup.includes('style="width:min(200%,226vh);min-width:1668px"'));
+  assert.ok(markup.includes('style="width:200%"'));
   assert.ok(!markup.includes("<script>"));
   assert.ok(!markup.includes("<img src=x"));
   assert.ok(!markup.includes("PRIVATE PLAN"));

@@ -649,7 +649,7 @@ def offer_optional_goods(config: dict[str, Any], *, scheduled_at: int | None = N
     profile = offer.visitor.merchant
     profile.buy_prices.update({"furniture": 9, "tackle": 8, "preserved-fish": 8,
                                "wooden-cup": 4, "herbal-remedy": 5})
-    profile.demand.update({"furniture": 1, "tackle": 1, "preserved-fish": 1,
+    profile.demand.update({"furniture": 1, "tackle": 1, "preserved-fish": 2,
                            "wooden-cup": 1, "herbal-remedy": 1})
     if scheduled_at is not None:
         if scheduled_at < 0 or scheduled_at % 5:

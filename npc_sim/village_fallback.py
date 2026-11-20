@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING, Any
 
 from npc_sim import village, village_ai, village_extensions, village_life, village_economy
 from npc_sim.models import (VillageBlockedAction, VillageEvent, VillageIdleWait,
-                            VillageLocationTransition, VillageRouteGoal, VillageSupplierSearch, VillageSupplyNeed)
+                            VillageLocationTransition, VillageRouteGoal, VillageSupplierSearch,
+                            VillageSupplyNeed, VillageTravelEvent)
 
 if TYPE_CHECKING:
     from npc_sim.world import World
@@ -267,6 +268,14 @@ def route_blocker(world: "World", args: dict[str, Any]) -> tuple[str, str] | Non
 
 def record_location_transition(world: "World", origin: str, destination: str) -> None:
     config, state = village.context(world)
+    edge = next((eid for eid, entity in world.state.entities.items()
+                 if entity.kind == "door" and {entity.location, entity.destination} == {origin, destination}),
+                f"{origin}->{destination}")
+    state.travel_events.append(VillageTravelEvent(
+        actor=world.actor_id, origin=origin, destination=destination, edge=edge,
+        started_at=max(0, state.minute - 5), ended_at=state.minute,
+        current_location=destination))
+    del state.travel_events[:-500]
     fallback = state.residents[world.actor_id].fallback
     from npc_sim import village_depot
     if village_depot.feed_store_enabled(world) and world.actor_id == config.livestock.keeper:
@@ -691,6 +700,7 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
         from npc_sim import village_communication
         for request in village_economy.suggestions(world, personal=True):
             if (not request["request_key"].endswith(f":production:{world.actor_id}:{request['product']}")
+                    and not request["request_key"].endswith(f":recycling:{world.actor_id}:{request['product']}")
                     and not (state.firewood and request["product"] == "firewood")):
                 continue
             if request["deadline"] <= state.minute:
@@ -741,10 +751,92 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
                             "action_id": "village_execute_fuel_delivery",
                             "arguments": {"route_id": plan.route_id}, "priority": "P1",
                             "reason": "Deliver a confirmed funded fuel load before its deadline."})
+    if world.actor_id == "nella" and state.communication and state.economy:
+        from npc_sim import village_services
+        orders = [order for order in village_economy._personal_orders(world)
+                  if order.buyer == world.actor_id and order.status in village_economy.LOADABLE
+                  and order.loadable and order.deadline >= state.minute]
+        cargo = [item for item in person.shipments if item.order_id in {order.id for order in orders}]
+        if cargo:
+            destination = cargo[0].destination
+            if location == destination:
+                choices.append({"task_id": f"store:unload:{cargo[0].order_id}",
+                                "action_id": "village_unload_goods", "arguments": {}, "priority": "P1",
+                                "reason": "Unload and pay for bounded general-store replenishment."})
+            else:
+                travel = _travel_choice(world, destination, f"store:deliver:{cargo[0].order_id}",
+                                        "Carry paid store stock to the general store.", "P1")
+                if travel:
+                    choices.append(travel)
+        elif orders:
+            order = min(orders, key=lambda item: (item.deadline, item.id))
+            if location != order.source:
+                travel = _travel_choice(world, order.source, f"store:collect:{order.id}",
+                                        "Collect a personally confirmed store purchase from its real source.", "P1")
+                if travel:
+                    choices.append(travel)
+            else:
+                quantity = min(order.loadable, village_economy.loadable_for_order(world, order),
+                               village_services.foot_capacity(world, world.actor_id))
+                if quantity:
+                    choices.append({"task_id": f"store:load:{order.id}", "action_id": "village_load_goods",
+                                    "arguments": {"goods": {order.product: quantity},
+                                                  "destination": order.destination},
+                                    "priority": "P1",
+                                    "reason": "Load only confirmed, affordable store surplus within capacity."})
+        for request in village_economy.suggestions(world, personal=True):
+            if (request["buyer"] != world.actor_id
+                    or request["request_key"] != f"{state.minute // 1440}:reserve:{world.actor_id}:{request['product']}"
+                    or request["deadline"] <= state.minute):
+                continue
+            terms = village_communication.NoticeTerms(
+                type="supply_request", subject=request["product"], description="Bounded general-store replenishment",
+                recipients=[request["supplier"]], quantity=request["quantity"],
+                destination=request["destination"], due_at=request["deadline"],
+                required_fresh_until=request["required_fresh_until"])
+            open_need = any(history[-1].author == world.actor_id
+                            and village_communication._need_key(world.actor_id, history[-1].terms)
+                            == village_communication._need_key(world.actor_id, terms)
+                            and history[-1].status not in village_communication.TERMINAL
+                            for history in state.communication.notices.values())
+            if open_need:
+                continue
+            terms = village_communication.preferred_supply_contact(world, terms)
+            if terms is None:
+                continue
+            try:
+                village_communication._intent_channel(world, terms)
+            except village_communication.ChannelUnavailable:
+                board = state.communication.config.board_id
+                travel = _travel_choice(world, world.state.entities[board].location,
+                                        f"store:post:{request['request_key']}",
+                                        "Reach the physical board to fund store replenishment.", "P1")
+                if travel:
+                    choices.append(travel)
+                break
+            choices.append({"task_id": f"store:request:{request['request_key']}",
+                            "action_id": "village_request_supply",
+                            "arguments": {"good": request["product"], "quantity": request["quantity"],
+                                          "purpose": terms.description, "deadline": request["deadline"],
+                                          "required_fresh_until": request["required_fresh_until"],
+                                          "preferred_supplier_id": terms.recipients[0]},
+                            "priority": "P1",
+                            "reason": "Buy real producer surplus above reserve for bounded resale."})
+            break
+    if state.economy and (world.actor_id == "nella" or any(
+            order.buyer == world.actor_id and order.status in village_economy.LOADABLE
+            for order in village_economy._personal_orders(world))):
+        freight = _freight_choices(world)
+        if freight:
+            choices.append(freight)
+    if village_depot.enabled(world) and not person.shipments:
+        depot_choice = _depot_choice(world)
+        if depot_choice:
+            choices.append(depot_choice)
     if world.actor_id == village_economy.config(world).innkeeper and state.communication:
         from npc_sim import village_communication
         for request in village_economy.suggestions(world, personal=True):
-            if request["product"] not in {"bread", "fish"} or request["deadline"] <= state.minute:
+            if request["product"] not in {"bread", "fish", "preserved-fish"} or request["deadline"] <= state.minute:
                 continue
             terms = village_communication.NoticeTerms(
                 type="supply_request", subject=request["product"],
@@ -866,7 +958,11 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
                                                 "Reach Rowan's physical inbox to request a funded smoker log.", "P4") if target else None
                         if choice:
                             choices.append(choice)
-            if not needs and state.stocks.get(config.residents["finn"].work, {}).get("logs", 0) >= 1:
+            if (not needs and state.stocks.get(config.residents["finn"].work, {}).get("logs", 0) >= 1
+                    and village_economy.usable_stock(world, config.residents["finn"].work,
+                                                     "preserved-fish", state.minute)
+                    < max(1, village_economy.policy_reserve(
+                        world, config.residents["finn"].work, "preserved-fish"))):
                 from npc_sim import village_social
                 activity = village_social.observation(world).get("social", {}).get("activities", {}).get("fish-smoking")
                 if activity and activity["available"] and location == activity["location"]:
@@ -1046,6 +1142,107 @@ def _feed_store_choices(world: "World") -> list[dict[str, Any]]:
         return []
     return [{"task_id": "feed:load", "action_id": "village_store_feed", "arguments": args,
              "priority": "P2", "reason": "Move only unreserved farm feed needed for today's cow and hens."}]
+
+
+def _freight_choices(world: "World") -> dict[str, Any] | None:
+    from npc_sim import village_services
+
+    config, state = village.context(world)
+    person = state.residents[world.actor_id]
+    location = world.actor.location_id
+    if person.shipments:
+        shipment = min(person.shipments, key=lambda item: item.order_id or "")
+        if location == shipment.destination:
+            return {"task_id": f"freight:unload:{shipment.order_id or shipment.resource}",
+                    "action_id": "village_unload_goods", "arguments": {}, "priority": "P1",
+                    "reason": "Unload known funded freight before optional store work."}
+        travel = _travel_choice(world, shipment.destination, f"freight:deliver:{shipment.order_id}",
+                                "Deliver personally loaded funded freight before its deadline.", "P1")
+        return travel
+    orders = [order for order in village_economy._personal_orders(world)
+              if order.status in village_economy.LOADABLE and order.loadable
+              and order.deadline >= state.minute]
+    feasible = []
+    for order in orders:
+        quantity = min(order.loadable, village_economy.loadable_for_order(world, order),
+                       village_services.foot_capacity(world, world.actor_id))
+        if not quantity:
+            continue
+        approach = village.route(world, location, order.source,
+                                 known_routes=state.residents[world.actor_id].known_routes or None)
+        delivery = village.route(world, order.source, order.destination,
+                                 known_routes=state.residents[world.actor_id].known_routes or None)
+        if approach is None or delivery is None:
+            continue
+        if state.minute + 5 * (len(approach) + len(delivery)) + 10 <= order.deadline:
+            feasible.append((order.deadline, order.id, order, quantity))
+    if not feasible:
+        return None
+    _, _, order, quantity = min(feasible)
+    if location != order.source:
+        return _travel_choice(world, order.source, f"freight:collect:{order.id}",
+                              "Collect the earliest personally known funded freight shipment.", "P1")
+    return {"task_id": f"freight:load:{order.id}", "action_id": "village_load_goods",
+            "arguments": {"goods": {order.product: quantity}, "destination": order.destination},
+            "priority": "P1", "reason": "Batch one feasible funded shipment within real capacity and deadline."}
+
+
+def _depot_choice(world: "World") -> dict[str, Any] | None:
+    from npc_sim import village_depot, village_services
+
+    config, state = village.context(world)
+    rid, location = world.actor_id, world.actor.location_id
+    work = config.residents[rid].work
+    capacity = village_services.foot_capacity(world, rid)
+    if capacity < 1:
+        return None
+    cargo = [item for item in state.residents[rid].shipments if item.depot_transfer]
+    if cargo:
+        shipment = cargo[0]
+        if location == shipment.destination:
+            return {"task_id": f"depot:unload:{shipment.depot_transfer}",
+                    "action_id": "village_unload_goods", "arguments": {}, "priority": "P2",
+                    "reason": "Complete the existing physical managed-store move."}
+        travel = _travel_choice(world, shipment.destination, f"depot:deliver:{shipment.depot_transfer}",
+                                "Carry the existing managed-store load to its real destination.", "P2")
+        return travel
+    for product, target in village_economy.production_targets(world, work, personal=True).items():
+        available = village_economy.usable_stock(world, work, product, state.minute)
+        missing = max(0, target - available)
+        if not missing:
+            continue
+        stores = [store for store in village_depot.stores(world)
+                  if product in village_depot.store_products(world, store) and store != village_depot.FEED_STORE]
+        store = next((site for site in stores
+                      if village_economy.usable_stock(world, site, product, state.minute) > 0), None)
+        if not store or state.coins[rid] < village_economy.unit_price(world, product):
+            continue
+        if location == store:
+            quantity = min(capacity, missing,
+                           village_economy.usable_stock(world, store, product, state.minute))
+            return {"task_id": f"depot:withdraw:{product}", "action_id": "village_depot_withdraw",
+                    "arguments": {"goods": {product: quantity}}, "priority": "P2",
+                    "reason": "Purchase only physically stored stock for a real affordable workplace target."}
+        return _travel_choice(world, store, f"depot:reach:{product}",
+                              "Visit managed storage for a real affordable workplace shortage.", "P2")
+    owned = {}
+    for product in state.stocks.get(work, {}):
+        surplus = (village_economy.usable_stock(world, work, product, state.minute)
+                   - village_economy.protected_quantity(world, work, product))
+        if surplus > 0 and village_depot.deposit_store(world, {product: 1}):
+            owned[product] = min(surplus, capacity)
+    if not owned:
+        return None
+    store = village_depot.deposit_store(world, owned)
+    if store is None and len(owned) > 1:
+        candidate = next(iter(owned))
+        owned = {candidate: owned[candidate]}
+        store = village_depot.deposit_store(world, owned)
+    if location != work or store is None:
+        return None
+    return {"task_id": f"depot:deposit:{next(iter(owned))}", "action_id": "village_depot_load",
+            "arguments": {"goods": owned}, "priority": "P3",
+            "reason": "Deposit only genuine workplace surplus above commitments and reserve."}
 
 
 def candidates(world: "World") -> list[dict[str, Any]]:

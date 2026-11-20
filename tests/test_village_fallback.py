@@ -246,6 +246,34 @@ def test_courier_dispatches_only_for_confirmed_funded_shipment(tmp_path):
     assert world.state.entities["wagon"].location == "forge"
 
 
+def test_nella_prioritizes_known_feasible_freight_before_store_prospecting(tmp_path):
+    value = build_scenario(scenario(), purposeful_downtime=True)
+    value.village.start_minute = 600
+    for agent in value.agents:
+        agent.start_location = value.village.residents[agent.id].work
+    world = World(value, tmp_path / "freight.json", "freight", "nella", "session-nella")
+    for agent in value.agents:
+        world.bind(agent.id, f"session-{agent.id}")
+    state = world.state.village
+    state.residents["nella"].life.meals["0:breakfast"].status = "eaten"
+    state.economy.orders["known-bread"] = VillageSupplierOrder(
+        id="known-bread", request_key="known-bread", buyer="elsie", supplier="jory",
+        source="bakery", destination="tavern", product="bread", quantity=2,
+        price=3, delivery_fee=1, deadline=900, required_fresh_until=1140,
+        created_at=600, status="ready_to_collect")
+    village_goods.put(world, "bakery", "bread", 2)
+    choice = next(item for item in village_fallback.candidates(world)
+                  if item["task_id"] == "freight:collect:known-bread")
+    assert choice["priority"] == "P1"
+    assert act(world, choice["action_id"], **choice["arguments"])["outcome"] == "APPLIED"
+    village.advance(world, 5)
+    world.actor.location_id = "bakery"
+    choice = next(item for item in village_fallback.candidates(world)
+                  if item["task_id"] == "freight:load:known-bread")
+    assert choice["arguments"] == {"goods": {"bread": 2}, "destination": "tavern"}
+    assert act(world, choice["action_id"], **choice["arguments"])["outcome"] == "APPLIED"
+
+
 def test_confirmed_crew_meeting_is_prioritized_over_optional_work(tmp_path):
     value = build_scenario(scenario(), purposeful_downtime=True)
     value.village.start_minute = 600

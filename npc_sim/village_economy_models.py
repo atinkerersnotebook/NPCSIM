@@ -49,6 +49,7 @@ class VillageEconomyConfig(EconomyModel):
     stock_buffer: dict[str, Quantity] = Field(default_factory=dict)
     reserve_targets: dict[str, dict[str, Quantity]] = Field(default_factory=dict)
     production_targets: dict[str, dict[str, Quantity]] = Field(default_factory=dict)
+    stock_capacities: dict[str, dict[str, Quantity]] = Field(default_factory=dict)
     prices: dict[str, PositiveQuantity] = Field(default_factory=dict)
     delivery_fee: Quantity | None = None
     meal_price: Quantity | None = None

@@ -193,7 +193,7 @@ def build_instant_scenario(base: Scenario) -> Scenario:
         raise ValueError("Instant Millhaven requires the existing living scenario with communication enabled")
     scenario = base.model_copy(deep=True)
     scenario.id = "millhaven-instant"
-    scenario.title = "Millhaven - Tin Cans and String Test"
+    scenario.title = "Millhaven VII - Tin Cans and String Test"
     scenario.village.communication.instant_messages = True
     depot = village_depot.DEPOT
     scenario.entities.update({
@@ -240,6 +240,137 @@ def build_instant_scenario(base: Scenario) -> Scenario:
     return Scenario.model_validate(scenario.model_dump(mode="json"))
 
 
+def build_generation_17(complete: Scenario, living: Scenario) -> Scenario:
+    if complete.id != "millhaven-complete" or living.id != "millhaven-living":
+        raise ValueError("Generation 17 requires the complete and living Millhaven scenario inputs")
+    scenario = complete.model_copy(deep=True)
+    latest = living.model_copy(deep=True)
+    config = scenario.village
+    latest_config = latest.village
+    if config is None or latest_config is None:
+        raise ValueError("Generation 17 requires configured village scenarios")
+
+    scenario.id = "millhaven-generation-17"
+    scenario.title = "Millhaven VIII - The Complete Village"
+    for field in ("economy", "social", "events", "firewood", "communication", "research", "equipment"):
+        if getattr(latest_config, field) is not None:
+            setattr(config, field, getattr(latest_config, field).model_copy(deep=True))
+    if latest_config.maintenance is not None:
+        if config.maintenance is None:
+            config.maintenance = latest_config.maintenance.model_copy(deep=True)
+        else:
+            config.maintenance.tasks.update(latest_config.maintenance.tasks)
+    config.spoil_after.update(latest_config.spoil_after)
+    config.prices.update(latest_config.prices)
+    for site, stock in latest_config.stocks.items():
+        config.stocks.setdefault(site, {}).update(stock)
+    for field in ("breakfast", "event_driven_waits", "anti_idle", "purposeful_downtime",
+                  "require_tea_use", "require_manure_use", "demand_led_completion"):
+        setattr(config, field, getattr(latest_config, field))
+
+    for entity_id, entity in latest.entities.items():
+        if entity_id not in scenario.entities:
+            scenario.entities[entity_id] = entity.model_copy(deep=True)
+    village_mining.install_scenario(scenario)
+    scenario.entities["north-fields"] = Entity(
+        name="North Fields", kind="location", village_road=True,
+        description="Open working fields north of Ada's farm. Crops require a future enabled field-work system; travel and meetings are available now.")
+    scenario.entities["farm-north-fields"] = Entity(
+        name="North field lane", kind="door", location="farm", destination="north-fields", open=True,
+        village_road=True, description="A short lane from Ada's farm into the North Fields.")
+    scenario.entities["north-pasture"] = Entity(
+        name="North Pasture", kind="location", village_road=True,
+        description="Fenced grazing and pastureland north of the farm. No automatic grazing or stock movement is implied.")
+    scenario.entities["fields-pasture"] = Entity(
+        name="Pasture gate", kind="door", location="north-fields", destination="north-pasture", open=True,
+        village_road=True, description="A field gate connecting North Fields and North Pasture.")
+    cistern = scenario.entities.get("farm-cistern")
+    if cistern is None:
+        raise ValueError("Generation 17 requires the resilient farm cistern fixture")
+    cistern.kind = "location"
+    cistern.name = "Emergency Cistern"
+    cistern.description = (
+        "Covered emergency rainwater storage beside the farm. The site is traversable and inspectable, "
+        "but it supplies no usable water until filling and withdrawal rules are implemented.")
+    cistern.location = None
+    cistern.village_road = True
+    cistern.health = None
+    cistern.max_health = None
+    scenario.entities["farm-emergency-cistern"] = Entity(
+        name="Cistern path", kind="door", location="farm", destination="farm-cistern", open=True,
+        village_road=True, description="A short marked path from Ada's farm to the emergency cistern.")
+    depot = scenario.entities[village_depot.DEPOT]
+    depot.name = "Supply Depot"
+    depot.description = (
+        "Covered storage beside the communal granary for physically delivered timber and firewood. "
+        "Food and hay are stored in the separate granary.")
+    scenario.entities[village_depot.GRANARY] = Entity(
+        name="Communal Granary", kind="location", village_road=True,
+        description="Dry communal storage for physically delivered grain, flour and hay.")
+    scenario.entities["square-granary"] = Entity(
+        name="Granary approach", kind="door", location="village-square",
+        destination=village_depot.GRANARY, open=True, village_road=True,
+        description="A short lane from the village square to the communal granary.")
+    config.stocks[village_depot.GRANARY] = {
+        product: config.stocks[village_depot.DEPOT].get(product, 0)
+        for product in sorted(village_depot.GRANARY_PRODUCTS)
+    }
+    config.stocks[village_depot.DEPOT] = {
+        product: config.stocks[village_depot.DEPOT].get(product, 0)
+        for product in sorted(village_depot.DEPOT_PRODUCTS)
+    }
+    scenario.entities["communal-kitchen"] = Entity(
+        name="Communal Kitchen", kind="location", village_road=True,
+        description=("Elsie's physical kitchen beside the tavern for village meal preparation. "
+                     "Current meal accounting remains at the tavern until kitchen stock migration is implemented."))
+    scenario.entities["tavern-kitchen"] = Entity(
+        name="Kitchen passage", kind="door", location="tavern", destination="communal-kitchen", open=True,
+        village_road=True, description="An interior passage from the tavern to the communal kitchen.")
+    scenario.agents = latest.agents
+    stock_reserves = {
+        "watermill": {"flour": 8, "grain": 8},
+        "farm": {"grain": 10},
+        "herbal-workshop": {"herbs": 8},
+        "riverbank": {"preserved-fish": 3},
+        "woods": {"logs": 10, "timber": 6},
+    }
+    stock_capacities = {
+        "watermill": {"flour": 16, "grain": 16},
+        "farm": {"grain": 20},
+        "herbal-workshop": {"herbs": 16},
+        "riverbank": {"preserved-fish": 6},
+        "woods": {"logs": 20, "timber": 12},
+        "general-store": {"grain": 8, "flour": 6, "bread": 8, "herbs": 6, "preserved-fish": 4},
+    }
+    config.economy.reserve_targets.update(stock_reserves)
+    config.economy.stock_capacities = stock_capacities
+    config.economy.supplier_alternatives.update({
+        product: ["nella"] for product in ("grain", "flour", "bread", "herbs", "preserved-fish")
+    })
+    config.stocks["riverbank"]["preserved-fish"] = config.stocks["riverbank"].get("preserved-fish", 0)
+    config.stocks["general-store"].update({product: config.stocks["general-store"].get(product, 0)
+                                            for product in stock_capacities["general-store"]})
+    config.economy.production_targets.setdefault("woods", {})["firewood"] = 6
+    for product, reserve in {"bread": 4, "grain": 4, "flour": 3,
+                             "herbs": 3, "preserved-fish": 2}.items():
+        config.economy.reserve_targets.setdefault("general-store", {})[product] = reserve
+    config.economy.recipes["preserved-fish"] = config.economy.recipes["fish"].model_copy(deep=True)
+    config.economy.recipes["preserved-fish"].inputs = {"preserved-fish": 1}
+    for meal in config.economy.meal_plans:
+        if meal.id == "supper" and "fish" in meal.recipe_portions:
+            meal.recipe_portions["preserved-fish"] = meal.recipe_portions.pop("fish")
+    config.economy.suppliers["preserved-fish"] = "finn"
+    scenario.objective = latest.objective + (
+        " Preserve the village's inherited family history, readable chronicle and optional same-scenario "
+        "midnight generation handoff while using the communal depot and feed store physically."
+    )
+    scenario.opening_narrative = latest.opening_narrative + (
+        " Families have worked here before this day. The square's chronicle preserves their stories, "
+        "and the communal depot and farm feed store provide finite physical storage for the village."
+    )
+    return Scenario.model_validate(scenario.model_dump(mode="json"))
+
+
 def main() -> None:
     root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description="Generate an opt-in living Millhaven scenario; never alter a saved adventure.")
@@ -251,15 +382,25 @@ def main() -> None:
     parser.add_argument("--firewood", action="store_true", help="Require real firewood for shared cottage fires, ovens and forge work.")
     parser.add_argument("--instant-from-living", action="store_true",
                         help="Derive the tin-cans-and-string test scenario from --base living JSON.")
+    parser.add_argument("--generation-17", action="store_true",
+                        help="Merge --base complete and --living inputs into the cumulative Generation 17 scenario.")
+    parser.add_argument("--living", type=Path, default=root / "data" / "scenarios" / "millhaven-living.json",
+                        help="Current Living Millhaven input used by --generation-17.")
     args = parser.parse_args()
-    if args.instant_from_living and args.output.resolve() == args.base.resolve():
-        parser.error("Instant scenario output must differ from its living scenario base")
+    if (args.instant_from_living or args.generation_17) and args.output.resolve() == args.base.resolve():
+        parser.error("Generated scenario output must differ from its base")
+    if args.instant_from_living and args.generation_17:
+        parser.error("Choose either --instant-from-living or --generation-17")
     if args.output.exists() and not args.force:
         parser.error("Output already exists; use --force only to regenerate this scenario")
     base = Scenario.model_validate(read_json(args.base))
-    scenario = (build_instant_scenario(base) if args.instant_from_living else
-                build_scenario(base, anti_idle=args.anti_idle,
-                               firewood=args.firewood, purposeful_downtime=args.purposeful_downtime))
+    if args.generation_17:
+        living = Scenario.model_validate(read_json(args.living))
+        scenario = build_generation_17(base, living)
+    else:
+        scenario = (build_instant_scenario(base) if args.instant_from_living else
+                    build_scenario(base, anti_idle=args.anti_idle,
+                                   firewood=args.firewood, purposeful_downtime=args.purposeful_downtime))
     write_json(args.output, scenario.model_dump(mode="json"))
     print(f"Generated {scenario.id}: {args.output}")
 

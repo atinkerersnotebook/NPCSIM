@@ -407,6 +407,11 @@ const villageStateSchema = z.object({
     evidence: z.array(z.number().int().nonnegative())
   })),
   events: z.array(villageEventSchema), breakdown: z.boolean(), repaired: z.boolean(),
+  travel_events: z.array(z.object({
+    actor: z.string(), origin: z.string(), destination: z.string(), edge: z.string(),
+    started_at: z.number().int().nonnegative(), ended_at: z.number().int().nonnegative(),
+    status: z.enum(["completed", "cancelled"]), current_location: z.string()
+  })).default([]),
   well_dug: z.boolean(), bread_after_repair: z.number().int().nonnegative(),
   roster: z.record(z.string(), villageResidentSchema).default({}),
   role_contributions: z.record(z.string(), z.number().int().nonnegative()).default({}),

@@ -245,6 +245,44 @@ start a new `millhaven-complete` adventure with that save's `generation_save_id`
 handoffs cannot import a save from a different scenario. Existing adventures
 keep their frozen scenario, and the unverified autonomous depot and multi-day
 feed-store limitations above still apply.
+
+For a fresh cumulative scenario, select **Millhaven VIII - The Complete Village**
+(`millhaven-generation-17`). It preserves the Complete scenario's original locations
+walkable locations, communal depot, farm feed store and inherited family history,
+while incorporating the latest Living Millhaven equipment upgrades, purposeful
+activities, crafts, events, economy and maintenance additions. Its map also
+tracks North Fields, North Pasture and the Emergency Cistern as distinct
+walkable locations; the cistern remains nonfunctional until its water rules are
+implemented. The Communal Granary and Supply Depot is also a distinct reachable
+storage location. The Communal Granary stores grain, flour and hay; the Supply
+Depot stores timber and firewood. Ada's Livestock Feed Store is a separate shed
+beside the farm, reachable by a dedicated path, with finite grain and hay for
+cow/hen care. The Communal Kitchen is also a distinct location beside the tavern;
+for now meal stock and service remain tavern-accounted until the dedicated
+kitchen-stock migration is implemented. Generation 17 is a new frozen scenario for future episodes; it does not migrate or reset existing
+Millhaven adventures. Items in [GENERATION-17-DEVELOPMENT-PLAN.md](GENERATION-17-DEVELOPMENT-PLAN.md)
+remain planned work and are not implied to be implemented merely by selecting the
+scenario. Regenerate it from the two cumulative sources with:
+
+Generation 17 producers maintain scenario-configured reserves with finite stock
+capacities, including preserved fish based on usable stock. Nella can buy feasible
+surplus for the bounded general store and carry real paid shipments there; Elsie
+can select that stock as a supplier fallback only when it is fresh, funded and able
+to reach the tavern before the meal cutoff. Granary/depot stock remains physically
+separate from general-store resale stock.
+Nella prioritizes personally known funded freight before optional store work.
+Residents likewise use managed granary/depot stock only for a real protected
+workplace shortage, and deposit only surplus above configured commitments and
+reserves. Personally learned recycling orders use the same physical pickup,
+travel, unload, payment and save/reload accounting path.
+
+```powershell
+.\.venv\Scripts\python.exe -m npc_sim.living_village --generation-17 --base data\scenarios\millhaven-complete.json --living data\scenarios\millhaven-living.json --output data\scenarios\millhaven-generation-17.json --force
+```
+
+The Grand Theft variant is listed separately as **Millhaven VI-I - Grand Theft Millhaven**
+(`grand-theft-millhaven`).
+
 Verified research discoveries and their readable recipes also carry into an
 explicit same-scenario generation handoff when research is enabled in both
 generations. Unfinished experiments, work in progress, physical goods and
@@ -549,7 +587,7 @@ require real goods, collection and travel.
 
 #### Tin-cans-and-string communication test scenario
 
-Choose **Millhaven - Tin Cans and String Test** for a separate, opt-in
+Choose **Millhaven VII - Tin Cans and String Test** for a separate, opt-in
 `millhaven-instant` adventure derived from the current Living Millhaven setup.
 Each named location has a tin-can station, connected by taut string lines to the
 Village Square hub. A resident speaks into the local can and the named recipient

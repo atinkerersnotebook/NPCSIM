@@ -19,6 +19,9 @@ def put(world: "World", location: str, resource: str, quantity: int,
         available = village_firewood.capacity_available(world, location)
         if available is not None and quantity > available:
             raise ValueError("FIREWOOD_STORAGE_FULL: destination fuel stock exceeds configured capacity")
+    available = village_economy.stock_capacity_available(world, location, resource)
+    if available is not None and quantity > available:
+        raise ValueError(f"STOCK_CAPACITY_FULL: {location} cannot store {quantity} {resource}")
     if config.expanded_rules:
         if lots is None:
             from npc_sim import village_research
@@ -99,6 +102,12 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
     stock = state.stocks.get(source, {})
     if any(stock.get(resource, 0) < amount for resource, amount in goods.items()):
         return "There is not enough real source stock; nothing was loaded."
+    for resource, amount in goods.items():
+        capacity = village_economy.stock_capacity_available(world, destination, resource)
+        inbound = sum(item.quantity for item in shipments
+                      if item.destination == destination and item.resource == resource)
+        if capacity is not None and amount + inbound > capacity:
+            return f"STOCK_CAPACITY_FULL: {destination} cannot accept {amount} {resource}."
     if "firewood" in goods:
         from npc_sim import village_firewood
         available = village_firewood.capacity_available(world, destination)
@@ -199,6 +208,13 @@ def unload(world: "World", carrier: str, shipments: list[VillageShipment]) -> st
     deliveries = [item for item in shipments if item.destination == location]
     if not deliveries:
         return "No cargo is intended for this destination."
+    delivered = {}
+    for item in deliveries:
+        delivered[item.resource] = delivered.get(item.resource, 0) + item.quantity
+    for resource, quantity in delivered.items():
+        capacity = village_economy.stock_capacity_available(world, location, resource)
+        if capacity is not None and quantity > capacity:
+            return f"STOCK_CAPACITY_FULL: {location} cannot accept {quantity} {resource}."
     if any(item.depot_transfer for item in deliveries):
         from npc_sim import village_depot
         return village_depot.unload(world, carrier, shipments, deliveries)
@@ -349,7 +365,7 @@ def advance(world: "World") -> None:
                 state.stocks[location][resource] -= amount
                 resources[resource] = [lot for lot in lots if lot not in expired]
                 from npc_sim import village_depot
-                if village_depot.enabled(world) and location in {village_depot.DEPOT, village_depot.FEED_STORE}:
+                if village_depot.enabled(world) and location in village_depot.stores(world):
                     remaining = amount
                     for owner, inventory in state.depot_lots.get(location, {}).items():
                         owned = inventory.get(resource, [])

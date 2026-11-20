@@ -126,6 +126,32 @@ def test_compost_material_and_scraps_trade_uses_real_orders_cargo_and_coins(tmp_
     assert state.stocks["farm"]["compost"] == 1
 
 
+def test_ada_prioritizes_personally_known_recycling_freight(tmp_path):
+    from npc_sim import village_fallback
+
+    world = make_world(tmp_path)
+    state = world.state.village
+    world.scenario.village.purposeful_downtime = True
+    world.scenario.village.anti_idle = True
+    state.residents["ada"].life.meals.clear()
+    village_goods.put(world, "tavern", "compost-material", 2)
+    inn = world.bind("elsie", "session-elsie")
+    inn.actor.location_id = "tavern"
+    world.actor.location_id = "tavern"
+    perform(world, "village_propose_order", supplier="elsie", product="compost-material",
+            quantity=2, deadline=900, required_fresh_until=950)
+    order = next(reversed(state.economy.orders.values()))
+    perform(inn, "village_accept_order", order_id=order.id)
+    world.actor.location_id = "farm"
+    choice = next(item for item in village_fallback.candidates(world)
+                  if item["task_id"] == f"freight:collect:{order.id}")
+    assert choice["priority"] == "P1"
+    world.actor.location_id = "tavern"
+    choice = next(item for item in village_fallback.candidates(world)
+                  if item["task_id"] == f"freight:load:{order.id}")
+    assert choice["arguments"] == {"goods": {"compost-material": 2}, "destination": "farm"}
+
+
 def test_missing_tools_interrupted_compost_and_legacy_spoilage_keep_conservation(tmp_path):
     world = make_world(tmp_path)
     state = world.state.village

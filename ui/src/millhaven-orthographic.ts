@@ -7,8 +7,9 @@ export const sceneHeight = 4420;
 const landmarkReferenceWidth = 989;
 const landmarkReferenceHeight = 768;
 
-// Label positions were measured on the 989 × 768 reference map with the same layout.
-// The unlabeled feed store uses a nearby spot.
+// Scene-only marker positions measured on the 989 × 768 orthographic artwork.
+// They intentionally do not derive from townMapAnchors: the two illustrations
+// share world locations but place their visible landmarks differently.
 const landmarkPixels = {
   "village-square": [438, 462],
   forge: [268, 352],
@@ -26,8 +27,13 @@ const landmarkPixels = {
   bridge: [685, 416],
   riverbank: [746, 310],
   "tavern-yard": [584, 583],
-  "supply-depot": [590, 430],
+  "supply-depot": [605, 428],
+  "communal-granary": [590, 410],
   "farm-feed-store": [650, 310],
+  "north-fields": [560, 190],
+  "north-pasture": [505, 175],
+  "farm-cistern": [655, 315],
+  "communal-kitchen": [520, 600],
   "iron-mine": [140, 334]
 } satisfies Record<keyof typeof townMapAnchors, [number, number]>;
 

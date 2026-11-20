@@ -41,6 +41,10 @@
 .town-map-place.bubbles-below .actor-details-popover { bottom: auto; top: calc(100% + 6px); }
 .town-map-place.align-right .town-map-stock { left: auto; right: 0; }
 .town-map-place.bubbles-below .town-map-stock { bottom: auto; top: calc(100% + 6px); }
+.town-map-fixture { position: absolute; transform: translate(-50%, -50%); z-index: 1; pointer-events: none; }
+.town-map-fixture .town-map-location-wrap { pointer-events: auto; }
+.town-map-fixture .town-map-location { border-radius: 3px; border-color: #9f8b5d; padding: 2px 5px; font-size: 9px; background: #403624ee; }
+.town-map-fixture:has(:hover, :focus-within) { z-index: 5; }
 .town-map-actor-wrap:hover .actor-details-popover, .town-map-actor-wrap:focus-within .actor-details-popover, .gantt-name-anchor:hover .actor-details-popover, .gantt-name-anchor:focus .actor-details-popover { display: block; }
 .town-map-place:has(.town-map-actor-wrap:hover), .town-map-place:focus-within { z-index: 5; }
 .gantt-names > div.gantt-name-row { overflow: visible; }
@@ -83,17 +87,21 @@
 .town-scene .town-map-cast { gap: 2px; margin: 0; }
 .town-scene .scene-actor {
   display: grid; justify-items: center; align-content: end; gap: 2px; width: clamp(88px, calc(108px * var(--scene-zoom)), 180px); max-width: none;
-  padding: 0 0 2px; border: 0; border-radius: 6px; background: none; box-shadow: none;
+  padding: 6px; border: 1px solid #e8cf89; border-radius: 8px; background: #182b29f2; box-shadow: 0 3px 10px #0009;
 }
-.town-scene .scene-actor .npc-sprite {
-  width: 100%; height: clamp(112px, calc(158px * var(--scene-zoom)), 288px); object-fit: contain; object-position: center bottom;
+.town-scene .scene-actor .npc-portrait {
+  width: clamp(80px, calc(104px * var(--scene-zoom)), 176px); aspect-ratio: 1; height: auto; object-fit: cover; object-position: center 28%;
+  border: 2px solid #e8cf89; border-radius: 50%; overflow: hidden;
   filter: saturate(.86) sepia(.09) drop-shadow(2px 3px 2px #1e150d99);
 }
+.town-scene .scene-actor .npc-portrait-image { border: 0; background: transparent; }
 .town-scene .scene-actor > span:last-child {
-  max-width: 100%; padding: 2px 5px; background: #302719e8; color: #fff4d3; border-radius: 5px; font-size: 11px;
+  width: 100%; max-width: 100%; padding: 3px 2px 1px; color: #fff4d3; font-size: 11px; text-align: center;
+  border-top: 1px solid #8e7446;
 }
-.town-scene .scene-actor:is(:hover, :focus-visible, [aria-pressed=true], .deciding) > span:last-child { background: #255a51; color: #fff; }
-.town-scene .scene-actor.visitor > span:last-child { outline: 1px dashed #e8cf89; outline-offset: -1px; }
+.town-scene .scene-actor:is(:hover, :focus-visible, [aria-pressed=true], .deciding) { border-color: #9ffff0; background: #255a51; }
+.town-scene .scene-actor:is(:hover, :focus-visible, [aria-pressed=true], .deciding) > span:last-child { color: #fff; }
+.town-scene .scene-actor.visitor { border-style: dashed; }
 .town-map-bubbles { position: absolute; bottom: calc(100% + 10px); width: 290px; max-height: 230px; overflow: auto; padding: 3px 4px 10px; scrollbar-width: thin; }
 .bubbles-below .town-map-bubbles { bottom: auto; top: calc(100% + 8px); }
 .town-map-bubble { position: relative; padding: 10px 12px; margin: 6px 0 10px; border-radius: 12px; background: #fffae9; color: #2f291f; border: 1px solid #8e7446; box-shadow: 0 3px 10px #0005; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }

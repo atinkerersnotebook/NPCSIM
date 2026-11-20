@@ -167,14 +167,19 @@ def initial_state(scenario: Scenario) -> VillageState:
                                                   if product in config.spoil_after else None),
                                       origin="initial_village_stock", seed_event_id=config.initial_stock_seed_id)]
             for product, quantity in config.stocks[village_depot.FEED_STORE].items() if quantity}}}
-        if any(config.stocks[village_depot.DEPOT].values()):
+        managed = {village_depot.DEPOT}
+        if village_depot.GRANARY in scenario.entities:
+            managed.add(village_depot.GRANARY)
+        for store in managed:
+            if not any(config.stocks[store].values()):
+                continue
             depot_keeper = config.courier
-            feed_lots[village_depot.DEPOT] = {depot_keeper: {
+            feed_lots[store] = {depot_keeper: {
                 product: [VillageStockLot(quantity=quantity, produced_at=config.start_minute,
                                           expires_at=(config.start_minute + config.spoil_after[product]
                                                       if product in config.spoil_after else None),
                                           origin="initial_village_stock", seed_event_id=config.initial_stock_seed_id)]
-                for product, quantity in config.stocks[village_depot.DEPOT].items() if quantity}}
+                for product, quantity in config.stocks[store].items() if quantity}}
     return VillageState(
         legacy=village_legacy.initial_state(scenario),
         depot_lots=feed_lots,

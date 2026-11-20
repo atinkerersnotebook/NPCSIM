@@ -121,10 +121,16 @@ def validate_config(scenario: Any) -> None:
                 or policy.suppliers[product] in alternatives
                 or any(resident not in base.residents for resident in alternatives)):
             raise ValueError("Supplier alternatives require a configured primary and distinct other real residents")
-    for targets in (policy.reserve_targets, policy.production_targets):
+    for targets in (policy.reserve_targets, policy.production_targets, policy.stock_capacities):
         for location, quantities in targets.items():
             if location not in base.stocks or any(resource not in products for resource in quantities):
                 raise ValueError("Reserve/production targets must name real stock locations and products")
+    for location, capacities in policy.stock_capacities.items():
+        for product, capacity in capacities.items():
+            if policy.reserve_targets.get(location, {}).get(product, 0) > capacity:
+                raise ValueError("A stock reserve cannot exceed its configured storage capacity")
+            if base.stocks[location].get(product, 0) > capacity:
+                raise ValueError("Opening stock exceeds its configured storage capacity")
 
 
 def initial_state(scenario: Any) -> VillageEconomyState | None:
@@ -317,6 +323,18 @@ def protected_quantity(world: "World", location: str, product: str) -> int:
 def policy_reserve(world: "World", location: str, product: str) -> int:
     policy = config(world)
     return policy.reserve_targets.get(location, {}).get(product, 0) if policy else 0
+
+
+def stock_capacity(world: "World", location: str, product: str) -> int | None:
+    policy = config(world)
+    return policy.stock_capacities.get(location, {}).get(product) if policy else None
+
+
+def stock_capacity_available(world: "World", location: str, product: str) -> int | None:
+    capacity = stock_capacity(world, location, product)
+    if capacity is None:
+        return None
+    return max(0, capacity - world.state.village.stocks.get(location, {}).get(product, 0))
 
 
 def _allocated_stock(world: "World", location: str, product: str,
@@ -1135,7 +1153,8 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
             and state.residents[buyer].life is not None
             and not state.residents[buyer].life.sleeping
             and state.minute % 1440 < 900
-            and usable_stock(world, destination, "preserved-fish", state.minute) == 0):
+            and usable_stock(world, destination, "preserved-fish", state.minute)
+            < max(1, policy_reserve(world, destination, "preserved-fish"))):
         cost = unit_price(world, "logs") + delivery_fee(world)
         if state.coins[buyer] - commitments(world, buyer) >= cost:
             requests.append((f"{state.minute // 1440}:fish-smoking", state.minute // 1440 * 1440 + 1020,
@@ -1158,6 +1177,9 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
             if product == "firewood" and village_firewood.enabled(world):
                 cost = unit_price(world, product) + delivery_fee(world)
                 quantity = min(quantity, max(0, state.coins[buyer] - commitments(world, buyer)) // cost)
+            capacity = stock_capacity_available(world, delivery_site, product)
+            if capacity is not None:
+                quantity = min(quantity, capacity)
             supplier = _supplier(world, product, delivery_site)
             if quantity and supplier:
                 if (_food_policy(world) and not personal and buyer == policy.innkeeper
@@ -1493,7 +1515,10 @@ def _return_cargo(world: "World", args: dict[str, Any]) -> tuple[str, str, str, 
         if item.depot_transfer:
             from npc_sim import village_depot
             source = (village_depot.workplace(world, world.actor_id, depot_goods)
-                      if item.depot_transfer == "deposit" else village_depot.DEPOT)
+                      if item.depot_transfer == "deposit"
+                      else village_depot.deposit_store(world, {item.resource: item.quantity}))
+            if source is None:
+                return "REJECTED", "DEPOT_AMBIGUOUS", "No single managed store accepts this cargo.", None
             if source != world.actor.location_id:
                 continue
             if any(lot.expires_at is not None and lot.expires_at <= state.minute for lot in item.lots):
@@ -1591,7 +1616,8 @@ def _production(world: "World", action: str) -> tuple[dict[str, int], dict[str, 
     if job is None:
         return {}, {}, 1
     if action == "village_cook_fish":
-        return {"fish": 1}, {"meals": 2}, job.batch_size
+        product = cooking_fish_product(world)
+        return {product: 1}, {"meals": 2}, job.batch_size
     from npc_sim import village_services
     if action in village_services.JOBS:
         return {}, {village_services.JOBS[action][1]: 2}, 1
@@ -1736,13 +1762,16 @@ def production_batch_limit(world: "World", action: str, *, personal: bool = Fals
     from npc_sim import village_livestock
     livestock_feed = village_livestock.feed_needs(world) if location == "farm" else {}
     for product, amount in outputs.items():
+        capacity = stock_capacity_available(world, location, product)
+        if capacity is not None:
+            limits.append(capacity // amount)
         if product not in targets:
             continue
         due = min((plan["due"] for plan in meal_requirements(world)), default=now) if (
             product == "meals" and location == world.scenario.village.residents[policy.innkeeper].work) else now
         stock = usable_stock(world, location, product, due)
         if product == "meals" and location == world.scenario.village.residents[policy.innkeeper].work:
-            recipe = "fish" if action == "village_cook_fish" else "bread"
+            recipe = cooking_fish_product(world) if action == "village_cook_fish" else "bread"
             recipe_demand = sum(plan["unmet_recipe_portions"].get(recipe, 0)
                                 for plan in meal_requirements(world)
                                 if now >= _service_preparation_at(world, plan) - policy.cooking_lead_minutes)
@@ -1752,7 +1781,7 @@ def production_batch_limit(world: "World", action: str, *, personal: bool = Fals
                         if person.life and person.life.work and person.life.work.location == location)
         short = max(0, targets[product] - stock - committed)
         orders = sorted((order for order in (_personal_orders(world) if personal else economy.orders.values())
-                         if order.status in COMMITTED and order.source == location
+                         if order.status in LOADABLE and order.source == location
                          and order.product == product and order.loadable),
                         key=lambda order: order.required_fresh_until) if economy else []
         if orders and product != "meals":
@@ -1775,6 +1804,15 @@ def production_batch_limit(world: "World", action: str, *, personal: bool = Fals
                             or bool(livestock_feed.get(product)) or action == "village_split_firewood")
         limits.append(ceil(short / amount) if needs_full_batch else short // amount)
     return min(limits)
+
+
+def cooking_fish_product(world: "World") -> str:
+    policy = config(world)
+    if policy is None or "preserved-fish" not in policy.recipes:
+        return "fish"
+    demands = [plan["unmet_recipe_portions"].get("preserved-fish", 0)
+               for plan in meal_requirements(world)]
+    return "preserved-fish" if any(demands) else "fish"
 
 
 def production_blocker(world: "World", action: str, *, personal: bool = False) -> tuple[str, str] | None:

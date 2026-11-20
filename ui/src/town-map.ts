@@ -6,9 +6,9 @@ import { actorDetailsMarkup, siteStockText } from "./actor-details.ts";
 import { npcPortrait, npcSprite } from "./npc-sprite.ts";
 import { sceneAnchors, sceneHeight, sceneTerrain, sceneWidth } from "./millhaven-orthographic.ts";
 
-import { townMapAnchors as mapAnchors, townMapWidth as mapWidth, townMapHeight as mapHeight } from "./millhaven-geography.ts";
+import { townMapAnchors as mapAnchors, townMapFixtureAnchors, townMapWidth as mapWidth, townMapHeight as mapHeight } from "./millhaven-geography.ts";
 
-const mapImage = new URL("./assets/millhaven-extended.png", import.meta.url).href;
+const mapImage = new URL("./assets/millhaven-extended-new.png", import.meta.url).href;
 const bubbleDuration = 18_000;
 export const townMapAnchors: Readonly<Record<string, { x: number; y: number }>> = mapAnchors;
 
@@ -151,7 +151,7 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
   const height = scene ? sceneHeight : mapHeight;
   const zoom = options.zoom ?? 1;
   const canvasStyle = scene ? `width:${zoom * 100}%;--scene-zoom:${zoom}`
-    : `width:min(${zoom * 100}%,${zoom * 113}vh);min-width:${zoom * 834}px`;
+    : `width:${zoom * 100}%`;
   const lines = options.dialogue?.lines ?? [];
   const active = options.dialogue?.active(options.now ?? Date.now()) ?? [];
   const present = agents.filter(agent => !agent.visitor || agent.current);
@@ -171,7 +171,7 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
     class="town-map-actor${onScene ? " scene-actor" : ""}${agent.deciding ? " deciding" : ""}${agent.visitor ? " visitor" : ""}"
     ${scene ? "data-scene-actor" : "data-map-actor"}="${escape(agent.id)}" aria-pressed="${agent.id === options.selectedActorId}"
     aria-label="${escape(`${agent.name}, ${agent.location}. Select for details`)}" aria-describedby="${prefix}-actor-${escape(agent.id)}">
-    ${npcSprite(agent.id, onScene)}
+    ${onScene ? npcPortrait(agent.id) : npcSprite(agent.id)}
     <span>${escape(agent.name)}</span></button><span id="${prefix}-actor-${escape(agent.id)}" class="actor-details-popover" role="tooltip">
       <strong>${escape(agent.name)}${agent.visitor ? " / Visitor" : ""}</strong>
       ${actorDetailsMarkup(state, agent)}</span></span>`;
@@ -208,7 +208,7 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
           const stock = world.village!.stocks[locationId];
           const bubbles = active.filter(line => line.locationId === locationId
             && group.some(agent => agent.id === line.actorId));
-          return `<div class="town-map-place${anchor.y < 240 ? " bubbles-below" : ""}${anchor.x < 160 ? " align-left" : anchor.x > width - (scene ? 200 : 263) ? " align-right" : ""}"
+          return `<div class="town-map-place${anchor.y < height * (240 / 768) ? " bubbles-below" : ""}${anchor.x < width * (160 / 1123) ? " align-left" : anchor.x > width - (scene ? 200 : width * (263 / 1123)) ? " align-right" : ""}"
             style="left:${anchor.x / width * 100}%;top:${anchor.y / height * 100}%"
             data-map-location="${escape(locationId)}">
             ${bubbles.length ? `<div class="town-map-bubbles" aria-live="polite">
@@ -224,6 +224,19 @@ export function townMapMarkup(state: State, agents: readonly MapAgent[], options
             ${group.length ? `<div class="town-map-cast">${group.map(agent => actorButton(agent, scene)).join("")}</div>` : ""}
           </div>`;
         }).join("")}
+        ${scene ? "" : Object.entries(townMapFixtureAnchors)
+          .filter(([id]) => world.entities[id])
+          .map(([id, anchor]) => {
+            const fixture = world.entities[id];
+            const parent = fixture.location ? world.entities[fixture.location]?.name : undefined;
+            return `<div class="town-map-fixture" style="left:${anchor.x / width * 100}%;top:${anchor.y / height * 100}%"
+              data-map-fixture="${escape(id)}"><span class="town-map-location-wrap"><button type="button"
+              class="town-map-location" data-fixture-marker="${escape(id)}" aria-label="${escape(fixture.name)}"
+              aria-describedby="${prefix}-fixture-${escape(id)}">${escape(fixture.name)}</button><span
+              id="${prefix}-fixture-${escape(id)}" class="actor-details-popover town-map-stock" role="tooltip">
+              <strong>${escape(fixture.name)}</strong><span>${escape(fixture.description ?? "Physical map landmark.")}${parent ? ` Located at ${escape(parent)}.` : ""}</span>
+              </span></span></div>`;
+          }).join("")}
       </div>
     </div>
     ${offMap.length ? `<div class="town-map-offmap"><strong>Off map / location unverified</strong>

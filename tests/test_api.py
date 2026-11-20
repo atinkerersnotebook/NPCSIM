@@ -13,17 +13,18 @@ from test_controller import assessment_response
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_instant_millhaven_is_listed_as_a_separate_scenario(tmp_path, monkeypatch):
+def test_versioned_millhaven_scenario_titles(tmp_path, monkeypatch):
     scenarios = tmp_path / "scenarios"
     scenarios.mkdir()
-    shutil.copy(ROOT / "data" / "scenarios" / "millhaven-instant.json", scenarios)
+    for scenario_id in ("millhaven-instant", "grand-theft-millhaven"):
+        shutil.copy(ROOT / "data" / "scenarios" / f"{scenario_id}.json", scenarios)
     monkeypatch.setattr(application, "DATA", tmp_path)
     response = TestClient(application.app).get("/api/scenarios")
     assert response.status_code == 200
-    choice = response.json()["scenarios"][0]
-    assert choice["id"] == "millhaven-instant"
-    assert choice["title"] == "Millhaven - Tin Cans and String Test"
-    assert len(choice["agent_slots"]) == 12
+    choices = {choice["id"]: choice for choice in response.json()["scenarios"]}
+    assert choices["millhaven-instant"]["title"] == "Millhaven VII - Tin Cans and String Test"
+    assert len(choices["millhaven-instant"]["agent_slots"]) == 12
+    assert choices["grand-theft-millhaven"]["title"] == "Millhaven VI-I - Grand Theft Millhaven"
 
 
 def test_live_event_projection_keeps_original_details_available(monkeypatch):

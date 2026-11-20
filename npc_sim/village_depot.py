@@ -4,10 +4,35 @@ from npc_sim import village, village_economy, village_goods
 from npc_sim.models import VillageShipment, VillageStockLot
 
 DEPOT = "supply-depot"
+GRANARY = "communal-granary"
 FEED_STORE = "farm-feed-store"
 PRODUCTS = {"grain", "flour", "timber", "firewood", "hay"}
+GRANARY_PRODUCTS = {"grain", "flour", "hay"}
+DEPOT_PRODUCTS = {"timber", "firewood"}
 FUEL_CAPACITY = 16
-MANAGED_SCENARIOS = {"millhaven-resilient", "millhaven-complete"}
+MANAGED_SCENARIOS = {"millhaven-resilient", "millhaven-complete", "millhaven-generation-17"}
+
+
+def stores(world) -> set[str]:
+    result = {DEPOT, FEED_STORE}
+    if GRANARY in world.state.entities:
+        result.add(GRANARY)
+    return result
+
+
+def store_products(world, store: str) -> set[str]:
+    if GRANARY in world.state.entities:
+        if store == GRANARY:
+            return GRANARY_PRODUCTS
+        if store == DEPOT:
+            return DEPOT_PRODUCTS
+    return PRODUCTS if store == DEPOT else {"grain", "hay"}
+
+
+def deposit_store(world, goods) -> str | None:
+    destinations = [store for store in stores(world)
+                    if store != FEED_STORE and set(goods) <= store_products(world, store)]
+    return destinations[0] if len(destinations) == 1 else None
 
 
 def enabled(world) -> bool:
@@ -38,18 +63,21 @@ def validate_config(scenario) -> None:
         return
     if base is None or base.livestock is None or base.economy is None or not base.economy.require_orders:
         raise ValueError("Resilient Millhaven requires livestock and a managed depot")
+    split_storage = scenario.id == "millhaven-generation-17" and GRANARY in scenario.entities
+    storage_sites = (DEPOT, GRANARY, FEED_STORE) if split_storage else (DEPOT, FEED_STORE)
     if any(scenario.entities.get(site) is None or scenario.entities[site].kind != "location"
-           for site in (DEPOT, FEED_STORE)):
-        raise ValueError("Depot and livestock feed store must be real locations")
-    if set(base.stocks.get(DEPOT, {})) != PRODUCTS:
-        raise ValueError("The communal depot needs the configured priced products")
+           for site in storage_sites):
+        raise ValueError("Managed storage requires real depot, granary and feed-store locations")
+    expected = {DEPOT: DEPOT_PRODUCTS, GRANARY: GRANARY_PRODUCTS} if split_storage else {DEPOT: PRODUCTS}
+    if any(set(base.stocks.get(site, {})) != products for site, products in expected.items()):
+        raise ValueError("Managed storage sites need the configured priced products")
     if not {"grain", "hay"} <= set(base.stocks.get(FEED_STORE, {})):
         raise ValueError("The feed store needs real opening grain and hay stock")
     if not base.initial_stock_seed_id:
         raise ValueError("Opening feed stock requires a provenance-backed seed")
     if base.stocks[DEPOT].get("firewood", 0) > FUEL_CAPACITY:
         raise ValueError("Opening depot fuel exceeds the woodshed capacity")
-    if any(product not in base.prices or quantity < 0 for site in (DEPOT, FEED_STORE)
+    if any(product not in base.prices or quantity < 0 for site in storage_sites
            for product, quantity in base.stocks[site].items()):
         raise ValueError("Stored goods need real nonnegative priced stock")
     if base.stocks[FEED_STORE].get("hay", 0) < 1 or base.stocks[FEED_STORE].get("grain", 0) < 1:
@@ -58,7 +86,7 @@ def validate_config(scenario) -> None:
 
 def reconcile(world) -> None:
     state = world.state.village
-    for location in (DEPOT, FEED_STORE):
+    for location in stores(world):
         if any(owner not in world.scenario.village.residents for owner in state.depot_lots.get(location, {})):
             raise ValueError(f"Unknown owner in {location} ledger")
         if any(product not in state.stocks.get(location, {}) for inventory in state.depot_lots.get(location, {}).values()
@@ -152,15 +180,23 @@ def load(world, goods: dict[str, int], withdrawal: bool, *, feed: bool = False) 
     if not state.economy or not state.economy.config.require_orders:
         return "DEPOT_ECONOMY_REQUIRED: Managed storage needs the active priced economy."
     actor = world.actor_id
-    store = FEED_STORE if feed else DEPOT
+    if feed:
+        store = FEED_STORE
+    elif withdrawal:
+        store = next((site for site in stores(world) if site != FEED_STORE
+                      and world.actor.location_id == site), "")
+    else:
+        store = deposit_store(world, goods) or ""
     if feed and (config.livestock is None or actor != config.livestock.keeper
                  or withdrawal or not set(goods) <= {"grain", "hay"}):
         return "FEED_STORE_AUTHORITY: Only the farmer may restock feed from the farm."
+    if not store or (not feed and not set(goods) <= store_products(world, store)):
+        return "DEPOT_INVALID_GOODS: Withdraw at one storage site and do not mix granary and depot goods."
     work = config.residents[actor].work if feed else workplace(world, actor, goods)
     source, destination = (store, work) if withdrawal else (work, store)
     if world.actor.location_id != source or source == destination:
         return "DEPOT_WRONG_SITE: Deposit at your workplace or withdraw at the depot."
-    if not goods or any(product not in PRODUCTS or type(quantity) is not int or quantity < 1
+    if not goods or any(product not in store_products(world, store) or type(quantity) is not int or quantity < 1
                         for product, quantity in goods.items()):
         return "DEPOT_INVALID_GOODS: Choose positive quantities of supported depot goods."
     from npc_sim.village_services import foot_capacity
@@ -236,8 +272,8 @@ def unload(world, carrier: str, shipments: list[VillageShipment], deliveries: li
     work = workplace(world, carrier, {item.resource for item in deliveries})
     if any(item.depot_owner not in config.residents or item.seller != item.depot_owner
            or item.buyer != carrier or item.resource not in PRODUCTS
-           or (item.depot_transfer == "deposit" and (location not in {DEPOT, FEED_STORE} or item.seller != carrier))
-           or (item.depot_transfer == "deposit" and location == DEPOT and item.resource not in PRODUCTS)
+           or (item.depot_transfer == "deposit" and (location not in stores(world) or item.seller != carrier))
+           or (item.depot_transfer == "deposit" and item.resource not in store_products(world, location))
            or (item.depot_transfer == "deposit" and location == FEED_STORE and (
                config.livestock is None or carrier != config.livestock.keeper or item.resource not in {"grain", "hay"}))
            or (item.depot_transfer == "withdrawal" and location != work)

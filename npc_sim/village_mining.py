@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 VERBS = {"village_mine_ore", "village_load_ore", "village_smelt_iron", "village_mining_pause"}
 FREE_ACTIONS = {"look", "read", "say", "village_observe", "village_wait", "village_mining_pause"}
 MINE, ORE, PICK, FURNACE = "iron-mine", "iron-ore", "mining-pick", "smelting-furnace"
+ORE_DOCK = "ore-loading-dock"
 
 
 def example_config(scenario: Scenario) -> VillageMiningConfig:
@@ -32,6 +33,9 @@ def fixtures(scenario: Scenario) -> dict[str, Entity]:
                               location="village-square", destination=MINE, open=True, health=None),
         "mine-square": Entity(name="Road back to Millhaven", kind="door", description="The iron mine's road to the village square.",
                               location=MINE, destination="village-square", open=True, health=None),
+        ORE_DOCK: Entity(name="Ore Loading Dock", kind="fixture", location=MINE,
+                         description="The marked loading point where mined ore is staged beside the mine entrance for physical hauling.",
+                         takable=False, health=100, max_health=100),
         PICK: Entity(name="Mining pick", kind="tool", description="A real hand-held pick for extracting iron ore.",
                      location=MINE, takable=True, max_health=100),
         FURNACE: Entity(name="Smelting furnace", kind="tool", description="Smelts one iron ore into one usable iron unit using real fuel: logs normally, firewood when its policy is enabled.",
@@ -64,7 +68,8 @@ def validate_config(scenario: Scenario) -> None:
             raise ValueError("Mining requires expanded timed AI village life")
         if base.mining.miner != base.smith:
             raise ValueError("The town smith is assigned ore extraction and smelting")
-        if not set(fixtures(scenario)) <= set(scenario.entities):
+        required = set(fixtures(scenario)) - {ORE_DOCK}
+        if not required <= set(scenario.entities):
             raise ValueError("Mining requires its real mine, road, pick and furnace")
 
 

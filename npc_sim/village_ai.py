@@ -44,7 +44,7 @@ def observation(world: "World") -> dict[str, Any]:
             owner: {product: sum(lot.quantity for lot in lots) for product, lots in inventory.items() if lots}
             for owner, inventory in state.depot_lots.get(world.actor.location_id, {}).items()}
             } if village_depot.enabled(world) and
-            world.actor.location_id in {"supply-depot", "farm-feed-store"} else {}),
+            world.actor.location_id in village_depot.stores(world) else {}),
         "coins": state.coins[rid], "resource_inventory": person.cargo.copy(), "tasks": [],
         "events": [state.events[index].model_dump() for index in person.memories[-12:]],
         **({"notices": [notice.model_dump() for notice in state.notices if rid in notice.witnesses],
@@ -286,11 +286,11 @@ def actions(world: "World") -> list[dict[str, Any]]:
         add("village_unload_goods", "Unload every foot shipment for this workplace; charge actual goods and one delivery fee.", {})
         if village_depot.enabled(world):
             depot_goods = {"grain", "flour", "timber", "firewood", "hay"}
-            add("village_depot_load", "Carry your own workplace goods to the shared depot; ownership is retained until a paid withdrawal.",
+            add("village_depot_load", "Carry grain, flour and hay to the communal granary, or timber and firewood to the supply depot; ownership is retained until a paid withdrawal.",
                 {"goods": {"type": "object", "minProperties": 1,
                            "propertyNames": {"enum": sorted(depot_goods)},
                            "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}}})
-            add("village_depot_withdraw", "Purchase available depot stock for your own workplace; the owner is paid on unloading.",
+            add("village_depot_withdraw", "Purchase available granary or depot stock from the current storage site for your workplace; the owner is paid on unloading.",
                 {"goods": {"type": "object", "minProperties": 1,
                            "propertyNames": {"enum": sorted(depot_goods)},
                            "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}}})
@@ -353,7 +353,8 @@ def production_job(world: "World", action: str) -> VillageJob | None:
     resident = config.residents[world.actor_id]
     job = resident.job
     if action == "village_cook_fish" and job and "hospitality" in resident.skills:
-        job = job.model_copy(update={"inputs": {"fish": 1}})
+        from npc_sim import village_economy
+        job = job.model_copy(update={"inputs": {village_economy.cooking_fish_product(world): 1}})
     if action in village_services.JOBS and job:
         _, resource, equipment = village_services.JOBS[action]
         job = job.model_copy(update={"inputs": {}, "outputs": {resource: 2}, "equipment": equipment,

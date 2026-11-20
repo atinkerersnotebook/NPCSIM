@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 
 from npc_sim import village, village_ai, village_economy, village_fallback, village_goods, village_depot
+from npc_sim.living_village import build_generation_17
+from npc_sim.storage import read_json
 from npc_sim.models import Scenario
 from npc_sim.world import World
 from test_world import act
@@ -58,6 +60,45 @@ def test_complete_scenario_combines_legacy_and_managed_storage(tmp_path):
     restored = World(scenario, world.path, "complete", "ada", "session-ada")
     assert restored.state.village.depot_lots == world.state.village.depot_lots
     assert restored.state.village.legacy.learned["ada"] == world.state.village.legacy.learned["ada"]
+
+
+def test_generation_17_is_cumulative_scenario():
+    complete = Scenario.model_validate(read_json(
+        ROOT / "data" / "scenarios" / "millhaven-complete.json"))
+    living = Scenario.model_validate(read_json(
+        ROOT / "data" / "scenarios" / "millhaven-living.json"))
+
+    generated = build_generation_17(complete, living)
+
+    assert generated.id == "millhaven-generation-17"
+    assert generated.village.legacy == complete.village.legacy
+    assert generated.village.equipment == living.village.equipment
+    assert generated.village.firewood == living.village.firewood
+    assert generated.village.social == living.village.social
+    assert generated.village.events == living.village.events
+    assert set(complete.entities) <= set(generated.entities)
+    assert set(complete.village.stocks) <= set(generated.village.stocks)
+    assert {"bridge-inspection", "road-inspection", "millrace-cleaning"} <= set(
+        generated.village.maintenance.tasks)
+    assert {"cottage-upkeep", "farm-railings"} <= set(generated.village.maintenance.tasks)
+    assert {"north-fields", "north-pasture", "farm-cistern", "supply-depot",
+            "communal-granary", "communal-kitchen", "farm-feed-store"} <= set(generated.entities)
+    for site in ("north-fields", "north-pasture", "farm-cistern", "supply-depot",
+                 "communal-granary", "communal-kitchen", "farm-feed-store"):
+        assert generated.entities[site].kind == "location"
+    assert generated.entities["farm-emergency-cistern"].destination == "farm-cistern"
+    assert set(generated.village.stocks["communal-granary"]) == {"grain", "flour", "hay"}
+    assert set(generated.village.stocks["supply-depot"]) == {"timber", "firewood"}
+    assert generated.village.economy.reserve_targets["watermill"]["flour"] == 8
+    assert generated.village.economy.reserve_targets["farm"]["grain"] == 10
+    assert generated.village.economy.reserve_targets["herbal-workshop"]["herbs"] == 8
+    assert generated.village.economy.reserve_targets["riverbank"]["preserved-fish"] == 3
+    assert generated.village.economy.reserve_targets["woods"] == {"logs": 10, "timber": 6}
+    assert generated.village.economy.stock_capacities["general-store"]["bread"] == 8
+    assert generated.village.economy.supplier_alternatives["bread"] == ["nella"]
+    assert generated.village.economy.meal_plans[-1].recipe_portions == {
+        "bread": 8, "preserved-fish": 4}
+    assert generated.village.economy.stock_capacities["riverbank"]["preserved-fish"] == 6
 
 
 def walk_to(world, destination):
@@ -181,6 +222,34 @@ def test_depot_preserves_owner_freshness_and_requires_funded_withdrawal(tmp_path
     assert state.coins["hobb"] == 0
     assert state.stocks["workshop"]["timber"] >= 1
     assert not village_economy.reconcile_inventory(world)
+
+
+def test_depot_planning_uses_real_surplus_and_affordable_workplace_need(tmp_path):
+    world = make_world(tmp_path)
+    state = world.state.village
+    rowan = world.bind("rowan", "session-rowan")
+    rowan.actor.location_id = "woods"
+    state.economy.config.reserve_targets.setdefault("woods", {})["timber"] = 2
+    state.economy.config.production_targets.setdefault("woods", {})["timber"] = 0
+    village_goods.put(rowan, "woods", "timber", 5)
+    deposit = village_fallback._depot_choice(rowan)
+    assert deposit["task_id"] == "depot:deposit:timber"
+    assert deposit["arguments"] == {"goods": {"timber": 3}}
+
+    hobb = world.bind("hobb", "session-hobb")
+    hobb.actor.location_id = "supply-depot"
+    state.economy.config.production_targets.setdefault("workshop", {})["timber"] = 2
+    state.stocks["workshop"]["timber"] = 0
+    state.stock_lots["workshop"]["timber"] = []
+    state.stocks["supply-depot"]["timber"] = 1
+    state.stock_lots["supply-depot"]["timber"] = [state.stock_lots["woods"]["timber"][0].model_copy(
+        update={"quantity": 1})]
+    state.depot_lots.setdefault("supply-depot", {}).setdefault("rowan", {})["timber"] = [
+        state.stock_lots["supply-depot"]["timber"][0].model_copy(deep=True)]
+    state.coins["hobb"] = village_economy.unit_price(hobb, "timber")
+    withdrawal = village_fallback._depot_choice(hobb)
+    assert withdrawal["task_id"] == "depot:withdraw:timber"
+    assert withdrawal["arguments"] == {"goods": {"timber": 1}}
 
 
 def test_instant_granary_transfers_real_grain_without_a_feed_store(tmp_path):
