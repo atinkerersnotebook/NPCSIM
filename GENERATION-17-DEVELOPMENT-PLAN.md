@@ -34,6 +34,13 @@ workplace shortage for withdrawals. Existing physical channels, freshness,
 payment and save/reload ledgers remain authoritative. Fresh multi-day
 autonomous verification and the seven-active-day release gate are still open.
 
+Generation 17 now supports an explicit morning supper menu. Elsie uses only
+personally completed store-delivery knowledge to choose a specialty when it is
+available, otherwise retaining the bread-and-fresh-fish fallback. Specialty and
+optional production yields to accepted supplier orders. General-store purchases
+are priced at the wholesale unit price; residents buying from Nella pay the
+configured retail markup, with physical payment and delivery unchanged.
+
 ## P0: Build producer stockpiles and a general-store fallback
 
 Make higher producer reserves and local resale the primary Generation 17 change. Producers should replenish these reserves even without an open order, rather than producing only when a buyer asks.

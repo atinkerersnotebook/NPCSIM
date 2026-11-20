@@ -533,7 +533,8 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   content.addEventListener("change", event => {
     const select = event.target;
     if (!(select instanceof HTMLSelectElement) || !select.hasAttribute("data-timeline-activity")) return;
-    if (select.value === "all" || select.value === "movement" || select.value === "work" || select.value === "dialogue") {
+    if (select.value === "all" || select.value === "movement" || select.value === "work"
+      || select.value === "dialogue" || select.value === "meals") {
       activity = select.value;
       schedule();
     }

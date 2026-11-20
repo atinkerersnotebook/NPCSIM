@@ -9,6 +9,7 @@ from npc_sim.village_economy_models import (
     VillageEconomyConfig, VillageEconomyState, VillageMealPlan, VillageSupplierOrder,
 )
 from npc_sim.world import World
+from npc_sim.village_communication_models import VillageCommunicationConfig
 from test_village_expanded import scenario
 from test_world import act
 
@@ -114,6 +115,38 @@ def test_general_store_sale_uses_paid_physical_stock_without_double_counting(wor
     assert state.coins["nella"] == before["nella"] + 6
     assert order.status == "fulfilled" and order.paid == 6
     assert sum(item.amount for item in state.economy.payments if item.kind == "goods") == 6
+
+
+def test_daily_menu_falls_back_to_fish_and_selects_known_store_specialty(world):
+    from npc_sim.village_communication import initial_state
+    from npc_sim.village_communication_models import NoticeKnowledge, NoticeTerms, NoticeVersion
+
+    state = world.state.village
+    policy = state.economy.config
+    policy.recipes["preserved-fish"] = policy.recipes["fish"].model_copy(deep=True)
+    policy.recipes["preserved-fish"].inputs = {"preserved-fish": 1}
+    assert economy.choose_daily_menu(world) == {"bread": 8, "fish": 4}
+    world.scenario.village.communication = VillageCommunicationConfig()
+    state.communication = initial_state(world.scenario)
+    notice = NoticeVersion(
+        id="store-specialty", version=1, author="elsie", status="completed",
+        terms=NoticeTerms(type="supply_request", subject="preserved-fish",
+                          description="Available from the store", recipients=["nella"], quantity=2,
+                          destination="general-store", due_at=900, required_fresh_until=1140,
+                          unit_price=8, delivery_fee=1), created_at=350, updated_at=400)
+    state.communication.knowledge.setdefault("elsie", {})[notice.id] = NoticeKnowledge(
+        snapshot=notice, heard_at=400, source_type="witness")
+    assert economy.choose_daily_menu(world) == {"bread": 8, "preserved-fish": 4}
+
+
+def test_general_store_resale_uses_configured_markup(world):
+    state = world.state.village
+    policy = state.economy.config
+    policy.retail_store = "general-store"
+    policy.retail_markup_percent = 25
+    policy.prices["bread"] = 4
+    assert economy.supplier_unit_price(world, "jory", "bread") == 4
+    assert economy.supplier_unit_price(world, "nella", "bread") == 5
 
 
 def test_alternative_recipes_fresh_stock_and_incoming_reduce_demand(world):

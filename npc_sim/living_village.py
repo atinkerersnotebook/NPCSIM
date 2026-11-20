@@ -340,7 +340,9 @@ def build_generation_17(complete: Scenario, living: Scenario) -> Scenario:
         "herbal-workshop": {"herbs": 16},
         "riverbank": {"preserved-fish": 6},
         "woods": {"logs": 20, "timber": 12},
-        "general-store": {"grain": 8, "flour": 6, "bread": 8, "herbs": 6, "preserved-fish": 4},
+        "general-store": {"grain": 8, "flour": 6, "bread": 8, "herbs": 6,
+                          "preserved-fish": 4, "furniture": 2, "tackle": 3,
+                          "wooden-cup": 4, "herbal-remedy": 3},
     }
     config.economy.reserve_targets.update(stock_reserves)
     config.economy.stock_capacities = stock_capacities
@@ -356,10 +358,11 @@ def build_generation_17(complete: Scenario, living: Scenario) -> Scenario:
         config.economy.reserve_targets.setdefault("general-store", {})[product] = reserve
     config.economy.recipes["preserved-fish"] = config.economy.recipes["fish"].model_copy(deep=True)
     config.economy.recipes["preserved-fish"].inputs = {"preserved-fish": 1}
-    for meal in config.economy.meal_plans:
-        if meal.id == "supper" and "fish" in meal.recipe_portions:
-            meal.recipe_portions["preserved-fish"] = meal.recipe_portions.pop("fish")
     config.economy.suppliers["preserved-fish"] = "finn"
+    config.economy.suppliers.update({"furniture": "hobb", "tackle": "finn",
+                                     "wooden-cup": "hobb", "herbal-remedy": "iona"})
+    for product in ("preserved-fish", "furniture", "tackle", "wooden-cup", "herbal-remedy"):
+        config.economy.reserve_targets.setdefault("general-store", {})[product] = 1
     scenario.objective = latest.objective + (
         " Preserve the village's inherited family history, readable chronicle and optional same-scenario "
         "midnight generation handoff while using the communal depot and feed store physically."

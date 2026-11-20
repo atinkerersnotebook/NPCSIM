@@ -599,6 +599,27 @@ def test_optional_goods_disabled_and_missing_tool_or_fuel(cast):
     assert leisure(cast, "catch-and-release", "finn")[1] == "OPTIONAL_GOODS_DISABLED"
 
 
+def test_optional_specialty_waits_for_accepted_supplier_order(cast):
+    from npc_sim.village_economy_models import VillageSupplierOrder
+
+    world = cast["hobb"]
+    opt_in_goods(cast)
+    from npc_sim.village_economy_models import VillageEconomyConfig, VillageEconomyState
+    from npc_sim.village_economy import example_config
+    world.scenario.village.expanded_rules = True
+    policy = VillageEconomyConfig.model_validate(example_config(world.scenario))
+    world.state.village.economy = VillageEconomyState(config=policy,
+        initial_coins=world.state.village.coins.copy())
+    place(cast, "hobb", "workshop")
+    world.state.village.stocks["workshop"].update(timber=2, planks=2)
+    world.state.village.economy.orders["hobb-paid"] = VillageSupplierOrder(
+        id="hobb-paid", request_key="hobb-paid", buyer="torvin", supplier="hobb",
+        source="workshop", destination="forge", product="planks", quantity=1,
+        price=3, delivery_fee=1, deadline=900, required_fresh_until=1000,
+        created_at=700, status="ready_to_collect")
+    assert leisure(cast, "furniture-making", "hobb")[1] == "ORDER_COMMITTED"
+
+
 def test_smoking_rejects_fish_expiring_during_recipe(cast):
     from npc_sim.models import VillageStockLot
 

@@ -6715,7 +6715,7 @@
           "portions": 12,
           "recipe_portions": {
             "bread": 8,
-            "preserved-fish": 4
+            "fish": 4
           },
           "bread_service": 0,
           "tea_portions": 12
@@ -6734,7 +6734,11 @@
         "hay": "ada",
         "herbs": "iona",
         "logs": "rowan",
-        "preserved-fish": "finn"
+        "preserved-fish": "finn",
+        "furniture": "hobb",
+        "tackle": "finn",
+        "wooden-cup": "hobb",
+        "herbal-remedy": "iona"
       },
       "supplier_alternatives": {
         "grain": [
@@ -6785,7 +6789,11 @@
           "flour": 3,
           "bread": 4,
           "herbs": 3,
-          "preserved-fish": 2
+          "preserved-fish": 1,
+          "furniture": 1,
+          "tackle": 1,
+          "wooden-cup": 1,
+          "herbal-remedy": 1
         },
         "herbal-workshop": {
           "herbs": 8
@@ -6828,9 +6836,15 @@
           "flour": 6,
           "bread": 8,
           "herbs": 6,
-          "preserved-fish": 4
+          "preserved-fish": 4,
+          "furniture": 2,
+          "tackle": 3,
+          "wooden-cup": 4,
+          "herbal-remedy": 3
         }
       },
+      "retail_markup_percent": 20,
+      "retail_store": "general-store",
       "prices": {
         "bread": 3,
         "fish": 2,
@@ -9749,7 +9763,11 @@
         "compost": 0,
         "firewood": 0,
         "herbs": 0,
-        "preserved-fish": 0
+        "preserved-fish": 0,
+        "furniture": 0,
+        "tackle": 0,
+        "wooden-cup": 0,
+        "herbal-remedy": 0
       },
       "iron-mine": {
         "iron-ore": 0,

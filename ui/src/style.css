@@ -351,6 +351,8 @@ main{max-width:none}
 .gantt-filters { display: flex; flex-wrap: wrap; align-items: end; gap: .55rem; padding: .5rem 1.25rem 0; }
 .gantt-filters label { display: grid; gap: .2rem; margin: 0; }
 .gantt-filters button[aria-pressed="true"] { background: #25423d; color: var(--teal); border-color: var(--teal); }
+.world-gantt .is-filtered-out { opacity: .18; filter: grayscale(1); }
+.world-gantt :is(.gantt-bar, .gantt-marker):is(:hover, :focus) { opacity: 1; filter: none; }
 .gantt-selected-lane { stroke: var(--teal); stroke-width: 2; fill: #7edcca18; pointer-events: none; }
 .gantt-name-row.is-selected, .monitor-agent:has(.monitor-resident-link[aria-pressed="true"]) { background: #25423d; box-shadow: inset 3px 0 var(--teal); }
 .monitor-agent:has(.monitor-resident-link[aria-pressed="true"]) { padding-inline: .75rem; }

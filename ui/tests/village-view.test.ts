@@ -1211,13 +1211,18 @@ test("World timeline filters recent activity and highlights the selected residen
   assert.match(markup, /data-gantt-agent="torvin"><rect class="gantt-selected-lane"/);
   assert.match(markup, /Recent dialogue/);
   assert.match(markup, /Torvin → Elsie/);
-  assert.doesNotMatch(markup, /Early dialogue|Recent movement|Recent work/);
+  assert.doesNotMatch(markup, /Early dialogue/);
+  assert.match(markup, /Recent movement/);
+  assert.match(markup, /Recent work/);
+  assert.ok((markup.match(/is-filtered-out/g) ?? []).length >= 2);
   const work = worldMonitorMarkup(state, events, { activity: "work" });
   assert.match(work, /Recent work/);
-  assert.doesNotMatch(work, /Recent dialogue|Recent movement/);
+  assert.match(work, /Recent dialogue/);
+  assert.match(work, /Recent movement/);
   const movement = worldMonitorMarkup(state, events, { activity: "movement" });
   assert.match(movement, /Recent movement/);
-  assert.doesNotMatch(movement, /Recent dialogue|Recent work/);
+  assert.match(movement, /Recent dialogue/);
+  assert.match(movement, /Recent work/);
   assert.match(worldMonitorMarkup(state, events), /Early dialogue/);
 });
 
@@ -1806,6 +1811,26 @@ test("Gantt uses taller aligned rows and rounded tiles without changing recorded
   assert.match(markup, /data-gantt-detail="Recorded work\."/);
   assert.match(markup, /id="gantt-tooltip" class="gantt-tooltip" role="tooltip" hidden/);
   assert.deepEqual(buildWorldTimeline(state, events, agents), before);
+});
+
+test("Gantt meal filter highlights eating and greys out all other actions", () => {
+  const state = expanded();
+  state.world!.village!.minute = 510;
+  const events = [
+    timelineEvent(1, "observation", 480, timelineObservation(480)),
+    timelineEvent(2, "action_request", 485, { request_id: "work", action_id: "village_work", arguments: {} }),
+    timelineEvent(3, "action_result", 485, { request_id: "work", outcome: "APPLIED",
+      explanation: "Recorded work.", observation: timelineObservation(485, "forge", 495) }),
+    timelineEvent(4, "action_request", 500, { request_id: "eat", action_id: "village_eat", arguments: {} }),
+    timelineEvent(5, "action_result", 500, { request_id: "eat", outcome: "APPLIED",
+      explanation: "A real supper was eaten.", observation: timelineObservation(500, "tavern", 505) })
+  ];
+  const markup = worldGanttMarkup(state, events, monitoredAgents(state), { activity: "meals", linkResidents: true });
+  assert.match(markup, /<option value="meals" selected>Meals<\/option>/);
+  assert.ok(markup.includes('data-gantt-title="Eat"'));
+  assert.ok(markup.includes('data-gantt-title="Forge work"'));
+  assert.match(markup, /gantt-bar action is-filtered-out/);
+  assert.ok(markup.includes("is-filtered-out"));
 });
 
 test("Gantt cells show recorded quantities, duration and clock range with escaped summaries", () => {

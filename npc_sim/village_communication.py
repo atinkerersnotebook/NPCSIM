@@ -232,7 +232,7 @@ def _validate_terms(world: "World", terms: NoticeTerms, author: str) -> None:
                 or terms.destination != base.residents[author].work or terms.due_at is None
                 or terms.required_fresh_until is None or terms.required_fresh_until < terms.due_at):
             raise ValueError("Supply terms need priced goods, quantity, buyer workplace, deadline and freshness")
-        if (terms.unit_price != village_economy.unit_price(world, terms.subject)
+        if (terms.unit_price != village_economy.supplier_unit_price(world, terms.recipients[0], terms.subject)
                 or terms.delivery_fee != village_economy.delivery_fee(world)):
             raise ValueError("The published price/fee no longer matches policy; the author must publish new terms")
         policy = village_economy.config(world)
@@ -241,7 +241,8 @@ def _validate_terms(world: "World", terms: NoticeTerms, author: str) -> None:
                 and state.minute > terms.required_fresh_until - policy.cooking_lead_minutes
                 - policy.delivery_lead_minutes):
             raise ValueError("ORDER_WINDOW_CLOSED: milk and eggs need physical delivery and cooking before service")
-        cost = terms.quantity * (village_economy.unit_price(world, terms.subject)
+        cost = terms.quantity * (village_economy.supplier_unit_price(
+                                 world, terms.recipients[0], terms.subject)
                                  + village_economy.delivery_fee(world))
         if state.coins[author] - village_economy.commitments(world, author) < cost:
             raise ValueError("The buyer cannot fund these goods and reserved delivery fees")
@@ -260,7 +261,8 @@ def _priced_terms(world: "World", terms: NoticeTerms) -> NoticeTerms:
     if terms.type != "supply_request":
         return terms
     return terms.model_copy(update={
-        "unit_price": terms.unit_price if terms.unit_price is not None else village_economy.unit_price(world, terms.subject),
+        "unit_price": terms.unit_price if terms.unit_price is not None else
+            village_economy.supplier_unit_price(world, terms.recipients[0], terms.subject),
         "delivery_fee": terms.delivery_fee if terms.delivery_fee is not None else village_economy.delivery_fee(world)})
 
 
@@ -690,7 +692,8 @@ def _intent_request(world: "World", action: str, request: Any) -> tuple[str, str
         raise ValueError("Revise business terms only; the engine owns recipients, prices and technical fields")
     changes = {**notice.terms.model_dump(), **request.changes}
     if notice.terms.type == "supply_request":
-        changes["unit_price"] = village_economy.unit_price(world, changes["subject"])
+        changes["unit_price"] = village_economy.supplier_unit_price(
+            world, changes["recipients"][0], changes["subject"])
         changes["delivery_fee"] = village_economy.delivery_fee(world)
     terms = NoticeTerms.model_validate(changes)
     if terms == notice.terms:

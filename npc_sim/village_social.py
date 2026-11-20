@@ -268,6 +268,13 @@ def action_blocker(world: "World", action: str, rid: str | None = None) -> tuple
     until = blocked_until(world, rid or world.actor_id)
     if until is not None and action not in FREE_ACTIONS:
         return "SOCIAL_COMMITTED", f"Committed until {village.clock_time(until)}; cancel explicitly to interrupt."
+    if action != "village_leisure":
+        return None
+    from npc_sim import village_economy
+    if any(order.supplier == (rid or world.actor_id)
+           and order.status in village_economy.LOADABLE and order.loadable
+           for order in village_economy._personal_orders(world)):
+        return "ORDER_COMMITTED", "Fulfil accepted supplier orders before optional specialty production or leisure."
     return None
 
 

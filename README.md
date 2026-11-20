@@ -276,6 +276,13 @@ workplace shortage, and deposit only surplus above configured commitments and
 reserves. Personally learned recycling orders use the same physical pickup,
 travel, unload, payment and save/reload accounting path.
 
+Elsie chooses a persisted daily supper menu after waking from confirmed
+general-store deliveries. A specialty is used only when Elsie personally knows it
+was delivered and available for service; otherwise the configured bread and fresh
+fish menu remains the fallback. Accepted supplier orders take priority over
+specialty/leisure production. Nella buys specialty goods at wholesale and resells
+from the physical general store at the configured markup (20% in Generation 17).
+
 ```powershell
 .\.venv\Scripts\python.exe -m npc_sim.living_village --generation-17 --base data\scenarios\millhaven-complete.json --living data\scenarios\millhaven-living.json --output data\scenarios\millhaven-generation-17.json --force
 ```

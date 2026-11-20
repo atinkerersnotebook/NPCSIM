@@ -97,7 +97,7 @@ def test_generation_17_is_cumulative_scenario():
     assert generated.village.economy.stock_capacities["general-store"]["bread"] == 8
     assert generated.village.economy.supplier_alternatives["bread"] == ["nella"]
     assert generated.village.economy.meal_plans[-1].recipe_portions == {
-        "bread": 8, "preserved-fish": 4}
+        "bread": 8, "fish": 4}
     assert generated.village.economy.stock_capacities["riverbank"]["preserved-fish"] == 6
 
 

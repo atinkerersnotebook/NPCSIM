@@ -56,7 +56,7 @@ export interface GanttAgent {
   visitor?: boolean;
   activity?: string;
 }
-export type GanttActivity = "all" | "movement" | "work" | "dialogue";
+export type GanttActivity = "all" | "movement" | "work" | "dialogue" | "meals";
 export interface GanttScale {
   zoom?: number;
   viewportWidth?: number;
@@ -98,6 +98,7 @@ export function locationColour(id: string): string {
 function actionLabel(action: string, args: Record<string, unknown>, state: State, actor: string): string {
   const labels: Record<string, string> = {
     go: "Walk", look: "Look", read: "Read", take: "Pick up", drop: "Put down", say: "Talk",
+    village_eat: "Eat",
     village_work: "Work", village_wait: "Wait", village_sleep: "Sleep",
     village_fit_wagon: "Fit wagon parts", village_start_route: "Start wagon route",
     village_stop_route: "Stop wagon route", village_project: "Project work",
@@ -262,7 +263,8 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           : planForTile
           ? `Purpose: ${planForTile.purpose}${/[.!?]$/.test(planForTile.purpose) ? "" : "."} ${villageClockText(result.explanation)}`
           : villageClockText(result.explanation), status: result.outcome, kind,
-        activity: action === "go" || action === "village_plan_walk" ? "movement"
+        activity: action === "village_eat" ? "meals"
+          : action === "go" || action === "village_plan_walk" ? "movement"
           : ["say", "village_ask", "village_tell", "village_share_route", "village_meeting"].includes(action) ? "dialogue"
           : life?.work || /^village_(work|project|research|repair|maintain|craft|produce|load_goods|unload_goods)(_|$)/.test(action) ? "work" : undefined,
         ...(linked.reasoning?.trim() ? { reasoning: linked.reasoning.trim() } : {})
@@ -456,7 +458,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
         <rect x="${x(band.start) + inset}" y="${y + 4}" width="${w - inset * 2}" height="82" rx="8" fill="${locationColour(band.location)}" opacity=".8"/>
         ${w > 80 ? `<text x="${x(band.start) + 8}" y="${y + 16}" class="gantt-place" clip-path="url(#${clip})">${escape(placeName(band.location))}</text>` : ""}</g>`;
     }).join("");
-    const spans = row.spans.filter(item => visible(item) && matches(item));
+    const spans = row.spans.filter(visible);
     const durationSpans = spans.filter(item => item.end > item.start)
       .sort((a, b) => Number(a.kind !== "route" && a.kind !== "sleep") - Number(b.kind !== "route" && b.kind !== "sleep"));
     const bars = durationSpans.map((item, barIndex) => {
@@ -479,7 +481,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const iconWidth = 24;
       const characters = tileWidth >= 48 ? Math.floor((tileWidth - 16 - iconWidth) / 7) : 0;
       const detailCharacters = Math.floor((tileWidth - 16) / 6);
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail + (item.reasoning ? ` Reason: ${item.reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.detail)}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}">
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail + (item.reasoning ? ` Reason: ${item.reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.detail)}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}${matches(item) ? "" : " is-filtered-out"}">
         <clipPath id="${id}"><rect x="${left + inset + 6}" y="${y + 19}" width="${Math.max(0, tileWidth - 12)}" height="64"/></clipPath>
         <rect x="${left + inset}" y="${y + 19}" width="${tileWidth}" height="64" rx="7"/>
         ${tileWidth >= 28 ? `<text x="${left + inset + 7}" y="${y + 37}" class="gantt-cell-icon" clip-path="url(#${id})">${icon}</text>` : ""}
@@ -496,7 +498,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     const dots = [...markers].map(([at, items]) => {
       const detail = `${row.name} / ${format(chart.turns ? at + 1 : at)} / ${items.map(item => `${item.label}: ${item.detail}`).join("; ")}`;
       const reasoning = items.map(item => item.reasoning).filter(Boolean).join("; ");
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:marker:${at}`)}" aria-label="${escape(detail + (reasoning ? ` Reason: ${reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(items.length === 1 ? items[0].label : `${items.length} events`)}" data-gantt-icon="●" data-gantt-status="${escape(items.some(item => item.kind === "rejected") ? "REJECTED" : "Recorded")}" data-gantt-range="${escape(format(chart.turns ? at + 1 : at))}" data-gantt-place="${escape(items[0].location ? placeName(items[0].location) : "")}" data-gantt-detail="${escape(items.map(item => `${item.label}: ${item.detail}`).join("\n"))}" data-gantt-reasoning="${escape(reasoning)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}">
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:marker:${at}`)}" aria-label="${escape(detail + (reasoning ? ` Reason: ${reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(items.length === 1 ? items[0].label : `${items.length} events`)}" data-gantt-icon="●" data-gantt-status="${escape(items.some(item => item.kind === "rejected") ? "REJECTED" : "Recorded")}" data-gantt-range="${escape(format(chart.turns ? at + 1 : at))}" data-gantt-place="${escape(items[0].location ? placeName(items[0].location) : "")}" data-gantt-detail="${escape(items.map(item => `${item.label}: ${item.detail}`).join("\n"))}" data-gantt-reasoning="${escape(reasoning)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}${items.some(matches) ? "" : " is-filtered-out"}">
         <path d="M ${x(at)} ${y + 88} l 4 4 l -4 4 l -4 -4 Z"/>
         ${items.length > 1 ? `<text x="${x(at) + 6}" y="${y + 95}">${items.length}</text>` : ""}</g>`;
     }).join("");
@@ -505,12 +507,12 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
   }).join("");
   const milestones = new Map<number, Milestone[]>();
   for (const mark of chart.milestones) {
-    if (mark.at < cutoff || activity !== "all") continue;
+    if (mark.at < cutoff) continue;
     const list = milestones.get(mark.at) ?? [];
     list.push(mark);
     milestones.set(mark.at, list);
   }
-  const lines = [...milestones].map(([at, marks], index) => `<g class="gantt-milestone" tabindex="0" role="img"
+  const lines = [...milestones].map(([at, marks], index) => `<g class="gantt-milestone${activity === "all" ? "" : " is-filtered-out"}" tabindex="0" role="img"
     aria-label="${escape(marks.map(mark => `${format(at)} ${mark.detail}`).join("; "))}">
     ${tooltip(marks.map(mark => `${format(at)} / ${mark.label}: ${mark.detail}`).join("\n"))}
     <line x1="${x(at)}" x2="${x(at)}" y1="8" y2="${height - 20}"/>
@@ -526,7 +528,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
         </div></div></div>
     ${scale.linkResidents ? `<div class="gantt-filters" aria-label="Timeline filters" role="group">
       <button type="button" class="button subtle" data-timeline-recent aria-pressed="${Boolean(scale.recent)}">${model.turns ? "Last 20 turns" : "Last simulated hour"}</button>
-      <label>Activity <select data-timeline-activity>${(["all", "movement", "work", "dialogue"] as const).map(value =>
+      <label>Activity <select data-timeline-activity>${(["all", "movement", "work", "dialogue", "meals"] as const).map(value =>
         `<option value="${value}"${value === activity ? " selected" : ""}>${value === "all" ? "All activity" : value[0].toUpperCase() + value.slice(1)}</option>`).join("")}</select></label>
       <button type="button" class="button subtle" data-timeline-reset>Full timeline</button>
     </div>` : ""}

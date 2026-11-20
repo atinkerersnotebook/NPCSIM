@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from npc_sim import village
 from npc_sim.village_economy_models import (
     VillageEconomyConfig, VillageEconomyMovement, VillageEconomyPayment,
-    VillageEconomyState, VillageSupplierOrder,
+    VillageEconomyState, VillageMealPlan, VillageSupplierOrder,
 )
 
 if TYPE_CHECKING:
@@ -106,6 +106,8 @@ def validate_config(scenario: Any) -> None:
     accounts = set(base.coins)
     if policy.subsidy_payer is not None and policy.subsidy_payer not in accounts:
         raise ValueError("Meal subsidies must name an existing funded account")
+    if policy.retail_store not in base.stocks:
+        raise ValueError("Retail store must name a real stock location")
     prices = {**base.prices, **policy.prices}
     products = set(prices)
     if any(resource not in products for recipe in policy.recipes.values() for resource in recipe.inputs):
@@ -214,6 +216,67 @@ def unit_price(world: "World", resource: str) -> int:
     policy = config(world)
     values = village_research.prices(world)
     return policy.prices.get(resource, values.get(resource, 0)) if policy else values.get(resource, 0)
+
+
+def supplier_unit_price(world: "World", supplier: str, resource: str) -> int:
+    price = unit_price(world, resource)
+    policy = config(world)
+    base = world.scenario.village
+    if (policy and supplier in base.residents
+            and base.residents[supplier].work == policy.retail_store
+            and policy.retail_markup_percent):
+        return ceil(price * (100 + policy.retail_markup_percent) / 100)
+    return price
+
+
+def daily_recipe_portions(world: "World", plan: VillageMealPlan, day: int) -> dict[str, int]:
+    state = _state(world)
+    if plan.id == "supper" and state and state.daily_menu and state.daily_menu.day == day:
+        return state.daily_menu.recipe_portions.copy()
+    return plan.recipe_portions.copy()
+
+
+def choose_daily_menu(world: "World") -> dict[str, int]:
+    policy, economy = config(world), _state(world)
+    state = world.state.village
+    if policy is None or economy is None:
+        raise ValueError("A configured economy is required for daily menu planning")
+    supper = next((plan for plan in policy.meal_plans if plan.id == "supper"), None)
+    if supper is None:
+        raise ValueError("Daily menu planning requires a supper plan")
+    day = state.minute // 1440
+    fallback = dict(supper.recipe_portions)
+    store = policy.retail_store
+    local = {}
+    if state.communication:
+        for memory in state.communication.knowledge.get(policy.innkeeper, {}).values():
+            notice = memory.snapshot
+            if (memory.confidence != "direct" or notice.terms.destination != store
+                    or notice.terms.type != "supply_request" or notice.terms.subject not in policy.recipes):
+                continue
+            if notice.status == "completed":
+                local[notice.terms.subject] = local.get(notice.terms.subject, 0) + notice.terms.quantity
+    candidates = []
+    for recipe in policy.recipes:
+        if recipe in {"bread", "fish"}:
+            continue
+        definition = policy.recipes[recipe]
+        portions = fallback.get("fish", 0)
+        batches = ceil(portions / definition.portions)
+        enough = all(local.get(product, 0) >= amount * batches
+                     for product, amount in definition.inputs.items())
+        if enough:
+            candidates.append((recipe, portions))
+    if candidates:
+        recipe, portions = sorted(candidates, key=lambda item: item[0])[0]
+        fallback.pop("fish", None)
+        fallback[recipe] = portions
+    result = {name: quantity for name, quantity in fallback.items() if quantity}
+    if sum(result.values()) != supper.portions:
+        raise ValueError("Daily menu must cover every planned supper portion")
+    from npc_sim.village_economy_models import VillageDailyMenu
+    economy.daily_menu = VillageDailyMenu(day=day, selected_at=state.minute, recipe_portions=result)
+    return result
 
 
 def delivery_fee(world: "World") -> int:
@@ -987,7 +1050,8 @@ def meal_requirements(world: "World") -> list[dict[str, Any]]:
             inputs: dict[str, int] = {}
             unmet_recipes: dict[str, int] = {}
             remaining_covered = covered + eaten
-            for name, portions in plan.recipe_portions.items():
+            portions_by_recipe = daily_recipe_portions(world, plan, service_day)
+            for name, portions in portions_by_recipe.items():
                 recipe = policy.recipes[name]
                 reused = min(portions, remaining_covered)
                 remaining_covered -= reused
@@ -1005,7 +1069,7 @@ def meal_requirements(world: "World") -> list[dict[str, Any]]:
                            "eaten_portions": eaten, "remaining_portions": remaining_portions,
                            "covered_portions": covered, "inputs": inputs,
                            "unmet_recipe_portions": unmet_recipes,
-                           "recipe_portions": plan.recipe_portions.copy()})
+                           "recipe_portions": portions_by_recipe})
     return result
 
 
@@ -1211,17 +1275,19 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
                     continue
                 deadline = max(state.minute, deadline)
                 if buyer == policy.innkeeper:
-                    quantity = min(quantity, budget // (unit_price(world, product) + delivery_fee(world)))
+                    quantity = min(quantity, budget // (
+                        supplier_unit_price(world, supplier, product) + delivery_fee(world)))
                 if not quantity:
                     continue
                 if (buyer != policy.innkeeper and key.endswith(":production")
                         and state.minute >= deadline - policy.delivery_lead_minutes):
                     continue
-                commitment = quantity * (unit_price(world, product) + delivery_fee(world))
+                commitment = quantity * (supplier_unit_price(world, supplier, product) + delivery_fee(world))
                 if buyer == policy.innkeeper:
                     budget -= commitment
                 result.append({"buyer": buyer, "supplier": supplier, "destination": delivery_site,
-                               "product": product, "quantity": quantity, "price": unit_price(world, product),
+                               "product": product, "quantity": quantity,
+                               "price": supplier_unit_price(world, supplier, product),
                                "deadline": deadline, "required_fresh_until": use_at,
                                "request_key": f"{key}:{buyer}:{product}", "usable": available,
                                "confirmed_incoming": incoming,
@@ -1317,7 +1383,7 @@ def _propose(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]
                        "description": f"Please supply {quantity} {product} for my workplace.",
                        "recipients": [supplier], "quantity": quantity, "destination": destination,
                        "due_at": deadline, "required_fresh_until": fresh}})
-    price = unit_price(world, product)
+    price = supplier_unit_price(world, supplier, product)
     fee = delivery_fee(world)
     source = base.residents[supplier].work
     if state.livestock and world.actor.location_id != destination and product in {"plant-scraps", "compost-material", "compost"} and usable_stock(

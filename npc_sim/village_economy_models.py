@@ -34,6 +34,12 @@ class VillageMealPlan(EconomyModel):
         return self
 
 
+class VillageDailyMenu(EconomyModel):
+    day: Quantity
+    selected_at: Minute
+    recipe_portions: dict[str, Quantity]
+
+
 class VillageEconomyConfig(EconomyModel):
     innkeeper: str = "elsie"
     recipes: dict[str, VillageRecipe] = Field(default_factory=lambda: {
@@ -50,6 +56,8 @@ class VillageEconomyConfig(EconomyModel):
     reserve_targets: dict[str, dict[str, Quantity]] = Field(default_factory=dict)
     production_targets: dict[str, dict[str, Quantity]] = Field(default_factory=dict)
     stock_capacities: dict[str, dict[str, Quantity]] = Field(default_factory=dict)
+    retail_markup_percent: int = Field(default=20, ge=0, le=100, strict=True)
+    retail_store: str = "general-store"
     prices: dict[str, PositiveQuantity] = Field(default_factory=dict)
     delivery_fee: Quantity | None = None
     meal_price: Quantity | None = None
@@ -137,6 +145,7 @@ class VillageEconomyState(EconomyModel):
     config: VillageEconomyConfig | None = None
     orders: dict[str, VillageSupplierOrder] = Field(default_factory=dict)
     next_order: PositiveQuantity = 1
+    daily_menu: VillageDailyMenu | None = None
     initial_coins: dict[str, Quantity] = Field(default_factory=dict)
     payments: list[VillageEconomyPayment] = Field(default_factory=list)
     movements: list[VillageEconomyMovement] = Field(default_factory=list)

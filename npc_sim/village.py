@@ -692,6 +692,11 @@ def advance(world: "World", minutes: int) -> None:
             from npc_sim import village_extensions
             village_extensions.account_time(world, 5)
         state.minute += 5
+        if (config.ai_controlled and config.expanded_rules and state.economy
+                and state.economy.config and state.minute % 1440 == config.residents[
+                    state.economy.config.innkeeper].wake_minute + 5):
+            from npc_sim import village_economy
+            village_economy.choose_daily_menu(world)
         if not state.breakdown and state.minute >= config.breakdown_minute:
             state.breakdown = True
             world.state.entities[config.mill_equipment].health = 0
