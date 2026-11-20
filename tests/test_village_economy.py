@@ -89,6 +89,21 @@ def test_generation_17_production_stops_at_target_and_capacity(world):
     assert economy.production_blocker(supplier, "village_work")[0] == "DEMAND_MET"
 
 
+def test_breakfast_batch_consumes_bread_and_eggs(world):
+    from npc_sim import village_ai
+
+    world.scenario.village.breakfast = True
+    policy = economy.config(world).model_copy(deep=True)
+    from npc_sim.village_economy_models import VillageMealPlan
+    breakfast = VillageMealPlan(id="breakfast", use_minute=510, portions=12,
+        recipe_portions={"bread": 12}, additional_inputs={"eggs": 12})
+    policy.meal_plans = [breakfast, *policy.meal_plans]
+    economy.configure(world, policy.model_dump())
+    world.state.village.minute = 360
+    job = village_ai.production_job(world, "village_work")
+    assert job is not None and job.inputs == {"bread": 1, "eggs": 2}
+
+
 def test_general_store_sale_uses_paid_physical_stock_without_double_counting(world):
     state = world.state.village
     policy = state.economy.config
@@ -191,7 +206,7 @@ def test_planning_is_idempotent_and_persistent(world):
 
 def test_fees_and_existing_commitments_are_affordable_before_acceptance(world):
     world.state.village.coins["elsie"] = 11
-    add(world, "bakery", "bread", 2, expiry=1400)
+    add(world, "bakery", "bread", 2, expiry=1401)
     first = propose(world, quantity=2)
     accept(world, first)
     actor(world, "finn", world.actor.location_id)
@@ -865,6 +880,43 @@ def test_capacity_aware_delivery_runs_and_reserve_protection(world):
     assert economy.protected_quantity(carrier, "bakery", "bread") == 5
 
 
+def test_innkeeper_food_order_has_priority_over_nella_store_order(world):
+    policy = world.state.village.economy.config
+    policy.reserve_targets = {"bakery": {"bread": 0}}
+    add(world, "bakery", "bread", 2, expiry=1401)
+    nella = VillageSupplierOrder(
+        id="store-order", request_key="store", buyer="nella", supplier="jory",
+        source="bakery", destination="general-store", product="bread", quantity=2,
+        price=3, delivery_fee=1, deadline=1080, required_fresh_until=1400,
+        created_at=480, status="accepted")
+    elsie = VillageSupplierOrder(
+        id="supper-order", request_key="supper", buyer="elsie", supplier="jory",
+        source="bakery", destination="tavern", product="bread", quantity=2,
+        price=3, delivery_fee=1, deadline=1080, required_fresh_until=1400,
+        created_at=480, status="accepted")
+    world.state.village.economy.orders.update({nella.id: nella, elsie.id: elsie})
+    assert economy.loadable_for_order(world, elsie) == 2
+    assert economy.loadable_for_order(world, nella) == 0
+
+
+def test_production_input_order_has_priority_over_nella_store_order(world):
+    policy = world.state.village.economy.config
+    policy.reserve_targets = {"farm": {"grain": 0}}
+    add(world, "farm", "grain", 2, expiry=1400)
+    store = VillageSupplierOrder(
+        id="store-grain", request_key="store-grain", buyer="nella", supplier="ada",
+        source="farm", destination="general-store", product="grain", quantity=2,
+        price=1, delivery_fee=1, deadline=1080, required_fresh_until=1400,
+        created_at=480, status="accepted")
+    production = VillageSupplierOrder(
+        id="mara-production", request_key="mara-production", buyer="mara", supplier="ada",
+        source="farm", destination="watermill", product="grain", quantity=2,
+        price=1, delivery_fee=1, deadline=1080, required_fresh_until=1400,
+        created_at=480, status="accepted")
+    world.state.village.economy.orders.update({store.id: store, production.id: production})
+    assert economy.order_priority(world, production)[0] < economy.order_priority(world, store)[0]
+
+
 def test_two_services_do_not_reuse_incoming_goods_or_expiring_meals(world):
     economy.configure(world, {**economy.config(world).model_dump(), "meal_plans": [
         {"id": "breakfast", "use_minute": 540, "portions": 4, "recipe_portions": {"bread": 4}},
@@ -1003,18 +1055,28 @@ def test_evening_forecast_renews_funded_next_day_bread_without_reusing_spent_sto
 
 def test_next_breakfast_orders_bread_before_previous_bedtime(world):
     world.scenario.village.breakfast = True
+    world.scenario.village.prices["eggs"] = 2
+    world.state.village.stocks["farm"]["eggs"] = 0
+    world.state.village.stock_lots.setdefault("farm", {})["eggs"] = []
     economy.configure(world, {**economy.config(world).model_dump(), "meal_plans": [
         {"id": "breakfast", "use_minute": 510, "portions": 12,
-         "recipe_portions": {"bread": 12}},
+         "recipe_portions": {"bread": 12}, "additional_inputs": {"eggs": 12}},
         {"id": "supper", "use_minute": 1140, "portions": 12,
-         "recipe_portions": {"bread": 8, "fish": 4}}]})
+         "recipe_portions": {"bread": 8, "fish": 4}}],
+         "suppliers": {**economy.config(world).suppliers, "eggs": "ada"}})
     world.state.village.minute = 600
     requests = [item for item in economy.suggestions(world)
                 if item["request_key"] == "1:breakfast:elsie:bread"]
     assert len(requests) == 1
     assert requests[0]["quantity"] >= 6
-    assert requests[0]["deadline"] <= 1440
+    assert requests[0]["deadline"] == 1080
     assert requests[0]["required_fresh_until"] == 1950
+
+    world.state.village.minute = 600
+    egg = next(item for item in economy.suggestions(world)
+               if item["request_key"] == "1:breakfast:elsie:eggs")
+    assert egg["deadline"] == 1080
+    assert egg["required_fresh_until"] == 1950
 
 
 def test_breakfast_cooking_opens_at_earliest_diner_not_average_service(world):

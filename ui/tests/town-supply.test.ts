@@ -133,6 +133,22 @@ test("forecast separates actual stock and both scenarios, warning when either fa
   assert.match(inventoryTable, /<td>8<\/td><td>1<\/td><td>2<\/td><td>4<\/td><td>4<\/td><td>0<\/td>/);
 });
 
+test("prepared meals distinguish breakfast, supper and unallocated portions", () => {
+  const data = townSupplySchema.parse({ ...overview, inventory: [{
+    ...inventory("tavern", "meals", 11, 0, [0, 0, 0]),
+    meal_allocations: { prepared: 11, unallocated: 1, services: [
+      { id: "0:breakfast", service: "breakfast", due: 510, required: 6, reserved: 6, shortfall: 0 },
+      { id: "0:supper", service: "supper", due: 1140, required: 8, reserved: 4, shortfall: 4 },
+    ] }
+  }] });
+  const markup = townSupplyMarkup(data, "", JSON.stringify(["tavern", "meals"]));
+  assert.match(markup, /Prepared meal service allocation[\s\S]*11<\/strong> prepared · <strong>1<\/strong> unallocated/);
+  assert.match(markup, /Breakfast[\s\S]*6\/6 reserved/);
+  assert.match(markup, /Supper[\s\S]*4\/8 reserved[\s\S]*4 short/);
+  const table = markup.split('aria-label="Inventory by location"')[1].split('</table>')[0];
+  assert.match(table, /meals: breakfast[\s\S]*meals: supper[\s\S]*meals: unallocated/);
+});
+
 test("replenishment shows planned and blocked work under production and respects the site filter", () => {
   const data = townSupplySchema.parse({ ...overview, residents: { iona: "Iona", ada: "Ada", rowan: "Rowan" }, replenishment: [
     { id: "herbs", worker: "iona", location: "square", product: "herbs", quantity: 3, finish: 540, status: "planned", basis: "Local reserve" },

@@ -361,6 +361,26 @@ def build_generation_17(complete: Scenario, living: Scenario) -> Scenario:
     config.economy.suppliers["preserved-fish"] = "finn"
     config.economy.suppliers.update({"furniture": "hobb", "tackle": "finn",
                                      "wooden-cup": "hobb", "herbal-remedy": "iona"})
+    breakfast = next(plan for plan in config.economy.meal_plans if plan.id == "breakfast")
+    breakfast = breakfast.model_copy(update={
+        "portions": 16, "resident_portions": 12, "visitor_portions": 4,
+        "recipe_portions": {"bread": 16}, "additional_inputs": {"eggs": 16}})
+    config.economy.meal_plans = [breakfast if plan.id == "breakfast" else plan
+                                 for plan in config.economy.meal_plans]
+    supper = next(plan for plan in config.economy.meal_plans if plan.id == "supper")
+    supper = supper.model_copy(update={
+        "portions": 16, "resident_portions": 12, "visitor_portions": 4,
+        "recipe_portions": {"bread": 16}, "additional_inputs": {"fish": 8}})
+    config.economy.meal_plans = [supper if plan.id == "supper" else plan
+                                 for plan in config.economy.meal_plans]
+    config.stocks.setdefault("tavern", {})["fish"] = 0
+    config.economy.production_targets.setdefault("farm", {})["eggs"] = 16
+    config.economy.suppliers["eggs"] = "ada"
+    config.stocks.setdefault("tavern", {})["eggs"] = 16
+    if config.livestock:
+        config.livestock = config.livestock.model_copy(update={"hens": 16, "cows": 2, "sheep": 6, "pigs": 3})
+        scenario.entities.update({key: entity for key, entity in village_livestock.fixtures(scenario).items()
+                                  if key not in scenario.entities})
     for product in ("preserved-fish", "furniture", "tackle", "wooden-cup", "herbal-remedy"):
         config.economy.reserve_targets.setdefault("general-store", {})[product] = 1
     scenario.objective = latest.objective + (

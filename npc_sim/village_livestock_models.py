@@ -11,6 +11,9 @@ class VillageLivestockConfig(StrictModel):
     enabled: bool = True
     keeper: str
     hens: int = Field(default=12, ge=1, le=48, strict=True)
+    pigs: int = Field(default=0, ge=0, le=24, strict=True)
+    cows: int = Field(default=1, ge=1, le=12, strict=True)
+    sheep: int = Field(default=0, ge=0, le=48, strict=True)
 
 
 class LivestockCare(StrictModel):
@@ -25,7 +28,7 @@ class LivestockCare(StrictModel):
 
 class LivestockChunk(StrictModel):
     actor: str
-    operation: Literal["water", "cow", "hens", "milk", "eggs", "cook", "scraps", "compost"]
+    operation: Literal["water", "cow", "hens", "pigs", "milk", "eggs", "cook", "scraps", "compost"]
     location: str
     equipment: list[str]
     start: int
@@ -43,5 +46,7 @@ class VillageLivestockState(StrictModel):
     started_day: int = -1
     cow: LivestockCare = Field(default_factory=LivestockCare)
     hens: LivestockCare = Field(default_factory=LivestockCare)
+    pigs: LivestockCare = Field(default_factory=LivestockCare)
+    sheep: LivestockCare = Field(default_factory=LivestockCare)
     water: int = 0
     chunks: list[LivestockChunk] = Field(default_factory=list)

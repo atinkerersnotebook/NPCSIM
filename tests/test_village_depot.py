@@ -97,7 +97,19 @@ def test_generation_17_is_cumulative_scenario():
     assert generated.village.economy.stock_capacities["general-store"]["bread"] == 8
     assert generated.village.economy.supplier_alternatives["bread"] == ["nella"]
     assert generated.village.economy.meal_plans[-1].recipe_portions == {
-        "bread": 8, "fish": 4}
+        "bread": 16}
+    assert generated.village.economy.meal_plans[-1].additional_inputs == {"fish": 8}
+    breakfast = next(plan for plan in generated.village.economy.meal_plans if plan.id == "breakfast")
+    assert breakfast.additional_inputs == {"eggs": 16}
+    assert breakfast.resident_portions == 12 and breakfast.visitor_portions == 4
+    assert generated.village.economy.production_targets["farm"]["eggs"] == 16
+    assert generated.village.stocks["tavern"]["eggs"] == 16
+    assert generated.village.livestock.hens == 16
+    assert generated.village.livestock.cows == 2
+    assert generated.village.livestock.sheep == 6
+    assert generated.village.livestock.pigs == 3
+    assert {"farm-cow", "farm-cow-02", "farm-sheep-01", "farm-pig-01",
+            "pig-pen", "sheep-pen"} <= set(generated.entities)
     assert generated.village.economy.stock_capacities["riverbank"]["preserved-fish"] == 6
 
 

@@ -57,6 +57,18 @@ def safe_lot(world, resource, lot):
     return plant_recipe(world, resource) and all(plant_recipe(world, item) for item in lot.ingredients)
 
 
+def safe_pig_food(world, resource, lot) -> bool:
+    minute = village.context(world)[1].minute
+    if lot.expires_at is not None and lot.expires_at <= minute:
+        return False
+    if resource in {MATERIAL, COMPOST, "manure", "hay"}:
+        return False
+    if resource == "meals":
+        return bool(lot.ingredients and "fish" not in lot.ingredients
+                    and all(item != "meals" and food(world, item) for item in lot.ingredients))
+    return bool(food(world, resource) and resource not in {"fish", "milk", "eggs"})
+
+
 def protected(world, location, product):
     quantity = village_economy.protected_quantity(world, location, product)
     base, _ = village.context(world)

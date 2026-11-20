@@ -352,9 +352,25 @@ def production_job(world: "World", action: str) -> VillageJob | None:
     config, _ = village.context(world)
     resident = config.residents[world.actor_id]
     job = resident.job
+    if action == "village_work" and job and job.location == "tavern" and config.economy:
+        from npc_sim import village_economy
+        now = world.state.village.minute
+        next_service = min((plan for plan in village_economy.meal_requirements(world)
+                            if plan["due"] >= now), key=lambda plan: plan["due"], default=None)
+        if next_service and next_service["id"].endswith(":breakfast"):
+            policy = village_economy.config(world)
+            service_plan = next(plan for plan in policy.meal_plans
+                                if next_service["id"].endswith(f":{plan.id}"))
+            meal_portions = next(iter(job.outputs.values()))
+            job = job.model_copy(update={"inputs": {
+                **job.inputs,
+                **{product: max(1, quantity * meal_portions // next_service["portions"])
+                   for product, quantity in service_plan.additional_inputs.items()}}})
     if action == "village_cook_fish" and job and "hospitality" in resident.skills:
         from npc_sim import village_economy
-        job = job.model_copy(update={"inputs": {village_economy.cooking_fish_product(world): 1}})
+        fish = village_economy.cooking_fish_product(world)
+        job = job.model_copy(update={"inputs": {fish: 1, **({"bread": 1}
+            if village_economy.fish_cooking_uses_bread(world) else {})}})
     if action in village_services.JOBS and job:
         _, resource, equipment = village_services.JOBS[action]
         job = job.model_copy(update={"inputs": {}, "outputs": {resource: 2}, "equipment": equipment,

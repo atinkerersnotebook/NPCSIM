@@ -26,11 +26,16 @@ class VillageMealPlan(EconomyModel):
     recipe_portions: dict[str, Quantity]
     bread_service: Quantity = 0
     tea_portions: Quantity = 0
+    additional_inputs: dict[str, Quantity] = Field(default_factory=dict)
+    resident_portions: Quantity = 12
+    visitor_portions: Quantity = 0
 
     @model_validator(mode="after")
     def check_portions(self) -> "VillageMealPlan":
+        if self.resident_portions + self.visitor_portions != self.portions:
+            raise ValueError("Resident and visitor portions must sum to planned portions")
         if sum(self.recipe_portions.values()) != self.portions:
-            raise ValueError("Alternative recipe portions must sum to planned diners")
+            raise ValueError("Meal recipe portions must sum to planned portions")
         return self
 
 

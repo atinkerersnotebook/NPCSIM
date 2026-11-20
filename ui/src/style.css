@@ -454,6 +454,9 @@ main{max-width:none}
 .supply-bar b { inset: -.12rem auto -.12rem min(var(--mark), 100% - 2px); border-width: 0 0 0 2px; }
 .supply-column b { inset: auto 0 min(var(--mark), 100% - 2px); border-width: 0 0 2px; }
 .supply-shortage { color: var(--orange); }
+.supply-meal-allocations { margin: .75rem 0 1rem; padding: .65rem .8rem; border-left: 3px solid var(--teal); background: #1b3330; }
+.supply-meal-allocations p { margin: 0; }
+.supply-meal-allocations ul { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: .45rem 0 0; padding: 0; list-style: none; }
 .supply-columns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .4rem; text-align: center; }
 .supply-columns li { display: flex; flex-direction: column; align-items: center; gap: .3rem; }
 .supply-column { width: min(80%, 4rem); height: 7rem; border: 1px solid var(--supply-border); }

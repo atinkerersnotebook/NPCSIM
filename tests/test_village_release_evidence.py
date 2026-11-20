@@ -146,6 +146,25 @@ def test_three_active_days_reconcile_without_reseeding_and_preserve_sources(tmp_
                            tmp_path / "invalid.json")
 
 
+def test_town_supply_separates_physical_prepared_meals_by_service(tmp_path):
+    from npc_sim import town_supply
+    from test_village_expanded import ROOT
+
+    value = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-generations.json"))
+    world = World(value, tmp_path / "meal-supply.json", "meal-supply", "elsie", "session-elsie")
+    state = world.state.village
+    state.minute = 480
+    village_goods.put(world, "tavern", "meals", 10)
+    report = town_supply.report(world.state, world.scenario.village)
+    meals = next(row for row in report["inventory"]
+                 if row["location"] == "tavern" and row["product"] == "meals")
+    allocation = meals["meal_allocations"]
+    assert allocation["prepared"] == 10
+    assert allocation["services"][0]["service"] == "breakfast"
+    assert allocation["services"][-1]["service"] == "supper"
+    assert sum(item["reserved"] for item in allocation["services"]) + allocation["unallocated"] == 10
+
+
 def test_continuity_rejects_paused_and_unbalanced_days(tmp_path):
     from test_village_expanded import ROOT
 

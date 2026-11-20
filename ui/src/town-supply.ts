@@ -18,7 +18,10 @@ export const townSupplySchema = z.object({
   sites: names, residents: names, fixtures: names,
   inventory: z.array(z.object({ location: text, product: text, on_hand: quantity, usable: quantity,
     reserve: quantity, target: dated, projected: checkpoints, baseline_projected: checkpoints.optional(),
-    forecast_changes: z.tuple([forecastChange, forecastChange, forecastChange]).optional() })),
+    forecast_changes: z.tuple([forecastChange, forecastChange, forecastChange]).optional(),
+    meal_allocations: z.object({ prepared: quantity, unallocated: quantity,
+      services: z.array(z.object({ id: text, service: z.enum(["breakfast", "supper"]), due: quantity,
+        required: quantity, reserved: quantity, shortfall: quantity })) }).optional() })),
   orders: z.array(z.object({ id: text, buyer: text, supplier: text, product: text, quantity,
     source: text, destination: text, delivered_quantity: quantity, remaining: quantity, in_transit: quantity,
     deadline: quantity, status: text, reason: detail, open: z.boolean() })),
@@ -72,6 +75,31 @@ const stockRisk = (row: InventoryRow) => shortage(row) > 0 ? 0 : firstBreach(row
   : row.reserve > 0 && row.usable === row.reserve ? 2 : 3;
 const forecastButton = (row: InventoryRow, caption: string, selected: boolean) =>
   `<button type="button" class="supply-stock-link" data-forecast-key="${escape(stockKey(row))}" aria-controls="supply-forecast-chart" aria-pressed="${selected}">${escape(caption)}</button>`;
+function inventoryRows(data: Snapshot, choices: InventoryRow[]) {
+  const rows: { row: InventoryRow; values: (string | number | null)[]; caption: string }[] = [];
+  for (const row of choices) {
+    if (!row.meal_allocations) {
+      rows.push({ row, caption: label(row.product), values: [name(row.location, data.sites), label(row.product),
+        row.on_hand, row.usable, row.reserve, row.target,
+        ...row.projected.flatMap((value, i) => choices.some(item => item.baseline_projected)
+          ? [value, row.baseline_projected?.[i] ?? null] : [value])] });
+      continue;
+    }
+    for (const service of row.meal_allocations.services) {
+      const caption = `meals: ${service.service}`;
+      rows.push({ row, caption, values: [name(row.location, data.sites), caption,
+        service.reserved, service.reserved, 0, null,
+        ...row.projected.flatMap(() => choices.some(item => item.baseline_projected) ? [null, null] : [null])] });
+    }
+    if (row.meal_allocations.unallocated) {
+      const caption = "meals: unallocated";
+      rows.push({ row, caption, values: [name(row.location, data.sites), caption,
+        row.meal_allocations.unallocated, row.meal_allocations.unallocated, 0, null,
+        ...row.projected.flatMap(() => choices.some(item => item.baseline_projected) ? [null, null] : [null])] });
+    }
+  }
+  return rows;
+}
 
 function atLocation(data: Snapshot, location: string): Snapshot {
   if (!location) return data;
@@ -112,6 +140,12 @@ function stockForecast(data: Snapshot, row: InventoryRow): string {
     return i < 0 ? "" : `<p class="supply-shortage">First projected below reserve${scenario}: <strong>${forecastLabels[i + 1]} · ${time(data.horizons[i])}</strong> (${values[i]} usable vs. ${row.reserve} reserve).</p>`;
   };
   return `<p><strong>${escape(stockLabel(row, data))}</strong> · ${row.reserve ? `Reserve: ${row.reserve}` : "No reserve configured"}</p>
+    ${row.meal_allocations ? `<div class="supply-meal-allocations" aria-label="Prepared meal service allocation">
+      <p><strong>${row.meal_allocations.prepared}</strong> prepared · <strong>${row.meal_allocations.unallocated}</strong> unallocated</p>
+      <ul>${row.meal_allocations.services.map(service => `<li><strong>${service.service === "breakfast" ? "Breakfast" : "Supper"}</strong>
+        · ${time(service.due)} · ${service.reserved}/${service.required} reserved${service.shortfall
+          ? ` · <span class="supply-shortage">${service.shortfall} short</span>` : ""}</li>`).join("")}</ul>
+    </div>` : ""}
     <p class="muted">Future bars show projected usable stock, not guaranteed stock levels.${marker ? " The white line marks the reserve." : ""}</p>
     <ul class="supply-legend" aria-label="Forecast legend"><li class="on-hand">On hand</li><li class="with-plans">With unstarted plans</li>
       ${baseline ? '<li class="without-plans">Without unstarted plans</li>' : ""}${row.reserve ? '<li class="reserve">Reserve</li>' : ""}</ul>
@@ -215,6 +249,7 @@ export function townSupplyMarkup(snapshot: Supply, location = "", forecastKey = 
   if (!snapshot) return '<p class="muted">No town snapshot available. Start or load a village adventure in <a href="/">Player view</a>.</p>';
   const data = atLocation(snapshot, location);
   const choices = forecastChoices(data);
+  const inventoryDisplayRows = inventoryRows(data, choices);
   const selected = choices.find(row => stockKey(row) === forecastKey) ?? choices[0];
   const site = (id: string | null) => name(id, data.sites);
   const resident = (id: string | null) => name(id, data.residents);
@@ -257,9 +292,9 @@ export function townSupplyMarkup(snapshot: Supply, location = "", forecastKey = 
       ...data.horizons.flatMap((due, i) => {
         const checkpoint = `${forecastLabels[i + 1]} · ${time(due)}`;
         return hasBaseline ? [`${checkpoint} with plans`, `${checkpoint} without plans`] : [checkpoint];
-      })], choices.map(row => [site(row.location), label(row.product), row.on_hand, row.usable, row.reserve, row.target,
-        ...row.projected.flatMap((value, i) => hasBaseline ? [value, row.baseline_projected?.[i] ?? null] : [value])]), "No inventory in this view.",
-      i => forecastButton(choices[i], label(choices[i].product), choices[i] === selected))}
+      })], inventoryDisplayRows.map(entry => entry.values), "No inventory in this view.",
+      i => forecastButton(inventoryDisplayRows[i].row, inventoryDisplayRows[i].caption,
+        inventoryDisplayRows[i].row === selected))}
     <h3>Forecast exceptions</h3>${table("Projected production and delivery shortages", ["Reference", "Type", "When", "Location", "Product", "Missing"],
       data.risks.map(risk => [risk.id, risk.kind, time(risk.minute), site(risk.location), label(risk.product), risk.missing]),
       "No modeled shortages in the next 48 simulated hours.")}

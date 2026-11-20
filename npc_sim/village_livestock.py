@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from npc_sim.world import World
 
 VERBS = {"village_draw_livestock_water", "village_care_cow", "village_care_hens",
+         "village_care_pigs",
          "village_milk_cow", "village_collect_eggs", "village_cook_dairy", "village_livestock_pause",
          "village_make_plant_scraps", "village_compost"}
 FREE_ACTIONS = {"look", "read", "say", "village_observe", "village_wait", "village_livestock_pause"}
@@ -26,12 +27,16 @@ def farmer(base):
 
 def fixtures(scenario) -> dict[str, Entity]:
     result = {
-        "farm-cow": Entity(name="Millhaven dairy cow", kind="creature", location="farm",
-                           description="One adult dairy cow; daily hay, real water and clean housing are required."),
+        "cow-stall": Entity(name="Cow stall", kind="tool", location="farm",
+                            description="Clean housing and a secure milking place."),
         "hen-coop": Entity(name="Hen coop", kind="tool", location="farm",
                            description="Real housing and nests for the adult laying flock.", max_health=100),
         "cow-stall": Entity(name="Cow stall", kind="tool", location="farm",
                             description="Clean housing and a secure milking place.", max_health=100),
+        "sheep-pen": Entity(name="Sheep pen", kind="tool", location="farm",
+                            description="A physical pen for farm sheep. Wool shearing is not yet enabled.", max_health=100),
+        "pig-pen": Entity(name="Pig pen", kind="tool", location="farm",
+                          description="A physical pen for the farm pigs and safe edible leftovers.", max_health=100),
     }
     for key, name in [(BUCKET, "Livestock water bucket"), (BRUSH, "Livestock cleaning brush"),
                       (PAIL, "Milking pail"), (BASKET, "Egg basket")]:
@@ -41,6 +46,18 @@ def fixtures(scenario) -> dict[str, Entity]:
     for index in range(1, count + 1):
         result[f"farm-hen-{index:02d}"] = Entity(name=f"Adult laying hen {index}", kind="creature",
                                                 location="farm", description="A real adult hen, not free egg stock.")
+    for index in range(1, scenario.village.livestock.pigs + 1 if scenario.village.livestock else 3 + 1):
+        result[f"farm-pig-{index:02d}"] = Entity(name=f"Adult farm pig {index}", kind="creature",
+            location="farm", description="A living farm pig. Bacon production is not enabled.")
+    cow_count = scenario.village.livestock.cows if scenario.village.livestock else 2
+    for index in range(1, cow_count + 1):
+        identifier = "farm-cow" if index == 1 else f"farm-cow-{index:02d}"
+        result[identifier] = Entity(name=f"Adult dairy cow {index}", kind="creature",
+            location="farm", description="A real dairy cow; daily hay, water and clean housing are required.")
+    sheep_count = scenario.village.livestock.sheep if scenario.village.livestock else 6
+    for index in range(1, sheep_count + 1):
+        result[f"farm-sheep-{index:02d}"] = Entity(name=f"Adult farm sheep {index}", kind="creature",
+            location="farm", description="A real farm sheep. Wool shearing is not yet enabled.")
     return {**result, **village_recycling.fixtures()}
 
 
@@ -50,6 +67,16 @@ def _validate(scenario, config) -> None:
         raise ValueError("Livestock requires expanded timed AI village life")
     if config.keeper != farmer(base):
         raise ValueError("Assign the actual farmer to the farm livestock")
+
+
+def legacy_fixture_ids(scenario) -> set[str]:
+    config = scenario.village.livestock if scenario.village else None
+    if not config:
+        return set()
+    required = {"farm-cow", "hen-coop", "cow-stall", BUCKET, BRUSH, PAIL, BASKET}
+    required |= {f"farm-hen-{index:02d}" for index in range(1, config.hens + 1)}
+    required |= set(village_recycling.fixtures())
+    return required
 
 
 def install_scenario(scenario) -> None:
@@ -67,7 +94,9 @@ def install_scenario(scenario) -> None:
 def validate_config(scenario) -> None:
     if scenario.village and scenario.village.livestock:
         _validate(scenario, scenario.village.livestock)
-        if not set(fixtures(scenario)) <= set(scenario.entities):
+        required = (set(fixtures(scenario)) if scenario.id == "millhaven-generation-17"
+                    else legacy_fixture_ids(scenario))
+        if not required <= set(scenario.entities):
             raise ValueError("Livestock requires its actual animals, housing and tools")
 
 
@@ -117,7 +146,7 @@ def _state(world) -> VillageLivestockState:
 def _rollover(world) -> None:
     state = _state(world)
     day = village.context(world)[1].minute // 1440
-    for care in [state.cow, state.hens]:
+    for care in [state.cow, state.hens, state.pigs]:
         if care.day != day:
             care.day = day
             care.fed = care.watered = care.cleaned = False
@@ -148,7 +177,10 @@ def action_blocker(world, action, actor):
             action.startswith("village_research") and action != "village_research_pause"
             or action in {"village_leisure", "village_band_attend", "village_quest"}):
         day = village.context(world)[1].minute // 1440
-        if any(care.day != day or not care.cleaned for care in [state.cow, state.hens]):
+        care_groups = [state.cow, state.hens]
+        if state.config.pigs or state.config.sheep:
+            care_groups.extend([state.pigs])
+        if any(care.day != day or not care.cleaned for care in care_groups):
             return "LIVESTOCK_CARE_DUE", "Today's real livestock care takes priority over optional research/leisure."
     return None
 
@@ -190,8 +222,12 @@ def _tools(world, actor, location, tools):
 
 
 def _animals(world, operation):
-    identifiers = ["farm-cow"] if operation in {"cow", "milk"} else [
-        f"farm-hen-{index:02d}" for index in range(1, _state(world).config.hens + 1)]
+    config = _state(world).config
+    identifiers = (["farm-cow", *[f"farm-cow-{index:02d}" for index in range(2, config.cows + 1)]]
+                   if operation in {"cow", "milk"} else
+                   [f"farm-pig-{index:02d}" for index in range(1, config.pigs + 1)]
+                   if operation == "pigs" else
+                   [f"farm-hen-{index:02d}" for index in range(1, config.hens + 1)])
     return all((entity := world.state.entities.get(key)) and entity.kind == "creature" and entity.location == "farm"
                and not entity.hidden and not entity.broken for key in identifiers)
 
@@ -335,9 +371,9 @@ def apply(world, action, args, *, collection_preview=False):
             return "REJECTED", "NO_LIVESTOCK_COMMITMENT", "No active livestock work.", None
         _interrupt(world, chunk)
         return "APPLIED", "LIVESTOCK_PAUSED", "Paused; no output or refunds. Resume unfinished care today.", None
-    operations: dict[str, Literal["water", "cow", "hens", "milk", "eggs", "cook", "scraps", "compost"]] = {
+    operations: dict[str, Literal["water", "cow", "hens", "pigs", "milk", "eggs", "cook", "scraps", "compost"]] = {
                  "village_draw_livestock_water": "water", "village_care_cow": "cow",
-                 "village_care_hens": "hens", "village_milk_cow": "milk",
+                 "village_care_hens": "hens", "village_care_pigs": "pigs", "village_milk_cow": "milk",
                  "village_collect_eggs": "eggs", "village_cook_dairy": "cook",
                  "village_make_plant_scraps": "scraps", "village_compost": "compost"}
     operation = operations[action]
@@ -348,7 +384,7 @@ def apply(world, action, args, *, collection_preview=False):
     site = base.residents[actor].work if operation == "scraps" else base.well_site if operation == "water" else "tavern" if operation == "cook" else "farm"
     cooking_job = base.residents[assigned].job
     tools = {"water": [BUCKET], "cow": [BUCKET, BRUSH, "cow-stall"],
-             "hens": [BUCKET, BRUSH, "hen-coop"], "milk": [PAIL, "cow-stall"],
+             "hens": [BUCKET, BRUSH, "hen-coop"], "pigs": [BUCKET, BRUSH, "pig-pen"], "milk": [PAIL, "cow-stall"],
              "eggs": [BASKET, "hen-coop"], "cook": [cooking_job.equipment if cooking_job else None],
              "scraps": [], "compost": ["compost-pile", "compost-fork"]}[operation]
     if location != site:
@@ -364,7 +400,7 @@ def apply(world, action, args, *, collection_preview=False):
         return "REJECTED", "LIVESTOCK_BODY_REQUIREMENT", reason, None
     if operation in {"water", "cow", "hens"} and BUCKET not in world.actor.inventory:
         return "REJECTED", "WATER_BUCKET_REQUIRED", "Carry the real livestock bucket; water is not teleported.", None
-    if operation in {"cow", "hens", "milk", "eggs"} and not _animals(world, operation):
+    if operation in {"cow", "hens", "pigs", "milk", "eggs"} and not _animals(world, operation):
         return "REJECTED", "LIVESTOCK_ANIMALS_REQUIRED", "The actual living animals must be here.", None
     person, resident = town.residents[actor], base.residents[actor]
     if (person.life and person.life.work or person.timber_route or person.delivery or person.busy_until > town.minute
@@ -372,11 +408,11 @@ def apply(world, action, args, *, collection_preview=False):
         return "REJECTED", "WORK_COMMITTED", "Finish existing work and physical transport first.", None
     quantity, session = 0, ""
     source_product, expires_at, ingredients = "", None, []
-    care = state.cow if operation in {"cow", "milk"} else state.hens
-    minutes = {"water": 5, "cow": 15, "hens": 10, "milk": 15, "eggs": 10, "cook": 15,
+    care = state.cow if operation in {"cow", "milk"} else state.pigs if operation == "pigs" else state.hens
+    minutes = {"water": 5, "cow": 15, "hens": 10, "pigs": 15, "milk": 15, "eggs": 10, "cook": 15,
                "scraps": 5 * args.get("quantity", 1), "compost": 20}[operation]
     factor = village_life.cooldown_factor(world, actor)
-    if operation in {"cow", "hens"}:
+    if operation in {"cow", "hens", "pigs"}:
         if care.cleaned:
             return "REJECTED", "CARE_DONE", "Today's care is already complete.", None
         minutes = max(5, minutes * factor - care.progress)
@@ -408,21 +444,30 @@ def apply(world, action, args, *, collection_preview=False):
             return "REJECTED", "NO_USABLE_WATER", "The actual well must be completed and usable; repair it first.", None
         if state.water:
             return "REJECTED", "BUCKET_HAS_WATER", "Use the real water already in the bucket.", None
-    elif operation in {"cow", "hens"}:
+    elif operation in {"cow", "hens", "pigs"}:
         grain, scraps = village_recycling.hen_ration(world)
         resource, amount = ("hay", 1) if operation == "cow" else ("grain", grain)
+        if operation == "pigs":
+            resource, amount = "meals", min(state.config.pigs, village_economy.usable_stock(
+                world, "farm", "meals", town.minute))
+            if amount == 0:
+                resource, amount = "plant-scraps", min(state.config.pigs,
+                    village_economy.usable_stock(world, "farm", "plant-scraps", town.minute))
         from npc_sim import village_depot
         feed_site = village_depot.FEED_STORE if village_depot.feed_store_enabled(world) else "farm"
-        protected = village_economy.protected_quantity(world, feed_site, resource)
+        protected = village_recycling.protected(world, "farm", resource) if operation == "pigs" else \
+            village_economy.protected_quantity(world, feed_site, resource)
         if resource == "hay" and town.horse_fed_day < town.minute // 1440:
             horse_stock = village_economy.usable_stock(world, base.residents[base.helper].work, "hay", town.minute)
             protected = max(protected, max(0, 1 - horse_stock))
-        if not care.fed and village_economy.usable_stock(world, feed_site, resource, town.minute) - amount < protected:
+        feed_available = village_economy.usable_stock(world, "farm", resource, town.minute) if operation == "pigs" \
+            else village_economy.usable_stock(world, feed_site, resource, town.minute)
+        if not care.fed and feed_available - amount < protected:
             return "REJECTED", "LIVESTOCK_FEED_REQUIRED", "Produce real surplus feed; horse hay and accepted grain commitments are protected.", None
         if not care.watered and state.water < 1:
             return "REJECTED", "LIVESTOCK_WATER_REQUIRED", "Draw actual well water with the bucket and carry it here.", None
         if not care.fed:
-            if feed_site == "farm":
+            if feed_site == "farm" or operation == "pigs":
                 village_goods.take(world, "farm", resource, amount)
             else:
                 village_depot.consume_feed(world, resource, amount)

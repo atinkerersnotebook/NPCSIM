@@ -383,6 +383,18 @@ def protected_quantity(world: "World", location: str, product: str) -> int:
         if order.status in LOADABLE and order.source == location and order.product == product)
 
 
+def order_priority(world: "World", order: VillageSupplierOrder) -> tuple[int, int, str]:
+    policy = config(world)
+    base = world.scenario.village
+    buyer_priority = (0 if policy and order.buyer == policy.innkeeper else
+                      2 if order.buyer == base.courier else 1)
+    if order.buyer != base.courier and order.buyer in base.residents:
+        resident = base.residents[order.buyer]
+        if resident.job and order.product in resident.job.inputs:
+            buyer_priority = 0
+    return buyer_priority, order.deadline, order.id
+
+
 def policy_reserve(world: "World", location: str, product: str) -> int:
     policy = config(world)
     return policy.reserve_targets.get(location, {}).get(product, 0) if policy else 0
@@ -430,10 +442,12 @@ def _allocated_stock(world: "World", location: str, product: str,
                  if person.life and person.life.work
                  and person.life.work.location == location and product in person.life.work.outputs]
     if economy:
+        excluded = economy.orders.get(excluding) if excluding else None
         orders = (order for order in economy.orders.values()
                   if order.status in LOADABLE and order.id != excluding
-                  and order.source == location and order.product == product)
-        for order in sorted(orders, key=lambda item: (item.required_fresh_until, item.deadline, item.id)):
+                  and order.source == location and order.product == product
+                  and (excluded is None or order_priority(world, order) < order_priority(world, excluded)))
+        for order in sorted(orders, key=lambda item: order_priority(world, item)):
             cutoff = max(state.minute, order.required_fresh_until)
             physical, _ = _allocate(buckets, order.loadable, cutoff)
             from npc_sim import village_services
@@ -710,7 +724,7 @@ def load_blocker(world: "World", source: str, destination: str,
         return None
     for product, amount in goods.items():
         remaining = amount
-        for order in sorted(economy.orders.values(), key=lambda item: (item.deadline, item.id)):
+        for order in sorted(economy.orders.values(), key=lambda item: order_priority(world, item)):
             if (order.status not in LOADABLE or order.source != source or order.destination != destination
                     or order.product != product or order.loadable <= 0):
                 continue
@@ -1010,15 +1024,11 @@ def _service_preparation_at(world: "World", plan: dict[str, Any]) -> int:
 
 def _meal_delivery_deadline(world: "World", plan: dict[str, Any], product: str) -> int:
     policy = config(world)
-    deadline = _service_preparation_at(world, plan) - policy.cooking_lead_minutes
-    if plan["id"].endswith(":breakfast") and product == "bread":
-        base = world.scenario.village
-        supplier_id = _supplier(world, "bread", base.residents[policy.innkeeper].work)
-        if supplier_id:
-            previous_day = plan["due"] // 1440 - 1
-            deadline = min(deadline, previous_day * 1440 + min(
-                base.residents[supplier_id].bed_minute,
-                base.residents[policy.innkeeper].bed_minute))
+    day = plan["due"] // 1440
+    if plan["id"].endswith(":breakfast"):
+        deadline = (day - 1) * 1440 + 1080
+    else:
+        deadline = _service_preparation_at(world, plan) - policy.cooking_lead_minutes
     return deadline
 
 
@@ -1035,9 +1045,12 @@ def meal_requirements(world: "World") -> list[dict[str, Any]]:
     meals = _supply_buckets(world, location, "meals")
     # Open tomorrow's ordering window while suppliers can still prepare and
     # communicate; never treat yesterday's fulfilled order as tomorrow's stock.
-    days = (day, day + 1) if state.minute % 1440 >= 600 else (day,)
+    minute = state.minute % 1440
+    days = (day, day + 1) if minute >= 600 else (day,)
     for service_day in days:
         for plan in sorted(policy.meal_plans, key=lambda plan: plan.use_minute):
+            if service_day > day and minute < 600:
+                continue
             due = service_day * 1440 + plan.use_minute
             if due < state.minute:
                 continue
@@ -1045,7 +1058,8 @@ def meal_requirements(world: "World") -> list[dict[str, Any]]:
             eaten = sum(1 for person in state.residents.values() if person.life
                         for meal in person.life.meals.values()
                         if meal.kind == meal_kind and meal.due // 1440 == service_day and meal.status == "eaten")
-            remaining_portions = max(0, plan.portions - eaten)
+            resident_target = plan.resident_portions
+            remaining_portions = max(0, resident_target - eaten) + plan.visitor_portions
             covered, _ = _allocate(meals, remaining_portions, due)
             inputs: dict[str, int] = {}
             unmet_recipes: dict[str, int] = {}
@@ -1063,6 +1077,8 @@ def meal_requirements(world: "World") -> list[dict[str, Any]]:
                 inputs["bread"] = inputs.get("bread", 0) + max(0, plan.bread_service - eaten)
             if plan.tea_portions:
                 inputs["tea"] = inputs.get("tea", 0) + max(0, plan.tea_portions - eaten)
+            for product, quantity in plan.additional_inputs.items():
+                inputs[product] = inputs.get(product, 0) + max(0, quantity - eaten)
             inputs = {product: amount + policy.stock_buffer.get(product, 0)
                       for product, amount in inputs.items() if amount or policy.stock_buffer.get(product, 0)}
             result.append({"id": f"{service_day}:{plan.id}", "due": due, "portions": plan.portions,
@@ -1264,13 +1280,13 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
                              or product in {"milk", "eggs"})
                         and state.minute > use_at - policy.cooking_lead_minutes - policy.delivery_lead_minutes):
                     continue
-                breakfast_bread = buyer == policy.innkeeper and key.endswith(":breakfast") and product == "bread"
-                if breakfast_bread:
+                next_breakfast = buyer == policy.innkeeper and key.endswith(":breakfast")
+                if next_breakfast:
                     plan = next(plan for plan in meal_requirements(world) if plan["id"] == key)
                     if state.minute > _meal_delivery_deadline(world, plan, product) - policy.delivery_lead_minutes:
                         continue
                 deadline = (_meal_delivery_deadline(world, plan, product)
-                            if breakfast_bread else use_at - lead)
+                            if next_breakfast else use_at - lead)
                 if deadline <= state.minute and buyer != policy.innkeeper:
                     continue
                 deadline = max(state.minute, deadline)
@@ -1683,7 +1699,10 @@ def _production(world: "World", action: str) -> tuple[dict[str, int], dict[str, 
         return {}, {}, 1
     if action == "village_cook_fish":
         product = cooking_fish_product(world)
-        return {product: 1}, {"meals": 2}, job.batch_size
+        inputs = {product: 1}
+        if fish_cooking_uses_bread(world):
+            inputs["bread"] = 1
+        return inputs, {"meals": 2}, job.batch_size
     from npc_sim import village_services
     if action in village_services.JOBS:
         return {}, {village_services.JOBS[action][1]: 2}, 1
@@ -1881,6 +1900,12 @@ def cooking_fish_product(world: "World") -> str:
     return "preserved-fish" if any(demands) else "fish"
 
 
+def fish_cooking_uses_bread(world: "World") -> bool:
+    policy = config(world)
+    return bool(policy and any(plan.id == "supper" and plan.additional_inputs.get("fish", 0)
+                              for plan in policy.meal_plans))
+
+
 def production_blocker(world: "World", action: str, *, personal: bool = False) -> tuple[str, str] | None:
     policy = config(world)
     if policy is None:
@@ -1944,7 +1969,7 @@ def delivery_runs(world: "World", carrier: str | None = None) -> list[dict[str, 
         item.quantity for item in loads)
     location = village.resident_location(world, carrier)
     runs: dict[str, dict[str, Any]] = {}
-    for order in sorted(economy.orders.values(), key=lambda order: (order.deadline, order.id)):
+    for order in sorted(economy.orders.values(), key=lambda order: order_priority(world, order)):
         if order.status not in LOADABLE or order.source != location or order.loadable <= 0:
             continue
         run = runs.setdefault(order.destination, {"destination": order.destination,

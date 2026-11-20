@@ -126,7 +126,7 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
     elif policy and economy:
         for resource, amount in goods.items():
             remaining = amount
-            for order in sorted(economy.orders.values(), key=lambda order: (order.deadline, order.id)):
+            for order in sorted(economy.orders.values(), key=lambda order: village_economy.order_priority(world, order)):
                 if (order.status not in village_economy.LOADABLE or order.source != source or order.destination != destination
                         or order.product != resource or order.loadable <= 0):
                     continue

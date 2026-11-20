@@ -178,12 +178,62 @@ def report(world: WorldState, config: VillageConfig | None) -> dict[str, Any] | 
             task.update(status="blocked", quantity=0, finish=None,
                         basis="Not enough unreserved inputs at the planned time")
 
+    meal_allocations = _meal_allocations(world, config)
     inventory = [{"location": site, "product": good, "on_hand": stock.get((site, good), 0),
                   "usable": usable[site, good], "reserve": reserves.get(site, {}).get(good, 0),
                   "target": targets.get(site, {}).get(good), "projected": projected[site, good],
-                  "baseline_projected": baseline[site, good], "forecast_changes": changes[site, good]}
+                  "baseline_projected": baseline[site, good], "forecast_changes": changes[site, good],
+                  **({"meal_allocations": meal_allocations} if good == "meals" else {})}
                  for site, good in sorted(projected)]
     return _details(world, config, horizons, inventory, orders, cargo_rows, production, replenishment, risks)
+
+
+def _meal_allocations(world: WorldState, config: VillageConfig | None) -> dict[str, Any]:
+    state = world.village
+    policy = state.economy.config if state and state.economy else None
+    if not state or not config or not policy:
+        return {"services": [], "unallocated": state.stocks.get("tavern", {}).get("meals", 0) if state else 0}
+    day = state.minute // 1440
+    prepared = [(lot.quantity, lot.expires_at) for lot in state.stock_lots.get("tavern", {}).get("meals", [])]
+    if not prepared:
+        quantity = state.stocks.get("tavern", {}).get("meals", 0)
+        prepared = [(quantity, None)] if quantity else []
+    available = sum(quantity for quantity, expiry in prepared
+                    if expiry is None or expiry > state.minute)
+    remaining_lots = list(prepared)
+    services = []
+    service_days = (day, day + 1) if state.minute % 1440 >= 600 else (day,)
+    for service_day in service_days:
+        for plan in sorted(policy.meal_plans, key=lambda item: item.use_minute):
+            due = service_day * 1440 + plan.use_minute
+            grace = world.village.day_policy.meal_window if world.village.day_policy else config.meal_window
+            if due + grace < state.minute:
+                continue
+            meal_kind = "breakfast" if plan.id == "breakfast" else "daily"
+            eaten = sum(1 for person in state.residents.values() if person.life
+                        for meal in person.life.meals.values()
+                        if meal.kind == meal_kind and meal.due // 1440 == service_day and meal.status == "eaten")
+            needed = max(0, plan.portions - eaten)
+            fresh = sum(quantity for quantity, expiry in remaining_lots
+                        if expiry is None or expiry > due)
+            reserved = min(needed, fresh)
+            left = reserved
+            next_lots = []
+            for quantity, expiry in sorted(remaining_lots, key=lambda item: (
+                    item[1] if item[1] is not None else float("inf"))):
+                used = min(left, quantity) if expiry is None or expiry > due else 0
+                left -= used
+                if quantity - used:
+                    next_lots.append((quantity - used, expiry))
+            remaining_lots = next_lots
+            services.append({"id": f"{service_day}:{plan.id}",
+                             "service": "breakfast" if plan.id == "breakfast" else "supper",
+                             "due": due, "required": needed, "reserved": reserved,
+                             "shortfall": max(0, needed - reserved)})
+    return {"services": services,
+            "unallocated": sum(quantity for quantity, expiry in remaining_lots
+                               if expiry is None or expiry > state.minute),
+            "prepared": available}
 
 
 def _project(initial_lots, initial_cargo, events, horizons, shelf, reserves, usable, *, include_plans):
