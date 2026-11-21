@@ -838,7 +838,9 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
             break
     if state.economy and (world.actor_id == "nella" or any(
             order.buyer == world.actor_id and order.status in village_economy.LOADABLE
-            for order in village_economy._personal_orders(world))):
+            for order in village_economy._personal_orders(world)) or any(
+                order.public_work and order.supplier == world.actor_id and order.status in village_economy.LOADABLE
+                for order in village_economy._personal_orders(world))):
         freight = _freight_choices(world)
         if freight:
             choices.append(freight)
@@ -1206,7 +1208,9 @@ def _freight_choices(world: "World") -> dict[str, Any] | None:
                               "Collect the earliest personally known funded freight shipment.", "P1")
     return {"task_id": f"freight:load:{order.id}", "action_id": "village_load_goods",
             "arguments": {"goods": {order.product: quantity}, "destination": order.destination},
-            "priority": "P1", "reason": "Batch one feasible funded shipment within real capacity and deadline."}
+            "priority": "P4" if order.public_work else "P1",
+            "reason": ("Carry one funded civic batch after urgent freight and obligations."
+                       if order.public_work else "Batch one feasible funded shipment within real capacity and deadline.")}
 
 
 def _depot_choice(world: "World") -> dict[str, Any] | None:
@@ -1275,7 +1279,9 @@ def candidates(world: "World") -> list[dict[str, Any]]:
         return []
     day = state.minute // 1440
     planned = any(plan["day"] == day for plan in person.fallback.daily_plans)
-    if not planned and state.minute % 1440 >= resident.wake_minute:
+    if (not planned and state.minute % 1440 >= resident.wake_minute
+            and not village_life.early_inn_close_ready(world, world.actor_id)
+            and not village_life.rest_due(resident, life, state.minute)):
         return [{"task_id": "daily-plan:required", "action_id": "village_daily_plan", "arguments": {},
                  "priority": "P0", "reason": "Plan today and tomorrow before committing productive work."}]
     if state.legacy is not None:
@@ -1357,6 +1363,41 @@ def candidates(world: "World") -> list[dict[str, Any]]:
                                     "action_id": action["id"], "arguments": args,
                                     "priority": "P4",
                                     "reason": "A funded local equipment upgrade improves real future capacity."})
+    economy_policy = village_economy.config(world)
+    if economy_policy and economy_policy.public_crafts and state.economy:
+        civic = next((recipe for recipe in economy_policy.public_crafts.values()
+                      if recipe.supplier == world.actor_id), None)
+        pending = [order for order in state.economy.orders.values()
+                   if civic and order.public_work and order.product == civic.product
+                   and order.supplier == world.actor_id and order.loadable
+                   and order.status in {"accepted_planned", "blocked"}]
+        if civic and pending and world.actor.location_id == resident.work:
+            args = {}
+            if (village_life.action_blocker(world, "village_public_craft", args=args) is None
+                    and action_blocker(world, "village_public_craft", args, check_wait=False) is None):
+                choices.append({"task_id": f"public:civic:{pending[0].id}",
+                                "action_id": "village_public_craft", "arguments": {},
+                                "priority": "P4",
+                                "reason": "Craft a town-funded project batch only when higher-priority work is clear."})
+        for project in economy_policy.public_works:
+            installed = state.economy.public_work_progress.get(project.id, {})
+            if (world.actor_id not in project.workers or project.id in state.economy.public_work_completed_at
+                    or not any(village_economy.usable_stock(world, project.location, product, state.minute)
+                               > 0 and installed.get(product, 0) < required
+                               for product, required in project.materials.items())):
+                continue
+            reason = "Install physically delivered town-funded materials at the civic work site."
+            if location != project.location:
+                travel = _travel_choice(world, project.location, f"public:work:reach:{project.id}", reason, "P4")
+                if travel:
+                    choices.append(travel)
+                continue
+            args = {"project": project.id}
+            if (village_life.action_blocker(world, "village_public_work", args=args) is None
+                    and action_blocker(world, "village_public_work", args, check_wait=False) is None):
+                choices.append({"task_id": f"public:work:{project.id}",
+                                "action_id": "village_public_work", "arguments": args,
+                                "priority": "P4", "reason": reason})
     for action in village_ai.actions(world):
         action_id = action["id"]
         if action_id not in village_life.PRODUCTION:

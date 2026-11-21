@@ -77,6 +77,80 @@ def test_standalone_strict_models_and_legacy_opt_out(world):
     assert economy.initial_state(legacy) is not None
 
 
+def test_public_work_funds_low_priority_crafts_and_installs_real_delivery(world):
+    from npc_sim.village_economy_models import VillagePublicCraft, VillagePublicWork
+
+    state = world.state.village
+    policy = state.economy.config
+    policy.town_treasury = 100
+    policy.public_crafts = {"nails": VillagePublicCraft(
+        supplier="torvin", product="nails", inputs={"iron": 1}, output_quantity=4, minutes=30)}
+    policy.public_works = [VillagePublicWork(
+        id="bridge-rails", title="Bridge rails", location="tavern-yard", workers=["torvin"],
+        materials={"nails": 4}, batch_sizes={"nails": 4}, starts_at=480, due_at=1920)]
+    world.scenario.village.prices["nails"] = 2
+    state.stocks.setdefault("tavern-yard", {})["nails"] = 0
+    state.stocks["forge"]["nails"] = 0
+    state.stocks["forge"]["iron"] = 0
+    state.coins["town"] = 100
+    add(world, "forge", "iron", 1)
+
+    economy.ensure_public_works(world)
+    order = next(item for item in state.economy.orders.values() if item.public_work == "bridge-rails")
+    assert order.status == "accepted_planned" and order.buyer == "town"
+    assert economy.order_priority(world, order)[0] == 3
+
+    smith = actor(world, "torvin", "forge")
+    result = economy.apply(smith, "village_public_craft", {})
+    assert result[1] == "PUBLIC_BATCH_STARTED"
+    state.minute = state.residents["torvin"].life.work.finishes_at
+    from npc_sim import village_life
+    village_life.advance(world)
+    assert state.stocks["forge"]["nails"] == 4
+
+    carrier = actor(world, "torvin", "forge")
+    assert goods.load(carrier, "torvin", {"nails": 4}, "tavern-yard", state.residents["torvin"].shipments, 6) is None
+    carrier.actor.location_id = "tavern-yard"
+    assert goods.unload(carrier, "torvin", state.residents["torvin"].shipments) is None
+    assert state.stocks["tavern-yard"]["nails"] == 4
+    worker = actor(world, "torvin", "tavern-yard")
+    state.residents["torvin"].next_work = state.minute
+    assert economy.apply(worker, "village_public_work", {"project": "bridge-rails"})[1] == "PUBLIC_WORK_STARTED"
+    state.minute = state.residents["torvin"].life.work.finishes_at
+    village_life.advance(world)
+    economy.advance(world)
+    assert state.stocks["tavern-yard"]["nails"] == 0
+    assert state.economy.public_work_progress["bridge-rails"]["nails"] == 4
+    assert "bridge-rails" in state.economy.public_work_completed_at
+
+
+def test_public_craft_yields_to_ordinary_funded_orders(world):
+    from npc_sim.village_economy_models import VillagePublicCraft, VillagePublicWork
+
+    state = world.state.village
+    policy = state.economy.config
+    policy.town_treasury = 100
+    policy.public_crafts = {"nails": VillagePublicCraft(
+        supplier="torvin", product="nails", inputs={"iron": 1}, output_quantity=4)}
+    policy.public_works = [VillagePublicWork(
+        id="bridge-nails", title="Bridge nails", location="tavern-yard", workers=["torvin"],
+        materials={"nails": 4}, starts_at=480, due_at=1920)]
+    state.coins["town"] = 100
+    world.scenario.village.prices["nails"] = 2
+    state.stocks.setdefault("tavern-yard", {})["nails"] = 0
+    add(world, "forge", "iron", 1)
+    economy.ensure_public_works(world)
+    ordinary = VillageSupplierOrder(
+        id="ordinary", request_key="ordinary", buyer="elsie", supplier="torvin",
+        source="forge", destination="tavern", product="wagon-parts", quantity=1,
+        price=5, delivery_fee=1, deadline=900, required_fresh_until=900,
+        created_at=480, status="accepted")
+    state.economy.orders[ordinary.id] = ordinary
+
+    result = economy.apply(actor(world, "torvin", "forge"), "village_public_craft", {})
+    assert result[:2] == ("REJECTED", "COMMITMENT_DUE")
+
+
 def test_generation_17_production_stops_at_target_and_capacity(world):
     supplier = actor(world, "jory")
     world.state.village.economy.config.reserve_targets = {"bakery": {"bread": 5}}

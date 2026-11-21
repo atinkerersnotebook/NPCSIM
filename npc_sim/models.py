@@ -768,7 +768,9 @@ class VillageCommittedWork(StrictModel):
     outputs: dict[str, VillageAmount]
     ingredients: list[str] = Field(default_factory=list)
     equipment: str | None = None
-    kind: Literal["production", "wagon_repair"] = "production"
+    public_work: str | None = None
+    public_inputs: dict[str, VillageAmount] = Field(default_factory=dict)
+    kind: Literal["production", "wagon_repair", "public_craft", "public_work"] = "production"
 
     @model_serializer(mode="wrap")
     def serialize_work(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -1136,6 +1138,7 @@ class VillageDashboard(StrictModel):
     maintenance: list[VillageMaintenanceView] = Field(default_factory=list)
     research: list[VillageResearchView] = Field(default_factory=list)
     equipment: list[dict[str, Any]] = Field(default_factory=list)
+    public_works: list[dict[str, Any]] = Field(default_factory=list)
     time_use: dict[str, VillageTimeUse] = Field(default_factory=dict)
     daily_time_use: dict[int, dict[str, VillageTimeUse]] = Field(default_factory=dict)
     day_policy: VillageDayPolicy | None = None

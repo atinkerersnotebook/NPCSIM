@@ -203,7 +203,9 @@ def initial_state(scenario: Scenario) -> VillageState:
             for rid, resident in config.residents.items()},
         stocks={location: stock.copy() for location, stock in config.stocks.items()},
         initial_stock_seed_id=config.initial_stock_seed_id,
-        coins={**config.coins, "visitor": 20, **({"iron-trader": 0} if config.expanded_rules else {})},
+        coins={**config.coins, "visitor": 20,
+               **({"town": config.economy.town_treasury} if config.economy and config.economy.town_treasury else {}),
+               **({"iron-trader": 0} if config.expanded_rules else {})},
         roster={rid: resident.model_copy(deep=True) for rid, resident in config.residents.items()}
         if config.ai_controlled else {},
         wagon=VillageWagon() if config.time_based_turns else None,

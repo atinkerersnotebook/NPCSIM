@@ -39,6 +39,36 @@ class VillageMealPlan(EconomyModel):
         return self
 
 
+class VillagePublicWork(EconomyModel):
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=160)
+    location: str
+    workers: list[str] = Field(default_factory=list)
+    materials: dict[str, PositiveQuantity]
+    batch_sizes: dict[str, PositiveQuantity] = Field(default_factory=dict)
+    work_minutes: int = Field(default=15, ge=5, le=120, multiple_of=5)
+    starts_at: Minute = 0
+    due_at: Minute | None = None
+
+    @model_validator(mode="after")
+    def check_batches(self) -> "VillagePublicWork":
+        if not self.workers:
+            raise ValueError("Public works require at least one assigned worker")
+        if any(product not in self.materials for product in self.batch_sizes):
+            raise ValueError("Public-work batch sizes must name required materials")
+        if self.due_at is not None and self.due_at <= self.starts_at:
+            raise ValueError("A public work must be due after it starts")
+        return self
+
+
+class VillagePublicCraft(EconomyModel):
+    supplier: str
+    product: str
+    inputs: dict[str, PositiveQuantity]
+    output_quantity: PositiveQuantity = 1
+    minutes: int = Field(default=30, ge=5, le=240, multiple_of=5)
+
+
 class VillageDailyMenu(EconomyModel):
     day: Quantity
     selected_at: Minute
@@ -79,6 +109,9 @@ class VillageEconomyConfig(EconomyModel):
     meal_price: Quantity | None = None
     subsidy_per_meal: Quantity = 0
     subsidy_payer: str | None = None
+    town_treasury: Quantity = 0
+    public_works: list[VillagePublicWork] = Field(default_factory=list)
+    public_crafts: dict[str, VillagePublicCraft] = Field(default_factory=dict)
     cooking_lead_minutes: int = Field(default=60, ge=5, multiple_of=5)
     delivery_lead_minutes: int = Field(default=30, ge=0, multiple_of=5)
     require_orders: bool = True
@@ -92,6 +125,13 @@ class VillageEconomyConfig(EconomyModel):
             raise ValueError("Meal plans must name configured recipes")
         if self.subsidy_per_meal and self.subsidy_payer is None:
             raise ValueError("Subsidized meals require an explicit funding account")
+        if len({project.id for project in self.public_works}) != len(self.public_works):
+            raise ValueError("Public-work identifiers must be unique")
+        if self.public_works and not self.town_treasury:
+            raise ValueError("Public works require a funded town treasury")
+        if any(product not in self.public_crafts or self.public_crafts[product].product != product
+               for project in self.public_works for product in project.materials):
+            raise ValueError("Every public-work material needs a matching public craft recipe")
         return self
 
 
@@ -120,6 +160,7 @@ class VillageSupplierOrder(EconomyModel):
     spoiled_quantity: Quantity = 0
     paid: Quantity = 0
     fees_paid: Quantity = 0
+    public_work: str | None = None
     reason: str | None = None
     deferred_until: Minute | None = None
 
@@ -163,5 +204,7 @@ class VillageEconomyState(EconomyModel):
     next_order: PositiveQuantity = 1
     daily_menu: VillageDailyMenu | None = None
     initial_coins: dict[str, Quantity] = Field(default_factory=dict)
+    public_work_progress: dict[str, dict[str, Quantity]] = Field(default_factory=dict)
+    public_work_completed_at: dict[str, Minute] = Field(default_factory=dict)
     payments: list[VillageEconomyPayment] = Field(default_factory=list)
     movements: list[VillageEconomyMovement] = Field(default_factory=list)

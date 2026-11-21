@@ -48,7 +48,8 @@ export const townSupplySchema = z.object({
     due_at: quantity, release_at: quantity, day: quantity, required_minutes: quantity, supplies: amounts,
     status: text })).default([]),
   projects: z.array(z.object({ id: text, title: text, location: text, status: text,
-    due: dated, progress: dated, blocker: detail })),
+    due: dated, progress: dated, blocker: detail,
+    materials: amounts.optional(), installed: amounts.optional() })),
   notes: z.array(z.object({ id: detail, fixture: text, location: detail, author: detail, title: text, text,
     minute: dated, version: dated, status: detail, latest_version: dated, latest_status: detail }))
 }).nullable();
@@ -363,8 +364,10 @@ export function townSupplyMarkup(snapshot: Supply, location = "", forecastKey = 
       "No standing supply-chain requirements are modeled.")}
   </section>
   <section ${panel("maintenance", "Maintenance", data.maintenance.length + data.projects.length)}><h2>Maintenance projects & jobs</h2>
-    ${table("Structural projects", ["Project", "Site", "Status", "Contributions", "Due", "Blocker"],
-      data.projects.map(project => [project.title, site(project.location), label(project.status), project.progress,
+    ${table("Structural projects", ["Project", "Site", "Status", "Progress / materials", "Due", "Blocker"],
+      data.projects.map(project => [project.title, site(project.location), label(project.status),
+        project.materials ? Object.entries(project.materials).map(([material, required]) =>
+          `${project.installed?.[material] ?? 0}/${required} ${label(material)}`).join(", ") : project.progress,
         time(project.due), project.blocker]), "No structural projects tracked.")}
     <h3>Tomorrow's routine upkeep</h3>
     <p class="muted">Preview only; these jobs become active on release and are not duplicate current work.</p>

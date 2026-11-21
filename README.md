@@ -133,6 +133,15 @@ of the route, while cargo and requests match their recorded destination. Selecti
 across refreshes when still available. The inventory includes out-of-stock products that
 have a configured reserve or projected stock.
 
+Living village economy policies may also define `town_treasury`, `public_works`, and
+`public_crafts`. Public works create finite, dated funded orders for materials such as
+nails and beams. Ordinary meals, reserves, and accepted customer orders retain priority;
+civic crafting is P4 work performed only when a supplier has free time and real inputs.
+The product must be physically produced, carried, delivered, paid from the town account,
+and then installed in a timed construction batch at the project site. The Maintenance
+tab reports each project's delivered-versus-required materials and completion state.
+Existing frozen runs remain unchanged; regenerate a scenario to opt into new projects.
+
 The detail sections show stock by location, cargo, supplier orders, recorded requests and resident needs,
 production plans and their bills of materials, structural and routine maintenance status,
 and notes grouped by their physical board or workplace inbox. Posted copies can be older

@@ -5,6 +5,7 @@ from npc_sim import village_economy, village_events, village_social, village_mai
 from npc_sim import village_depot
 from npc_sim.models import Entity, Scenario, VillageEconomyConfig, VillageEventsConfig, VillageSocialConfig, VillageMaintenanceConfig, VillageResearchConfig
 from npc_sim.village_equipment_models import VillageEquipmentConfig
+from npc_sim.village_economy_models import VillagePublicCraft, VillagePublicWork
 from npc_sim.storage import read_json, write_json
 
 
@@ -37,6 +38,22 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
     economy = village_economy.example_config(scenario)
     economy.update(subsidy_per_meal=0, subsidy_payer=None)
     config.economy = VillageEconomyConfig.model_validate(economy)
+    config.prices.update(nails=2, beams=4)
+    config.stocks.setdefault("bridge", {}).update(nails=0, beams=0)
+    config.stocks.setdefault("forge", {})["nails"] = 0
+    config.stocks.setdefault("workshop", {})["beams"] = 0
+    config.economy.town_treasury = 120
+    config.economy.public_crafts = {
+        "nails": VillagePublicCraft(supplier="torvin", product="nails", inputs={"iron": 1},
+                                     output_quantity=4, minutes=30),
+        "beams": VillagePublicCraft(supplier="hobb", product="beams", inputs={"timber": 2},
+                                     output_quantity=1, minutes=45),
+    }
+    config.economy.public_works = [VillagePublicWork(
+        id="bridge-reinforcement", title="Reinforce the stone bridge approaches", location="bridge",
+        workers=["torvin", "hobb"], materials={"nails": 12, "beams": 6},
+        batch_sizes={"nails": 4, "beams": 2}, starts_at=config.start_minute,
+        due_at=config.start_minute + 14 * 1440, work_minutes=15)]
     config.economy.production_targets.setdefault("tavern", {})["meals"] = 32
     social = village_social.example_config()
     scenario.entities.update({identifier: Entity.model_validate(fixture)

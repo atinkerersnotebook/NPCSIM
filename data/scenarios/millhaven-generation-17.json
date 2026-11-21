@@ -7604,10 +7604,10 @@
       "firewood_per_log": 4,
       "reserve": 2,
       "site_capacities": {
-        "tavern": 16,
-        "cottages": 24,
-        "bakery": 16,
         "forge": 16,
+        "bakery": 16,
+        "cottages": 24,
+        "tavern": 16,
         "woods": 24
       },
       "site_reorder_points": {
@@ -7848,6 +7848,49 @@
       "meal_price": 2,
       "subsidy_per_meal": 0,
       "subsidy_payer": null,
+      "town_treasury": 120,
+      "public_works": [
+        {
+          "id": "bridge-reinforcement",
+          "title": "Reinforce the stone bridge approaches",
+          "location": "bridge",
+          "workers": [
+            "torvin",
+            "hobb"
+          ],
+          "materials": {
+            "nails": 12,
+            "beams": 6
+          },
+          "batch_sizes": {
+            "nails": 4,
+            "beams": 2
+          },
+          "work_minutes": 15,
+          "starts_at": 300,
+          "due_at": 20460
+        }
+      ],
+      "public_crafts": {
+        "nails": {
+          "supplier": "torvin",
+          "product": "nails",
+          "inputs": {
+            "iron": 1
+          },
+          "output_quantity": 4,
+          "minutes": 30
+        },
+        "beams": {
+          "supplier": "hobb",
+          "product": "beams",
+          "inputs": {
+            "timber": 2
+          },
+          "output_quantity": 1,
+          "minutes": 45
+        }
+      },
       "cooking_lead_minutes": 60,
       "delivery_lead_minutes": 30,
       "require_orders": true
@@ -10671,7 +10714,8 @@
         "plant-scraps": 0,
         "compost-material": 0,
         "compost": 0,
-        "firewood": 10
+        "firewood": 10,
+        "nails": 0
       },
       "stable": {
         "hay": 6,
@@ -10736,6 +10780,7 @@
         "compost": 0,
         "furniture": 0,
         "firewood": 0,
+        "beams": 0,
         "wooden-cup": 0
       },
       "cottages": {
@@ -10787,6 +10832,14 @@
         "compost": 0,
         "herbal-remedy": 0
       },
+      "bridge": {
+        "nails": 0,
+        "beams": 0,
+        "plant-scraps": 0,
+        "compost-material": 0,
+        "compost": 0,
+        "firewood": 0
+      },
       "communal-granary": {
         "flour": 0,
         "grain": 0,
@@ -10833,6 +10886,8 @@
       "tackle": 6,
       "preserved-fish": 6,
       "firewood": 1,
+      "nails": 2,
+      "beams": 4,
       "wooden-cup": 3,
       "herbal-remedy": 4
     },

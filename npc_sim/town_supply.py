@@ -624,6 +624,20 @@ def _details(world, config, horizons, inventory, orders, cargo_rows, production,
         projects.append({"id": "repair_wagon", "title": "Repair the wagon", "location": wagon_entity.location,
                          "status": "completed" if state.wagon.repaired else "in_progress" if wagon_repair else "pending",
                          "due": None, "progress": None, "blocker": None})
+    if state.economy and state.economy.config:
+        for public_work in state.economy.config.public_works:
+            installed = state.economy.public_work_progress.get(public_work.id, {})
+            completed = public_work.id in state.economy.public_work_completed_at
+            blocked = any(order.public_work == public_work.id and order.status == "blocked"
+                          for order in state.economy.orders.values())
+            projects.append({
+                "id": public_work.id, "title": public_work.title, "location": public_work.location,
+                "status": "completed" if completed else "blocked" if blocked else
+                          "in_progress" if any(installed.values()) else "pending",
+                "due": public_work.due_at, "progress": sum(installed.values()),
+                "blocker": "A funded civic material order is blocked by physical supply." if blocked else None,
+                "materials": public_work.materials, "installed": installed,
+            })
     dashboard = state.dashboard
     maintenance = [job.model_dump() for job in dashboard.maintenance] if dashboard else []
     upcoming_maintenance = []

@@ -158,7 +158,9 @@ const villageLifeSchema = z.object({
   work: z.object({
     location: z.string(), finishes_at: z.number().int().nonnegative(),
     outputs: z.record(z.string(), z.number().int().positive()), equipment: z.string().nullable(),
-    kind: z.enum(["production", "wagon_repair"]).default("production")
+    public_work: z.string().nullable().optional(),
+    public_inputs: z.record(z.string(), z.number().int().positive()).optional(),
+    kind: z.enum(["production", "wagon_repair", "public_craft", "public_work"]).default("production")
   }).nullable(),
   fatigue_days: z.array(z.number().int()).optional(), tea_day: z.number().int().optional(),
   urgent_project: z.string().nullable().optional(), urgent_until: z.number().int().nullable().optional()
@@ -340,6 +342,12 @@ const villageDashboardSchema = z.object({
   projects: z.array(z.object({
     id: z.string(), owner: z.string(), title: z.string(), progress: z.number().int().nonnegative(),
     required: z.number().int().nonnegative(), status: z.string()
+  })).default([]),
+  public_works: z.array(z.object({
+    id: z.string(), title: z.string(), location: z.string(), status: z.string(),
+    materials: z.record(z.string(), z.number().int().nonnegative()),
+    progress: z.record(z.string(), z.number().int().nonnegative()),
+    due: z.number().int().nonnegative().nullable(), workers: z.array(z.string())
   })).default([]),
   quests: z.array(z.object({
     id: z.string(), actor: z.string(), title: z.string(), progress: z.number().int().nonnegative(),

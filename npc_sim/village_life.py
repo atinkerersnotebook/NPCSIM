@@ -20,7 +20,7 @@ WORK_ACTIONS |= {"village_draw_livestock_water", "village_care_cow", "village_ca
                  "village_make_plant_scraps", "village_compost", "village_fertilize_compost"}
 PRODUCTION = {"village_work", "village_cook_fish", "village_grow_hay", "village_gather_herbs", "village_fell_logs",
               "village_split_firewood"}
-WORK_ACTIONS |= {"village_split_firewood", "village_execute_fuel_delivery"}
+WORK_ACTIONS |= {"village_split_firewood", "village_execute_fuel_delivery", "village_public_craft", "village_public_work"}
 WORK_ACTIONS.add("village_upgrade_equipment")
 
 
@@ -592,7 +592,22 @@ def advance(world: "World") -> None:
                     state.wagon.repaired = True
                     village.announce(world, rid, "wagon_ready", "wagon",
                                      "The wagon repair is complete. The delivery wagon is usable again.")
+                if work.kind == "public_work" and work.public_work and state.economy is not None:
+                    progress = state.economy.public_work_progress.setdefault(work.public_work, {})
+                    for product, quantity in work.public_inputs.items():
+                        progress[product] = progress.get(product, 0) + quantity
+                    village.event(world, rid, "public_work_progress", work.public_work,
+                                  f"Installed {work.public_inputs} at the funded civic project.", work.location)
                 stock = state.stocks.setdefault(work.location, {})
+                if work.kind == "public_craft":
+                    from npc_sim import village_economy
+                    economy = state.economy
+                    if economy is not None and work.public_work:
+                        for order in economy.orders.values():
+                            if (order.public_work == work.public_work and order.supplier == rid
+                                    and order.product in work.outputs and order.status in village_economy.COMMITTED):
+                                order.status = "in_production"
+                                break
                 for resource, amount in work.outputs.items():
                     village_goods.put(world, work.location, resource, amount, ingredients=work.ingredients)
                 state.role_contributions[rid] = state.role_contributions.get(rid, 0) + 1

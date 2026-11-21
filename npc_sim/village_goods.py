@@ -86,6 +86,14 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
         if orders:
             sellers = sorted({order.supplier for order in orders})
             buyers = sorted({order.buyer for order in orders})
+    economy = getattr(state, "economy", None)
+    civic_orders = [order for order in (economy.orders.values() if economy else [])
+                    if order.public_work and order.status in village_economy.LOADABLE
+                    and order.source == source and order.destination == destination
+                    and order.product in goods]
+    if civic_orders:
+        sellers = sorted({order.supplier for order in civic_orders})
+        buyers = ["town"]
     from npc_sim import village_communication
     transfer = next((item for item in state.communication.transfers.values()
                      if item.status == "authorized" and item.source_site == source
@@ -115,7 +123,6 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
                       and item.destination == destination)
         if available is not None and goods["firewood"] + inbound > available:
             return "FIREWOOD_STORAGE_FULL: destination fuel stock exceeds configured capacity."
-    economy = getattr(state, "economy", None)
     from npc_sim import village_communication
     policy = village_economy.config(world)
     planned = []

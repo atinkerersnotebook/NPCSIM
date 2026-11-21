@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 
 VERBS = {"village_plan_supplies", "village_propose_order", "village_accept_order",
          "village_reject_order", "village_defer_order", "village_cancel_order",
-         "village_return_cargo", "village_respond_late_fuel"}
+         "village_return_cargo", "village_respond_late_fuel", "village_public_craft",
+         "village_public_work"}
 ACTIVE = {"proposed", "accepted", "accepted_planned", "in_production", "ready_to_collect",
           "in_transit", "blocked", "deferred"}
 COMMITTED = {"accepted", "accepted_planned", "in_production", "ready_to_collect", "in_transit"}
@@ -106,6 +107,16 @@ def validate_config(scenario: Any) -> None:
     accounts = set(base.coins)
     if policy.subsidy_payer is not None and policy.subsidy_payer not in accounts:
         raise ValueError("Meal subsidies must name an existing funded account")
+    for project in policy.public_works:
+        if (project.location not in base.stocks
+                or any(material not in base.prices for material in project.materials)
+                or any(worker not in base.residents for worker in project.workers)):
+            raise ValueError("Public works must use real locations, products and residents")
+    for product, craft in policy.public_crafts.items():
+        supplier = base.residents.get(craft.supplier)
+        if (supplier is None or product not in base.prices or craft.product != product
+                or any(material not in base.prices for material in craft.inputs)):
+            raise ValueError("Public crafts must name real products, inputs and suppliers")
     if policy.retail_store not in base.stocks:
         raise ValueError("Retail store must name a real stock location")
     prices = {**base.prices, **policy.prices}
@@ -141,6 +152,8 @@ def initial_state(scenario: Any) -> VillageEconomyState | None:
         return None
     state = VillageEconomyState(config=policy.model_copy(deep=True),
                                 initial_coins=scenario.village.coins.copy())
+    if policy.town_treasury:
+        state.initial_coins["town"] = policy.town_treasury
     if scenario.village.initial_stock_seed_id:
         state.movements.extend(VillageEconomyMovement(
             minute=scenario.village.start_minute, location=location,
@@ -308,6 +321,87 @@ def record_payment(world: "World", payer: str, payee: str, amount: int, kind: st
     return True
 
 
+def ensure_public_works(world: "World") -> None:
+    """Create one bounded supplier order per civic-material batch when work is due."""
+    policy, economy = config(world), _state(world)
+    state = world.state.village
+    if policy is None or economy is None or not policy.public_works:
+        return
+    state.coins.setdefault("town", policy.town_treasury)
+    for project in policy.public_works:
+        if (project.starts_at > state.minute or project.id in economy.public_work_completed_at):
+            continue
+        delivered = economy.public_work_progress.setdefault(project.id, {})
+        for product, required in project.materials.items():
+            remaining = max(0, required - delivered.get(product, 0) - usable_stock(
+                world, project.location, product, state.minute))
+            if remaining <= 0:
+                continue
+            recipe = policy.public_crafts[product]
+            if recipe.supplier not in world.state.actors:
+                continue
+            request_key = f"public-work:{project.id}:{product}"
+            outstanding = sum(order.remaining for order in economy.orders.values()
+                              if order.request_key == request_key
+                              and order.status in ACTIVE | {"deferred"})
+            need = remaining - outstanding
+            if need <= 0:
+                continue
+            batch = project.batch_sizes.get(product, recipe.output_quantity)
+            quantity = min(need, max(batch, recipe.output_quantity))
+            deadline = project.due_at or state.minute + 30 * 1440
+            source = world.scenario.village.residents[recipe.supplier].work
+            price = supplier_unit_price(world, recipe.supplier, product)
+            cost = quantity * (price + delivery_fee(world))
+            if state.coins.get("town", 0) - commitments(world, "town") < cost:
+                continue
+            order = VillageSupplierOrder(
+                id=f"order-{economy.next_order}", request_key=request_key,
+                buyer="town", supplier=recipe.supplier, source=source,
+                destination=project.location, product=product, quantity=quantity,
+                price=price, delivery_fee=delivery_fee(world), deadline=deadline,
+                required_fresh_until=deadline, created_at=state.minute,
+                status="accepted_planned", public_work=project.id)
+            economy.next_order += 1
+            economy.orders[order.id] = order
+            stock = usable_stock(world, source, product, state.minute)
+            plan, reason = ({}, "") if stock >= quantity else production_plan(world, order)
+            if plan or stock >= quantity:
+                order.production_plan = plan
+                order.status = "accepted_planned" if plan else "ready_to_collect"
+                order.reason = None
+            else:
+                order.status, order.reason = "blocked", reason or "Civic production inputs unavailable"
+            village.event(world, "town", "public_order", order.id,
+                          f"Funded {quantity} {product} for {project.title} from the town treasury.",
+                          project.location)
+
+    for project in policy.public_works:
+        progress = economy.public_work_progress.setdefault(project.id, {})
+        if (project.id not in economy.public_work_completed_at
+                and all(progress.get(product, 0) >= required
+                        for product, required in project.materials.items())):
+            economy.public_work_completed_at[project.id] = state.minute
+            village.announce(world, "town", "public_work_completed", project.id,
+                             f"{project.title} is complete after funded materials were delivered and installed.")
+
+
+def public_work_materials(world: "World") -> list[dict[str, Any]]:
+    policy, economy = config(world), _state(world)
+    state = world.state.village
+    if policy is None or economy is None:
+        return []
+    rows = []
+    for project in policy.public_works:
+        progress = economy.public_work_progress.get(project.id, {})
+        for product, required in project.materials.items():
+            rows.append({"project": project.id, "product": product, "required": required,
+                         "installed": progress.get(product, 0),
+                         "available": usable_stock(world, project.location, product, state.minute),
+                         "complete": project.id in economy.public_work_completed_at})
+    return rows
+
+
 def record_external_payment(world: "World", payer: str, payee: str, amount: int,
                             kind: str = "goods") -> None:
     """Ledger only: visitor trading already transfers its separate real purse."""
@@ -386,7 +480,7 @@ def protected_quantity(world: "World", location: str, product: str) -> int:
 def order_priority(world: "World", order: VillageSupplierOrder) -> tuple[int, int, str]:
     policy = config(world)
     base = world.scenario.village
-    buyer_priority = (0 if policy and order.buyer == policy.innkeeper else
+    buyer_priority = (3 if order.public_work else 0 if policy and order.buyer == policy.innkeeper else
                       2 if order.buyer == base.courier else 1)
     if order.buyer != base.courier and order.buyer in base.residents:
         resident = base.residents[order.buyer]
@@ -567,7 +661,24 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
                 return {}, f"Insufficient uncommitted {product} inputs above reserves"
             inputs[f"input:{product}"] = required
         return {"finish": finish, "output": missing, **inputs}, ""
+    policy = config(world)
+    public_craft = policy.public_crafts.get(order.product) if policy else None
     job = resident.job
+    if public_craft and public_craft.supplier == order.supplier and order.public_work:
+        batches = ceil(missing / public_craft.output_quantity)
+        start = max(earliest, max((other.production_plan.get("finish", 0) for other in pending), default=0))
+        finish = start + batches * public_craft.minutes * village_life.cooldown_factor(world, order.supplier)
+        if finish > min(latest_start, closing):
+            return {}, "No low-priority civic production slot before delivery and closing time"
+        inputs = {}
+        for product, amount in public_craft.inputs.items():
+            required = batches * amount
+            reserved = sum(other.production_plan.get(f"input:{product}", 0) for other in pending
+                           if other.source == order.source)
+            if available_for_order(world, order.source, product, finish) - reserved < required:
+                return {}, f"Insufficient uncommitted {product} inputs above reserves"
+            inputs[f"input:{product}"] = required
+        return {"finish": finish, "output": missing, "public_craft": 1, **inputs}, ""
     from npc_sim import village_firewood
     fuel_world = None
     if (order.product == "firewood" and village_firewood.enabled(world)
@@ -1437,6 +1548,88 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         return "REJECTED", "ECONOMY_DISABLED", "The economy is not configured.", None
     _, state = village.context(world)
     rid = world.actor_id
+    if action == "village_public_work":
+        from npc_sim import village_life
+        from npc_sim.models import VillageCommittedWork
+        person = state.residents[rid]
+        project_id = args.get("project")
+        project = next((item for item in policy.public_works if item.id == project_id), None)
+        if (project is None or rid not in project.workers or world.actor.location_id != project.location
+                or project.id in economy.public_work_completed_at):
+            return "REJECTED", "PUBLIC_WORK_UNAVAILABLE", "Go to an assigned civic work site and choose its project.", None
+        if person.life and person.life.work:
+            return "REJECTED", "WORK_MUST_FINISH", "Finish the current committed batch first.", None
+        progress = economy.public_work_progress.setdefault(project.id, {})
+        inputs = {
+            product: min(required - progress.get(product, 0),
+                          usable_stock(world, project.location, product, state.minute))
+            for product, required in project.materials.items()
+        }
+        inputs = {product: quantity for product, quantity in inputs.items() if quantity > 0}
+        if not inputs:
+            return "REJECTED", "PUBLIC_MATERIALS_MISSING", "No required civic materials are physically available here.", None
+        if person.life is None:
+            raise ValueError("Civic construction requires persistent daily-life state")
+        from npc_sim import village_goods
+        for product, quantity in inputs.items():
+            village_goods.take(world, project.location, product, quantity, kind="consumed")
+        finish = state.minute + project.work_minutes * village_life.cooldown_factor(world, rid)
+        person.life.work = VillageCommittedWork(
+            location=project.location, finishes_at=finish, outputs={}, ingredients=list(inputs),
+            public_work=project.id, public_inputs=inputs, kind="public_work")
+        person.next_work = finish
+        village.event(world, rid, action, project.id,
+                      f"Started {project.title} using {inputs}; finishing at {village.clock_time(finish)}.",
+                      project.location)
+        return "APPLIED", "PUBLIC_WORK_STARTED", f"Started civic construction for {project.title}.", None
+    if action == "village_public_craft":
+        from npc_sim import village_life
+        from npc_sim.models import VillageCommittedWork
+        if args or policy is None or economy is None:
+            return "REJECTED", "INVALID_PUBLIC_CRAFT", "Choose the personally assigned public craft without arguments.", None
+        recipe = next((item for item in policy.public_crafts.values()
+                       if item.supplier == rid), None)
+        if recipe is None:
+            return "REJECTED", "PUBLIC_CRAFT_UNASSIGNED", "You are not assigned a configured civic craft.", None
+        person = state.residents[rid]
+        resident = world.scenario.village.residents[rid]
+        location = resident.work
+        if world.actor.location_id != location:
+            return "REJECTED", "WRONG_WORKPLACE", "Return to your workplace for civic production.", None
+        if person.life and person.life.work:
+            return "REJECTED", "WORK_MUST_FINISH", "Finish the current committed batch first.", None
+        ordinary = [order for order in economy.orders.values()
+                    if not order.public_work and order.status in COMMITTED
+                    and order.supplier == rid and order.loadable]
+        if ordinary:
+            return "REJECTED", "COMMITMENT_DUE", "Complete ordinary funded commitments before civic work.", None
+        order = next((order for order in sorted(economy.orders.values(), key=lambda item: order_priority(world, item))
+                      if order.public_work and order.supplier == rid and order.product == recipe.product
+                      and order.status in {"accepted_planned", "blocked"} and order.loadable), None)
+        if order is None:
+            return "REJECTED", "NO_PUBLIC_DEMAND", "The town has no pending funded demand for this craft.", None
+        if any(usable_stock(world, location, product, state.minute) < quantity
+               for product, quantity in recipe.inputs.items()):
+            return "REJECTED", "STOCK_SHORTAGE", "The workplace lacks the real civic-craft inputs.", None
+        if state.minute < person.next_work:
+            return "REJECTED", "WORK_COOLDOWN", "Wait for your next available production batch.", None
+        finish = state.minute + recipe.minutes * village_life.cooldown_factor(world, rid)
+        for product, quantity in recipe.inputs.items():
+            from npc_sim import village_goods
+            village_goods.take(world, location, product, quantity, kind="consumed")
+        person.next_work = finish
+        if person.life is None:
+            raise ValueError("Public crafts require persistent daily-life state")
+        person.life.work = VillageCommittedWork(
+            location=location, finishes_at=finish,
+            outputs={recipe.product: min(order.loadable, recipe.output_quantity)},
+            ingredients=list(recipe.inputs), kind="public_craft", public_work=order.public_work)
+        village.event(world, rid, action, order.id,
+                      f"Started civic crafting of {recipe.product} for {order.public_work}; finishing at "
+                      f"{village.clock_time(finish)}.", location)
+        return "APPLIED", "PUBLIC_BATCH_STARTED", (
+            f"Started civic {recipe.product} production funded by the town; it will finish at "
+            f"{village.clock_time(finish)}."), None
     if action == "village_propose_order":
         return _propose(world, args)
     if action == "village_plan_supplies":
@@ -1533,6 +1726,7 @@ def advance(world: "World") -> None:
     economy = _state(world)
     if economy is None:
         return
+    ensure_public_works(world)
     for order in economy.orders.values():
         if order.status in ACTIVE and world.state.village.minute > order.deadline:
             order.status, order.reason, order.production_plan = "failed", "MISSED_DEADLINE", {}
@@ -1566,7 +1760,7 @@ def advance(world: "World") -> None:
                 order.status, order.reason, order.production_plan = "ready_to_collect", None, {}
                 from npc_sim import village_communication
                 village_communication.sync_order(world, order, "commitment_ready", order.source)
-            elif _food_policy(world):
+            elif _food_policy(world) or order.public_work:
                 feasible, reason = order_feasibility(world, order)
                 if feasible:
                     order.status, order.reason, order.production_plan = "ready_to_collect", None, {}
@@ -2141,6 +2335,7 @@ def observation(world: "World") -> dict[str, Any]:
         "Planning alone places no orders. Find each supplier and speak face-to-face using "
         "village_plan_supplies with supplier, or village_propose_order. Suppliers respond "
         "separately to their own proposals; upstream input suggestions also require an in-person request.")
+    report["public_work_materials"] = public_work_materials(world)
     return report
 
 
@@ -2148,7 +2343,7 @@ def monitor(world: "World") -> dict[str, Any]:
     """Flatten persistent accounting for the operator dashboard, not NPC knowledge."""
     report = _report(world)
     if not report:
-        return {"orders": [], "products": [], "accounts": []}
+        return {"orders": [], "products": [], "accounts": [], "public_works": []}
     policy = config(world)
     state = world.state.village
     orders = [{"id": order["id"], "buyer": order["buyer"], "seller": order["supplier"],
@@ -2173,7 +2368,15 @@ def monitor(world: "World") -> dict[str, Any]:
                          "fees": cash["delivery_fees_received"] - cash["delivery_fees_paid"],
                          "subsidies": cash["subsidies_received"] - cash["subsidies_paid"],
                          "net_cash": cash["net_cash_change"], "inventory_value": value})
-    return {"orders": orders, "products": products, "accounts": accounts}
+    public_works = []
+    for project in policy.public_works:
+        progress = world.state.village.economy.public_work_progress.get(project.id, {})
+        public_works.append({"id": project.id, "title": project.title, "location": project.location,
+                             "status": "completed" if project.id in world.state.village.economy.public_work_completed_at else "pending",
+                             "materials": project.materials, "progress": progress,
+                             "due": project.due_at, "workers": project.workers})
+    return {"orders": orders, "products": products, "accounts": accounts,
+            "public_works": public_works}
 
 
 def actions(world: "World") -> list[dict[str, Any]]:
@@ -2263,6 +2466,23 @@ def actions(world: "World") -> list[dict[str, Any]]:
                 blocked=None if any(economy.orders[oid].destination == world.actor.location_id for oid in late_ids)
                 else ("BUYER_NOT_AT_SITE", "Travel to the destination to decide."))
     person = state.residents[world.actor_id]
+    if config(world) and config(world).public_crafts:
+        recipe = next((item for item in config(world).public_crafts.values()
+                       if item.supplier == world.actor_id), None)
+        pending = [order for order in economy.orders.values()
+                   if order.public_work and order.supplier == world.actor_id
+                   and recipe and order.product == recipe.product and order.loadable
+                   and order.status in {"accepted_planned", "blocked"}]
+        add("village_public_craft",
+            "Craft one low-priority town-funded batch for a civic project after ordinary commitments.",
+            {}, required=[],
+            blocked=None if pending else ("NO_PUBLIC_DEMAND", "No pending funded civic batch is available."))
+        projects = [project.id for project in config(world).public_works
+                    if world.actor_id in project.workers and project.location == world.actor.location_id
+                    and project.id not in state.economy.public_work_completed_at]
+        add("village_public_work", "Perform a timed civic construction batch at the assigned project site.",
+            {"project": {"type": "string", "enum": projects}},
+            blocked=None if projects else ("NO_PUBLIC_WORK", "No assigned civic project is available here."))
     if person.shipments or (state.wagon and state.wagon.driver == world.actor_id and state.wagon.loads):
         add("village_return_cargo", "Physically return unpaid cargo to its original supplier.",
             {"wagon": {"type": "boolean"}})
