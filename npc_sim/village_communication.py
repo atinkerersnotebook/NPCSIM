@@ -724,6 +724,10 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                     and "manipulate" not in world.actor.body.capabilities):
                 raise ValueError("Writing a physical note requires actual manipulation capability")
             result = _apply(world, action, request)
+            if action in {"village_notice_reply", "village_notice_update", "village_respond_to_request",
+                         "village_update_request"}:
+                from npc_sim import village_planning
+                village_planning.reconcile(world, f"communication {action}", force=True)
         state = _state(world)
         state.recent_blockers.pop(world.actor_id, None)
         return "APPLIED", result[0], result[1], None

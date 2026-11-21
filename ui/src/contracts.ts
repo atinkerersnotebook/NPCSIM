@@ -97,7 +97,8 @@ const needSchema = z.object({
 });
 const villageEventSchema = z.object({
   minute: z.number().int().nonnegative(), actor: z.string(), action: z.string(),
-  target: z.string(), result: z.string(), witnesses: z.array(z.string())
+  target: z.string(), result: z.string(), witnesses: z.array(z.string()),
+  details: z.record(z.string(), z.unknown()).optional()
 });
 const villageMaintenanceSchema = z.object({
   id: z.string(), title: z.string(), assignee: z.string(), location: z.string(),

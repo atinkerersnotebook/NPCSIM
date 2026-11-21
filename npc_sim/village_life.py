@@ -350,6 +350,10 @@ def action_blocker(world: "World", action: str, rid: str | None = None, *,
         if blocked:
             return blocked
     if action in WORK_ACTIONS:
+        planned = any(plan["day"] == state.minute // 1440
+                      for plan in state.residents[rid].fallback.daily_plans)
+        if config.anti_idle and not planned:
+            return "DAILY_PLAN_REQUIRED", "Plan today and tomorrow before starting productive work."
         if rest_due(config.residents[rid], life, state.minute):
             urgent = (config.expanded_rules and action == "village_project" and life.urgent_until is not None
                       and state.minute < life.urgent_until)
@@ -600,3 +604,9 @@ def advance(world: "World") -> None:
             person.activity = ("Woke after a full rest; work may resume. Supper is at "
                                f"{village.clock_time(state.minute // 1440 * 1440 + daily_meal_minute(resident))}.")
             village.event(world, rid, "wake", resident.home, person.activity)
+            person.fallback.decision = {
+                "selected_task_id": "daily-plan:required",
+                "action_id": "village_daily_plan",
+                "reason": "Plan today and tomorrow before productive work.",
+                "priority": "P0",
+            }

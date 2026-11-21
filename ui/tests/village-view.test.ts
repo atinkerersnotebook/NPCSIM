@@ -1271,6 +1271,40 @@ test("timeline panels show recorded decision reasons for both instant and timed 
   assert.doesNotMatch(markup, /<title>Torvin \/ 08:05 \/ search/);
 });
 
+test("timeline shows order parameters and the complete decision plan", () => {
+  const state = expanded();
+  state.world!.village!.minute = 500;
+  const events = [
+    timelineEvent(1, "observation", 480, timelineObservation(480)),
+    timelineEvent(2, "decision", 480, {
+      action_id: "village_propose_order", justification: "Order fresh fish before supper demand rises.",
+      expected_outcome: "Finn receives a concrete, affordable request.",
+      subgoal: "Secure the supper fish supply", plan: ["Check demand", "Request delivery", "Confirm acceptance"],
+      arguments: { product: "fish", quantity: 3 }
+    }),
+    timelineEvent(3, "action_request", 480, {
+      request_id: "order", action_id: "village_propose_order",
+      arguments: { supplier: "finn", product: "fish", quantity: 3, deadline: 1080,
+        required_fresh_until: 1140 }
+    }),
+    timelineEvent(4, "action_result", 480, {
+      request_id: "order", outcome: "APPLIED", explanation: "Order proposed.",
+      observation: timelineObservation(480)
+    })
+  ];
+  const span = buildWorldTimeline(state, events.map(timelineEventProjection).filter(event => event !== null),
+    monitoredAgents(state))!.rows.find(row => row.id === "torvin")!.spans[0];
+  assert.equal(span.arguments, "Request 3 fish from Finn by 18:00; keep fresh through 19:00.");
+  assert.equal(span.expectedOutcome, "Finn receives a concrete, affordable request.");
+  assert.equal(span.subgoal, "Secure the supper fish supply");
+  assert.deepEqual(span.plan, ["Check demand", "Request delivery", "Confirm acceptance"]);
+  const markup = worldGanttMarkup(state, events.map(timelineEventProjection).filter(event => event !== null),
+    monitoredAgents(state));
+  assert.match(markup, /data-gantt-arguments="Request 3 fish from Finn by 18:00; keep fresh through 19:00\."/);
+  assert.match(markup, /data-gantt-expected="Finn receives a concrete, affordable request\."/);
+  assert.match(markup, /data-gantt-plan="Check demand\nRequest delivery\nConfirm acceptance"/);
+});
+
 test("timeline does not attribute a different or absent decision to an action", () => {
   const state = expanded();
   state.world!.village!.minute = 500;

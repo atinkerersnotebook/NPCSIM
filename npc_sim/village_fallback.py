@@ -154,6 +154,9 @@ def update_supply_needs(world: "World") -> None:
             status=status, notice_id=notice_id, last_material_change=state.minute,
             next_check_after=state.minute + village_extensions.policy(world).idle_review_minutes,
             blocker=None)
+        if notice.status in {"rejected", "accepted", "in_progress"}:
+            from npc_sim import village_planning
+            village_planning.reconcile(world, f"order {notice.status}", force=True)
 
 
 def current_tasks(world: "World") -> dict[str, list[dict[str, Any]]]:
@@ -1270,6 +1273,11 @@ def candidates(world: "World") -> list[dict[str, Any]]:
     life = person.life
     if life is None or life.sleeping or life.work or person.available_at > state.minute:
         return []
+    day = state.minute // 1440
+    planned = any(plan["day"] == day for plan in person.fallback.daily_plans)
+    if not planned and state.minute % 1440 >= resident.wake_minute:
+        return [{"task_id": "daily-plan:required", "action_id": "village_daily_plan", "arguments": {},
+                 "priority": "P0", "reason": "Plan today and tomorrow before committing productive work."}]
     if state.legacy is not None:
         from npc_sim import village_legacy
         if village_legacy.history_pending(world):

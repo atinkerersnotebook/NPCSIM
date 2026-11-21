@@ -30,7 +30,10 @@ const observedSchema = timeSchema.extend({
 const requestSchema = z.object({
   request_id: z.string(), action_id: z.string(), arguments: z.record(z.string(), z.unknown())
 });
-const decisionSchema = z.object({ action_id: z.string(), justification: z.string() });
+const decisionSchema = z.object({
+  action_id: z.string(), justification: z.string(), arguments: z.record(z.string(), z.unknown()).optional(),
+  expected_outcome: z.string().optional(), subgoal: z.string().optional(), plan: z.array(z.string()).optional()
+});
 const resultSchema = z.object({
   request_id: z.string(), outcome: z.string(), code: z.string().optional(), explanation: z.string(),
   observation: observedSchema
@@ -66,7 +69,7 @@ export interface GanttAgent {
   visitor?: boolean;
   activity?: string;
 }
-export type GanttActivity = "all" | "actions" | "movement" | "route" | "work" | "dialogue"
+export type GanttActivity = "all" | "actions" | "movement" | "route" | "work" | "planning" | "dialogue"
   | "meals" | "diary" | "waiting" | "sleeping" | "free" | "rejected" | "events" | "milestones";
 export interface GanttScale {
   zoom?: number;
@@ -89,6 +92,10 @@ export interface GanttSpan {
   label: string;
   detail: string;
   reasoning?: string;
+  arguments?: string;
+  expectedOutcome?: string;
+  subgoal?: string;
+  plan?: string[];
   status?: string;
   activity?: Exclude<GanttActivity, "all">;
   kind: "action" | "travel" | "wait" | "sleep" | "route" | "free" | "rejected" | "event";
@@ -130,8 +137,35 @@ function actionLabel(action: string, args: Record<string, unknown>, state: State
   return target && ["go", "look", "read", "take", "drop"].includes(action) ? `${label}: ${target}` : label;
 }
 
+function actionArguments(action: string, args: Record<string, unknown>, state: State,
+  actors: readonly GanttAgent[]): string {
+  if (!Object.keys(args).length) return "No parameters";
+  if (action === "village_propose_order") {
+    const quantity = typeof args.quantity === "number" ? args.quantity : "?";
+    const product = typeof args.product === "string" ? args.product : "product";
+    const supplier = recipientName(args, state, actors) ?? "supplier";
+    const deadline = typeof args.deadline === "number" ? villageClockTime(args.deadline) : "unspecified deadline";
+    const fresh = typeof args.required_fresh_until === "number" ? villageClockTime(args.required_fresh_until) : null;
+    return `Request ${quantity} ${product} from ${supplier} by ${deadline}${fresh ? `; keep fresh through ${fresh}` : ""}.`;
+  }
+  const friendly = (value: unknown): string => {
+    if (typeof value === "string") return actors.find(actor => actor.id === value)?.name
+      ?? state.world?.entities[value]?.name ?? value.replaceAll("_", " ").replaceAll("-", " ");
+    if (Array.isArray(value)) return value.map(friendly).join(", ");
+    if (value && typeof value === "object") return JSON.stringify(value);
+    return String(value);
+  };
+  return Object.entries(args).map(([key, value]) => {
+    const label = key.replaceAll("_", " ").replace(/^./, char => char.toUpperCase());
+    const displayed = typeof value === "number" && /deadline|until|minute|at/.test(key)
+      ? `${villageClockTime(value)} (minute ${value})` : friendly(value);
+    return `${label}: ${displayed}`;
+  }).join("\n");
+}
+
 function recipientName(args: Record<string, unknown>, state: State, actors: readonly GanttAgent[]): string | null {
   const recipient = typeof args.recipient === "string" ? args.recipient
+    : typeof args.supplier === "string" ? args.supplier
     : typeof args.target === "string" ? args.target : null;
   if (!recipient) return null;
   const name = actors.find(actor => actor.id === recipient)?.name
@@ -190,7 +224,8 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
     spans: [] as GanttSpan[]
   }));
   const byId = new Map(rows.map(row => [row.id, row]));
-  const requests = new Map<string, { event: RunEvent; request: z.infer<typeof requestSchema>; reasoning?: string }>();
+  const requests = new Map<string, { event: RunEvent; request: z.infer<typeof requestSchema>;
+    decision?: z.infer<typeof decisionSchema> }>();
   const decisions = new Map<string, z.infer<typeof decisionSchema>>();
   const walkingPlans = new Map<string, { destination: string; purpose: string }>();
   const milestones: Milestone[] = [];
@@ -213,7 +248,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       const request = requestSchema.parse(event.payload);
       const decision = decisions.get(event.actor_id);
       requests.set(request.request_id, { event, request,
-        ...(decision?.action_id === request.action_id ? { reasoning: decision.justification } : {}) });
+        ...(decision?.action_id === request.action_id ? { decision } : {}) });
       decisions.delete(event.actor_id);
     } else if (event.kind === "observation") {
       recordObservation(observedSchema.parse(event.payload), event.sequence);
@@ -270,7 +305,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           typeof args.suggestions === "string" ? `Suggestions: ${args.suggestions}` : ""]
           .filter(Boolean).join("\n") : "";
       const readNote = /(?:^read$|read_|_read$)/i.test(action)
-        ? `Reading: ${villageClockText(result.explanation)} Reason: ${linked.reasoning?.trim()
+        ? `Reading: ${villageClockText(result.explanation)} Reason: ${linked.decision?.justification.trim()
           || "review local information before the next task"}.` : "";
       if (kind !== "sleep") row.spans.push({
         start, end: Math.max(start, Math.min(now, end)), location: result.observation.self.location_id,
@@ -291,7 +326,11 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           : action === "go" || action === "village_plan_walk" ? "movement"
           : ["say", "village_ask", "village_tell", "village_share_route", "village_meeting"].includes(action) ? "dialogue"
           : life?.work || /^village_(work|project|research|repair|maintain|craft|produce|load_goods|unload_goods)(_|$)/.test(action) ? "work" : undefined,
-        ...(linked.reasoning?.trim() ? { reasoning: linked.reasoning.trim() } : {})
+        arguments: actionArguments(action, args, state, cast),
+        ...(linked.decision?.justification.trim() ? { reasoning: linked.decision.justification.trim() } : {}),
+        ...(linked.decision?.expected_outcome?.trim() ? { expectedOutcome: linked.decision.expected_outcome.trim() } : {}),
+        ...(linked.decision?.subgoal?.trim() ? { subgoal: linked.decision.subgoal.trim() } : {}),
+        ...(linked.decision?.plan?.length ? { plan: linked.decision.plan } : {})
       });
       if (walkingPlan && result.observation.self.location_id === walkingPlan.destination) {
         walkingPlans.delete(event.actor_id);
@@ -335,6 +374,24 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       row.positions.push({ at: event.minute, order: -1, location: event.target });
       row.spans.push({ start: event.minute, end: event.minute, location: event.target, kind: "event",
         label: event.action === "wagon_drive" ? "Wagon travel" : "Timber delivery", detail: event.result });
+    }
+    if (row && event.action === "daily_plan") {
+      const details = event.details as { trigger?: string; assumptions?: string[]; calculations?: string[];
+        actions?: string[]; needs_customer_adjustment?: boolean; planning_days?: number } | undefined;
+      row.spans.push({ start: event.minute, end: event.minute, location: event.target, kind: "event",
+        label: "Daily planning",
+        detail: [event.result,
+          details?.trigger ? `Trigger: ${details.trigger}` : "",
+          details?.planning_days ? `Planning horizon: ${details.planning_days} days` : "",
+          details?.calculations?.length ? `Calculations:\n${details.calculations.join("\n")}` : "",
+          details?.assumptions?.length ? `Assumptions:\n${details.assumptions.join("\n")}` : "",
+          details?.actions?.length ? `Plan:\n${details.actions.join("\n")}` : "",
+          details?.needs_customer_adjustment ? "Customer adjustment required if commitments exceed feasible upstream supply." : ""]
+          .filter(Boolean).join("\n"),           activity: "planning" });
+    }
+    if (row && event.action === "customer_adjustment_required") {
+      row.spans.push({ start: event.minute, end: event.minute, location: event.target, kind: "event",
+          label: "Customer adjustment required", detail: event.result, activity: "dialogue" });
     }
     if (event.action === "wagon_paused") routeChanges.push({ at: event.minute, actor: event.actor, active: false });
   }
@@ -520,7 +577,11 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
         : `${Math.round((item.end - item.start) * 600) / 10} sec`;
       const range = chart.turns ? format(item.end) : `${format(item.start)} - ${format(item.end)}`;
       const timing = `${duration} / ${range}`;
-      const detail = `${row.name} / ${range} / ${duration}${location ? ` / ${location}` : ""} / ${item.label}. ${item.detail}`;
+      const decisionDetail = [item.arguments ? `Action details: ${item.arguments}` : "",
+        item.subgoal ? `Subgoal: ${item.subgoal}` : "", item.expectedOutcome ? `Expected: ${item.expectedOutcome}` : "",
+        item.plan?.length ? `Plan: ${item.plan.join("; ")}` : "", item.reasoning ? `Reason: ${item.reasoning}` : ""]
+        .filter(Boolean).join(" ");
+      const detail = `${row.name} / ${range} / ${duration}${location ? ` / ${location}` : ""} / ${item.label}. ${item.detail}${decisionDetail ? ` ${decisionDetail}` : ""}`;
       const label = item.kind === "wait" && item.label === "Wait" ? "Waiting" : item.label;
       const summary = (item.detail || location).replace(/\s+/g, " ").trim();
       const icon = activityIcon(item);
@@ -528,7 +589,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const iconWidth = 24;
       const characters = tileWidth >= 48 ? Math.floor((tileWidth - 16 - iconWidth) / 7) : 0;
       const detailCharacters = Math.floor((tileWidth - 16) / 6);
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail + (item.reasoning ? ` Reason: ${item.reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.detail)}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}${matches(item) ? "" : " is-filtered-out"}">
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail)}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.detail)}" data-gantt-arguments="${escape(item.arguments ?? "")}" data-gantt-expected="${escape(item.expectedOutcome ?? "")}" data-gantt-subgoal="${escape(item.subgoal ?? "")}" data-gantt-plan="${escape(item.plan?.join("\n") ?? "")}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}${matches(item) ? "" : " is-filtered-out"}">
         <clipPath id="${id}"><rect x="${left + inset + 6}" y="${y + 19}" width="${Math.max(0, tileWidth - 12)}" height="64"/></clipPath>
         <rect x="${left + inset}" y="${y + 19}" width="${tileWidth}" height="64" rx="7"/>
         ${tileWidth >= 28 ? `<text x="${left + inset + 7}" y="${y + 37}" class="gantt-cell-icon" clip-path="url(#${id})">${icon}</text>` : ""}
@@ -543,9 +604,17 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       markers.set(item.start, list);
     }
     const dots = [...markers].map(([at, items]) => {
-      const detail = `${row.name} / ${format(chart.turns ? at + 1 : at)} / ${items.map(item => `${item.label}: ${item.detail}`).join("; ")}`;
+      const detail = `${row.name} / ${format(chart.turns ? at + 1 : at)} / ${items.map(item => [
+        `${item.label}: ${item.detail}`, item.arguments ? `Action details: ${item.arguments}` : "",
+        item.subgoal ? `Subgoal: ${item.subgoal}` : "", item.expectedOutcome ? `Expected: ${item.expectedOutcome}` : "",
+        item.plan?.length ? `Plan: ${item.plan.join("; ")}` : ""
+      ].filter(Boolean).join(" ")).join("; ")}`;
       const reasoning = items.map(item => item.reasoning).filter(Boolean).join("; ");
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:marker:${at}`)}" aria-label="${escape(detail + (reasoning ? ` Reason: ${reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(items.length === 1 ? items[0].label : `${items.length} events`)}" data-gantt-icon="●" data-gantt-status="${escape(items.some(item => item.kind === "rejected") ? "REJECTED" : "Recorded")}" data-gantt-range="${escape(format(chart.turns ? at + 1 : at))}" data-gantt-place="${escape(items[0].location ? placeName(items[0].location) : "")}" data-gantt-detail="${escape(items.map(item => `${item.label}: ${item.detail}`).join("\n"))}" data-gantt-reasoning="${escape(reasoning)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}${items.some(matches) ? "" : " is-filtered-out"}">
+      const argumentsText = items.map(item => item.arguments).filter(Boolean).join("\n");
+      const expected = items.map(item => item.expectedOutcome).filter(Boolean).join("; ");
+      const subgoal = items.map(item => item.subgoal).filter(Boolean).join("; ");
+      const plan = items.flatMap(item => item.plan ?? []).join("\n");
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:marker:${at}`)}" aria-label="${escape(detail + (reasoning ? ` Reason: ${reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(items.length === 1 ? items[0].label : `${items.length} events`)}" data-gantt-icon="●" data-gantt-status="${escape(items.some(item => item.kind === "rejected") ? "REJECTED" : "Recorded")}" data-gantt-range="${escape(format(chart.turns ? at + 1 : at))}" data-gantt-place="${escape(items[0].location ? placeName(items[0].location) : "")}" data-gantt-detail="${escape(items.map(item => `${item.label}: ${item.detail}`).join("\n"))}" data-gantt-arguments="${escape(argumentsText)}" data-gantt-expected="${escape(expected)}" data-gantt-subgoal="${escape(subgoal)}" data-gantt-plan="${escape(plan)}" data-gantt-reasoning="${escape(reasoning)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}${items.some(matches) ? "" : " is-filtered-out"}">
         <path d="M ${x(at)} ${y + 88} l 4 4 l -4 4 l -4 -4 Z"/>
         ${items.length > 1 ? `<text x="${x(at) + 6}" y="${y + 95}">${items.length}</text>` : ""}</g>`;
     }).join("");
@@ -568,6 +637,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     <div class="gantt-heading"><div><span class="eyebrow">RECORDED ACTIVITY</span><h2>World timeline</h2></div>
       <div class="gantt-tools"><p>${escape(format(chart.start))} - ${escape(format(chart.now))} / ${escape(state.run?.status ?? "")}</p>
         <div class="gantt-zoom" role="group" aria-label="Timeline timescale">
+          <button type="button" class="button subtle" data-timeline-export>Export planning JSON</button>
           <button type="button" class="button subtle" data-timeline-zoom="out" aria-label="Zoom out timescale"${zoom <= 1 ? " disabled" : ""}>-</button>
           <output aria-label="Timeline zoom">${Math.round(zoom * 100)}%</output>
           <button type="button" class="button subtle" data-timeline-zoom="in" aria-label="Zoom in timescale"${zoom >= 8 ? " disabled" : ""}>+</button>
@@ -577,7 +647,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       <button type="button" class="button subtle" data-timeline-recent aria-pressed="${Boolean(scale.recent)}">${model.turns ? "Last 20 turns" : "Last simulated hour"}</button>
       <label>Timeline cells <select data-timeline-activity>${([
         ["all", "All cells"], ["actions", "Other actions"], ["movement", "Walking"], ["route", "Routes"],
-        ["work", "Work"], ["dialogue", "Dialogue"], ["meals", "Meals"], ["diary", "Diary entries"],
+        ["work", "Work"], ["planning", "Daily planning"], ["dialogue", "Dialogue"], ["meals", "Meals"], ["diary", "Diary entries"],
         ["waiting", "Waiting"], ["sleeping", "Sleeping"], ["free", "Free actions"],
         ["rejected", "Rejected actions"], ["events", "Events"], ["milestones", "Milestones"]
       ] as const).map(([value, label]) =>

@@ -278,6 +278,13 @@ def test_living_village_morning_wake_schedule(tmp_path, rid, wake):
     village.advance(world, wake - world.state.village.minute)
     assert not person.sleeping
     assert person.last_woke == wake
+    assert any(choice["action_id"] == "village_daily_plan" for choice in village_fallback.candidates(world))
+    result = act(world, "village_daily_plan")
+    assert result["code"] == "DAY_PLANNED"
+    plan = world.state.village.residents[rid].fallback.daily_plans[-1]
+    assert plan["trigger"] == "resident action"
+    assert plan["planning_days"] == 2
+    assert all(item["day"] <= 2 for item in plan["requirements"])
     village.advance(world, configured.village.breakfast_delay)
     assert person.meals["0:breakfast"].due == wake + configured.village.breakfast_delay
 

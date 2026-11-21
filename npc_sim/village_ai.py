@@ -14,7 +14,7 @@ VERBS = {"village_wait", "village_ask", "village_tell", "village_observe", "vill
          "village_load", "village_deliver", "village_project", "village_patrol", "village_eat", "village_sleep",
          "village_daytime_rest",
          "village_meeting", "village_cook_fish", "village_share_route", "village_split_firewood",
-         "village_appeal_dungeon_master", "village_execute_fuel_delivery", "village_plan_walk",
+         "village_appeal_dungeon_master", "village_execute_fuel_delivery", "village_plan_walk", "village_daily_plan",
          "wait_until_next_relevant_event"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS | village_replenishment.VERBS
 
 
@@ -351,6 +351,8 @@ def actions(world: "World") -> list[dict[str, Any]]:
         add("village_project", "Contribute five work minutes with your partner and actual tools/materials present. "
             "A project requires six contributions, including at least two from each partner.",
             {"project": {"type": "string", "enum": projects}})
+    from npc_sim import village_planning
+    result.extend(village_planning.actions())
     result.extend(village_extensions.actions(world))
     investigation = config.investigation
     if investigation is not None and rid == investigation.investigator:
@@ -450,6 +452,9 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
 
     if action in village_replenishment.VERBS:
         return village_replenishment.apply(world, action, args)
+    if action == "village_daily_plan":
+        from npc_sim import village_planning
+        return village_planning.apply(world, action, args)
     if action == "village_appeal_dungeon_master":
         request, category = args.get("request"), args.get("category")
         if not isinstance(request, str) or len(request.strip()) < 5 or category not in {"help", "resource", "event"}:

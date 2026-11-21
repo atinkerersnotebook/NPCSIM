@@ -455,6 +455,14 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       result.append(element("small", "", "Recorded detail"), element("p", "", detail));
       bubble.append(result);
     }
+    for (const [name, label] of [["arguments", "Action details"], ["subgoal", "Current subgoal"],
+      ["expected", "Expected outcome"], ["plan", "Plan"]] as const) {
+      const value = text(name);
+      if (!value) continue;
+      const section = element("div", "gantt-tooltip-result", "");
+      section.append(element("small", "", label), element("p", "", value));
+      bubble.append(section);
+    }
     if (text("reasoning")) {
       const reasoning = element("div", "gantt-tooltip-result", "");
       reasoning.append(element("small", "", "Why this action"), element("p", "", text("reasoning")));
@@ -536,7 +544,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     const select = event.target;
     if (!(select instanceof HTMLSelectElement) || !select.hasAttribute("data-timeline-activity")) return;
     if (select.value === "all" || select.value === "actions" || select.value === "movement"
-      || select.value === "route" || select.value === "work" || select.value === "dialogue"
+      || select.value === "route" || select.value === "work" || select.value === "planning" || select.value === "dialogue"
       || select.value === "meals" || select.value === "diary" || select.value === "waiting"
       || select.value === "sleeping" || select.value === "free" || select.value === "rejected"
       || select.value === "events" || select.value === "milestones") {
@@ -546,6 +554,17 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   });
   content.addEventListener("click", event => {
     if (!(event.target instanceof Element)) return;
+    if (event.target.closest("[data-timeline-export]") && state?.world?.village?.events) {
+      const plans = state.world.village.events.filter(item => item.action === "daily_plan"
+        || item.action === "customer_adjustment_required");
+      const url = URL.createObjectURL(new Blob([JSON.stringify(plans, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `millhaven-planning-${state.run?.id ?? "episode"}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
     if (event.target.closest("[data-timeline-recent], [data-timeline-reset]")) {
       if (event.target.closest("[data-timeline-reset]")) {
         recent = false;

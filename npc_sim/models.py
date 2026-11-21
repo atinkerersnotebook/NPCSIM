@@ -884,6 +884,7 @@ class VillageFallbackState(StrictModel):
     active_inspection_until: int | None = None
     active_inspection_location: str | None = None
     decision: dict[str, Any] | None = None
+    daily_plans: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class VillageWalkingPlan(StrictModel):
