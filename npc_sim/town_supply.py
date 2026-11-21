@@ -1,6 +1,7 @@
 """Read-only supply planning from a saved village revision."""
 
 from collections import defaultdict
+from math import ceil
 from typing import Any
 
 from npc_sim.models import VillageCommittedWork, VillageConfig, WorldState
@@ -47,7 +48,7 @@ def report(world: WorldState, config: VillageConfig | None) -> dict[str, Any] | 
     if state is None:
         return None
     now = state.minute
-    horizons = [now + hours * 60 for hours in (6, 24, 48)]
+    horizons = [now + hours * 60 for hours in (6, 24, 48, 168, 720)]
     economy = state.economy
     policy = economy.config if economy else None
     reserves = policy.reserve_targets if policy else {}
@@ -178,6 +179,22 @@ def report(world: WorldState, config: VillageConfig | None) -> dict[str, Any] | 
         else:
             events.append((task["finish"], HARVEST, task["id"], task))
 
+    if config:
+        standing_replenishment = _standing_forecasts(
+            world, config, targets, orders, replenishment, horizons, now)
+        for row in standing_replenishment:
+            replenishment.append(row)
+            lots[row["location"], row["product"]]
+            if row["status"] != "planned" or row["finish"] is None or row["finish"] < now:
+                continue
+            if row.get("kind") == "production":
+                event = {**row, "outputs": {row["product"]: row["quantity"]}, "gathered": {}}
+                events.append((row["finish"], PLANNED_PRODUCTION, row["id"], event))
+                for good in row.get("inputs", {}):
+                    lots[row["location"], good]
+            else:
+                events.append((row["finish"], HARVEST, row["id"], row))
+
     usable = {key: _available(buckets, now) for key, buckets in lots.items()}
     baseline, _, _ = _project(lots, cargo, events, horizons, shelf, reserves, usable, include_plans=False)
     projected, changes, plan_risks = _project(lots, cargo, events, horizons, shelf, reserves, usable, include_plans=True)
@@ -197,7 +214,226 @@ def report(world: WorldState, config: VillageConfig | None) -> dict[str, Any] | 
                   "baseline_projected": baseline[site, good], "forecast_changes": changes[site, good],
                   **({"meal_allocations": meal_allocations} if good == "meals" else {})}
                  for site, good in sorted(projected)]
-    return _details(world, config, horizons, inventory, orders, cargo_rows, production, replenishment, risks)
+    details = _details(world, config, horizons, inventory, orders, cargo_rows, production, replenishment, risks)
+    details["waterfall"] = _waterfall(details, horizons)
+    return details
+
+
+def _standing_forecasts(world: WorldState, config: VillageConfig, targets, orders,
+                        replenishment: list[dict[str, Any]], horizons: list[int], now: int) -> list[dict[str, Any]]:
+    state = world.village
+    assert state is not None
+    current_day = now // 1440
+    final_day = horizons[-1] // 1440
+    rows = []
+    existing = {(row["location"], row["product"], row["finish"] // 1440)
+                for row in replenishment if row["finish"] is not None}
+    active = {(row.location, product, row.finishes_at // 1440)
+              for person in state.residents.values() if person.life and person.life.work
+              and person.life.work.kind == "production"
+              for row, product in ((person.life.work, next(iter(person.life.work.outputs), "")),)
+              if product}
+    for order in orders:
+        finish = order.production_plan.get("finish")
+        if finish is not None and order.status in COMMITTED:
+            existing.add((order.source, order.product, finish // 1440))
+
+    producers = {}
+    for rid, resident in config.residents.items():
+        if resident.job:
+            for product, quantity in resident.job.outputs.items():
+                producers[resident.job.location, product] = (rid, quantity, resident.job.inputs,
+                                                               resident.job.equipment, resident.job.duration)
+    from npc_sim import village_livestock
+    livestock = state.livestock
+    if livestock and livestock.config.enabled:
+        producers["farm", "milk"] = (livestock.config.keeper, 6, {}, None, 15)
+        producers["farm", "eggs"] = (livestock.config.keeper,
+                                       min(livestock.config.hens, targets.get("farm", {}).get("eggs", 0)),
+                                       {}, None, 10)
+    for rid, resident in config.residents.items():
+        if "herbalism" in resident.skills and resident.job:
+            producers[resident.work, "herbs"] = (rid, 2, {}, None, 5)
+    if state.firewood and state.firewood.config.enabled:
+        fuel = state.firewood.config
+        supplier = config.residents[fuel.supplier]
+        producers[supplier.work, "firewood"] = (
+            fuel.supplier, fuel.firewood_per_log, {"logs": 1}, "wood-axe", fuel.split_minutes)
+    if state.mining and state.mining.config.enabled:
+        miner = state.mining.config.miner
+        forge = config.residents[miner].work
+        producers["iron-mine", "iron-ore"] = (
+            miner, 1, {}, "mining-pick", state.mining.config.mining_minutes)
+        producers[forge, "iron"] = (
+            miner, 1, {"iron-ore": 1, "firewood": 1 if state.firewood else 0},
+            "smelting-furnace", state.mining.config.smelting_minutes)
+
+    chain = _daily_chain_requirements(world, config)
+    policy = state.economy.config if state.economy else None
+
+    for (site, product), (worker, batch_output, recipe_inputs, equipment, duration) in sorted(producers.items()):
+        target = max(targets.get(site, {}).get(product, 0), chain.get((site, product), 0))
+        if state.mining and state.mining.config.enabled:
+            if product == "iron":
+                target = max(target, policy.reserve_targets.get(site, {}).get("iron", 2) if policy else 2)
+            elif product == "iron-ore":
+                target = max(target, policy.reserve_targets.get(config.residents[state.mining.config.miner].work, {}).get("iron", 2) if policy else 2)
+        if not target:
+            continue
+        resident = config.residents[worker]
+        actor = world.actors.get(worker)
+        capable = set(resident.skills) <= set(actor.body.capabilities) if actor else bool(resident.skills)
+        equipment_ok = equipment is None or (equipment in world.entities and not world.entities[equipment].broken)
+        daily_capacity = batch_output * max(1, (1170 - resident.wake_minute) // max(1, resident.job.interval if resident.job else duration))
+        if policy and site == config.residents[policy.innkeeper].work and product == "meals":
+            daily_capacity = sum(plan.portions for plan in policy.meal_plans)  # 16 breakfast + 16 supper in living Millhaven
+            target = daily_capacity
+        if product == "milk":
+            daily_capacity = 12
+        elif product == "eggs":
+            daily_capacity = livestock.config.hens if livestock else 0
+        for day in range(current_day, final_day + 1):
+            if (site, product, day) in existing or (site, product, day) in active:
+                continue
+            finish = day * 1440 + max(resident.wake_minute + duration, 480 + duration)
+            if finish <= now:
+                finish = day * 1440 + min(1170, max(resident.wake_minute + duration, 1080))
+            if finish > horizons[-1]:
+                continue
+            on_hand = state.stocks.get(site, {}).get(product, 0)
+            quantity = min(max(0, target), daily_capacity)
+            reason = (f"Standing chain forecast: {target} required per day for downstream demand; capacity is {daily_capacity}."
+                      if capable and equipment_ok else
+                      "The assigned worker lacks the occupation capabilities." if not capable else
+                      "The required production equipment is unavailable or broken.")
+            row = {"id": f"standing:{site}:{product}:{day}", "worker": worker,
+                   "location": site, "product": product, "quantity": quantity if capable and equipment_ok else 0,
+                   "required_output": target,
+                   "finish": finish if capable and equipment_ok and quantity else None,
+                   "status": "planned" if capable and equipment_ok and quantity else "blocked", "basis": reason}
+            if product not in {"milk", "eggs"}:
+                batches = ceil(quantity / batch_output) if batch_output else 0
+                inputs = {material: amount * batches for material, amount in recipe_inputs.items()}
+                if state.firewood and state.firewood.config.enabled and site in {
+                        "bakery", "forge", "tavern"}:
+                    inputs["firewood"] = inputs.get("firewood", 0) + 1
+                row.update(kind="production", inputs=inputs)
+            else:
+                row["basis"] = ("Daily livestock yield: requires care and one real collection; standing capacity only."
+                                if capable and equipment_ok else reason)
+            rows.append(row)
+    livestock = state.livestock
+    wool = [row for row in rows if row["id"] == "long-term:sheep:wool"]
+    if livestock and livestock.config.sheep and not wool:
+        rows.append({"id": "long-term:sheep:wool", "worker": state.livestock.config.keeper,
+                     "location": "farm", "product": "wool", "quantity": 0, "finish": None,
+                     "status": "blocked",
+                     "basis": "Long-term capability gap: the sheep are physical, but wool shearing is not implemented."})
+    return rows
+
+
+def _daily_chain_requirements(world: WorldState, config: VillageConfig) -> dict[tuple[str, str], int]:
+    """Back-propagate one day's meal demand through configured physical producers."""
+    state = world.village
+    policy = state.economy.config if state and state.economy else None
+    if not state or not policy or not config:
+        return {}
+    producers = {}
+    for resident in config.residents.values():
+        job = resident.job
+        if not job:
+            continue
+        for product, quantity in job.outputs.items():
+            producers[product] = (job.location, quantity, job.inputs)
+    healers = [resident for resident in config.residents.values() if "herbalism" in resident.skills]
+    if healers:
+        healer = healers[0]
+        producers.setdefault("herbs", (healer.work, 2, {}))
+    if state.livestock and state.livestock.config.enabled:
+        producers["milk"] = ("farm", 6, {})
+        producers["eggs"] = ("farm", state.livestock.config.hens, {})
+    if state.mining and state.mining.config.enabled:
+        forge = config.residents[state.mining.config.miner].work
+        producers["iron-ore"] = ("iron-mine", 1, {})
+        producers["iron"] = (forge, 1, {"iron-ore": 1,
+                              "firewood": 1 if state.firewood else 0})
+    requirements: dict[tuple[str, str], int] = defaultdict(int)
+    pending: list[tuple[str, str, int]] = []
+    if state.mining and state.mining.config.enabled:
+        forge = config.residents[state.mining.config.miner].work
+        for product, quantity in policy.production_targets.get(forge, {}).items():
+            if product == "wagon-parts" and quantity:
+                pending.append((forge, product, quantity))
+    for plan in policy.meal_plans:
+        pending.append((config.residents[policy.innkeeper].work, "meals", plan.portions))
+        for recipe_name, portions in plan.recipe_portions.items():
+            recipe = policy.recipes.get(recipe_name)
+            if recipe is None:
+                continue
+            batches = ceil(portions / recipe.portions)
+            for product, amount in recipe.inputs.items():
+                pending.append((config.residents[policy.innkeeper].work, product, batches * amount))
+        for product, amount in plan.additional_inputs.items():
+            pending.append((config.residents[policy.innkeeper].work, product, amount))
+        fish_portions = plan.recipe_portions.get("fish", 0)
+        if fish_portions and fish_portions not in plan.additional_inputs.values():
+            pending.append((config.residents[policy.innkeeper].work, "fish", fish_portions))
+        if plan.tea_portions:
+                pending.append((config.residents[policy.innkeeper].work, "tea", plan.tea_portions))
+        if plan.bread_service:
+            pending.append((config.residents[policy.innkeeper].work, "bread", plan.bread_service))
+    seen = 0
+    while pending:
+        site, product, quantity = pending.pop(0)
+        source = producers.get(product)
+        if source is None:
+            continue
+        source_site, output, inputs = source
+        if source_site == config.residents[policy.innkeeper].work and product == "meals":
+            requirements[source_site, product] += quantity
+            continue
+        requirements[source_site, product] += quantity
+        batches = ceil(quantity / output)
+        pending.extend((source_site, material, batches * amount) for material, amount in inputs.items())
+        seen += 1
+        if seen > 1000:
+            raise ValueError("Supply-chain dependency cycle in configured recipes")
+    if state.livestock and state.livestock.config.enabled:
+        requirements["farm", "grain"] += ceil(state.livestock.config.hens / 4)
+        requirements["farm", "hay"] += state.livestock.config.cows
+    if state.firewood and state.firewood.config.enabled:
+        supplier = state.firewood.config.supplier
+        site = config.residents[supplier].work
+        requirements[site, "firewood"] = max(requirements[site, "firewood"], state.firewood.config.reserve)
+        log_need = ceil(requirements[site, "firewood"] / state.firewood.config.firewood_per_log)
+        requirements[site, "logs"] += log_need
+    fish = producers.get("fish")
+    if fish:
+        site, output, _ = fish
+        requirements[site, "fish"] = min(
+            requirements[site, "fish"],
+            max(0, output * max(1, (1170 - config.residents[policy.suppliers["fish"]].wake_minute) //
+                                max(1, config.residents[policy.suppliers["fish"]].job.interval))))
+    return dict(requirements)
+
+
+def _waterfall(details: dict[str, Any], horizons: list[int]) -> dict[str, Any]:
+    inventory = {(row["location"], row["product"]): row for row in details["inventory"]}
+    rows = sorted((row for row in details["replenishment"] if row["status"] in {"planned", "blocked"}),
+                  key=lambda row: (row.get("finish") or horizons[-1] + 1, row["location"], row["product"]))
+    requirements = []
+    for row in rows:
+        day = (row.get("finish") or horizons[-1]) // 1440
+        stock = inventory.get((row["location"], row["product"]), {})
+        requirements.append({
+            "id": row["id"], "day": day + 1, "worker": row["worker"],
+            "site": row["location"], "product": row["product"],             "planned_output": row.get("required_output", row["quantity"]),
+            "finish": row.get("finish"), "status": row["status"], "basis": row["basis"],
+            "on_hand": stock.get("on_hand", 0), "target": stock.get("target"),
+            "inputs": row.get("inputs", {}),
+            "blocked_by": [risk for risk in details["risks"] if risk["id"] == row["id"]],
+        })
+    return {"horizons": horizons, "requirements": requirements}
 
 
 def _meal_allocations(world: WorldState, config: VillageConfig | None) -> dict[str, Any]:

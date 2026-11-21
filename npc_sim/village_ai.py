@@ -41,6 +41,11 @@ def observation(world: "World") -> dict[str, Any]:
         "residents": [{"id": other, "name": village.resident_name(world, other),
                        "occupation": config.residents[other].occupation,
                        "activity": state.residents[other].activity} for other in nearby],
+        "public_schedules": [{
+            "id": other, "name": village.resident_name(world, other),
+            "occupation": resident_info.occupation, "wake_minute": resident_info.wake_minute,
+            "bed_minute": resident_info.bed_minute, "workplace": resident_info.work,
+        } for other, resident_info in config.residents.items() if other != rid],
         "stocks": state.stocks.get(world.actor.location_id, {}).copy(),
         **({"stored_owners": {
             owner: {product: sum(lot.quantity for lot in lots) for product, lots in inventory.items() if lots}
@@ -86,7 +91,11 @@ def observation(world: "World") -> dict[str, Any]:
                      "reverse course for a new whim. A new task, due meal, rest, schedule change or fresh "
                      "message permits a justified replan; a blocked route permits a detour. "
                      if village_walking.enabled(world) else "")
-                  + "Schedules are commitments, never automatic movement. Looking and reading are free. "
+                  + "Schedules are commitments, never automatic movement. Public wake times and usual workplaces "
+                    "are common village knowledge: do not travel to seek another resident before their wake time. "
+                    "Use a physical inbox or board when that contact channel is suitable, or finish useful local work "
+                    "and wait until they are awake; do not rely on another resident's current location. "
+                    "Looking and reading are free. "
                   + ("The earliest available villager acts next; work and travel reserve only that person's time. "
                      "Sleeping, committed baking and the accepted standing wagon route skip AI turns. "
                      "When idle away from your workplace, return there before waiting if a safe route fits before your next obligation. "

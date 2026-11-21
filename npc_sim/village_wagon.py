@@ -13,6 +13,10 @@ VERBS = {"village_fit_wagon", "village_start_route", "village_stop_route",
          "village_load_wagon", "village_unload_wagon", "village_drive_wagon"}
 
 
+def broken(world: "World") -> bool:
+    return world.state.entities["wagon"].broken
+
+
 def load(world: "World", goods: dict[str, int], destination: str) -> str | None:
     config, state = village.context(world)
     from npc_sim import village_equipment
@@ -114,7 +118,7 @@ def readiness(world: "World") -> dict[str, Any]:
     shipments = [{"order_id": order.id, "source": order.source, "destination": order.destination,
                   "product": order.product, "quantity": min(order.loadable, village_economy.loadable_for_order(world, order))}
                  for order in ready_orders(world)]
-    blocker = ("WAGON_REPAIR_REQUIRED" if not wagon.repaired else
+    blocker = ("WAGON_REPAIR_REQUIRED" if not wagon.repaired or broken(world) else
                "HORSE_HITCH_REQUIRED" if config.expanded_rules and not wagon.hitched else
                "NO_CONFIRMED_SHIPMENT" if not shipments and not wagon.loads else None)
     driver = state.residents[world.actor_id]
@@ -143,15 +147,16 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     if world.actor.location_id != world.state.entities["wagon"].location:
         return reject("Walk to the actual wagon first.")
     if action == "village_fit_wagon":
-        if (rid != config.smith or "smithing" not in world.actor.body.capabilities
-                or world.actor.location_id != config.residents[rid].work):
-            return reject("Torvin must fit the parts at his forge.")
-        if wagon.repaired:
+        if rid != config.smith or "smithing" not in world.actor.body.capabilities:
+            return reject("Torvin must fit the parts to repair the wagon.")
+        if wagon.repaired and not broken(world):
             return reject("The wagon is already repaired.")
         stock = state.stocks[world.actor.location_id]
         life = state.residents[rid].life
         if life is None:
             raise ValueError("Wagon repair requires daily-life state")
+        if world.actor.location_id != config.residents[rid].work and not broken(world):
+            return reject("Torvin must fit initial wagon parts at his forge.")
         if stock.get("wagon-parts", 0) < 1:
             return reject("Make one real unit of wagon parts before fitting it.")
         village_goods.take(world, world.actor.location_id, "wagon-parts", 1)
@@ -172,7 +177,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                     and merchant.available_at <= state.minute and merchant.life
                     and not merchant.life.sleeping and not merchant.life.work):
                 return reject("Nella is available here; backup drivers step in when she is busy or away.")
-    if not wagon.repaired:
+    if not wagon.repaired or broken(world):
         return reject("Torvin must finish fitting the wagon parts before the wagon can be used.")
     if action == "village_start_route":
         if config.expanded_rules and state.economy is not None and not readiness(world)["ready"]:
@@ -224,6 +229,9 @@ def advance(world: "World") -> None:
     if blocked:
         pause(blocked[1])
         return
+    if broken(world):
+        pause("The wagon broke and needs a smith repair before delivery can continue.")
+        return
     if config.expanded_rules and not wagon.hitched:
         pause("The horse is no longer hitched.")
         return
@@ -268,17 +276,19 @@ def advance(world: "World") -> None:
             person.activity = "Unloaded the wagon and settled the delivery."
             village.event(world, rid, "wagon_unload", location, person.activity, location)
             return
-        order = next((order for order in ready_orders(world) if order.source == location), None)
-        if order is None:
+        runs = [run for run in village_economy.delivery_runs(world, rid)
+                if run["goods"]]
+        if not runs:
             return
-        amount = min(order.loadable, village_economy.loadable_for_order(world, order), 6)
-        if amount:
-            reason = load(world, {order.product: amount}, order.destination)
-            if reason:
-                pause(reason)
-                return
-            person.activity = f"Loaded {amount} {order.product} in one action."
-            village.event(world, rid, "wagon_load", location, person.activity, location)
+        run = min(runs, key=lambda item: min(state.economy.orders[oid].deadline
+                                            for oid in item["orders"]))
+        amount = sum(run["goods"].values())
+        reason = load(world, run["goods"], run["destination"])
+        if reason:
+            pause(reason)
+            return
+        person.activity = f"Loaded {amount} mixed goods in one action."
+        village.event(world, rid, "wagon_load", location, person.activity, location)
         return
     for _ in range(4):
         location = driver.location_id

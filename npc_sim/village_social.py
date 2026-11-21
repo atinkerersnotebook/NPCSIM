@@ -27,7 +27,7 @@ BOOK_STEPS = {
     "recipe_test": ("observed_at", None),
 }
 RECIPES = {
-    "bread_test": ({"flour": 1}, {"bread": 1}),
+    "bread_test": ({"flour": 1, "milk": 1, "eggs": 1}, {"bread": 1}),
     "tea_blending": ({"herbs": 1}, {"tea": 1}),
     "plank_practice": ({"timber": 1}, {"planks": 1}),
     "garden_tending": ({"manure": 1}, {}),
@@ -1409,7 +1409,8 @@ def example_config() -> dict[str, Any]:
                           "min_participants": 2, "max_participants": 4, "interests": ["music"]},
         "test-bread-recipe": {"kind": "recipe_test", "location": "bakery", "duration": 30,
                               "project": "jory-recipe", "chapter": "festival-bread",
-                              "equipment": ["oven"], "recipe": "bread_test", "supplies": {"flour": 1},
+                              "equipment": ["oven"], "recipe": "bread_test",
+                              "supplies": {"flour": 1, "milk": 1, "eggs": 1},
                               "interests": ["recipes"], "skill": "baking"},
         "repair-festival-drum": {"kind": "instrument_repair", "location": "forge", "duration": 30,
                                  "repair_target": "festival-drum", "equipment": ["anvil", "smith-hammer"],

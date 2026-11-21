@@ -10,7 +10,7 @@ const amounts = z.record(text, quantity);
 const names = z.record(text, text);
 const dated = quantity.nullable();
 const detail = text.nullable();
-const checkpoints = z.tuple([quantity, quantity, quantity]);
+const checkpoints = z.tuple([quantity, quantity, quantity, quantity, quantity]);
 const forecastChange = z.object({ production: quantity, inbound: quantity, inputs: quantity, outbound: quantity, expired: quantity,
   harvest: quantity.optional(), planned_production: quantity.optional() });
 
@@ -20,7 +20,7 @@ export const townSupplySchema = z.object({
   inventory: z.array(z.object({ location: text, product: text, on_hand: quantity, usable: quantity,
     accounting_location: text.nullable().optional(),
     reserve: quantity, target: dated, projected: checkpoints, baseline_projected: checkpoints.optional(),
-    forecast_changes: z.tuple([forecastChange, forecastChange, forecastChange]).optional(),
+    forecast_changes:     z.tuple([forecastChange, forecastChange, forecastChange, forecastChange, forecastChange]).optional(),
     meal_allocations: z.object({ prepared: quantity, unallocated: quantity,
       services: z.array(z.object({ id: text, service: z.enum(["breakfast", "supper"]), due: quantity,
         required: quantity, reserved: quantity, shortfall: quantity })) }).optional() })),
@@ -36,6 +36,11 @@ export const townSupplySchema = z.object({
     ingredients: z.array(text), gathered: amounts, finish: quantity, status: text, basis: text })),
   replenishment: z.array(z.object({ id: text, worker: text, location: text, product: text,
     quantity, finish: dated, status: text, basis: text })).optional(),
+  waterfall: z.object({ horizons: checkpoints, requirements: z.array(z.object({
+    id: text, day: quantity, worker: text, site: text, product: text, planned_output: quantity,
+    finish: dated, status: text, basis: text, on_hand: quantity, target: dated, inputs: amounts,
+    blocked_by: z.array(z.object({ id: text, kind: text, minute: quantity, location: text,
+      product: text, missing: quantity })) })) }).optional(),
   risks: z.array(z.object({ id: text, kind: text, minute: quantity, location: text, product: text, missing: quantity })),
   maintenance: z.array(z.object({ id: text, title: text, assignee: text, location: text, due_at: quantity,
     worked_minutes: quantity, required_minutes: quantity, supplies: amounts, status: text, blocker: detail })),
@@ -68,11 +73,32 @@ const stockKey = (row: InventoryRow) => JSON.stringify([row.location, row.produc
 const stockLabel = (row: InventoryRow, data: Snapshot) => `${label(row.product)} · ${name(row.location, data.sites)}`;
 const shortage = (row: InventoryRow) => Math.max(0, row.reserve - row.usable);
 const percent = (value: number, max: number) => value / max * 100;
-const forecastLabels = ["Now", "+6h", "+24h", "+48h"];
+const forecastLabels = ["Now", "+6h", "+24h", "+48h", "+7d", "+30d"];
 const previewLimit = 5;
 const belowProjectedReserve = (row: InventoryRow, index: number) => row.projected[index] < row.reserve
   || (row.baseline_projected?.[index] ?? row.reserve) < row.reserve;
 const firstBreach = (row: InventoryRow) => row.projected.findIndex((_, i) => belowProjectedReserve(row, i));
+function waterfallDiagram(data: Snapshot): string {
+  const rows = (data.waterfall?.requirements ?? []).filter(row => row.finish !== null && row.finish <= data.minute + 2880);
+  const byProduct = new Map<string, typeof rows>();
+  for (const row of rows) byProduct.set(row.product, [...(byProduct.get(row.product) ?? []), row]);
+  const chains = [...byProduct].map(([product, items]) => {
+    const item = items[0];
+    const inputs = Object.entries(item.inputs);
+    const blocked = item.blocked_by.length > 0 || item.status === "blocked";
+    return `<li class="supply-waterfall-chain${blocked ? " blocked" : ""}">
+      <div class="supply-waterfall-source"><small>Daily demand</small><strong>${escape(label(product))}</strong><span>${item.planned_output} required</span></div>
+      <span class="supply-waterfall-arrow" aria-hidden="true">→</span>
+      <div class="supply-waterfall-stage"><small>${escape(name(item.site, data.sites))}</small><strong>${escape(name(item.worker, data.residents))}</strong><span>${escape(label(item.status))}</span></div>
+      ${inputs.length ? `<span class="supply-waterfall-arrow" aria-hidden="true">→</span><div class="supply-waterfall-inputs"><small>Upstream inputs</small>${inputs.map(([input, quantity]) => `<span class="${item.blocked_by.some(block => block.product === input) ? "blocked" : ""}">${quantity} ${escape(label(input))}</span>`).join("")}</div>` : ""}
+    </li>`;
+  }).join("");
+  return `<section class="supply-card supply-waterfall" aria-labelledby="supply-waterfall-title">
+    <h3 id="supply-waterfall-title">48-hour supply waterfall</h3>
+    <p class="muted">Read right to left: final demand pulls required work and then its physical inputs. Red links are currently blocked.</p>
+    <ul>${chains || '<li class="muted">No timed supply requirements in this horizon.</li>'}</ul>
+  </section>`;
+}
 const stockRisk = (row: InventoryRow) => shortage(row) > 0 ? 0 : firstBreach(row) >= 0 ? 1
   : row.reserve > 0 && row.usable === row.reserve ? 2 : 3;
 const forecastButton = (row: InventoryRow, caption: string, selected: boolean) =>
@@ -259,6 +285,7 @@ export function townSupplyMarkup(snapshot: Supply, location = "", forecastKey = 
   const pastDue = open.filter(order => order.remaining > 0 && order.deadline < data.minute);
   const belowReserve = data.inventory.filter(row => row.usable < row.reserve);
   const replenishment = data.replenishment ?? [];
+  const waterfall = data.waterfall?.requirements ?? [];
   const hasBaseline = choices.some(row => row.baseline_projected);
   const maintenanceIssues = data.maintenance.filter(job => job.status !== "completed" &&
     (job.status === "blocked" || job.due_at <= data.minute)).length
@@ -289,7 +316,7 @@ export function townSupplyMarkup(snapshot: Supply, location = "", forecastKey = 
     ${stockCharts(data, choices, selected)}
   </section>
   <section ${panel("inventory", "Inventory & forecast", choices.length)}><h2>Inventory & forecast</h2>
-    <p class="muted">Forecasts age stock and include started production and committed deliveries, using order deadlines as estimated delivery times. The with-plans forecast also includes modeled unstarted production and replenishment. Unrecorded work and consumption such as meals and maintenance are excluded. Reserves are protected from modeled allocations; timing and execution are not guaranteed.</p>
+    <p class="muted">Forecasts age stock and include started production and committed deliveries, using order deadlines as estimated delivery times. The with-plans forecast also includes modeled unstarted production, replenishment, and standing daily capacity for configured targets. Standing rows remain conditional on real workers, inputs, equipment, care and execution. Baseline excludes these plans. Consumption such as meals and maintenance remains excluded unless explicitly modeled. Reserves are protected from allocations; timing and execution are not guaranteed.</p>
     ${table("Inventory by location", ["Location", "Product", "On hand", "Usable now", "Reserve", "Production target",
       ...data.horizons.flatMap((due, i) => {
         const checkpoint = `${forecastLabels[i + 1]} · ${time(due)}`;
@@ -326,6 +353,14 @@ export function townSupplyMarkup(snapshot: Supply, location = "", forecastKey = 
       replenishment.map(item => [item.id, resident(item.worker), site(item.location), label(item.product),
         item.status === "blocked" && item.quantity === 0 ? null : item.quantity,
         item.finish === null ? "Unscheduled" : time(item.finish), label(item.status), item.basis]), "No internal replenishment tasks recorded.")}
+    <h3>Supply-chain requirements waterfall</h3>
+    <p class="muted">Daily meal demand is expanded backwards into producer requirements, including bread ingredients, flour-to-grain, tea-to-herbs, livestock feed, fishing quota, fuel, and log demand. Rows are conditional plans; blockers identify what must be replenished first.</p>
+    ${waterfallDiagram(data)}
+    ${table("Supply-chain requirements waterfall", ["Day", "Worker", "Site", "Product", "Planned output", "On hand", "Target", "Inputs", "Finish", "Status / blockers"],
+      waterfall.map(item => [`Day ${item.day}`, resident(item.worker), site(item.site), label(item.product),
+        item.planned_output, item.on_hand, item.target, goods(item.inputs), time(item.finish),
+        `${label(item.status)}${item.blocked_by.length ? ` · ${item.blocked_by.map(block => `${label(block.product)} short ${block.missing}`).join(", ")}` : ""}`]),
+      "No standing supply-chain requirements are modeled.")}
   </section>
   <section ${panel("maintenance", "Maintenance", data.maintenance.length + data.projects.length)}><h2>Maintenance projects & jobs</h2>
     ${table("Structural projects", ["Project", "Site", "Status", "Contributions", "Due", "Blocker"],
@@ -360,7 +395,7 @@ export function startTownSupply(app: HTMLDivElement): void {
     ${dashboardHeader("supply", "TOWN OPERATIONS", "Town supply chain")}
     <nav class="dashboard-tabs" role="tablist" aria-label="Town supply sections" hidden></nav></div>
     <p class="notice" role="alert" hidden></p><div id="supply-summary"></div>
-    <div class="supply-tools" hidden>
+    <div class="supply-tools" hidden><button id="export-waterfall" class="button subtle" type="button">Export waterfall JSON</button>
       <label>Location <select id="supply-location" aria-controls="supply-content"></select></label>
     </div><div id="supply-content"><p class="muted">Loading town snapshot…</p></div></main>`;
   trackDashboardHeader(app);
@@ -384,6 +419,20 @@ export function startTownSupply(app: HTMLDivElement): void {
     phase => phase === "before" ? rememberScroll() : restoreScroll());
   let forecastKey = "";
   let snapshot: Supply = null;
+  const exportWaterfall = app.querySelector<HTMLButtonElement>("#export-waterfall");
+  exportWaterfall?.addEventListener("click", () => {
+    if (!snapshot?.waterfall) return;
+    const payload = JSON.stringify({
+      title: snapshot.title, minute: snapshot.minute, revision: snapshot.revision,
+      ...snapshot.waterfall,
+    }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `millhaven-supply-waterfall-day-${Math.floor(snapshot.minute / 1440) + 1}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  });
   let previous = "";
   let controller: AbortController | undefined;
   let timer: ReturnType<typeof setTimeout>;

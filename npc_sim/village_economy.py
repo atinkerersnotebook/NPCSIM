@@ -878,6 +878,10 @@ def meal_delivery_actions(world: "World") -> list[dict[str, Any]]:
     base, state = village.context(world)
     policy = config(world)
     rid, location = world.actor_id, world.actor.location_id
+    from npc_sim import village_wagon
+    if (rid == base.courier and state.wagon and not state.wagon.automatic
+            and village_wagon.readiness(world)["ready"]):
+        return []
     inn = base.residents[policy.innkeeper].work
     plans = meal_requirements(world)
     deadlines = [_meal_delivery_deadline(world, plan, "bread") for plan in plans

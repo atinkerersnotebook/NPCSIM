@@ -23,6 +23,21 @@ def make_world(tmp_path):
     return World(value, tmp_path / "walking.json", "walking", "nella", "session-nella")
 
 
+def test_planned_contact_waits_for_public_wake_time(tmp_path):
+    world = make_world(tmp_path)
+    world.state.village.minute = 400
+    world.state.village.residents["finn"].life.sleeping = True
+    world.state.village.residents["finn"].life.sleep_until = 420
+    world.state.village.residents["nella"].available_at = 400
+    world.state.village.residents["nella"].known_routes = list(world.state.village.residents["nella"].known_routes)
+    assert step(world, "village_plan_walk", destination="riverbank",
+                purpose="Find Finn for a fish order")["code"] == "RESIDENT_ASLEEP"
+    world.state.village.minute = world.scenario.village.residents["finn"].wake_minute
+    world.state.village.residents["finn"].life.sleeping = False
+    assert step(world, "village_plan_walk", destination="riverbank",
+                purpose="Find Finn for a fish order")["code"] == "ROUTE_PLANNED"
+
+
 def test_destination_is_planned_before_step_and_cannot_ping_pong(tmp_path):
     world = make_world(tmp_path)
     person = world.state.village.residents["nella"]

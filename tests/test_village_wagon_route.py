@@ -5,6 +5,57 @@ from test_village_economy import actor, world  # noqa: F401
 from test_world import act
 
 
+def complete_route(world, wagon, limit=80):
+    for _ in range(limit):
+        if not wagon.automatic:
+            break
+        world.state.village.minute = wagon.next_event_at
+        village_wagon.advance(world)
+
+
+def test_ready_orders_for_same_route_are_loaded_as_one_batch(world):
+    courier = actor(world, "nella")
+    state = courier.state.village
+    wagon = state.wagon
+    wagon.repaired = wagon.hitched = True
+    courier.actor.location_id = courier.state.entities["wagon"].location
+    for identifier, product, quantity in (("bread", "bread", 4), ("bread-extra", "bread", 2)):
+        state.economy.orders[identifier] = VillageSupplierOrder(
+            id=identifier, request_key=identifier, buyer="elsie", supplier="jory",
+            source="bakery", destination="tavern", product=product, quantity=quantity,
+            price=1, deadline=900, required_fresh_until=850, created_at=state.minute,
+            status="ready_to_collect")
+    village_goods.put(courier, "bakery", "bread", 6,
+                      [VillageStockLot(quantity=6, produced_at=state.minute, expires_at=1000)])
+
+    assert village_wagon.apply(courier, "village_start_route", {})[:2] == ("APPLIED", "ROUTE_STARTED")
+    complete_route(courier, wagon)
+
+    assert sum(order.delivered_quantity for order in state.economy.orders.values()) == 6
+    assert not wagon.loads and wagon.driver is None
+
+
+def test_broken_wagon_blocks_delivery_until_real_repair(world):
+    smith = actor(world, "torvin", "forge")
+    courier = actor(world, "nella", "forge")
+    state = courier.state.village
+    wagon = state.wagon
+    wagon.repaired = wagon.hitched = True
+    wagon_entity = courier.state.entities["wagon"]
+    wagon_entity.health, wagon_entity.max_health = 0, 100
+    assert village_wagon.readiness(courier)["blocker"] == "WAGON_REPAIR_REQUIRED"
+    assert village_wagon.apply(courier, "village_start_route", {})[0] == "REJECTED"
+
+    village_goods.put(smith, "forge", "wagon-parts", 1)
+    assert village_wagon.apply(smith, "village_fit_wagon", {})[:2] == ("APPLIED", "WAGON_REPAIR_STARTED")
+    state.minute += 30
+    from npc_sim import village_life
+    village_life.advance(smith)
+
+    assert wagon.repaired and not wagon_entity.broken
+    assert wagon_entity.health == wagon_entity.max_health == 100
+
+
 def test_standing_route_requires_real_confirmed_shipment(world):
     courier = actor(world, "nella")
     state = courier.state.village

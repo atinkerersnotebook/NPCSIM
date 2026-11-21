@@ -4,7 +4,7 @@
   "title": "Millhaven VII - Tin Cans and String Test",
   "start_location": "cottages",
   "exit_location": "village-square",
-  "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real firewood, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Keep occupied cottage hearths and working ovens/forge supplied with paid, physically delivered firewood. Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+  "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real firewood, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Keep occupied cottage hearths and working ovens/forge supplied with paid, physically delivered firewood. Care daily for the physical farm cows and twenty-four hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
   "initial_objective": null,
   "goal_note_id": null,
   "opening_narrative": "This test version of Millhaven connects every location with tin cans and taut string. Requests and replies reach named residents instantly through the line. They must still accept requests and perform all work, travel and deliveries physically. The communal granary by the square starts empty; Elsie's tavern houses the communal kitchen. Remote stock and whereabouts are not shared. Millhaven is waking to a day of work and ordinary village life. Breakfast follows each villager's wake time; supper is at 19:00. Suppliers produce against real demand and small reserves. Buyers may speak funded supply requests and project appointments into their tin cans. Continue useful work while waiting. Meals cost two coins. Elsie coordinates the inn, Iona is writing her herbal book, and interested villagers can rehearse or play music together. Hobbies and sidequests are optional. Passing visitors and minor events may change plans, but everyone still needs time to eat, care for the horse, travel home and sleep.",
@@ -1737,8 +1737,8 @@
       "preparation": {},
       "lock_id": null,
       "damage": 0,
-      "health": null,
-      "max_health": null,
+      "health": 100,
+      "max_health": 100,
       "break_into": {},
       "jammed": false,
       "broken_name": null,
@@ -3988,6 +3988,46 @@
       "required_challenges": [],
       "village_road": true
     },
+    "ore-loading-dock": {
+      "name": "Ore Loading Dock",
+      "kind": "fixture",
+      "description": "The marked loading point where mined ore is staged beside the mine entrance for physical hauling.",
+      "location": "iron-mine",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
     "mining-pick": {
       "name": "Mining pick",
       "kind": "tool",
@@ -4068,10 +4108,10 @@
       "required_challenges": [],
       "village_road": true
     },
-    "farm-cow": {
-      "name": "Millhaven dairy cow",
-      "kind": "creature",
-      "description": "One adult dairy cow; daily hay, real water and clean housing are required.",
+    "cow-stall": {
+      "name": "Cow stall",
+      "kind": "tool",
+      "description": "Clean housing and a secure milking place.",
       "location": "farm",
       "open": null,
       "locked": null,
@@ -4148,10 +4188,50 @@
       "required_challenges": [],
       "village_road": true
     },
-    "cow-stall": {
-      "name": "Cow stall",
+    "sheep-pen": {
+      "name": "Sheep pen",
       "kind": "tool",
-      "description": "Clean housing and a secure milking place.",
+      "description": "A physical pen for farm sheep. Wool shearing is not yet enabled.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "pig-pen": {
+      "name": "Pig pen",
+      "kind": "tool",
+      "description": "A physical pen for the farm pigs and safe edible leftovers.",
       "location": "farm",
       "open": null,
       "locked": null,
@@ -4828,6 +4908,46 @@
       "required_challenges": [],
       "village_road": true
     },
+    "farm-cow": {
+      "name": "Adult dairy cow 1",
+      "kind": "creature",
+      "description": "A real dairy cow; daily hay, water and clean housing are required.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
     "compost-pile": {
       "name": "Farm compost pile",
       "kind": "tool",
@@ -4881,6 +5001,486 @@
       "discovery_target": null,
       "destination": null,
       "takable": true,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-13": {
+      "name": "Adult laying hen 13",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-14": {
+      "name": "Adult laying hen 14",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-15": {
+      "name": "Adult laying hen 15",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-16": {
+      "name": "Adult laying hen 16",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-17": {
+      "name": "Adult laying hen 17",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-18": {
+      "name": "Adult laying hen 18",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-19": {
+      "name": "Adult laying hen 19",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-20": {
+      "name": "Adult laying hen 20",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-21": {
+      "name": "Adult laying hen 21",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-22": {
+      "name": "Adult laying hen 22",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-23": {
+      "name": "Adult laying hen 23",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
+      "inventory_units": 1,
+      "carry_grips": [
+        "hand"
+      ],
+      "use_grips": [
+        "hand"
+      ],
+      "food": false,
+      "nutrition": null,
+      "ingredients": [],
+      "power": null,
+      "plugged_into": null,
+      "readable_text": null,
+      "preparation": {},
+      "lock_id": null,
+      "damage": 0,
+      "health": 100,
+      "max_health": 100,
+      "break_into": {},
+      "jammed": false,
+      "broken_name": null,
+      "broken_description": null,
+      "traversal_capabilities": [],
+      "max_body_size": null,
+      "required_challenges": [],
+      "village_road": true
+    },
+    "farm-hen-24": {
+      "name": "Adult laying hen 24",
+      "kind": "creature",
+      "description": "A real adult hen, not free egg stock.",
+      "location": "farm",
+      "open": null,
+      "locked": null,
+      "key_id": null,
+      "alternative_key_ids": [],
+      "hidden": false,
+      "discovery_target": null,
+      "destination": null,
+      "takable": false,
       "inventory_units": 1,
       "carry_grips": [
         "hand"
@@ -5884,11 +6484,11 @@
       "firewood_per_log": 4,
       "reserve": 2,
       "site_capacities": {
-        "cottages": 24,
         "tavern": 16,
-        "woods": 24,
+        "cottages": 24,
+        "bakery": 16,
         "forge": 16,
-        "bakery": 16
+        "woods": 24
       },
       "site_reorder_points": {
         "tavern": 9,
@@ -5941,7 +6541,10 @@
             "bread": 12
           },
           "bread_service": 0,
-          "tea_portions": 0
+          "tea_portions": 0,
+          "additional_inputs": {},
+          "resident_portions": 12,
+          "visitor_portions": 0
         },
         {
           "id": "supper",
@@ -5952,7 +6555,10 @@
             "fish": 4
           },
           "bread_service": 0,
-          "tea_portions": 12
+          "tea_portions": 12,
+          "additional_inputs": {},
+          "resident_portions": 12,
+          "visitor_portions": 0
         }
       ],
       "suppliers": {
@@ -6011,8 +6617,17 @@
         },
         "workshop": {
           "planks": 2
+        },
+        "tavern": {
+          "meals": 32
+        },
+        "farm": {
+          "eggs": 24
         }
       },
+      "stock_capacities": {},
+      "retail_markup_percent": 20,
+      "retail_store": "general-store",
       "prices": {
         "bread": 3,
         "fish": 2,
@@ -6644,7 +7259,9 @@
             "recipes"
           ],
           "supplies": {
-            "flour": 1
+            "flour": 1,
+            "milk": 1,
+            "eggs": 1
           },
           "equipment": [
             "oven"
@@ -7367,7 +7984,7 @@
                 "bread": 2,
                 "furniture": 1,
                 "tackle": 1,
-                "preserved-fish": 1,
+                "preserved-fish": 2,
                 "wooden-cup": 1,
                 "herbal-remedy": 1
               },
@@ -7742,7 +8359,10 @@
     "livestock": {
       "enabled": true,
       "keeper": "ada",
-      "hens": 12
+      "hens": 24,
+      "pigs": 0,
+      "cows": 1,
+      "sheep": 0
     },
     "equipment": {
       "enabled": true,
@@ -8395,7 +9015,9 @@
           "location": "bakery",
           "interval": 30,
           "inputs": {
-            "flour": 1
+            "flour": 1,
+            "milk": 1,
+            "eggs": 1
           },
           "outputs": {
             "bread": 1
@@ -8954,7 +9576,7 @@
   "agents": [
     {
       "id": "torvin",
-      "role": "Torvin the blacksmith: make and fit wagon parts, then retrieve the borrowed shovel. Bren can collect well timber and rope while you are away. Confirm your tavern-yard meeting and each contribute to dig_well. Collect the noon trader's paid iron when needed. Never control Bren. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Torvin the blacksmith: make and fit wagon parts, then retrieve the borrowed shovel. Bren can collect well timber and rope while you are away. Confirm your tavern-yard meeting and each contribute to dig_well. Collect the noon trader's paid iron when needed. Never control Bren. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "cottages",
       "body": {
         "description": "A practical, strong blacksmith.",
@@ -8974,7 +9596,7 @@
     },
     {
       "id": "bren",
-      "role": "Bren the stable keeper: feed the actual working horse with village_work, lead it to the wagon with village_lead_horse, then village_hitch. At night unhitch, lead it back to the stable and release it before sleeping. Collect well timber and rope while Torvin retrieves the shovel; confirm the meeting and contribute at the tavern-yard. Deliver manure to Ada when possible. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Bren the stable keeper: feed the actual working horse with village_work, lead it to the wagon with village_lead_horse, then village_hitch. At night unhitch, lead it back to the stable and release it before sleeping. Collect well timber and rope while Torvin retrieves the shovel; confirm the meeting and contribute at the tavern-yard. Deliver manure to Ada when possible. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "cottages",
       "body": {
         "description": "A patient stable keeper and experienced digger.",
@@ -8994,7 +9616,7 @@
     },
     {
       "id": "mara",
-      "role": "Mara the miller: mill actual grain and coordinate flour deliveries. When the public bell reports failure, meet Hobb at the watermill and contribute repair_mill work with real materials. Use the free map, stocks and project reports. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Mara the miller: mill actual grain and coordinate flour deliveries. When the public bell reports failure, meet Hobb at the watermill and contribute repair_mill work with real materials. Use the free map, stocks and project reports. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "cottages",
       "body": {
         "description": "A methodical miller.",
@@ -9013,7 +9635,7 @@
     },
     {
       "id": "elsie",
-      "role": "Elsie the innkeeper: wake at 05:30, ready the inn and cook bread or fish into meals from real stock for morning guests, then replenish food for the 19:00 gathering as needed; charge one coin per daily meal. Food spoils, so do not accumulate unusable meals. Encourage the well crew without claiming imaginary work. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Elsie the innkeeper: wake at 05:30, ready the inn and cook bread or fish into meals from real stock for morning guests, then replenish food for the 19:00 gathering as needed; charge one coin per daily meal. Food spoils, so do not accumulate unusable meals. Encourage the well crew without claiming imaginary work. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "tavern",
       "body": {
         "description": "A welcoming innkeeper.",
@@ -9032,7 +9654,7 @@
     },
     {
       "id": "hobb",
-      "role": "Hobb the carpenter: make planks; Rowan's foot route delivers timber. Carry mill-beam, joiner-hammer and one plank unit to the watermill when repairs are needed. Load the plank with village_load_goods and unload it with village_unload_goods; the supplies together fit your three-unit capacity. Confirm the meeting with Mara and contribute repair_mill. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Hobb the carpenter: make planks; Rowan's foot route delivers timber. Carry mill-beam, joiner-hammer and one plank unit to the watermill when repairs are needed. Load the plank with village_load_goods and unload it with village_unload_goods; the supplies together fit your three-unit capacity. Confirm the meeting with Mara and contribute repair_mill. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "cottages",
       "body": {
         "description": "A careful joiner and mill repairer.",
@@ -9051,7 +9673,7 @@
     },
     {
       "id": "jory",
-      "role": "Jory the baker: bake up to two flour in committed 30-minute batches. Deliver bread without waiting for the mill repair. Production may start through 19:30's closing grace. You may drive the hitched wagon when Nella is busy or away, then return to baking. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Jory the baker: bake up to two flour in committed 30-minute batches. Deliver bread without waiting for the mill repair. Production may start through 19:30's closing grace. You may drive the hitched wagon when Nella is busy or away, then return to baking. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "cottages",
       "body": {
         "description": "A cheerful village baker.",
@@ -9070,7 +9692,7 @@
     },
     {
       "id": "ada",
-      "role": "Ada the farmer: harvest grain, grow hay with village_grow_hay, and use delivered manure with village_fertilize to speed three harvests. You may drive the wagon when Nella is busy or away. Keep supplies available for real deliveries. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Ada the farmer: harvest grain, grow hay with village_grow_hay, and use delivered manure with village_fertilize to speed three harvests. You may drive the wagon when Nella is busy or away. Keep supplies available for real deliveries. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "farm",
       "body": {
         "description": "A steady, early-rising farmer.",
@@ -9089,7 +9711,7 @@
     },
     {
       "id": "nella",
-      "role": "Nella the merchant: collect the repaired wagon once Bren hitches the fed horse, then accept the automatic farm, mill, bakery, tavern, square supply route. Roads only; six mixed units; one coin per unloading goes to the actual driver. Park for meals and rest, and return to resume. Foot goods use village_load_goods and village_unload_goods with a three-unit limit. Deliver bread by day-one 19:00; late delivery remains possible but is reported. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Nella the merchant: collect the repaired wagon once Bren hitches the fed horse, then accept the automatic farm, mill, bakery, tavern, square supply route. Roads only; six mixed units; one coin per unloading goes to the actual driver. Park for meals and rest, and return to resume. Foot goods use village_load_goods and village_unload_goods with a three-unit limit. Deliver bread by day-one 19:00; late delivery remains possible but is reported. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "cottages",
       "body": {
         "description": "An exacting merchant driving a six-unit wagon.",
@@ -9108,7 +9730,7 @@
     },
     {
       "id": "rowan",
-      "role": "Rowan the forester: make timber with village_work and replenish logs with village_fell_logs. Accept village_start_timber_route to carry three timber on foot to Hobb and return. The woodlot trail cannot take a wagon. Stop for meals, rest, shortages or an unpaid delivery. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Rowan the forester: make timber with village_work and replenish logs with village_fell_logs. Accept village_start_timber_route to carry three timber on foot to Hobb and return. The woodlot trail cannot take a wagon. Stop for meals, rest, shortages or an unpaid delivery. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "cottages",
       "body": {
         "description": "A quiet forester.",
@@ -9127,7 +9749,7 @@
     },
     {
       "id": "garrick",
-      "role": "Garrick the guard: patrol your scheduled bridge or square post, physically walking between them. Remember and share walked paths, read public notices and prefer a clear wait when no useful action is available. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Garrick the guard: patrol your scheduled bridge or square post, physically walking between them. Remember and share walked paths, read public notices and prefer a clear wait when no useful action is available. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "cottages",
       "body": {
         "description": "A watchful bridge guard.",
@@ -9146,7 +9768,7 @@
     },
     {
       "id": "iona",
-      "role": "Iona the healer: gather two herbs with village_gather_herbs, prepare actual tea with village_work, and deliver it on foot when needed. Tea can relieve tiredness but never replace sleep or a daily meal. Share only personal knowledge and public reports. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Iona the healer: gather two herbs with village_gather_herbs, prepare actual tea with village_work, and deliver it on foot when needed. Tea can relieve tiredness but never replace sleep or a daily meal. Share only personal knowledge and public reports. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "herbal-workshop",
       "body": {
         "description": "A considerate village healer.",
@@ -9166,7 +9788,7 @@
     },
     {
       "id": "finn",
-      "role": "Finn the fisher: catch fish and carry it on foot to the tavern using real goods loading and unloading. Fish spoils after twelve hours. Join the paid evening meal and speak from personal experience. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
+      "role": "Finn the fisher: catch fish and carry it on foot to the tavern using real goods loading and unloading. Fish spoils after twelve hours. Join the paid evening meal and speak from personal experience. Follow configured meal prices and breakfast/supper schedules rather than legacy single-meal instructions. Check demand and accepted orders before producing or shipping. Use the tin-can-and-string phone network for named residents, one request per need. Messages do not reveal remote stock or whereabouts. Keep working while awaiting consent. This replaces legacy global bell broadcasts and live noticeboard stock reports. Use event-based waiting when appropriate. Personal interests and quests are optional and never override meals, funded commitments, animal care or bedtime. Do your assigned daily maintenance before optional leisure, using actual sites, time and supplies. Routine maintenance does not replace structural repairs; unfinished jobs carry forward. During genuinely free workday time, propose and research new items related to your occupation. Use actual ingredients, equipment and fallible trials; discoveries persist and unlock verified production/use. Research never overrides food, sleep, maintenance or accepted supplier commitments. Firewood is split from real logs at the woodlot with the actual axe and committed work time. Keep construction logs and promised timber protected. Produce only a small reserve or accepted demand. Each successful oven, cooking or forge batch consumes one firewood; rejected actions consume none. Smelting uses firewood instead of logs, never both. Heated research trials and recipes also use fuel. Cottage hearths share one physical woodpile funded by the named custodian's existing coins. Only explicitly configured hearth heating burns fuel: one unit for four hours in spring/autumn or two in winter, between 18:00 and 07:00 when occupied. Summer and unoccupied hearths burn nothing. Cold homes are reported without health penalties. Season is operator-configured, not inferred weather. Only local fuel stocks and hearths are visible. Inspect supplies, remember shortages and send a tin-can request for funded deliveries. Optional grouped fuel routes execute real load, travel and unload actions; blocked routes retain their cargo without remote delivery. Rowan supplies firewood; Iona funds the communal cottage pile. Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request. Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. Elsie can order these foods from Ada through a tin-can request, then cook one real milk plus one egg into two meals using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work. Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer without inventing manure.",
       "start_location": "cottages",
       "body": {
         "description": "An easygoing fisher.",

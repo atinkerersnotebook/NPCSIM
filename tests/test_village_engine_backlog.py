@@ -2,9 +2,10 @@ import copy
 
 import pytest
 
-from npc_sim import village, village_extensions, village_life, village_turns
+from npc_sim import village, village_extensions, village_goods, village_life, village_turns
 from npc_sim.dungeon_master import DungeonMasterConfig, DungeonMasterReview, validate_review
 from npc_sim.interactions import resolve_dungeon_appeal
+from npc_sim.living_village import build_scenario
 from npc_sim.models import VillageDayPolicy
 from npc_sim.world import World
 from test_village_expanded import scenario
@@ -353,7 +354,6 @@ async def test_privileged_configuration_round_trips_through_real_mcp(tmp_path):
 
 
 def test_living_scenario_enables_every_system_without_changing_legacy(tmp_path):
-    from npc_sim.living_village import build_scenario
     base = scenario()
     before = base.model_dump(mode="json")
     value = build_scenario(base)
@@ -363,6 +363,11 @@ def test_living_scenario_enables_every_system_without_changing_legacy(tmp_path):
     assert value.village.breakfast and value.village.event_driven_waits
     assert value.village.economy.meal_price == 2
     assert value.village.economy.subsidy_per_meal == 0
+    assert value.village.livestock.hens == 24
+    assert value.village.economy.production_targets["farm"]["eggs"] == 24
+    assert value.village.economy.production_targets["tavern"]["meals"] == 32
+    assert value.village.residents["jory"].job.inputs == {"flour": 1, "milk": 1, "eggs": 1}
+    assert {"milk", "eggs"} <= set(value.village.prices)
     assert all("shared physical communication policy" in agent.role for agent in value.agents)
     assert value.village.communication is not None
     assert set(value.village.social.interests) == set(value.village.residents)
@@ -379,3 +384,27 @@ def test_living_scenario_enables_every_system_without_changing_legacy(tmp_path):
         assert usage.sleep + usage.work + usage.travel + usage.wait + usage.leisure + usage.idle == 60
     assert not value.village.require_tea_use
     assert not value.village.require_manure_use
+
+
+def test_baking_requires_flour_milk_and_eggs(tmp_path):
+    value = build_scenario(scenario())
+    world = World(value, tmp_path / "bread-inputs.json", "bread-inputs", "jory", "session-jory")
+    village.advance(world, 60)
+    world.actor.location_id = "bakery"
+    stock = world.state.village.stocks["bakery"]
+    stock.update({"flour": 0, "milk": 0, "eggs": 0, "bread": 0})
+    world.state.village.stock_lots["bakery"] = {}
+    village_goods.put(world, "bakery", "flour", 4)
+    village_goods.put(world, "bakery", "milk", 2)
+    world.state.village.economy.config.production_targets["bakery"] = {"bread": 2}
+    world.state.village.economy.config.reserve_targets["bakery"] = {}
+
+    assert act(world, "village_work")["code"] == "STOCK_SHORTAGE"
+    village_goods.put(world, "bakery", "eggs", 2)
+    result = act(world, "village_work")
+
+    assert result["code"] == "BATCH_STARTED"
+    assert {product: stock[product] for product in ("flour", "milk", "eggs")} == {
+        "flour": 2, "milk": 0, "eggs": 0}
+    village.advance(world, 30)
+    assert stock["bread"] == 2

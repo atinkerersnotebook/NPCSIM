@@ -85,11 +85,20 @@ def _blocked_step(world: "World", plan: VillageWalkingPlan) -> bool:
             or world.lock_for(door).broken)
 
 
-def check_plan(world: "World", destination: str) -> tuple[str, str] | None:
+def check_plan(world: "World", destination: str, purpose: str = "") -> tuple[str, str] | None:
     if destination not in world.state.entities or world.state.entities[destination].kind != "location":
         return "INVALID_DESTINATION", "Choose a real village location."
     if destination == world.actor.location_id:
         return "ALREADY_THERE", "You are already at that destination."
+    config, state = village.context(world)
+    clock = state.minute % 1440
+    for other, resident in config.residents.items():
+        life = state.residents[other].life
+        name_mentions = other in purpose.casefold() or village.resident_name(world, other).casefold() in purpose.casefold()
+        if (other != world.actor_id and destination == resident.work and name_mentions
+                and clock < resident.wake_minute and life is not None and life.sleeping):
+            return ("RESIDENT_ASLEEP", f"{village.resident_name(world, other)} is known to wake at "
+                    f"{village.clock_time(resident.wake_minute)}; do useful local work or use a physical message channel.")
     plan = world.state.village.residents[world.actor_id].walking_plan
     if plan and not _interruption(world, plan) and not _blocked_step(world, plan):
         return "ROUTE_COMMITTED", "Finish the current route before choosing another destination."
@@ -100,7 +109,7 @@ def check_plan(world: "World", destination: str) -> tuple[str, str] | None:
 
 def plan(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]:
     destination = args["destination"]
-    blocked = check_plan(world, destination)
+    blocked = check_plan(world, destination, args["purpose"])
     if blocked:
         return "REJECTED", *blocked, None
     _, state = village.context(world)

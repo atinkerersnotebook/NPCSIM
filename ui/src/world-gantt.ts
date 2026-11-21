@@ -269,6 +269,9 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           typeof args.problems === "string" ? `Problems: ${args.problems}` : "",
           typeof args.suggestions === "string" ? `Suggestions: ${args.suggestions}` : ""]
           .filter(Boolean).join("\n") : "";
+      const readNote = /(?:^read$|read_|_read$)/i.test(action)
+        ? `Reading: ${villageClockText(result.explanation)} Reason: ${linked.reasoning?.trim()
+          || "review local information before the next task"}.` : "";
       if (kind !== "sleep") row.spans.push({
         start, end: Math.max(start, Math.min(now, end)), location: result.observation.self.location_id,
         label: waitLabel ? waitLabel
@@ -278,6 +281,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           : actionLabel(action, args, state, event.actor_id),
         detail: waitReason ? `Reason: ${waitReason}`
           : diaryNote ? `${diaryNote}\n${villageClockText(result.explanation)}`
+          : readNote ? readNote
           : research ? `${researchDetail(research)} ${villageClockText(result.explanation)}`
           : planForTile
           ? `Purpose: ${planForTile.purpose}${/[.!?]$/.test(planForTile.purpose) ? "" : "."} ${villageClockText(result.explanation)}`

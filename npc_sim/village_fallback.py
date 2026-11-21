@@ -427,8 +427,18 @@ def _unread_paper(world: "World", fixture: str) -> bool:
 
 def _travel_choice(world: "World", destination: str, task: str, reason: str,
                    priority: str) -> dict[str, Any] | None:
-    _, state = village.context(world)
+    config, state = village.context(world)
     if world.actor.location_id == destination:
+        return None
+    clock = state.minute % 1440
+    sleeping_contact = next((other for other, resident in config.residents.items()
+                             if other != world.actor_id and destination == resident.work
+                             and clock < resident.wake_minute
+                             and state.residents[other].life is not None
+                             and state.residents[other].life.sleeping
+                             and "inbox" not in reason.casefold()
+                             and "board" not in reason.casefold()), None)
+    if sleeping_contact:
         return None
     from npc_sim import village_walking
     if village_walking.enabled(world):
@@ -1145,7 +1155,7 @@ def _feed_store_choices(world: "World") -> list[dict[str, Any]]:
 
 
 def _freight_choices(world: "World") -> dict[str, Any] | None:
-    from npc_sim import village_services
+    from npc_sim import village_services, village_wagon
 
     config, state = village.context(world)
     person = state.residents[world.actor_id]
@@ -1159,6 +1169,15 @@ def _freight_choices(world: "World") -> dict[str, Any] | None:
         travel = _travel_choice(world, shipment.destination, f"freight:deliver:{shipment.order_id}",
                                 "Deliver personally loaded funded freight before its deadline.", "P1")
         return travel
+    if (world.actor_id == config.courier and state.wagon and not state.wagon.automatic
+            and village_wagon.readiness(world)["ready"]):
+        wagon_location = world.state.entities["wagon"].location
+        if location != wagon_location:
+            return _travel_choice(world, wagon_location, "freight:wagon",
+                                  "Collect the repaired wagon to batch the confirmed delivery run.", "P1")
+        return {"task_id": "shipment:wagon", "action_id": "village_start_route", "arguments": {},
+                "priority": "P1",
+                "reason": "Use the delivery wagon's full batch capacity instead of making foot trips."}
     orders = [order for order in village_economy._personal_orders(world)
               if order.status in village_economy.LOADABLE and order.loadable
               and order.deadline >= state.minute]

@@ -68,6 +68,7 @@ def cast():
     value.village.time_based_turns = True
     value.village.breakdown_minute = 99990
     value.village.stocks["tavern"]["tea"] = 8
+    value.village.stocks["bakery"].update({"milk": 0, "eggs": 0})
     value.entities["wild-herb"] = Entity(name="Wild herb", kind="fixture", description="A fictional local plant.", location="woods")
     for eid in ("fiddle", "drum"):
         value.entities[eid] = Entity(name=eid.title(), kind="item", description="A real configured instrument.",
@@ -697,7 +698,7 @@ def test_example_every_resident_has_matching_optional_solo_and_social(cast):
                    for activity in config.activities.values()), rid
 
 
-def test_jory_recipe_consumes_actual_flour_produces_bread_and_persists(cast):
+def test_jory_recipe_consumes_actual_ingredients_produces_bread_and_persists(cast):
     install_example(cast)
     world = cast["jory"]
     place(cast, "jory", "bakery")
@@ -705,9 +706,12 @@ def test_jory_recipe_consumes_actual_flour_produces_bread_and_persists(cast):
     assert respond_quest(cast, "jory", "festival-recipe")[0] == "APPLIED"
     assert leisure(cast, "recipe-draft", "jory")[1] == "NOTES_REQUIRED"
     stock = world.state.village.stocks["bakery"]
-    flour, bread = stock["flour"], stock["bread"]
+    stock["milk"], stock["eggs"] = 1, 1
+    flour, milk, eggs, bread = stock["flour"], stock["milk"], stock["eggs"], stock["bread"]
     assert leisure(cast, "test-bread-recipe", "jory")[0] == "APPLIED"
-    assert stock["flour"] == flour - 1 and stock["bread"] == bread
+    assert stock["flour"] == flour - 1
+    assert stock["milk"] == milk - 1 and stock["eggs"] == eggs - 1
+    assert stock["bread"] == bread
     tick(cast, 930)
     assert stock["bread"] == bread + 1
     assert world.state.village.social.intervals[-1].produced == {"bread": 1}

@@ -80,7 +80,7 @@ def check(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str] 
     if action == "village_plan_walk":
         from npc_sim import village_walking
         if village_walking.enabled(world):
-            return village_walking.check_plan(world, args["destination"])
+            return village_walking.check_plan(world, args["destination"], args.get("purpose", ""))
     if action == "go":
         from npc_sim import village_fallback, village_walking
         if village_walking.enabled(world):

@@ -6544,7 +6544,9 @@
             "recipes"
           ],
           "supplies": {
-            "flour": 1
+            "flour": 1,
+            "milk": 1,
+            "eggs": 1
           },
           "equipment": [
             "oven"

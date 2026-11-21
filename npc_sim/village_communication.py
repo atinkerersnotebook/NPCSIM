@@ -770,7 +770,14 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
             if _receive(world, actor, notice, "inbox" if action == "village_inbox_read" else "noticeboard"):
                 learned.append(notice)
                 _emit(world, "notice_read", notice)
-        return "NOTICES_READ", f"Read {len(learned)} new versions. Older paper may be out of date."
+        source = entity.name.lower()
+        summaries = [f"{notice.terms.subject}: {notice.terms.description}" for notice in learned]
+        detail = "; ".join(summaries)
+        reason = ("to check changed supply requests, replies, and commitments for current work"
+                  if learned else "to check for new relevant messages")
+        return "NOTICES_READ", (f"Read {source} {reason}; learned {len(learned)} new version(s)."
+                                + (f" Contents: {detail}." if detail else " No new paper was available.")
+                                + " Older paper may be out of date.")
     if action == "village_notice_tell":
         _local_listener(world, request.listener)
         memory = state.knowledge.get(actor, {}).get(request.notice_id)

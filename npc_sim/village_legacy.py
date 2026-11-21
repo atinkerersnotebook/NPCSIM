@@ -227,7 +227,11 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
             if entry.origin_world_id and index not in legacy.learned.get(world.actor_id, []):
                 learn(world, world.actor_id, index, "inherited chronicle")
         legacy.history_read.append(world.actor_id)
-        text = "Read the inherited family journal and village chronicle; old accounts may not describe today's world."
+        titles = [entry.lesson or entry.text for entry in legacy.chronicle if entry.origin_world_id]
+        summary = "; ".join(title for title in titles[:3] if title)
+        text = ("Read the inherited family journal and village chronicle at home to learn prior residents' "
+                "obligations and avoid repeating old mistakes."
+                + (f" Reviewed: {summary}." if summary else ""))
         village.event(world, world.actor_id, action, world.actor.location_id, text)
         return "APPLIED", "HISTORY_READ", text, None
     if action == "village_write_diary":
@@ -266,7 +270,10 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
     new = [index for index in range(len(legacy.chronicle)) if index not in known]
     for index in new:
         learn(world, world.actor_id, index, "square chronicle")
-    text = f"Read {len(new)} new chronicle entries at the square."
+    summaries = [legacy.chronicle[index].lesson or legacy.chronicle[index].text for index in new]
+    reviewed = "; ".join(value for value in summaries if value)
+    text = (f"Read {len(new)} new chronicle entries at the square to learn lessons relevant to current village work."
+            + (f" Reviewed: {reviewed}." if reviewed else ""))
     village.event(world, world.actor_id, action, "village-square", text)
     return "APPLIED", "CHRONICLE_READ", text, None
 

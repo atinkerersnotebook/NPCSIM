@@ -580,9 +580,14 @@ def advance(world: "World") -> None:
                 if work.kind == "wagon_repair":
                     if state.wagon is None:
                         raise ValueError("A committed wagon repair has no wagon")
+                    wagon = world.state.entities["wagon"]
+                    wagon.health = wagon.max_health or 100
+                    wagon.max_health = wagon.max_health or 100
+                    wagon.name = "Delivery wagon"
+                    wagon.description = "A working communal wagon for batch supply deliveries."
                     state.wagon.repaired = True
                     village.announce(world, rid, "wagon_ready", "wagon",
-                                     "The wagon repair is complete. Nella can collect the working six-unit wagon at the forge.")
+                                     "The wagon repair is complete. The delivery wagon is usable again.")
                 stock = state.stocks.setdefault(work.location, {})
                 for resource, amount in work.outputs.items():
                     village_goods.put(world, work.location, resource, amount, ingredients=work.ingredients)

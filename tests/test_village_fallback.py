@@ -54,6 +54,18 @@ def inspect_then_wait(world):
     return world.state.village.residents["rowan"].fallback.wait
 
 
+def test_fallback_does_not_travel_to_a_known_sleeping_supplier(tmp_path):
+    world = make_world(tmp_path, minute=390, living=True)
+    world.bind("elsie", "session-elsie")
+    actor = world.bind("elsie", "session-elsie")
+    actor.actor.location_id = "tavern"
+    finn = world.scenario.village.residents["finn"]
+    assert 390 < finn.wake_minute
+    choice = village_fallback._travel_choice(
+        actor, finn.work, "food:contact-finn", "Find Finn to request fish.", "P1")
+    assert choice is None
+
+
 def test_iona_prefers_garden_during_downtime_and_harvests_before_retending(tmp_path):
     value = build_scenario(scenario(), purposeful_downtime=True)
     value.village.start_minute = 600

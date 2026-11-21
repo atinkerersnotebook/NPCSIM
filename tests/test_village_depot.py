@@ -90,6 +90,7 @@ def test_generation_17_is_cumulative_scenario():
     assert set(generated.village.stocks["communal-granary"]) == {"grain", "flour", "hay"}
     assert set(generated.village.stocks["supply-depot"]) == {"timber", "firewood"}
     assert generated.village.economy.reserve_targets["watermill"]["flour"] == 8
+    assert generated.village.economy.reserve_targets["watermill"]["grain"] == 0
     assert generated.village.economy.reserve_targets["farm"]["grain"] == 10
     assert generated.village.economy.reserve_targets["herbal-workshop"]["herbs"] == 8
     assert generated.village.economy.reserve_targets["riverbank"]["preserved-fish"] == 3
@@ -102,9 +103,9 @@ def test_generation_17_is_cumulative_scenario():
     breakfast = next(plan for plan in generated.village.economy.meal_plans if plan.id == "breakfast")
     assert breakfast.additional_inputs == {"eggs": 16}
     assert breakfast.resident_portions == 12 and breakfast.visitor_portions == 4
-    assert generated.village.economy.production_targets["farm"]["eggs"] == 16
+    assert generated.village.economy.production_targets["farm"]["eggs"] == 24
     assert generated.village.stocks["tavern"]["eggs"] == 16
-    assert generated.village.livestock.hens == 16
+    assert generated.village.livestock.hens == 24
     assert generated.village.livestock.cows == 2
     assert generated.village.livestock.sheep == 6
     assert generated.village.livestock.pigs == 3

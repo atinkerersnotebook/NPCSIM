@@ -47,6 +47,7 @@ def test_forecast_does_not_double_count_batches_or_allocate_expired_or_reserved_
     state.stock_lots = {"bakery": {"bread": [VillageStockLot(quantity=2, produced_at=480, expires_at=520)]}}
     state.economy.config.reserve_targets = {"bakery": {"flour": 1}, "farm": {"grain": 2}}
     state.economy.config.production_targets = {}
+    state.economy.config.meal_plans = []
     state.residents["jory"].life.work = VillageCommittedWork(location="bakery", finishes_at=540,
                                                             outputs={"bread": 2}, ingredients=["flour"])
     world.bind("jory", "session-jory").actor.location_id = "bakery"
@@ -69,7 +70,7 @@ def test_forecast_does_not_double_count_batches_or_allocate_expired_or_reserved_
     assert rows["tavern", "bread"]["projected"][0] == 2
     assert rows["tavern", "bread"]["projected"][2] == 0
     assert rows["bakery", "flour"]["projected"][0] == 1
-    assert rows["farm", "grain"]["projected"] == [2, 2, 2]
+    assert rows["farm", "grain"]["projected"] == [3, 3, 6, 21, 90]
     assert rows["bakery", "bread"]["forecast_changes"][0] == {
         "production": 2, "outbound": 2, "expired": 2, "inbound": 0, "inputs": 0}
     assert rows["tavern", "bread"]["forecast_changes"][0]["inbound"] == 2
@@ -78,8 +79,8 @@ def test_forecast_does_not_double_count_batches_or_allocate_expired_or_reserved_
     assert rows["farm", "hay"]["forecast_changes"][0]["inputs"] == 1
     assert rows["farm", "hay"]["projected"][0] == 1
     assert ("bakery", "grain") not in rows
-    assert {(risk["id"], risk["kind"], risk["missing"]) for risk in snapshot["risks"]} == {
-        ("bread", "delivery", 1), ("flour", "production input", 1), ("grain-b", "delivery", 2)}
+    assert {("bread", "delivery", 1), ("flour", "production input", 1)} <= {
+        (risk["id"], risk["kind"], risk["missing"]) for risk in snapshot["risks"]}
     assert next(item["inputs"] for item in snapshot["production"] if item["id"] == "bread") == {"flour": 2}
     assert snapshot["upcoming_maintenance"] == []  # Unfinished current jobs carry forward; no duplicate preview.
     assert state.model_dump() == before
@@ -116,8 +117,8 @@ def test_forecast_compares_planned_harvests_and_production_with_baseline(tmp_pat
     snapshot = report(world.state, scenario.village)
     rows = {(row["location"], row["product"]): row for row in snapshot["inventory"]}
     herbs = rows[site, "herbs"]
-    assert herbs["baseline_projected"] == [0, 0, 0]
-    assert herbs["projected"] == [2, 2, 0]
+    assert herbs["baseline_projected"] == [0, 0, 0, 0, 0]
+    assert herbs["projected"] == [2, 2, 2, 12, 12]
     assert herbs["forecast_changes"][0]["harvest"] == 3
     assert herbs["forecast_changes"][0]["inputs"] == 1
     assert herbs["forecast_changes"][0]["expired"] == 2
@@ -156,6 +157,82 @@ def test_started_collection_counts_in_both_projections_without_duplicate_order_o
     assert "planned_production" not in farm_eggs["forecast_changes"][0]
 
 
+def test_daily_egg_collection_is_forecast_from_flock_capacity(tmp_path):
+    scenario, world = town(tmp_path)
+    state = world.state.village
+    state.minute = 480
+    state.economy.config.production_targets.setdefault("farm", {})["eggs"] = 24
+    state.livestock.config.hens = 24
+    state.stocks["farm"]["eggs"] = 0
+    state.stock_lots.get("farm", {}).pop("eggs", None)
+
+    snapshot = report(world.state, scenario.village)
+    eggs = next(row for row in snapshot["inventory"]
+                if row["location"] == "farm" and row["product"] == "eggs")
+    daily = [row for row in snapshot["replenishment"]
+             if row["id"] == "standing:farm:eggs:0"]
+
+    assert daily == [{"id": "standing:farm:eggs:0", "worker": "ada", "location": "farm",
+                      "product": "eggs", "quantity": 24, "required_output": 24, "finish": 490, "status": "planned",
+                      "basis": "Daily livestock yield: requires care and one real collection; standing capacity only."}]
+    assert eggs["forecast_changes"][0]["harvest"] == 24
+
+
+def test_mill_forecasts_flour_from_real_unreserved_grain(tmp_path):
+    scenario, world = town(tmp_path)
+    state = world.state.village
+    state.minute = 480
+    state.economy.config.reserve_targets["watermill"] = {"grain": 0, "flour": 8}
+    state.economy.config.production_targets["watermill"] = {"flour": 8}
+    state.stocks["watermill"]["grain"] = 8
+    state.stocks["watermill"]["flour"] = 2
+    state.stock_lots["watermill"] = {}
+
+    snapshot = report(world.state, scenario.village)
+    flour = next(row for row in snapshot["inventory"]
+                 if row["location"] == "watermill" and row["product"] == "flour")
+    grain = next(row for row in snapshot["inventory"]
+                 if row["location"] == "watermill" and row["product"] == "grain")
+
+    assert not flour["forecast_changes"][0].get("planned_production")
+    assert flour["projected"][0] == 2
+    assert not grain["forecast_changes"][0]["inputs"]
+    assert any(risk["id"] == "standing:watermill:flour:0" for risk in snapshot["risks"])
+
+
+def test_standing_forecast_backfills_bread_chain_and_herbal_demand(tmp_path):
+    scenario, world = town(tmp_path)
+    state = world.state.village
+    state.minute = 480
+    state.economy.config.production_targets = {
+        "farm": {"grain": 10, "eggs": 24, "milk": 12},
+        "watermill": {"flour": 8}, "bakery": {"bread": 8},
+        "herbal-workshop": {"herbs": 8, "tea": 12}, "tavern": {"meals": 32}}
+    state.economy.config.reserve_targets = {}
+    state.economy.config.meal_plans = [plan.model_copy(update={
+        "portions": 16, "visitor_portions": 4,
+        "recipe_portions": {"bread": 16} if plan.id == "breakfast" else {"bread": 10, "fish": 6}})
+        for plan in state.economy.config.meal_plans]
+    for site, stock in state.stocks.items():
+        for product in stock:
+            stock[product] = 0
+    state.stock_lots = {}
+
+    snapshot = report(world.state, scenario.village)
+    rows = {item["id"]: item for item in snapshot["replenishment"]}
+
+    assert rows["standing:tavern:meals:0"]["required_output"] == 32
+    bread = rows["standing:bakery:bread:0"]
+    assert bread["inputs"] == {"flour": 13, "firewood": 1}
+    assert rows["standing:watermill:flour:0"]["inputs"] == {"grain": 13}
+    assert rows["standing:herbal-workshop:tea:0"]["inputs"] == {"herbs": 12}
+    assert rows["standing:herbal-workshop:herbs:0"]["quantity"] >= 2
+    assert rows["standing:riverbank:fish:0"]["quantity"] == 9
+    assert rows["standing:woods:firewood:0"]["inputs"] == {"logs": 1}
+    assert rows["standing:iron-mine:iron-ore:0"]["quantity"] >= 1
+    assert rows["standing:forge:iron:0"]["inputs"] == {"iron-ore": 2, "firewood": 3}
+
+
 def test_api_uses_saved_revision_and_shows_all_maintenance_and_physical_note_versions(tmp_path, monkeypatch):
     scenario, world = town(tmp_path)
     state = world.state.village
@@ -182,8 +259,9 @@ def test_api_uses_saved_revision_and_shows_all_maintenance_and_physical_note_ver
     response = client.get("/api/town-supply")
     assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
     snapshot = response.json()
-    assert all(len(row["forecast_changes"]) == len(row["baseline_projected"]) == 3 for row in snapshot["inventory"])
-    assert [(task["worker"], task["product"]) for task in snapshot["replenishment"]] == [("iona", "herbs")]
+    assert all(len(row["forecast_changes"]) == len(row["baseline_projected"]) == 5 for row in snapshot["inventory"])
+    assert ("iona", "herbs") in [(task["worker"], task["product"])
+                                  for task in snapshot["replenishment"]]
     paper = next(note for note in snapshot["notes"] if note["id"] == first.id)
     assert (paper["text"], paper["version"], paper["latest_status"]) == ("Original board copy", 1, "accepted")
     assert paper["location"] == world.state.entities[board].location

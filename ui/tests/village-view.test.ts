@@ -1880,6 +1880,27 @@ test("Gantt diary cells contain the authored note and diary can be filtered like
   }
 });
 
+test("Gantt read cells explain what was read and why", () => {
+  const state = expanded();
+  state.world!.village!.minute = 495;
+  state.world!.entities.noticeboard = { ...state.world!.entities.noticeboard,
+    name: "Village noticeboard" };
+  const events = [
+    timelineEvent(1, "observation", 490, timelineObservation(490)),
+    timelineEvent(2, "decision", 490, { action_id: "read",
+      justification: "Check the posted supply map before requesting flour." }),
+    timelineEvent(3, "action_request", 490, { request_id: "read", action_id: "read",
+      arguments: { target: "noticeboard" } }),
+    timelineEvent(4, "action_result", 490, { request_id: "read", outcome: "APPLIED", code: "READ",
+      explanation: "Read village noticeboard at village-square to inspect current routes. It says: Flour comes from the watermill.",
+      observation: timelineObservation(490) })
+  ];
+  const model = buildWorldTimeline(state, events, monitoredAgents(state))!;
+  const reading = model.rows.find(row => row.id === "torvin")!.spans.find(span => span.label === "Read: Village noticeboard");
+  assert.ok(reading?.detail.includes("Flour comes from the watermill"));
+  assert.ok(reading?.detail.includes("Check the posted supply map before requesting flour"));
+});
+
 test("Gantt cells show recorded quantities, duration and clock range with escaped summaries", () => {
   const state = expanded();
   state.world!.village!.minute = 500;

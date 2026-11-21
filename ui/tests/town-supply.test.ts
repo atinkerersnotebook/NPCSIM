@@ -10,7 +10,7 @@ test("supply navigation opens the read-only dashboard and handles an absent town
 });
 
 test("tomorrow's upkeep is visible and scoped without becoming active work", () => {
-  const data = townSupplySchema.parse({ title: "Millhaven", revision: 1, minute: 2235, horizons: [2595, 3675, 5115],
+  const data = townSupplySchema.parse({ title: "Millhaven", revision: 1, minute: 2235, horizons: [2595, 3675, 5115, 12315, 45435],
     sites: { cottages: "Village cottages", farm: "Farm", forge: "Forge" }, fixtures: {}, residents: { hobb: "Hobb", ada: "Ada" },
     inventory: [], orders: [], requests: [], needs: [], cargo: [], production: [], risks: [], maintenance: [], projects: [], notes: [],
     upcoming_maintenance: [
@@ -27,7 +27,7 @@ test("tomorrow's upkeep is visible and scoped without becoming active work", () 
 });
 
 test("posted notes are grouped by their physical site and escaped without hiding stale copies", () => {
-  const data = townSupplySchema.parse({ title: "Millhaven", revision: 1, minute: 480, horizons: [840, 1920, 3360],
+  const data = townSupplySchema.parse({ title: "Millhaven", revision: 1, minute: 480, horizons: [840, 1920, 3360, 10560, 43680],
     sites: { square: "Village Square", farm: "Farm Site" }, fixtures: { board: "Board", box: "Inbox" }, residents: {},
     inventory: [], orders: [], requests: [], needs: [], cargo: [], production: [], risks: [], maintenance: [], projects: [],
     notes: [{ id: "notice-1", fixture: "board", location: "square", author: "jory", title: "Need flour",
@@ -48,10 +48,10 @@ const order = (id, source, destination, deadline, status, open = true) => ({
   id, source, destination, deadline, status, open, product: "flour", quantity: 3, remaining: 3,
   supplier: "s", buyer: "b", delivered_quantity: 0, in_transit: 0, reason: null,
 });
-const overview = townSupplySchema.parse({ title: "Millhaven", revision: 1, minute: 480, horizons: [840, 1920, 3360],
+const overview = townSupplySchema.parse({ title: "Millhaven", revision: 1, minute: 480, horizons: [840, 1920, 3360, 10560, 43680],
   sites: { farm: "Farm Site", mill: "Mill", square: "Village Square" }, fixtures: {}, residents: {},
-  inventory: [inventory("farm", "grain", 6, 2, [5, 4, 3]), inventory("mill", "flour", 1, 3, [0, 7, 2]),
-    inventory("farm", "eggs", 2, 0, [2, 2, 2])],
+  inventory: [inventory("farm", "grain", 6, 2, [5, 4, 3, 3, 3]), inventory("mill", "flour", 1, 3, [0, 7, 2, 2, 2]),
+    inventory("farm", "eggs", 2, 0, [2, 2, 2, 2, 2])],
   orders: [order("incoming", "farm", "mill", 479, "accepted"), order("outgoing", "mill", "square", 840, "accepted"),
     order("later", "mill", "farm", 841, "accepted"), order("elsewhere", "farm", "square", 510, "accepted"),
     order("closed", "mill", "farm", 470, "fulfilled", false)],
@@ -114,9 +114,9 @@ test("zero stock at a configured reserve remains actionable; forecast shows the 
 
 test("forecast separates actual stock and both scenarios, warning when either falls below reserve", () => {
   const movement = { production: 0, inbound: 0, inputs: 0, outbound: 0, expired: 0 };
-  const data = townSupplySchema.parse({ ...overview, inventory: [{ ...inventory("mill", "herbs", 5, 3, [8, 2, 4]),
-    on_hand: 7, baseline_projected: [1, 4, 0], forecast_changes: [
-      { ...movement, production: 1, harvest: 4, planned_production: 2 }, movement, movement,
+  const data = townSupplySchema.parse({ ...overview, inventory: [{ ...inventory("mill", "herbs", 5, 3, [8, 2, 4, 4, 4]),
+    on_hand: 7, baseline_projected: [1, 4, 0, 0, 0], forecast_changes: [
+      { ...movement, production: 1, harvest: 4, planned_production: 2 }, movement, movement, movement, movement,
     ] }] });
   const markup = townSupplyMarkup(data);
   assert.match(markup, /Below reserve without plans at \+6h/);
@@ -133,9 +133,21 @@ test("forecast separates actual stock and both scenarios, warning when either fa
   assert.match(inventoryTable, /<td>8<\/td><td>1<\/td><td>2<\/td><td>4<\/td><td>4<\/td><td>0<\/td>/);
 });
 
+test("waterfall diagram shows downstream demand and blocked upstream inputs", () => {
+  const data = townSupplySchema.parse({ ...overview,
+    waterfall: { horizons: [840, 1920, 3360, 10560, 43680], requirements: [{
+      id: "standing:bakery:bread:0", day: 1, worker: "jory", site: "bakery", product: "bread",
+      planned_output: 8, finish: 510, status: "blocked", basis: "Flour unavailable", on_hand: 4,
+      target: 8, inputs: { flour: 8 }, blocked_by: [{ id: "standing:bakery:bread:0", kind: "production input",
+        minute: 510, location: "bakery", product: "flour", missing: 8 }] }] } });
+  const markup = townSupplyMarkup(data);
+  assert.match(markup, /48-hour supply waterfall/);
+  assert.match(markup, /bread[\s\S]*blocked[\s\S]*8 flour/);
+});
+
 test("prepared meals distinguish breakfast, supper and unallocated portions", () => {
   const data = townSupplySchema.parse({ ...overview, inventory: [{
-    ...inventory("tavern", "meals", 11, 0, [0, 0, 0]),
+    ...inventory("tavern", "meals", 11, 0, [0, 0, 0, 0, 0]),
     meal_allocations: { prepared: 11, unallocated: 1, services: [
       { id: "0:breakfast", service: "breakfast", due: 510, required: 6, reserved: 6, shortfall: 0 },
       { id: "0:supper", service: "supper", due: 1140, required: 8, reserved: 4, shortfall: 4 },

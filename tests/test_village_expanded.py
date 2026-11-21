@@ -63,6 +63,10 @@ def test_twelve_real_actors_without_duplicate_positions_and_private_context(cast
                for entity in world.state.entities.values()) >= 50
     contexts = {rid: observation(actor.observe())["village"] for rid, actor in cast.items()}
     assert contexts["torvin"]["personal"]["beliefs"]["shovel"]["location"] == "stable"
+    public_schedules = {item["id"]: item for item in contexts["elsie"]["public_schedules"]}
+    assert public_schedules["finn"]["wake_minute"] == 420
+    assert public_schedules["finn"]["workplace"] == "riverbank"
+    assert "finn" not in {item["id"] for item in contexts["finn"]["public_schedules"]}
     assert contexts["bren"]["personal"]["beliefs"]["shovel"]["location"] == "mill-shed"
     assert "mill-shed" not in json.dumps(contexts["torvin"])
     assert contexts["mara"]["personal"]["beliefs"] == {}

@@ -917,7 +917,9 @@ class World:
             if target in self.actor.read_entities:
                 return unchanged(entity.readable_text)
             self.actor.read_entities.append(target)
-            return "APPLIED", "READ", f"You read the {entity.name.lower()}: {entity.readable_text}", None
+            return "APPLIED", "READ", (
+                f"Read {entity.name.lower()} at {self.actor.location_id} to inspect its instructions or information. "
+                f"It says: {entity.readable_text}"), None
         if action == "search":
             revealed = []
             for eid, hidden in self.state.entities.items():

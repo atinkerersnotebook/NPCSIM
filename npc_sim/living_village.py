@@ -37,6 +37,7 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
     economy = village_economy.example_config(scenario)
     economy.update(subsidy_per_meal=0, subsidy_payer=None)
     config.economy = VillageEconomyConfig.model_validate(economy)
+    config.economy.production_targets.setdefault("tavern", {})["meals"] = 32
     social = village_social.example_config()
     scenario.entities.update({identifier: Entity.model_validate(fixture)
                               for identifier, fixture in village_social.example_fixtures().items()})
@@ -48,6 +49,10 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
     config.equipment = VillageEquipmentConfig.model_validate(village_equipment.recommended_config(scenario))
     if livestock:
         village_livestock.install_scenario(scenario)
+        config.livestock = config.livestock.model_copy(update={"hens": 24})
+        scenario.entities.update(village_livestock.fixtures(scenario))
+        config.economy.production_targets.setdefault("farm", {})["eggs"] = 24
+        config.residents["jory"].job.inputs = {"flour": 1, "milk": 1, "eggs": 1}
     village_communication.install_scenario(scenario)
     if firewood:
         village_firewood.install_scenario(scenario)
@@ -92,7 +97,7 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
         scenario.objective += " Keep occupied cottage hearths and working ovens/forge supplied with paid, physically delivered firewood."
     if livestock:
         scenario.objective += (
-            " Care daily for the physical farm cow and twelve hens using real balanced feed, well water and clean housing. "
+            " Care daily for the physical farm cows and twenty-four hens using real balanced feed, well water and clean housing. "
             "Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; "
             "spoiled food becomes real compost material, never animal feed."
         )
@@ -127,13 +132,13 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
                "Prioritize funded fuel deliveries alongside existing timber commitments; do not keep taking the automatic timber-only "
                "route when firewood orders need manual foot delivery. Inspect your actual fuel stock before posting a request."
                if firewood else "")
-            + (" Livestock is physical: Ada cares daily for one cow and twelve hens at farm using real hay/grain, "
+            + (" Livestock is physical: Ada cares daily for the cows and twenty-four hens at farm using real hay/grain, "
             "a carried water bucket filled at the completed well, housing and tools. Protect horse hay and funded grain. "
             "Milk/eggs are timed, daytime, daily-limited and only for actual reserves/accepted demand. "
             "Elsie can order these foods from Ada through a valid physical channel, then cook one real milk plus one egg into two meals "
             "using village_cook_dairy; preserve existing bread/fish orders. No butter/cheese work." if livestock else "")
             + (" Safe recycling is deliberate: convert only fresh proven plant-only surplus into plant-scraps; "
-               "one scrap may supplement twelve hens' three-unit ration, leaving at least two grain. "
+               "one or more scraps may supplement the hens' six-unit ration only within the validated one-third limit. "
                "Never feed spoiled/mouldy food or animal ingredients. Actual spoilage produces compost-material "
                "at its physical site; trade/haul it to farm, then use the actual pile/fork and timed village_compost "
                "to process two units into one compost fertilizer. village_fertilize_compost uses this real fertilizer "
@@ -267,6 +272,9 @@ def build_generation_17(complete: Scenario, living: Scenario) -> Scenario:
     for field in ("breakfast", "event_driven_waits", "anti_idle", "purposeful_downtime",
                   "require_tea_use", "require_manure_use", "demand_led_completion"):
         setattr(config, field, getattr(latest_config, field))
+    for rid, resident in latest_config.residents.items():
+        if rid in config.residents and resident.job is not None:
+            config.residents[rid].job = resident.job.model_copy(deep=True)
 
     for entity_id, entity in latest.entities.items():
         if entity_id not in scenario.entities:
@@ -328,7 +336,7 @@ def build_generation_17(complete: Scenario, living: Scenario) -> Scenario:
         village_road=True, description="An interior passage from the tavern to the communal kitchen.")
     scenario.agents = latest.agents
     stock_reserves = {
-        "watermill": {"flour": 8, "grain": 8},
+        "watermill": {"flour": 8, "grain": 0},
         "farm": {"grain": 10},
         "herbal-workshop": {"herbs": 8},
         "riverbank": {"preserved-fish": 3},
@@ -374,11 +382,21 @@ def build_generation_17(complete: Scenario, living: Scenario) -> Scenario:
     config.economy.meal_plans = [supper if plan.id == "supper" else plan
                                  for plan in config.economy.meal_plans]
     config.stocks.setdefault("tavern", {})["fish"] = 0
-    config.economy.production_targets.setdefault("farm", {})["eggs"] = 16
+    standing_targets = {
+        "tavern": {"meals": 32},
+        "farm": {"grain": 10, "hay": 8, "milk": 12, "eggs": 24},
+        "watermill": {"flour": 8},
+        "bakery": {"bread": 8},
+        "riverbank": {"fish": 8},
+        "herbal-workshop": {"herbs": 8, "tea": 12},
+        "woods": {"logs": 10, "timber": 6, "firewood": 6},
+    }
+    for site, targets in standing_targets.items():
+        config.economy.production_targets.setdefault(site, {}).update(targets)
     config.economy.suppliers["eggs"] = "ada"
     config.stocks.setdefault("tavern", {})["eggs"] = 16
     if config.livestock:
-        config.livestock = config.livestock.model_copy(update={"hens": 16, "cows": 2, "sheep": 6, "pigs": 3})
+        config.livestock = config.livestock.model_copy(update={"hens": 24, "cows": 2, "sheep": 6, "pigs": 3})
         scenario.entities.update({key: entity for key, entity in village_livestock.fixtures(scenario).items()
                                   if key not in scenario.entities})
     for product in ("preserved-fish", "furniture", "tackle", "wooden-cup", "herbal-remedy"):
