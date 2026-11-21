@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from npc_sim import handling, village, village_goods, village_life, village_services, village_wagon, village_extensions, village_communication, village_depot
 from npc_sim import village_replenishment, village_walking
@@ -13,7 +14,8 @@ VERBS = {"village_wait", "village_ask", "village_tell", "village_observe", "vill
          "village_load", "village_deliver", "village_project", "village_patrol", "village_eat", "village_sleep",
          "village_daytime_rest",
          "village_meeting", "village_cook_fish", "village_share_route", "village_split_firewood",
-         "village_execute_fuel_delivery", "village_plan_walk", "wait_until_next_relevant_event"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS | village_replenishment.VERBS
+         "village_appeal_dungeon_master", "village_execute_fuel_delivery", "village_plan_walk",
+         "wait_until_next_relevant_event"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS | village_replenishment.VERBS
 
 
 def observation(world: "World") -> dict[str, Any]:
@@ -192,6 +194,9 @@ def actions(world: "World") -> list[dict[str, Any]]:
                        "availability": "available", "reason": None})
 
     tasks = village_replenishment.choices(world)
+    add("village_appeal_dungeon_master", "Ask the Dungeon Master for bounded help, a needed resource, or a world event; ignore/timeout changes nothing.",
+        {"request": {"type": "string", "minLength": 5, "maxLength": 500},
+         "category": {"type": "string", "enum": ["help", "resource", "event"]}})
     if tasks:
         add(village_replenishment.PLAN,
             "Plan one local batch; optionally choose starts_at (absolute game minute in the next 48 hours). "
@@ -436,6 +441,18 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
 
     if action in village_replenishment.VERBS:
         return village_replenishment.apply(world, action, args)
+    if action == "village_appeal_dungeon_master":
+        request, category = args.get("request"), args.get("category")
+        if not isinstance(request, str) or len(request.strip()) < 5 or category not in {"help", "resource", "event"}:
+            return reject("INVALID_APPEAL", "Describe one bounded help/resource/event request.")
+        appeal_id = f"appeal-{uuid4().hex}"
+        state.dungeon_appeals.append({"id": appeal_id, "actor": rid, "request": request.strip(),
+            "category": category, "created_at": state.minute, "expires_at": state.minute + 30,
+            "status": "pending", "response": None})
+        del state.dungeon_appeals[:-20]
+        village.event(world, rid, "dungeon_master_appeal", appeal_id, request.strip(), world.actor.location_id)
+        return done("DUNGEON_MASTER_ASKED",
+                    "Asked the Dungeon Master for help; continue normal work if no reply arrives within 30 minutes.")
     if action == "village_close_investigation":
         investigation = config.investigation
         if investigation is None or rid != investigation.investigator:

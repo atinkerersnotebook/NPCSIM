@@ -36,6 +36,15 @@ const resultSchema = z.object({
   observation: observedSchema
 });
 const objectSchema = z.record(z.string(), z.unknown());
+const dungeonAppealSchema = z.object({
+  id: z.string(), actor: z.string(), request: z.string(), category: z.string(),
+  status: z.string(), response: z.string().nullable(), npc_acknowledgement: z.string().optional(),
+  created_at: z.number().nonnegative(),
+  expires_at: z.number().nonnegative(), world_changes: z.array(z.object({
+    kind: z.string(), location: z.string(), product: z.string(), quantity: z.number().nonnegative(),
+    inventory_location_note: z.string().nullable().optional()
+  })).optional()
+});
 const timeOf = (value: z.infer<typeof timeSchema>) => value.village?.minute
   ?? (value.clock ? value.clock.seconds / 60 : value.bbq ? value.bbq.elapsed_seconds / 60 : undefined);
 
@@ -44,7 +53,8 @@ export function timelineEventProjection(event: RunEvent): RunEvent | null {
     : event.kind === "decision" ? decisionSchema.parse(event.payload)
     : event.kind === "action_request" ? requestSchema.parse(event.payload)
     : event.kind === "action_result" ? resultSchema.parse(event.payload)
-    : event.kind === "control" ? objectSchema.parse(event.payload) : null;
+    : event.kind === "control" ? objectSchema.parse(event.payload)
+    : event.kind === "dungeon_master_appeal_resolved" ? dungeonAppealSchema.parse(event.payload) : null;
   return payload === null ? null : { ...event, payload };
 }
 
@@ -56,7 +66,8 @@ export interface GanttAgent {
   visitor?: boolean;
   activity?: string;
 }
-export type GanttActivity = "all" | "movement" | "work" | "dialogue" | "meals";
+export type GanttActivity = "all" | "actions" | "movement" | "route" | "work" | "dialogue"
+  | "meals" | "diary" | "waiting" | "sleeping" | "free" | "rejected" | "events" | "milestones";
 export interface GanttScale {
   zoom?: number;
   viewportWidth?: number;
@@ -102,7 +113,8 @@ function actionLabel(action: string, args: Record<string, unknown>, state: State
     village_work: "Work", village_wait: "Wait", village_sleep: "Sleep",
     village_fit_wagon: "Fit wagon parts", village_start_route: "Start wagon route",
     village_stop_route: "Stop wagon route", village_project: "Project work",
-    village_meeting: "Arrange meeting", village_load_goods: "Load goods", village_unload_goods: "Unload goods"
+    village_meeting: "Arrange meeting", village_load_goods: "Load goods", village_unload_goods: "Unload goods",
+    village_write_diary: "Diary"
   };
   const label = labels[action] ?? action.replace(/^village_/, "").replaceAll("_", " ");
   if (action === "village_work") {
@@ -152,6 +164,7 @@ function activityIcon(item: GanttSpan): string {
   if (/forge|carpentry|repair|work|project|fit/i.test(item.label)) return "🔨";
   if (/harvest|farm|forestry|timber/i.test(item.label)) return "🌿";
   if (/talk|meeting|trade|visit/i.test(item.label)) return "💬";
+  if (item.activity === "diary") return "📖";
   if (/look|read|inspect/i.test(item.label)) return "🔎";
   return "●";
 }
@@ -251,6 +264,11 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       const waitReason = kind === "wait" && decision?.selected_task_id === "wait:event"
         ? decision.reason.trim().replace(/[.!?]+$/, "") : "";
       const waitLabel = waitReason ? /^waiting\b/i.test(waitReason) ? waitReason : `Waiting: ${waitReason}` : "";
+      const diaryNote = action === "village_write_diary"
+        ? [typeof args.text === "string" ? args.text : "",
+          typeof args.problems === "string" ? `Problems: ${args.problems}` : "",
+          typeof args.suggestions === "string" ? `Suggestions: ${args.suggestions}` : ""]
+          .filter(Boolean).join("\n") : "";
       if (kind !== "sleep") row.spans.push({
         start, end: Math.max(start, Math.min(now, end)), location: result.observation.self.location_id,
         label: waitLabel ? waitLabel
@@ -259,11 +277,13 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           : walkingPlan ? `Walk to ${state.world?.entities[walkingPlan.destination]?.name ?? walkingPlan.destination}`
           : actionLabel(action, args, state, event.actor_id),
         detail: waitReason ? `Reason: ${waitReason}`
+          : diaryNote ? `${diaryNote}\n${villageClockText(result.explanation)}`
           : research ? `${researchDetail(research)} ${villageClockText(result.explanation)}`
           : planForTile
           ? `Purpose: ${planForTile.purpose}${/[.!?]$/.test(planForTile.purpose) ? "" : "."} ${villageClockText(result.explanation)}`
           : villageClockText(result.explanation), status: result.outcome, kind,
-        activity: action === "village_eat" ? "meals"
+        activity: action === "village_write_diary" ? "diary"
+          : action === "village_eat" ? "meals"
           : action === "go" || action === "village_plan_walk" ? "movement"
           : ["say", "village_ask", "village_tell", "village_share_route", "village_meeting"].includes(action) ? "dialogue"
           : life?.work || /^village_(work|project|research|repair|maintain|craft|produce|load_goods|unload_goods)(_|$)/.test(action) ? "work" : undefined,
@@ -281,6 +301,21 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       if (value.command === "pause" && value.source === "llm_unavailable") {
         milestones.push({ at: event.village_minute, label: "LLM unavailable / paused", detail: String(value.reason) });
       }
+    } else if (event.kind === "dungeon_master_appeal_resolved") {
+      const appeal = dungeonAppealSchema.parse(event.payload);
+      const row = byId.get(appeal.actor);
+      const at = event.village_minute ?? appeal.created_at;
+      if (!row || at > now) continue;
+      const changes = appeal.world_changes?.map(change =>
+        `World change: added ${change.quantity} ${change.product} at ${change.location}.`).join(" ") ?? "";
+      row.spans.push({
+        start: at, end: at, location: row.locationId, kind: "event",
+        label: `Dungeon Master ${appeal.status}`,
+        detail: `${row.name} asked: ${appeal.request}\nReply: ${appeal.response ?? "No intervention was granted."}`
+          + `${appeal.npc_acknowledgement ? `\n${row.name}: ${appeal.npc_acknowledgement}` : ""}`
+          + `${changes ? `\n${changes}` : ""}`,
+        status: appeal.status, activity: "dialogue"
+      });
     }
   }
   for (const event of state.world?.village?.events ?? []) {
@@ -419,8 +454,16 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
   const activity = scale.activity ?? "all";
   const cutoff = scale.recent ? Math.max(model.start, model.now - (model.turns ? 20 : 60)) : model.start;
   const chart = { ...model, start: cutoff };
-  const matches = (item: GanttSpan) => activity === "all" || item.activity === activity
-    || (activity === "movement" && (item.kind === "travel" || item.kind === "route"));
+  const matches = (item: GanttSpan) => activity === "all"
+    || (activity === "actions" && item.kind === "action" && item.activity === undefined)
+    || (activity === "movement" && item.kind === "travel")
+    || (activity === "route" && item.kind === "route")
+    || (activity === "waiting" && item.kind === "wait")
+    || (activity === "sleeping" && item.kind === "sleep")
+    || (activity === "free" && item.kind === "free")
+    || (activity === "rejected" && item.kind === "rejected")
+    || (activity === "events" && item.kind === "event")
+    || activity === item.activity;
   const visible = (item: { start: number; end: number }) => item.start === item.end ? item.start >= cutoff : item.end > cutoff;
   const format = (minute: number) => chart.turns ? `Turn ${minute}`
     : chart.village ? villageClockTime(minute) : clockTime(minute * 60);
@@ -512,7 +555,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     list.push(mark);
     milestones.set(mark.at, list);
   }
-  const lines = [...milestones].map(([at, marks], index) => `<g class="gantt-milestone${activity === "all" ? "" : " is-filtered-out"}" tabindex="0" role="img"
+  const lines = [...milestones].map(([at, marks], index) => `<g class="gantt-milestone${activity === "all" || activity === "milestones" ? "" : " is-filtered-out"}" tabindex="0" role="img"
     aria-label="${escape(marks.map(mark => `${format(at)} ${mark.detail}`).join("; "))}">
     ${tooltip(marks.map(mark => `${format(at)} / ${mark.label}: ${mark.detail}`).join("\n"))}
     <line x1="${x(at)}" x2="${x(at)}" y1="8" y2="${height - 20}"/>
@@ -528,8 +571,13 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
         </div></div></div>
     ${scale.linkResidents ? `<div class="gantt-filters" aria-label="Timeline filters" role="group">
       <button type="button" class="button subtle" data-timeline-recent aria-pressed="${Boolean(scale.recent)}">${model.turns ? "Last 20 turns" : "Last simulated hour"}</button>
-      <label>Activity <select data-timeline-activity>${(["all", "movement", "work", "dialogue", "meals"] as const).map(value =>
-        `<option value="${value}"${value === activity ? " selected" : ""}>${value === "all" ? "All activity" : value[0].toUpperCase() + value.slice(1)}</option>`).join("")}</select></label>
+      <label>Timeline cells <select data-timeline-activity>${([
+        ["all", "All cells"], ["actions", "Other actions"], ["movement", "Walking"], ["route", "Routes"],
+        ["work", "Work"], ["dialogue", "Dialogue"], ["meals", "Meals"], ["diary", "Diary entries"],
+        ["waiting", "Waiting"], ["sleeping", "Sleeping"], ["free", "Free actions"],
+        ["rejected", "Rejected actions"], ["events", "Events"], ["milestones", "Milestones"]
+      ] as const).map(([value, label]) =>
+        `<option value="${value}"${value === activity ? " selected" : ""}>${label}</option>`).join("")}</select></label>
       <button type="button" class="button subtle" data-timeline-reset>Full timeline</button>
     </div>` : ""}
     <p class="gantt-help">Location colours show recorded positions. ${chart.turns
@@ -537,6 +585,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       : "Boxes show action time or reserved availability, not model thinking time. Diamonds mark instant or free actions; red diamonds are rejected actions."}
       Hover or focus for details. Scroll sideways to explore.</p>
     ${activity !== "all" && events.length && !chart.rows.some(row => row.spans.some(item => visible(item) && matches(item)))
+      && !(activity === "milestones" && chart.milestones.some(mark => mark.at >= cutoff))
       ? '<p class="gantt-help">No matching activities in this time range.</p>' : ""}
     <div id="gantt-tooltip" class="gantt-tooltip" role="tooltip" hidden></div>
     <div class="gantt-layout">

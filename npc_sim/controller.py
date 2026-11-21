@@ -279,7 +279,7 @@ class Controller:
                 future.set_exception(error)
 
     async def _command(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
-        if name in {"npc_chat", "propose_edit", "approve_edit"}:
+        if name in {"npc_chat", "propose_edit", "approve_edit", "respond_dungeon_appeal"}:
             from npc_sim.interactions import handle
             await handle(self, name, args)
         elif name in {"start", "reset"}:

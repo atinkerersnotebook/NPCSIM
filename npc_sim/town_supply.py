@@ -32,6 +32,16 @@ def _available(lots: list[tuple[int, int | None]], minute: int) -> int:
     return sum(quantity for quantity, expiry in lots if expiry is None or expiry > minute)
 
 
+def _inventory_location(world: WorldState, site: str, product: str) -> str:
+    village = world.village
+    policy = village.economy.config if village and village.economy else None
+    if site != "tavern" or policy is None:
+        return site
+    kitchen_inputs = {ingredient for recipe in policy.recipes.values() for ingredient in recipe.inputs}
+    kitchen_inputs.update(ingredient for plan in policy.meal_plans for ingredient in plan.additional_inputs)
+    return "communal-kitchen" if product in kitchen_inputs and "communal-kitchen" in world.entities else site
+
+
 def report(world: WorldState, config: VillageConfig | None) -> dict[str, Any] | None:
     state = world.village
     if state is None:
@@ -179,7 +189,9 @@ def report(world: WorldState, config: VillageConfig | None) -> dict[str, Any] | 
                         basis="Not enough unreserved inputs at the planned time")
 
     meal_allocations = _meal_allocations(world, config)
-    inventory = [{"location": site, "product": good, "on_hand": stock.get((site, good), 0),
+    inventory = [{"location": _inventory_location(world, site, good),
+                  "accounting_location": site if _inventory_location(world, site, good) != site else None,
+                  "product": good, "on_hand": stock.get((site, good), 0),
                   "usable": usable[site, good], "reserve": reserves.get(site, {}).get(good, 0),
                   "target": targets.get(site, {}).get(good), "projected": projected[site, good],
                   "baseline_projected": baseline[site, good], "forecast_changes": changes[site, good],

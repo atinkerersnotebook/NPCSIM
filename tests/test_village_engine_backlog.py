@@ -1,7 +1,10 @@
+import copy
+
 import pytest
 
 from npc_sim import village, village_extensions, village_life, village_turns
 from npc_sim.dungeon_master import DungeonMasterConfig, DungeonMasterReview, validate_review
+from npc_sim.interactions import resolve_dungeon_appeal
 from npc_sim.models import VillageDayPolicy
 from npc_sim.world import World
 from test_village_expanded import scenario
@@ -19,6 +22,62 @@ def make_world(tmp_path, **policy):
     for agent in value.agents:
         world.bind(agent.id, f"session-{agent.id}")
     return world
+
+
+def test_dungeon_master_appeal_times_out_without_mutating_world(tmp_path):
+    world = make_world(tmp_path)
+    result = act(world, "village_appeal_dungeon_master", request="Please send a cooper", category="resource")
+    assert result["code"] == "DUNGEON_MASTER_ASKED"
+    appeal, = world.state.village.dungeon_appeals
+    assert appeal["status"] == "pending"
+    stock = world.state.village.stocks.copy()
+    village.advance(world, 30)
+    assert appeal["status"] == "timed_out"
+    assert world.state.village.stocks == stock
+    assert any(event.action == "dungeon_master_timeout" for event in world.state.village.events)
+
+
+def test_dungeon_master_resource_reply_can_grant_real_stock(tmp_path):
+    world = make_world(tmp_path)
+    state = world.state.village
+    state.dungeon_appeals.append({
+        "id": "appeal-eggs", "actor": "elsie",
+        "request": "Could you provide 4 more eggs?", "category": "resource",
+        "created_at": state.minute, "expires_at": state.minute + 30,
+        "status": "pending", "response": None,
+    })
+    before = state.stocks["tavern"].get("eggs", 0)
+
+    appeal = resolve_dungeon_appeal(
+        world, "appeal-eggs", "answer", "Add two more eggs in the communal kitchen.")
+
+    assert state.stocks["tavern"]["eggs"] == before + 2
+    assert sum(lot.quantity for lot in state.stock_lots["tavern"]["eggs"]) == before + 2
+    assert appeal["world_changes"] == [{
+        "kind": "stock_grant", "location": "tavern", "product": "eggs", "quantity": 2,
+        "inventory_location_note": "Communal kitchen stock is accounted at the tavern.",
+    }]
+    if state.economy is not None:
+        assert state.economy.movements[-1].kind == "imported"
+        assert state.economy.movements[-1].quantity == 2
+        assert appeal["npc_acknowledgement"].startswith("Thank you, Dungeon Master.")
+        assert appeal["acknowledgement_expires_at"] == state.minute + 5
+
+
+def test_dungeon_master_advice_does_not_grant_stock(tmp_path):
+    world = make_world(tmp_path)
+    state = world.state.village
+    state.dungeon_appeals.append({
+        "id": "appeal-advice", "actor": "elsie",
+        "request": "What should we do?", "category": "resource",
+        "created_at": state.minute, "expires_at": state.minute + 30,
+        "status": "pending", "response": None,
+    })
+    before = copy.deepcopy(state.stocks)
+
+    resolve_dungeon_appeal(world, "appeal-advice", "answer", "Check whether the farm has any eggs first.")
+
+    assert state.stocks == before
 
 
 def test_breakfast_consumes_and_pays_once_without_satisfying_supper(tmp_path):

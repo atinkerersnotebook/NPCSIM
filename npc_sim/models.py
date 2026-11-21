@@ -1213,6 +1213,7 @@ class VillageState(StrictModel):
     dashboard: VillageDashboard | None = None
     time_use: dict[str, VillageTimeUse] = Field(default_factory=dict)
     daily_time_use: dict[int, dict[str, VillageTimeUse]] = Field(default_factory=dict)
+    dungeon_appeals: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class Scenario(StrictModel):

@@ -457,6 +457,16 @@ main{max-width:none}
 .supply-meal-allocations { margin: .75rem 0 1rem; padding: .65rem .8rem; border-left: 3px solid var(--teal); background: #1b3330; }
 .supply-meal-allocations p { margin: 0; }
 .supply-meal-allocations ul { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: .45rem 0 0; padding: 0; list-style: none; }
+.dungeon-appeal-strip { margin: .35rem 0 1rem; border: 1px solid var(--teal); border-radius: 8px; background: var(--panel); overflow: hidden; }
+.dungeon-appeal-strip-title { display: flex; justify-content: space-between; padding: .6rem .85rem; background: #21413b; }
+.dungeon-appeal-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) auto; align-items: center; gap: .8rem; padding: .75rem .85rem; border-top: 1px solid var(--line); }
+.dungeon-appeal-row p { margin: .35rem 0; }
+.dungeon-appeal-row small { color: var(--muted); }
+.dungeon-appeal-row label { display: grid; gap: .2rem; }
+.dungeon-appeal-error { grid-column: 1 / -1; margin: 0; color: var(--orange); }
+.dungeon-appeal-receipt { grid-template-columns: 1fr; background: #172722; }
+.dungeon-appeal-acknowledgement { color: var(--teal); }
+@media (max-width: 800px) { .dungeon-appeal-row { grid-template-columns: 1fr; } }
 .supply-columns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .4rem; text-align: center; }
 .supply-columns li { display: flex; flex-direction: column; align-items: center; gap: .3rem; }
 .supply-column { width: min(80%, 4rem); height: 7rem; border: 1px solid var(--supply-border); }

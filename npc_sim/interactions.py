@@ -1,6 +1,6 @@
 import copy
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 from pydantic import Field, field_validator, model_validator
@@ -43,6 +43,13 @@ class ApprovalRequest(StrictModel):
     proposal_id: str
 
 
+class DungeonAppealResponse(StrictModel):
+    run_id: str
+    appeal_id: str
+    response: Literal["answer", "decline"]
+    text: str = Field(default="", max_length=1000)
+
+
 class NpcReply(StrictModel):
     answer: str = Field(min_length=1, max_length=8000)
 
@@ -65,6 +72,103 @@ class WorldEditPlan(StrictModel):
         if not self.additions and not self.secondary_goals:
             raise ValueError("A proposal must add objects or verifiable side goals.")
         return self
+
+
+_NUMBER_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12, "sixteen": 16,
+}
+
+
+def _appeal_stock_grant(world: "World", text: str, request: str) -> tuple[str, int, str] | None:
+    match = re.fullmatch(
+        r"\s*(?:add|provide|give|grant)\s+(?P<quantity>\d+|one|two|three|four|five|six|seven|eight|nine|ten|twelve|sixteen)"
+        r"(?:\s+more)?\s+(?P<product>[a-z][a-z -]*?)\s+(?:to|at|in|into)\s+(?:the\s+)?"
+        r"(?P<location>[a-z][a-z -]*?)\s*[.!]?\s*", text, re.IGNORECASE)
+    if match is None:
+        return None
+    state = world.state.village
+    if state is None:
+        raise ValueError("The active village is unavailable.")
+    quantity_text = match.group("quantity").lower()
+    quantity = int(quantity_text) if quantity_text.isdigit() else _NUMBER_WORDS[quantity_text]
+    if quantity < 1 or quantity > 100:
+        raise ValueError("DM stock grants must contain between 1 and 100 units.")
+    base = world.scenario.village
+    products = set(base.spoil_after)
+    products.update(product for stock in base.stocks.values() for product in stock)
+    products.update(product for stock in state.stocks.values() for product in stock)
+    if state.economy is not None and state.economy.config is not None:
+        policy = state.economy.config
+        products.update(policy.prices.keys())
+        products.update(product for recipe in policy.recipes.values() for product in recipe.inputs)
+        products.update(product for plan in policy.meal_plans for product in plan.additional_inputs)
+        for configured in (policy.reserve_targets, policy.production_targets, policy.stock_capacities):
+            products.update(product for stock in configured.values() for product in stock)
+    product_text = "-".join(match.group("product").lower().split())
+    singular = product_text[:-1] if product_text.endswith("s") else product_text
+    request_terms = set(re.findall(r"[a-z]+", request.lower().replace("-", " ")))
+    if product_text.replace("-", " ") in request.lower() or singular in request_terms:
+        products.update((product_text, singular))
+    product = product_text if product_text in products else singular if singular in products else product_text
+    if product not in products:
+        raise ValueError(f"Unknown village product: {product_text.replace('-', ' ')}.")
+    location_text = "-".join(match.group("location").lower().replace("'", "").split())
+    aliases = {
+        "communal-kitchen": "tavern",
+        "elsies-communal-kitchen": "tavern",
+        "elsies-tavern": "tavern",
+        "adas-farm": "farm",
+        "nellas-general-store": "general-store",
+    }
+    location = aliases.get(location_text, location_text)
+    if location not in state.stocks:
+        raise ValueError(f"Unknown stock location: {location_text.replace('-', ' ')}.")
+    return location, quantity, product
+
+
+def resolve_dungeon_appeal(world: "World", appeal_id: str, response: str, text: str) -> dict[str, Any]:
+    if world.state.village is None:
+        raise ValueError("The active village is unavailable.")
+    appeal = next((item for item in world.state.village.dungeon_appeals
+                   if item["id"] == appeal_id), None)
+    if appeal is None or appeal["status"] != "pending":
+        raise ValueError("Choose a pending Dungeon Master appeal.")
+    if appeal["expires_at"] <= world.state.village.minute:
+        appeal["status"] = "timed_out"
+        world.save()
+        raise ValueError("This appeal has timed out.")
+    if response == "answer" and not text.strip():
+        raise ValueError("Enter a reply or decline the appeal.")
+    grant = _appeal_stock_grant(world, text, appeal["request"]) \
+        if response == "answer" and appeal["category"] == "resource" else None
+    if grant is not None:
+        location, quantity, product = grant
+        from npc_sim import village_goods
+        village_goods.put(world, location, product, quantity, kind="imported")
+        appeal["world_changes"] = [{
+            "kind": "stock_grant", "location": location, "product": product, "quantity": quantity,
+            "inventory_location_note": "Communal kitchen stock is accounted at the tavern."
+            if location == "tavern" and "communal kitchen" in text.lower() else None,
+        }]
+    appeal["status"] = "answered" if response == "answer" else "declined"
+    appeal["response"] = text.strip() or None
+    if response == "decline":
+        appeal["npc_acknowledgement"] = "I understand, Dungeon Master. I will continue with the village's ordinary work."
+    elif grant is not None:
+        location, quantity, product = grant
+        appeal["npc_acknowledgement"] = (
+            f"Thank you, Dungeon Master. I see the {quantity} {product} at "
+            f"{world.state.entities[location].name}, and I will put them to use.")
+    else:
+        appeal["npc_acknowledgement"] = "Thank you, Dungeon Master. I will follow your guidance."
+    appeal["acknowledgement_expires_at"] = world.state.village.minute + 5
+    person = world.state.village.residents.get(appeal["actor"])
+    if person is not None:
+        person.available_at = min(person.available_at, world.state.village.minute)
+    world.state.revision += 1
+    world.save()
+    return copy.deepcopy(appeal)
 
 
 def validate_edit(world: "World", plan: WorldEditPlan) -> None:
@@ -242,10 +346,16 @@ def visitor_context(snapshot: dict[str, Any], actor_id: str) -> tuple[dict[str, 
 
 async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> None:
     request = (ChatRequest.model_validate(args) if name == "npc_chat" else
-               EditRequest.model_validate(args) if name == "propose_edit" else ApprovalRequest.model_validate(args))
+               EditRequest.model_validate(args) if name == "propose_edit" else
+               DungeonAppealResponse.model_validate(args) if name == "respond_dungeon_appeal"
+               else ApprovalRequest.model_validate(args))
     from npc_sim.controller import TERMINAL
 
-    await prepare(controller, request.run_id, allow_ended=isinstance(request, ChatRequest))
+    persisted_appeal = isinstance(request, DungeonAppealResponse)
+    await prepare(controller, request.run_id,
+                  allow_ended=isinstance(request, ChatRequest) or persisted_appeal)
+    if persisted_appeal and controller.world is None:
+        await controller._connect_saved_world()
     world, run = controller.world, controller.run
     if run is None:
         raise ValueError("No current adventure.")
@@ -300,6 +410,21 @@ async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> N
             if saved:
                 saved["observation"] = fresh
             controller.emit("npc_chat", {**exchange, **metadata, "private": True}, request.actor_id)
+        elif isinstance(request, DungeonAppealResponse):
+            if world is None:
+                raise ValueError("The active village is unavailable.")
+            tool = world.manifest.get("dungeon_master_appeal_response")
+            if not tool or tool not in world.tools:
+                raise ValueError("This world does not support Dungeon Master appeal responses.")
+            appeal = await world.call(tool, {
+                "appeal_id": request.appeal_id, "response": request.response, "text": request.text})
+            controller.emit("dungeon_master_appeal_resolved", appeal, appeal["actor"])
+            if appeal["actor"] in controller.agents:
+                memory = controller.agents[appeal["actor"]]["memory"]
+                memory.setdefault("operator_conversation", []).append({
+                    "question": appeal["request"],
+                    "answer": appeal["response"] or "No intervention was granted. Continue ordinary work.",
+                    "npc_acknowledgement": appeal["npc_acknowledgement"]})
         elif isinstance(request, EditRequest):
             if world is None:
                 raise ValueError("No active world.")

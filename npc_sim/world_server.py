@@ -10,7 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from npc_sim.models import Scenario
 from npc_sim.storage import read_json
 from npc_sim.world import World
-from npc_sim.interactions import WorldEditPlan, apply_edit, validate_edit
+from npc_sim.interactions import WorldEditPlan, apply_edit, resolve_dungeon_appeal, validate_edit
 
 
 def main() -> None:
@@ -68,6 +68,7 @@ def main() -> None:
             "actor_selection": "world_select_actor",
             "admin_intervention": "world_apply_edit",
             "admin_validate_intervention": "world_validate_edit",
+            "dungeon_master_appeal_response": "world_resolve_dungeon_appeal",
             "village_scheduler": "world_next_village_actor"
             if world.scenario.village and world.scenario.village.time_based_turns else None,
             "village_full_rules": bool(world.scenario.village and world.scenario.village.expanded_rules),
@@ -110,6 +111,12 @@ def main() -> None:
     def world_apply_edit(request_id: str, expected_revision: str, plan: dict[str, Any]) -> dict[str, Any]:
         """Apply only the local operator's approved, revision-checked intervention."""
         return apply_edit(world, request_id, expected_revision, WorldEditPlan.model_validate(plan))
+
+    @server.tool()
+    def world_resolve_dungeon_appeal(appeal_id: str, response: str, text: str = "") -> dict[str, Any]:
+        """Resolve a pending operator-visible appeal without granting world changes."""
+        with world._lock:
+            return resolve_dungeon_appeal(world, appeal_id, response, text)
 
     stopped = threading.Event()
 

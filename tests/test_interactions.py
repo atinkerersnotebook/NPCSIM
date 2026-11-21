@@ -2,6 +2,7 @@ import copy
 import json
 import shutil
 from pathlib import Path
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -454,5 +455,53 @@ async def test_followups_work_after_restart_without_reopening_world_and_remain_p
             await restored.command("npc_chat", {**request, "actor_id": "foreign"})
         with pytest.raises(ValueError, match="active adventure"):
             await restored.command("npc_chat", {**request, "run_id": "older-run"})
+    finally:
+        await restored.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_dungeon_master_appeal_response_reconnects_finished_world(configuration, monkeypatch):
+    data, config = configuration
+    config.world.scenario = "millhaven-generation-17"
+    controller = Controller(ROOT, data, config)
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        actor_id = controller.run["actor_id"]
+        saved_path = controller.world.state_path
+        saved = read_json(saved_path)
+        minute = saved["village"]["minute"]
+        appeal = {
+            "id": "appeal-response-after-restart", "actor": actor_id,
+            "request": "May we ask for a dry route?", "category": "help",
+            "created_at": minute, "expires_at": minute + 30,
+            "status": "pending", "response": None,
+        }
+        saved["village"]["dungeon_appeals"].append(appeal)
+        saved["revision"] += 1
+        from npc_sim.storage import write_json
+        write_json(saved_path, saved)
+        controller.run["status"] = "error"
+        controller.run["reason"] = "Interrupted by process restart."
+        controller.checkpoint()
+        run_id = controller.run["id"]
+    finally:
+        await controller.shutdown()
+
+    restored = Controller(ROOT, data, config)
+    await restored.start_worker()
+    monkeypatch.setattr(restored, "assess_completion", AsyncMock())
+    try:
+        assert restored.world is None
+        result = await restored.command("respond_dungeon_appeal", {
+            "run_id": run_id, "appeal_id": appeal["id"],
+            "response": "answer", "text": "Use the existing dry route.",
+        })
+        saved = result["world"]["village"]["dungeon_appeals"][0]
+        assert saved["status"] == "answered"
+        assert saved["response"] == "Use the existing dry route."
+        assert result["memory"]["operator_conversation"][-1] == {
+            "question": appeal["request"], "answer": "Use the existing dry route.",
+            "npc_acknowledgement": "Thank you, Dungeon Master. I will follow your guidance."}
     finally:
         await restored.shutdown()

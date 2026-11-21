@@ -1162,6 +1162,26 @@ function timelineObservation(minute: number, location = "cottages", available = 
     village: { minute, personal: { available_at: available } } };
 }
 
+test("resolved Dungeon Master appeals appear in the actor timeline with world changes", () => {
+  const state = expanded();
+  state.world!.village!.minute = 510;
+  const event = timelineEvent(1, "dungeon_master_appeal_resolved", 500, {
+    id: "appeal-eggs", actor: "elsie", request: "Please provide 4 more eggs.", category: "resource",
+    created_at: 480, expires_at: 510, status: "answered", response: "Add two eggs to the communal kitchen.",
+    npc_acknowledgement: "Thank you, Dungeon Master. I see the 2 eggs and will put them to use.",
+    world_changes: [{ kind: "stock_grant", location: "tavern", product: "eggs", quantity: 2,
+      inventory_location_note: "Communal kitchen stock is accounted at the tavern." }]
+  }, "elsie");
+  const projected = timelineEventProjection(event)!;
+  const row = buildWorldTimeline(state, [projected], monitoredAgents(state))!.rows.find(item => item.id === "elsie")!;
+  const appeal = row.spans.find(span => span.label === "Dungeon Master answered")!;
+  assert.match(appeal.detail, /elsie asked: Please provide 4 more eggs\./);
+  assert.match(appeal.detail, /Reply: Add two eggs to the communal kitchen\./);
+  assert.match(appeal.detail, /elsie: Thank you, Dungeon Master\./);
+  assert.match(appeal.detail, /World change: added 2 eggs at tavern\./);
+  assert.equal(appeal.activity, "dialogue");
+});
+
 test("World now only reports completed moves and labels a stopped snapshot", () => {
   const state = expanded();
   state.run!.status = "running";
@@ -1831,6 +1851,33 @@ test("Gantt meal filter highlights eating and greys out all other actions", () =
   assert.ok(markup.includes('data-gantt-title="Forge work"'));
   assert.match(markup, /gantt-bar action is-filtered-out/);
   assert.ok(markup.includes("is-filtered-out"));
+});
+
+test("Gantt diary cells contain the authored note and diary can be filtered like every cell type", () => {
+  const state = expanded();
+  state.world!.village!.minute = 510;
+  const events = [
+    timelineEvent(1, "observation", 480, timelineObservation(480)),
+    timelineEvent(2, "action_request", 495, { request_id: "diary", action_id: "village_write_diary",
+      arguments: { text: "The workshop had ten herbs & no spare stock.",
+        problems: "The seedling-tie trial still lacks herbs.",
+        suggestions: "Check reserves before using any research herbs." } }),
+    timelineEvent(3, "action_result", 495, { request_id: "diary", outcome: "APPLIED", code: "DIARY_WRITTEN",
+      explanation: "Wrote a private diary note for a future successor.",
+      observation: timelineObservation(495, "cottages", 500) })
+  ];
+  const markup = worldGanttMarkup(state, events, monitoredAgents(state), {
+    activity: "diary", linkResidents: true
+  });
+  assert.match(markup, /data-gantt-title="Diary"/);
+  assert.match(markup, /The workshop had ten herbs &amp; no spare stock\./);
+  assert.match(markup, /Problems: The seedling-tie trial still lacks herbs\./);
+  assert.match(markup, /Suggestions: Check reserves before using any research herbs\./);
+  assert.match(markup, /<option value="diary" selected>Diary entries<\/option>/);
+  for (const type of ["actions", "movement", "route", "work", "dialogue", "meals", "diary",
+    "waiting", "sleeping", "free", "rejected", "events", "milestones"]) {
+    assert.ok(markup.includes(`value="${type}"`), type);
+  }
 });
 
 test("Gantt cells show recorded quantities, duration and clock range with escaped summaries", () => {

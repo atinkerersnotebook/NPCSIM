@@ -20,6 +20,7 @@ import { startTownSupply } from "./town-supply";
 import { conditionText } from "./secondary-goals";
 import { savedEpisodesMarkup } from "./episode-saves";
 import { escape } from "./html";
+import { renderDungeonAppeal } from "./dungeon-appeal";
 import "./style.css";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -623,6 +624,7 @@ function renderDungeonMaster(): void {
     config.capabilities.includes("review_progress") ? "HYBRID / AI + WORLD" : "WORLD RULES ONLY" : "DISABLED FOR EPISODE") :
     state?.run ? "LEGACY EPISODE / NO SUPERVISOR" : "NEXT EPISODE";
   updateReadingPane(element("dungeon-master-rulings"), dungeonMasterMarkup(events));
+  renderDungeonAppeal(state, failure => notice(errorMessage(failure)));
 }
 
 function renderBakery(): void {
@@ -1569,6 +1571,7 @@ element("save-dungeon-master").addEventListener("click", () => {
     finally { button.disabled = false; }
   })();
 });
+
 element("save-clock").addEventListener("click", () => {
   const input = element<HTMLInputElement>("clock-rate");
   if (!input.reportValidity() || busy) return;

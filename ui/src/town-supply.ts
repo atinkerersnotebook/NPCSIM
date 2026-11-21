@@ -2,6 +2,7 @@ import { z } from "zod";
 import { escape } from "./html.ts";
 import { dashboardHeader, dashboardWorldSummary, simulationClock, trackDashboardHeader, villageClockTime } from "./view-mode.ts";
 import { sectionTabPanel, sectionTabs } from "./section-tabs.ts";
+import { renderDungeonAppeal } from "./dungeon-appeal.ts";
 
 const quantity = z.number().int().nonnegative();
 const text = z.string();
@@ -17,6 +18,7 @@ export const townSupplySchema = z.object({
   title: text, revision: quantity, minute: quantity, horizons: checkpoints,
   sites: names, residents: names, fixtures: names,
   inventory: z.array(z.object({ location: text, product: text, on_hand: quantity, usable: quantity,
+    accounting_location: text.nullable().optional(),
     reserve: quantity, target: dated, projected: checkpoints, baseline_projected: checkpoints.optional(),
     forecast_changes: z.tuple([forecastChange, forecastChange, forecastChange]).optional(),
     meal_allocations: z.object({ prepared: quantity, unallocated: quantity,
@@ -400,6 +402,8 @@ export function startTownSupply(app: HTMLDivElement): void {
     if (summary.innerHTML !== heading) summary.innerHTML = heading;
     tools.hidden = !snapshot;
     if (snapshot) {
+      void fetch("/api/state").then(response => response.ok ? response.json() : null)
+        .then(payload => { if (payload) renderDungeonAppeal(payload); });
       const sites = Object.entries(snapshot.sites).sort((a, b) => a[1].localeCompare(b[1]));
       setOptions(locationFilter, [["", "All locations"], ...sites]);
     }

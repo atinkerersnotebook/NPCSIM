@@ -45,6 +45,17 @@ class VillageDailyMenu(EconomyModel):
     recipe_portions: dict[str, Quantity]
 
 
+class VillageDungeonAppeal(EconomyModel):
+    id: str
+    actor: str
+    request: str = Field(min_length=5, max_length=500)
+    category: Literal["help", "resource", "event"]
+    created_at: Minute
+    expires_at: Minute
+    status: Literal["pending", "answered", "declined", "timed_out"] = "pending"
+    response: str | None = Field(default=None, max_length=1000)
+
+
 class VillageEconomyConfig(EconomyModel):
     innkeeper: str = "elsie"
     recipes: dict[str, VillageRecipe] = Field(default_factory=lambda: {

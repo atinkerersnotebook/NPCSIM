@@ -18,6 +18,26 @@ def town(tmp_path):
     return scenario, world
 
 
+def test_communal_kitchen_inputs_are_displayed_at_the_physical_kitchen(tmp_path):
+    scenario, world = town(tmp_path)
+    state = world.state.village
+    kitchen = world.state.entities["tavern"].model_copy(deep=True)
+    kitchen.name = "Communal Kitchen"
+    world.state.entities["communal-kitchen"] = kitchen
+    state.stocks["tavern"]["eggs"] = 6
+    state.stock_lots.setdefault("tavern", {})["eggs"] = [
+        VillageStockLot(quantity=6, produced_at=state.minute)]
+    state.economy.config.meal_plans[0].additional_inputs = {"eggs": 16}
+
+    snapshot = report(world.state, scenario.village)
+    row = next(item for item in snapshot["inventory"]
+               if item["product"] == "eggs" and item["accounting_location"] == "tavern")
+
+    assert row["location"] == "communal-kitchen"
+    assert row["accounting_location"] == "tavern"
+    assert row["on_hand"] == row["usable"] == 6
+
+
 def test_forecast_does_not_double_count_batches_or_allocate_expired_or_reserved_stock(tmp_path):
     scenario, world = town(tmp_path)
     state = world.state.village

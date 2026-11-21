@@ -407,6 +407,14 @@ const villageStateSchema = z.object({
     evidence: z.array(z.number().int().nonnegative())
   })),
   events: z.array(villageEventSchema), breakdown: z.boolean(), repaired: z.boolean(),
+  dungeon_appeals: z.array(z.object({ id: z.string(), actor: z.string(), request: z.string(),
+    category: z.enum(["help", "resource", "event"]), created_at: z.number().int().nonnegative(),
+    expires_at: z.number().int().nonnegative(), status: z.enum(["pending", "answered", "declined", "timed_out"]),
+    response: z.string().nullable(), npc_acknowledgement: z.string().optional(),
+    acknowledgement_expires_at: z.number().int().nonnegative().optional(),
+    world_changes: z.array(z.object({ kind: z.string(), location: z.string(), product: z.string(),
+      quantity: z.number().int().nonnegative(), inventory_location_note: z.string().nullable().optional() })).optional()
+  })).default([]),
   travel_events: z.array(z.object({
     actor: z.string(), origin: z.string(), destination: z.string(), edge: z.string(),
     started_at: z.number().int().nonnegative(), ended_at: z.number().int().nonnegative(),

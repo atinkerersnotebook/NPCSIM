@@ -692,6 +692,12 @@ def advance(world: "World", minutes: int) -> None:
             from npc_sim import village_extensions
             village_extensions.account_time(world, 5)
         state.minute += 5
+        for appeal in state.dungeon_appeals:
+            if appeal["status"] == "pending" and appeal["expires_at"] <= state.minute:
+                appeal["status"] = "timed_out"
+                event(world, appeal["actor"], "dungeon_master_timeout", appeal["id"],
+                      "No Dungeon Master intervention arrived; continue ordinary work.",
+                      world.state.actors[appeal["actor"]].location_id)
         if (config.ai_controlled and config.expanded_rules and state.economy
                 and state.economy.config and state.minute % 1440 == config.residents[
                     state.economy.config.innkeeper].wake_minute + 5):

@@ -16,7 +16,7 @@ from npc_sim.models import AgentProfile, AppConfig, BudgetExtension, ClockReques
 from npc_sim.storage import StoryStore, read_json, write_json
 from npc_sim.agents import default_profile_id, load_profiles, save_profile, slots
 from npc_sim.dungeon_master import DungeonMasterConfig, load_config as load_dungeon_master
-from npc_sim.interactions import ApprovalRequest, ChatRequest, EditRequest
+from npc_sim.interactions import ApprovalRequest, ChatRequest, DungeonAppealResponse, EditRequest
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -234,9 +234,10 @@ async def need_toggle(actor_id: str, need: str, body: NeedToggle, request: Reque
         raise HTTPException(409, str(error)) from error
 
 @app.post("/api/interactions/{operation}")
-async def interact(operation: str, body: ChatRequest | EditRequest | ApprovalRequest, request: Request) -> dict[str, Any]:
+async def interact(operation: str, body: ChatRequest | EditRequest | ApprovalRequest | DungeonAppealResponse, request: Request) -> dict[str, Any]:
     commands = {"chat": ("npc_chat", ChatRequest), "propose": ("propose_edit", EditRequest),
-                "approve": ("approve_edit", ApprovalRequest)}
+                "approve": ("approve_edit", ApprovalRequest),
+                "appeal-response": ("respond_dungeon_appeal", DungeonAppealResponse)}
     if operation not in commands:
         raise HTTPException(404, "Unknown interaction.")
     command, expected = commands[operation]

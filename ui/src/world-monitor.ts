@@ -2,6 +2,7 @@ import { eventSchema, stateSchema } from "./contracts.ts";
 import type { RunEvent, State } from "./contracts.ts";
 import { timelineEventProjection, worldGanttMarkup } from "./world-gantt.ts";
 import type { GanttActivity, GanttScale } from "./world-gantt.ts";
+import { renderDungeonAppeal } from "./dungeon-appeal.ts";
 import { slotLabel } from "./agent-profiles.ts";
 import { actorPerspective } from "./world-view.ts";
 import { canReopenAdventure, simulationClock, villageClockText, villageClockTime, dashboardHeader, dashboardWorldSummary, trackDashboardHeader } from "./view-mode.ts";
@@ -305,6 +306,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   const draw = () => {
     frame = null;
     if (!state || sceneDrag) return;
+    renderDungeonAppeal(state);
     historyReady ||= seen.size >= state.event_count;
     const old = content.querySelector<HTMLDivElement>("#monitor-timeline:not([hidden]) .gantt-scroll");
     const viewportWidth = old?.clientWidth || content.clientWidth - (window.matchMedia("(max-width: 700px)").matches ? 102 : 132);
@@ -533,8 +535,11 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   content.addEventListener("change", event => {
     const select = event.target;
     if (!(select instanceof HTMLSelectElement) || !select.hasAttribute("data-timeline-activity")) return;
-    if (select.value === "all" || select.value === "movement" || select.value === "work"
-      || select.value === "dialogue" || select.value === "meals") {
+    if (select.value === "all" || select.value === "actions" || select.value === "movement"
+      || select.value === "route" || select.value === "work" || select.value === "dialogue"
+      || select.value === "meals" || select.value === "diary" || select.value === "waiting"
+      || select.value === "sleeping" || select.value === "free" || select.value === "rejected"
+      || select.value === "events" || select.value === "milestones") {
       activity = select.value;
       schedule();
     }
