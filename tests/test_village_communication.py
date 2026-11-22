@@ -140,6 +140,11 @@ def test_post_read_encounter_secondhand_and_repeat_suppression(world):
     guard = actor(world, "garrick", "village-square")
     read(guard)
     first = known(world, "garrick", nid).model_copy(deep=True)
+    learned = world.state.village.events[-1]
+    assert learned.action == "notice_read"
+    assert "Two flour for real bakery work" in learned.result
+    assert "Quantity: 2" in learned.result
+    assert "Status: posted; version 1" in learned.result
     assert comm.candidates(guard, "jory") == []  # Author already knows.
     actor(world, "mara", "watermill")
     assert comm.apply(guard, "village_notice_tell", {

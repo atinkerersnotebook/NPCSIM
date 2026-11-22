@@ -551,6 +551,26 @@ def test_pending_local_maintenance_prevents_an_idle_wait(tmp_path):
     assert act(world, "village_maintain", job=job)["outcome"] == "APPLIED"
 
 
+def test_public_work_candidate_handles_unreached_worksite(tmp_path):
+    world = make_world(tmp_path, living=True)
+    state = world.state.village
+    policy = state.economy.config
+    from npc_sim.village_economy_models import VillagePublicCraft, VillagePublicWork
+    policy.town_treasury = 100
+    policy.public_crafts = {"planks": VillagePublicCraft(
+        supplier="rowan", product="planks", inputs={"timber": 1}, output_quantity=2)}
+    policy.public_works = [VillagePublicWork(
+        id="bridge-rails", title="Bridge rails", location="tavern-yard", workers=["rowan"],
+        materials={"planks": 2}, starts_at=state.minute, due_at=state.minute + 300)]
+    state.stocks.setdefault("tavern-yard", {})["planks"] = 2
+    state.economy.public_work_progress["bridge-rails"] = {}
+    state.residents["rowan"].fallback.daily_plans.append({"day": state.minute // 1440})
+    world.actor.location_id = "woods"
+
+    choices = village_fallback.candidates(world)
+    assert isinstance(choices, list)
+
+
 def test_idle_elsie_returns_to_tavern_before_waiting(tmp_path):
     world = make_world(tmp_path, minute=390, living=True)
     elsie = world.bind("elsie", "session-elsie")

@@ -686,8 +686,15 @@ class Controller:
         )
         actor_selection_recovery = (
             previous_status == "error"
+            and self.run.get("reason") in {
+                "MCP tool world_select_actor failed: Error executing tool world_select_actor: 'status'",
+                "MCP tool world_select_actor failed: Error executing tool world_select_actor: name 'location' is not defined",
+            })
+        restart_recovery = (
+            previous_status == "error"
             and self.run.get("reason") ==
-            "MCP tool world_select_actor failed: Error executing tool world_select_actor: 'status'")
+            "Interrupted by process restart; inspect saved requests before starting a fresh episode."
+        )
         premature = (previous_status == "succeeded" and analysis.get("status") == "completed"
                      and analysis.get("verdict") == "fail")
         last_ruling = next((event["payload"] for event in reversed(self.events.events)
@@ -698,7 +705,7 @@ class Controller:
                                  and last_ruling.get("verdict") == "defeat")
         if self.run["goal"]["type"] != "village_restored" or not (
                 premature or timeout_recovery or scheduler_recovery or actor_selection_recovery
-                or daily_defeat_recovery):
+                or restart_recovery or daily_defeat_recovery):
             raise ValueError("Only a prematurely completed village adventure, a recoverable daily-village AI defeat, "
                              "or a confirmed recoverable world error can be reopened.")
         config = AppConfig.model_validate(self.run["config"]).world
@@ -707,13 +714,24 @@ class Controller:
         retry_actor = None
         stop_at_minute = None
         recovered_action = None
-        if timeout_recovery or scheduler_recovery or actor_selection_recovery or request.until_midnight:
+        if timeout_recovery or scheduler_recovery or actor_selection_recovery or restart_recovery or request.until_midnight:
             state_path = self.data / "worlds" / self.run["world_id"] / "world-state.json"
             saved_world = WorldState.model_validate(read_json(state_path))
             if saved_world.world_id != self.run["world_id"] or saved_world.village is None:
                 raise ValueError("The saved village identity does not match this adventure.")
             if request.until_midnight:
                 stop_at_minute = (saved_world.village.minute // 1440 + 1) * 1440
+            if restart_recovery:
+                results = {event["payload"]["request_id"] for event in self.events.events
+                           if event["kind"] == "action_result"}
+                pending = any(event["payload"]["request_id"] not in results for event in self.events.events
+                              if event["kind"] == "action_request")
+                last_action = next((event for event in reversed(self.events.events)
+                                    if event["kind"] == "action_result"), None)
+                if (pending or last_action is None or last_action.get("free_action")
+                        or last_action["payload"]["observation"]["observation_revision"]
+                        != f"obs-{saved_world.revision}"):
+                    raise ValueError("The interrupted episode is not at a confirmed durable action boundary.")
             if actor_selection_recovery:
                 results = {event["payload"]["request_id"] for event in self.events.events
                            if event["kind"] == "action_result"}

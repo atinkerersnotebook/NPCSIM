@@ -1182,6 +1182,30 @@ test("resolved Dungeon Master appeals appear in the actor timeline with world ch
   assert.equal(appeal.activity, "dialogue");
 });
 
+test("daily plans show concise production jobs and supply needs", () => {
+  const state = expanded();
+  state.world!.village!.minute = 335;
+  state.world!.village!.events.push({ minute: 330, actor: "elsie", action: "daily_plan", target: "tavern",
+    result: "Planned two requirements.", witnesses: ["elsie"], details: {
+      planning_days: 2,
+      component_lines: [{ day: 1, output: "breakfast meals", quantity: 16,
+        for: ["12 residents and 4 visitors"], order_ids: [], components: [
+          { product: "eggs", required: 16, on_hand: 16, confirmed_incoming: 0, shortfall: 0,
+            source: "inventory", supplier: "ada", confirmation: null },
+          { product: "fish", required: 8, on_hand: 0, confirmed_incoming: 0, shortfall: 8,
+            source: "needs_order", supplier: "finn", confirmation: null }
+        ] }]
+    } });
+  const row = buildWorldTimeline(state, [], monitoredAgents(state))!.rows.find(item => item.id === "elsie")!;
+  const plan = row.spans.find(span => span.activity === "planning")!;
+  assert.match(plan.detail, /Day 1: 16 breakfast meals for 12 residents and 4 visitors/);
+  assert.match(plan.detail, /Ready: 16 eggs from ada/);
+  assert.match(plan.detail, /Needs order: 8 fish from finn/);
+  assert.doesNotMatch(plan.detail, /Calculations:|Assumptions:|inventory \/ ada/);
+  const markup = worldGanttMarkup(state, [], monitoredAgents(state));
+  assert.match(markup, /class="gantt-marker  activity-planning"/);
+});
+
 test("World now only reports completed moves and labels a stopped snapshot", () => {
   const state = expanded();
   state.run!.status = "running";

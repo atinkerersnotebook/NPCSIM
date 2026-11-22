@@ -2055,9 +2055,11 @@ def production_batch_limit(world: "World", action: str, *, personal: bool = Fals
         stock = usable_stock(world, location, product, due)
         if product == "meals" and location == world.scenario.village.residents[policy.innkeeper].work:
             recipe = cooking_fish_product(world) if action == "village_cook_fish" else "bread"
-            recipe_demand = sum(plan["unmet_recipe_portions"].get(recipe, 0)
-                                for plan in meal_requirements(world)
-                                if now >= _service_preparation_at(world, plan) - policy.cooking_lead_minutes)
+            recipe_demand = sum(
+                plan["unmet_recipe_portions"].get(recipe, 0)
+                + (plan["inputs"].get(recipe, 0) if action == "village_cook_fish" else 0)
+                for plan in meal_requirements(world)
+                if now >= _service_preparation_at(world, plan) - policy.cooking_lead_minutes)
             limits.append(ceil(recipe_demand / amount))
         committed = sum(person.life.work.outputs.get(product, 0)
                         for person in world.state.village.residents.values()
@@ -2131,7 +2133,13 @@ def production_blocker(world: "World", action: str, *, personal: bool = False) -
                            if lot.expires_at is not None
                            and world.state.village.minute < lot.expires_at <= next_breakfast)
             available = fresh + expiring - required
-            if available < inputs["bread"]:
+            fish_for_due_supper = action == "village_cook_fish" and any(
+                plan["id"].endswith(":supper")
+                and plan["inputs"].get("fish", 0) > 0
+                and _service_preparation_at(world, plan) - policy.cooking_lead_minutes
+                    <= world.state.village.minute <= plan["due"]
+                for plan in meal_requirements(world))
+            if available < inputs["bread"] and not fish_for_due_supper:
                 return ("BREAKFAST_BREAD_RESERVED",
                         "Keep tomorrow's fresh breakfast bread at the tavern; cook supper from surplus inputs.")
     reserves = policy.reserve_targets.get(location, {})

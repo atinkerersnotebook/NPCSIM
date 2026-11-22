@@ -353,6 +353,9 @@ main{max-width:none}
 .gantt-filters button[aria-pressed="true"] { background: #25423d; color: var(--teal); border-color: var(--teal); }
 .world-gantt .is-filtered-out { opacity: .18; filter: grayscale(1); }
 .world-gantt :is(.gantt-bar, .gantt-marker):is(:hover, :focus) { opacity: 1; filter: none; }
+.world-gantt .activity-planning > rect { fill: #fff0a8; stroke: #f3c84b; stroke-width: 1.5; }
+.world-gantt .activity-planning text { fill: #4f3b00; }
+.world-gantt .gantt-marker.activity-planning path { fill: #ffd75e; stroke: #f3c84b; stroke-width: 1.5; }
 .gantt-selected-lane { stroke: var(--teal); stroke-width: 2; fill: #7edcca18; pointer-events: none; }
 .gantt-name-row.is-selected, .monitor-agent:has(.monitor-resident-link[aria-pressed="true"]) { background: #25423d; box-shadow: inset 3px 0 var(--teal); }
 .monitor-agent:has(.monitor-resident-link[aria-pressed="true"]) { padding-inline: .75rem; }
@@ -405,6 +408,20 @@ main{max-width:none}
 .dashboard-page .monitor-clock { max-width: 100%; background: #102122; border: 1px solid var(--dashboard-border); border-radius: .75rem; padding: .65rem 1rem; white-space: normal; }
 .dashboard-page .monitor-clock[hidden] { display: none; }
 .dashboard-page .monitor-clock strong { font-size: clamp(1.65rem, 3vw, 2.25rem); }
+.dashboard-page .monitor-clock { min-width: 150px; }
+.monitor-time-cards { display: flex; align-items: stretch; justify-content: flex-end; gap: .75rem; max-width: 100%; }
+.monitor-time-cards .action-speedometer { margin: 0; min-width: 210px; padding: .65rem 1rem; border: 1px solid var(--dashboard-border); border-top: 1px solid var(--dashboard-border); border-radius: .75rem; background: #102122; }
+.action-speedometer { margin-top: .6rem; padding-top: .55rem; border-top: 1px solid var(--dashboard-border); display: grid; grid-template-columns: auto 128px; align-items: center; gap: .15rem .65rem; min-width: 0; }
+.action-speedometer > div { display: flex; flex-direction: column; align-items: flex-start; }
+.action-speedometer strong { color: var(--teal); font: 700 1.35rem Consolas, monospace; }
+.action-speedometer svg { width: 128px; height: 38px; overflow: visible; }
+.action-speedometer small { grid-column: 1 / -1; color: var(--muted); font-size: .68rem; text-align: right; }
+.speedometer-history rect { fill: #68c7b8; }
+.speedometer-history text { fill: var(--muted); font: 6px "Segoe UI", sans-serif; }
+.speedometer-axis { stroke: #355a57; stroke-width: 1; }
+.action-speedometer.slow .speedometer-history rect { fill: #efad63; }
+.action-speedometer.stalled .speedometer-history rect { fill: #ef7169; }
+@media(max-width:700px) { .action-speedometer { grid-template-columns: auto minmax(100px, 128px); } .monitor-time-cards { align-items: stretch; flex-wrap: wrap; } .monitor-time-cards .action-speedometer { flex: 1 1 180px; min-width: 0; } .monitor-time-cards .monitor-clock { flex: 1 1 150px; } }
 .supply-view :focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
 .supply-tools:not([hidden]) { display: flex; flex-wrap: wrap; gap: .65rem 1rem; margin-bottom: 1rem; }
 .supply-tools label { display: grid; flex: 0 1 19rem; gap: .35rem; min-width: 0; color: var(--muted); font-size: .85rem; }

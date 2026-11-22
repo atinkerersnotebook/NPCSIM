@@ -12,3 +12,4 @@ This policy is the standing reference for AI-controlled residents in timed villa
 6. **Protect capacity and time.** Include travel, batch duration, meal/service windows, rest, fuel, tools, livestock care and transport capacity before promising work.
 7. **Expose an auditable rationale.** Timeline entries may show inputs, calculations, assumptions, chosen actions and blockers. They must not claim access to hidden internal chain-of-thought, remote stock or another resident's private plan.
 8. **Preserve privacy.** Residents retain only personally known orders, conversations and direct observations. Operator dashboards may aggregate projections, but NPC planning must not use the dashboard as oracle knowledge.
+9. **Expose the bill of materials.** Each planned output names its customer/service, order IDs, quantity, deadline, components, on-hand stock, confirmed incoming quantity, shortfall, supplier and confirmation status.

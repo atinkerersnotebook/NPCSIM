@@ -6325,8 +6325,8 @@
       "reserve": 2,
       "site_capacities": {
         "forge": 16,
-        "bakery": 16,
         "cottages": 24,
+        "bakery": 16,
         "tavern": 16,
         "woods": 24
       },

@@ -18,6 +18,8 @@ def world_for_meal(tmp_path):
     world = World(scenario, tmp_path / "nightly-bread.json", "nightly-bread", "elsie", "session-elsie")
     state = world.state.village
     state.minute = 1080
+    state.residents["elsie"].life.last_woke = 330
+    state.residents["elsie"].fallback.daily_plans.append({"day": 0})
     world.actor.location_id = "tavern"
     state.residents["elsie"].life.sleeping = False
     state.stocks["tavern"] = {}
@@ -114,6 +116,26 @@ def test_supper_cooking_cannot_spend_tomorrows_breakfast_inputs(tmp_path):
     assert state.coins == before
     village_goods.put(world, "tavern", "bread", 1)
     assert village_economy.production_blocker(world, "village_work") is None
+
+
+def test_due_supper_can_cook_delivered_fish_with_breakfast_bread_then_replenishes(tmp_path):
+    world = world_for_meal(tmp_path)
+    state = world.state.village
+    state.minute = 1080
+    state.residents["elsie"].life.last_woke = 330
+    state.residents["elsie"].fallback.daily_plans.append({"day": 0})
+    required, _ = village_life.overnight_breakfast_bread_reserve(world)
+    village_goods.put(world, "tavern", "bread", required)
+    village_goods.put(world, "tavern", "fish", 8)
+    village_goods.put(world, "tavern", "firewood", 8)
+
+    assert village_economy.production_batch_limit(world, "village_cook_fish") > 0
+    assert village_economy.production_blocker(world, "village_cook_fish") is None
+    assert village_ai.production_ready(world, "village_cook_fish") is None
+    result = act(world, "village_cook_fish")
+    assert result["outcome"] == "APPLIED", result
+    assert state.stocks["tavern"]["fish"] < 8
+    assert state.stocks["tavern"]["meals"] > 0
 
 
 def test_breakfast_serves_prepared_portions_before_fresh_bread(tmp_path):

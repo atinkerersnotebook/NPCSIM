@@ -308,7 +308,7 @@ def _standing_forecasts(world: WorldState, config: VillageConfig, targets, order
                       "The required production equipment is unavailable or broken.")
             row = {"id": f"standing:{site}:{product}:{day}", "worker": worker,
                    "location": site, "product": product, "quantity": quantity if capable and equipment_ok else 0,
-                   "required_output": target,
+                   "required_output": target, "day": day + 1,
                    "finish": finish if capable and equipment_ok and quantity else None,
                    "status": "planned" if capable and equipment_ok and quantity else "blocked", "basis": reason}
             if product not in {"milk", "eggs"}:
@@ -423,10 +423,10 @@ def _waterfall(details: dict[str, Any], horizons: list[int]) -> dict[str, Any]:
                   key=lambda row: (row.get("finish") or horizons[-1] + 1, row["location"], row["product"]))
     requirements = []
     for row in rows:
-        day = (row.get("finish") or horizons[-1]) // 1440
+        day = row.get("day", ((row.get("finish") or horizons[-1]) // 1440) + 1)
         stock = inventory.get((row["location"], row["product"]), {})
         requirements.append({
-            "id": row["id"], "day": day + 1, "worker": row["worker"],
+            "id": row["id"], "day": day, "worker": row["worker"],
             "site": row["location"], "product": row["product"],             "planned_output": row.get("required_output", row["quantity"]),
             "finish": row.get("finish"), "status": row["status"], "basis": row["basis"],
             "on_hand": stock.get("on_hand", 0), "target": stock.get("target"),

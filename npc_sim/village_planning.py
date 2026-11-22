@@ -40,8 +40,80 @@ def _requirements(world: "World", resident: str, days: int = 2) -> list[dict[str
     from npc_sim.town_supply import report
     snapshot = report(world.state, world.scenario.village)
     waterfall = snapshot.get("waterfall", {}).get("requirements", []) if snapshot else []
+    first_day = world.state.village.minute // 1440 + 1
     return [row for row in waterfall if row["worker"] == resident
-            and world.state.village.minute // 1440 + 1 <= row["day"] <= world.state.village.minute // 1440 + days]
+            and first_day <= row["day"] < first_day + days]
+
+
+def _component_lines(world: "World", resident: str, requirements: list[dict[str, Any]],
+                     orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    config, state = village.context(world)
+    policy = state.economy.config if state.economy else None
+    lines = []
+    order_by_product = {}
+    for order in orders:
+        if order["buyer"] == resident:
+            order_by_product.setdefault(order["product"], []).append(order)
+    for requirement in requirements:
+        output = requirement["product"]
+        matching_customer = [order for order in orders if order["supplier"] == resident and
+                             order["product"] == output]
+        components = []
+        for product, quantity in requirement.get("inputs", {}).items():
+            stock = state.stocks.get(requirement["site"], {}).get(product, 0)
+            incoming = sum(order["quantity"] - order.get("delivered_quantity", 0)
+                           for order in order_by_product.get(product, [])
+                           if order["destination"] == requirement["site"] and
+                           order["status"] not in {"declined", "expired", "cancelled"})
+            short = max(0, quantity - stock - incoming)
+            supplier = policy.suppliers.get(product) if policy else None
+            components.append({
+                "product": product, "required": quantity, "on_hand": stock,
+                "confirmed_incoming": incoming, "shortfall": short,
+                "source": "inventory" if stock >= quantity else "supplier_order" if incoming >= short else "needs_order",
+                "supplier": supplier,
+                "confirmation": next((order["status"] for order in order_by_product.get(product, [])
+                                       if order["supplier"] == supplier), None),
+            })
+        line = {
+            "requirement_id": requirement["id"], "day": requirement["day"],
+            "output": output, "quantity": requirement["planned_output"],
+            "site": requirement["site"], "finish": requirement.get("finish"),
+            "for": [order["buyer"] for order in matching_customer] or ["village demand/reserve"],
+            "order_ids": [order["id"] for order in matching_customer],
+            "components": components,
+        }
+        if output == "meals" and policy:
+            service_lines = []
+            for plan in policy.meal_plans:
+                service_lines.append({**line,
+                    "output": f"{plan.id} meals", "quantity": plan.portions,
+                    "for": ["12 residents and 4 visitors"],
+                    "components": [{
+                        "product": product, "required": amount,
+                        "on_hand": state.stocks.get(requirement["site"], {}).get(product, 0),
+                        "confirmed_incoming": 0,
+                        "shortfall": max(0, amount - state.stocks.get(requirement["site"], {}).get(product, 0)),
+                        "source": "inventory" if state.stocks.get(requirement["site"], {}).get(product, 0) >= amount else "needs_order",
+                        "supplier": policy.suppliers.get(product), "confirmation": None,
+                    } for product, amount in _meal_inputs(policy, plan).items()]})
+            lines.extend(service_lines)
+            continue
+        lines.append(line)
+    return lines
+
+
+def _meal_inputs(policy, plan) -> dict[str, int]:
+    inputs = dict(plan.additional_inputs)
+    for recipe_name, portions in plan.recipe_portions.items():
+        recipe = policy.recipes.get(recipe_name)
+        if recipe:
+            batches = (portions + recipe.portions - 1) // recipe.portions
+            for product, amount in recipe.inputs.items():
+                inputs[product] = inputs.get(product, 0) + batches * amount
+    if plan.tea_portions:
+        inputs["tea"] = inputs.get("tea", 0) + plan.tea_portions
+    return inputs
 
 
 def reconcile(world: "World", trigger: str, *, force: bool = False) -> dict[str, Any] | None:
@@ -54,6 +126,7 @@ def reconcile(world: "World", trigger: str, *, force: bool = False) -> dict[str,
     today = [item for item in person.fallback.daily_plans if item["day"] == day]
     orders = _orders(world, rid)
     requirements = _requirements(world, rid, days=2)
+    component_lines = _component_lines(world, rid, requirements, orders)
     signature = (trigger, len(orders), sum(item.get("planned_output", 0) for item in requirements),
                  ",".join(sorted(f"{item['id']}:{item['status']}" for item in orders)))
     if today and not force and today[-1].get("signature") == signature:
@@ -72,6 +145,13 @@ def reconcile(world: "World", trigger: str, *, force: bool = False) -> dict[str,
         f"Own production requirements: {len(requirements)} standing or demand-driven outputs; {sum(item['planned_output'] for item in requirements)} units planned.",
         f"Customer commitments: {len(customer_orders)}; supplier orders/purchases: {len(purchase_orders)}; blocked own requirements: {len(blocked)}.",
     ]
+    for line in component_lines:
+        components = "; ".join(
+            f"{item['product']}: need {item['required']}, on hand {item['on_hand']}, incoming {item['confirmed_incoming']}, "
+            f"short {item['shortfall']}, {item['source']} from {item['supplier'] or 'local stock'}"
+            for item in line["components"])
+        calculations.append(f"Day {line['day']} make {line['quantity']} {line['output']} for "
+                            f"{', '.join(line['for'])}; components: {components or 'none'}.")
     actions = []
     confirmations = []
     alternatives = []
@@ -100,12 +180,13 @@ def reconcile(world: "World", trigger: str, *, force: bool = False) -> dict[str,
     plan = {"day": day, "created_at": state.minute, "trigger": trigger, "signature": signature,
             "assumptions": assumptions, "calculations": calculations, "actions": actions,
             "requirements": requirements, "orders": orders, "planning_days": 2,
+            "component_lines": component_lines,
             "confirmations": confirmations, "alternatives": alternatives,
             "needs_customer_adjustment": bool(blocked and customer_orders),
             "supplier_confirmations_pending": sum(item["status"] == "proposed" for item in confirmations)}
     person.fallback.daily_plans.append(plan)
     del person.fallback.daily_plans[:-7]
-    summary = (f"Planned Day {day + 1} at wake: reviewed {len(customer_orders)} customer order(s), "
+    summary = (f"Planned Days {day + 1}-{day + 2}: reviewed {len(customer_orders)} customer order(s), "
                f"{len(purchase_orders)} supplier order(s), and {len(requirements)} production requirements. "
                f"Assumed upstream supply initially, then scheduled confirmation and customer-adjustment checks.")
     details = {**plan, "actor_id": rid, "world_time": state.minute, "known_source": "personal orders, forecasts and local stock"}

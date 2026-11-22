@@ -1,4 +1,5 @@
 import copy
+import json
 from typing import Any
 
 
@@ -7,6 +8,44 @@ RECENT_MESSAGES = 6
 PREVIOUS_FAILURES = 3
 REVIEW_EVENTS = 40
 RESULT_CHARACTERS = 600
+EVENT_RESULT_CHARACTERS = 800
+ACTION_DESCRIPTION_CHARACTERS = 240
+
+
+def _trim_text(value: Any, limit: int) -> Any:
+    if isinstance(value, str) and len(value) > limit:
+        return value[:limit].rstrip() + " [truncated]"
+    return value
+
+
+def _compact_schema(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _compact_schema(item) for key, item in value.items()
+                if key not in {"description", "title", "examples", "default"}}
+    if isinstance(value, list):
+        return [_compact_schema(item) for item in value]
+    return value
+
+
+def _compact_action(action: dict[str, Any]) -> dict[str, Any]:
+    result = copy.deepcopy(action)
+    if "description" in result:
+        result["description"] = _trim_text(result["description"], ACTION_DESCRIPTION_CHARACTERS)
+    if "arguments_schema" in result:
+        result["arguments_schema"] = _compact_schema(result["arguments_schema"])
+    return result
+
+
+def _compact_event(event: Any) -> Any:
+    if not isinstance(event, dict):
+        return event
+    result = copy.deepcopy(event)
+    for key in ("result", "text", "description"):
+        if isinstance(result.get(key), str):
+            result[key] = _trim_text(result[key], EVENT_RESULT_CHARACTERS)
+    result.pop("details", None)
+    result.pop("witnesses", None)
+    return result
 
 
 def _trim_explanation(value: dict[str, Any]) -> None:
@@ -18,6 +57,8 @@ def _trim_explanation(value: dict[str, Any]) -> None:
 
 def observation_context(value: dict[str, Any], *, supervisor: bool = False) -> dict[str, Any]:
     result = copy.deepcopy(value)
+    if "actions" in result:
+        result["actions"] = [_compact_action(action) for action in result["actions"]]
     if "messages" in result:
         result["messages"] = result["messages"][-RECENT_MESSAGES:]
     village = result.get("village")
@@ -30,7 +71,16 @@ def observation_context(value: dict[str, Any], *, supervisor: bool = False) -> d
             communication["share_candidates"] = communication.get("share_candidates", [])[:3]
         for key in ("events", "notices"):
             if key in village:
-                village[key] = village[key][-RECENT_MESSAGES:]
+                village[key] = [_compact_event(item) for item in village[key][-RECENT_MESSAGES:]]
+        for key in ("social", "legacy", "orders", "suggestions"):
+            section = village.get(key)
+            if isinstance(section, (dict, list)):
+                encoded = json.dumps(section, ensure_ascii=True, separators=(",", ":"))
+                if len(encoded) > 20_000:
+                    village.pop(key, None)
+        fallback = village.get("fallback")
+        if isinstance(fallback, dict):
+            fallback.pop("recent_context_revisions", None)
         if supervisor:
             for key in ("events", "notices", "policy"):
                 village.pop(key, None)
@@ -67,6 +117,17 @@ def memory_context(value: dict[str, Any]) -> dict[str, Any]:
     feedback = result.get("previous_attempt_feedback")
     if feedback is not None and "failures" in feedback:
         feedback["failures"] = feedback["failures"][-PREVIOUS_FAILURES:]
+    for key in ("known_entities", "visited_locations"):
+        section = result.get(key)
+        if isinstance(section, dict) and len(section) > 40:
+            result[key] = dict(list(section.items())[-40:])
+    known = result.get("known_entities")
+    if isinstance(known, dict):
+        retained = {"id", "name", "kind", "location", "last_seen_location", "status", "broken",
+                    "open", "locked", "carry_grips", "use_grips", "takable", "readable", "text"}
+        result["known_entities"] = {
+            key: {field: value for field, value in item.items() if field in retained}
+            if isinstance(item, dict) else item for key, item in known.items()}
     return result
 
 

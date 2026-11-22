@@ -51,6 +51,31 @@ const dungeonAppealSchema = z.object({
 const timeOf = (value: z.infer<typeof timeSchema>) => value.village?.minute
   ?? (value.clock ? value.clock.seconds / 60 : value.bbq ? value.bbq.elapsed_seconds / 60 : undefined);
 
+type DailyPlanDetails = { trigger?: string; assumptions?: string[]; calculations?: string[];
+  actions?: string[]; needs_customer_adjustment?: boolean; planning_days?: number;
+  component_lines?: { day: number; output: string; quantity: number; for: string[]; order_ids: string[];
+    components: { product: string; required: number; on_hand: number; confirmed_incoming: number;
+      shortfall: number; source: string; supplier: string | null; confirmation: string | null }[] }[] };
+
+function dailyPlanDetail(event: { result: string; details?: unknown } | undefined): string {
+  if (!event) return "";
+  const details = event.details as DailyPlanDetails | undefined;
+  const lines = details?.component_lines ?? [];
+  const jobs = lines.map(line => {
+    const stocked = line.components.filter(item => item.shortfall === 0)
+      .map(item => `${item.required} ${item.product}${item.supplier ? ` from ${item.supplier}` : " in stock"}`);
+    const missing = line.components.filter(item => item.shortfall > 0)
+      .map(item => `${item.shortfall} ${item.product}${item.supplier ? ` from ${item.supplier}` : " (supplier unconfirmed)"}`);
+    return `Day ${line.day}: ${line.quantity} ${line.output}${line.for.length ? ` for ${line.for.join(", ")}` : ""}.`
+      + (stocked.length ? `\n  Ready: ${stocked.join(", ")}.` : "")
+      + (missing.length ? `\n  Needs order: ${missing.join(", ")}.` : "");
+  });
+  return [`Plan: ${details?.planning_days ?? 2} days ahead.`,
+    jobs.length ? jobs.join("\n") : event.result,
+    details?.needs_customer_adjustment ? "Customer quantities need adjustment before these jobs can be promised." : ""]
+    .filter(Boolean).join("\n");
+}
+
 export function timelineEventProjection(event: RunEvent): RunEvent | null {
   const payload = event.kind === "observation" ? observedSchema.parse(event.payload)
     : event.kind === "decision" ? decisionSchema.parse(event.payload)
@@ -306,7 +331,11 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           .filter(Boolean).join("\n") : "";
       const readNote = /(?:^read$|read_|_read$)/i.test(action)
         ? `Reading: ${villageClockText(result.explanation)} Reason: ${linked.decision?.justification.trim()
-          || "review local information before the next task"}.` : "";
+          || "review local information before the next task"}. Learned: ${villageClockText(result.explanation)}` : "";
+      const villagePlan = action === "village_daily_plan" && result.outcome === "APPLIED"
+        ? state.world?.village?.events?.filter(item => item.action === "daily_plan" && item.actor === event.actor_id)
+          .filter(item => item.minute <= at).at(-1)
+        : undefined;
       if (kind !== "sleep") row.spans.push({
         start, end: Math.max(start, Math.min(now, end)), location: result.observation.self.location_id,
         label: waitLabel ? waitLabel
@@ -318,10 +347,12 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           : diaryNote ? `${diaryNote}\n${villageClockText(result.explanation)}`
           : readNote ? readNote
           : research ? `${researchDetail(research)} ${villageClockText(result.explanation)}`
+          : villagePlan ? dailyPlanDetail(villagePlan)
           : planForTile
           ? `Purpose: ${planForTile.purpose}${/[.!?]$/.test(planForTile.purpose) ? "" : "."} ${villageClockText(result.explanation)}`
           : villageClockText(result.explanation), status: result.outcome, kind,
-        activity: action === "village_write_diary" ? "diary"
+        activity: action === "village_daily_plan" ? "planning"
+          : action === "village_write_diary" ? "diary"
           : action === "village_eat" ? "meals"
           : action === "go" || action === "village_plan_walk" ? "movement"
           : ["say", "village_ask", "village_tell", "village_share_route", "village_meeting"].includes(action) ? "dialogue"
@@ -376,18 +407,9 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
         label: event.action === "wagon_drive" ? "Wagon travel" : "Timber delivery", detail: event.result });
     }
     if (row && event.action === "daily_plan") {
-      const details = event.details as { trigger?: string; assumptions?: string[]; calculations?: string[];
-        actions?: string[]; needs_customer_adjustment?: boolean; planning_days?: number } | undefined;
       row.spans.push({ start: event.minute, end: event.minute, location: event.target, kind: "event",
         label: "Daily planning",
-        detail: [event.result,
-          details?.trigger ? `Trigger: ${details.trigger}` : "",
-          details?.planning_days ? `Planning horizon: ${details.planning_days} days` : "",
-          details?.calculations?.length ? `Calculations:\n${details.calculations.join("\n")}` : "",
-          details?.assumptions?.length ? `Assumptions:\n${details.assumptions.join("\n")}` : "",
-          details?.actions?.length ? `Plan:\n${details.actions.join("\n")}` : "",
-          details?.needs_customer_adjustment ? "Customer adjustment required if commitments exceed feasible upstream supply." : ""]
-          .filter(Boolean).join("\n"),           activity: "planning" });
+        detail: dailyPlanDetail(event), activity: "planning" });
     }
     if (row && event.action === "customer_adjustment_required") {
       row.spans.push({ start: event.minute, end: event.minute, location: event.target, kind: "event",
@@ -589,7 +611,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const iconWidth = 24;
       const characters = tileWidth >= 48 ? Math.floor((tileWidth - 16 - iconWidth) / 7) : 0;
       const detailCharacters = Math.floor((tileWidth - 16) / 6);
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail)}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.detail)}" data-gantt-arguments="${escape(item.arguments ?? "")}" data-gantt-expected="${escape(item.expectedOutcome ?? "")}" data-gantt-subgoal="${escape(item.subgoal ?? "")}" data-gantt-plan="${escape(item.plan?.join("\n") ?? "")}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}${matches(item) ? "" : " is-filtered-out"}">
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail)}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.detail)}" data-gantt-arguments="${escape(item.arguments ?? "")}" data-gantt-expected="${escape(item.expectedOutcome ?? "")}" data-gantt-subgoal="${escape(item.subgoal ?? "")}" data-gantt-plan="${escape(item.plan?.join("\n") ?? "")}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}${item.activity === "planning" ? " activity-planning" : ""}${matches(item) ? "" : " is-filtered-out"}">
         <clipPath id="${id}"><rect x="${left + inset + 6}" y="${y + 19}" width="${Math.max(0, tileWidth - 12)}" height="64"/></clipPath>
         <rect x="${left + inset}" y="${y + 19}" width="${tileWidth}" height="64" rx="7"/>
         ${tileWidth >= 28 ? `<text x="${left + inset + 7}" y="${y + 37}" class="gantt-cell-icon" clip-path="url(#${id})">${icon}</text>` : ""}
@@ -614,7 +636,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const expected = items.map(item => item.expectedOutcome).filter(Boolean).join("; ");
       const subgoal = items.map(item => item.subgoal).filter(Boolean).join("; ");
       const plan = items.flatMap(item => item.plan ?? []).join("\n");
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:marker:${at}`)}" aria-label="${escape(detail + (reasoning ? ` Reason: ${reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(items.length === 1 ? items[0].label : `${items.length} events`)}" data-gantt-icon="●" data-gantt-status="${escape(items.some(item => item.kind === "rejected") ? "REJECTED" : "Recorded")}" data-gantt-range="${escape(format(chart.turns ? at + 1 : at))}" data-gantt-place="${escape(items[0].location ? placeName(items[0].location) : "")}" data-gantt-detail="${escape(items.map(item => `${item.label}: ${item.detail}`).join("\n"))}" data-gantt-arguments="${escape(argumentsText)}" data-gantt-expected="${escape(expected)}" data-gantt-subgoal="${escape(subgoal)}" data-gantt-plan="${escape(plan)}" data-gantt-reasoning="${escape(reasoning)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}${items.some(matches) ? "" : " is-filtered-out"}">
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:marker:${at}`)}" aria-label="${escape(detail + (reasoning ? ` Reason: ${reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(items.length === 1 ? items[0].label : `${items.length} events`)}" data-gantt-icon="●" data-gantt-status="${escape(items.some(item => item.kind === "rejected") ? "REJECTED" : "Recorded")}" data-gantt-range="${escape(format(chart.turns ? at + 1 : at))}" data-gantt-place="${escape(items[0].location ? placeName(items[0].location) : "")}" data-gantt-detail="${escape(items.map(item => `${item.label}: ${item.detail}`).join("\n"))}" data-gantt-arguments="${escape(argumentsText)}" data-gantt-expected="${escape(expected)}" data-gantt-subgoal="${escape(subgoal)}" data-gantt-plan="${escape(plan)}" data-gantt-reasoning="${escape(reasoning)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}${items.some(item => item.activity === "planning") ? " activity-planning" : ""}${items.some(matches) ? "" : " is-filtered-out"}">
         <path d="M ${x(at)} ${y + 88} l 4 4 l -4 4 l -4 -4 Z"/>
         ${items.length > 1 ? `<text x="${x(at) + 6}" y="${y + 95}">${items.length}</text>` : ""}</g>`;
     }).join("");

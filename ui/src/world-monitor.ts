@@ -10,6 +10,7 @@ import { villageSystemsMarkup } from "./village-view.ts";
 import { TownDialogue, townMapMarkup } from "./town-map.ts";
 import type { TownMapOptions } from "./town-map.ts";
 import { tradeNote } from "./trade-notes.ts";
+import { actionSpeedometerMarkup } from "./action-speedometer.ts";
 import { npcPortrait } from "./npc-sprite.ts";
 import { sectionTabPanel, sectionTabs } from "./section-tabs.ts";
 import { sceneAnchors, sceneHeight, sceneWidth } from "./millhaven-orthographic.ts";
@@ -180,9 +181,13 @@ export function worldMonitorMarkup(
       ${agents.some(agent => agent.visitor) ? `${agents.filter(agent => !agent.visitor).length} residents /
         ${agents.filter(agent => agent.visitor && agent.current).length} visitors present`
         : `${agents.length} ${agents.length === 1 ? "agent" : "agents"}`} / Read-only</p>`,
-    `<div class="monitor-clock" role="timer" aria-label="Current game time">
-      <span class="eyebrow">CURRENT GAME TIME</span><strong>${clock?.time ?? "Untimed world"}</strong>
-      ${clock ? `<small>${clock.description}</small>` : ""}</div>`)}
+    `<div class="monitor-time-cards">
+      ${actionSpeedometerMarkup(state.run)}
+      <div class="monitor-clock" role="timer" aria-label="Current game time">
+        <span class="eyebrow">CURRENT GAME TIME</span><strong>${clock?.time ?? "Untimed world"}</strong>
+        ${clock ? `<small>${clock.description}</small>` : ""}
+      </div>
+    </div>`)}
   <section ${sectionTabPanel("monitor-overview", "Overview")}>
   ${worldNowMarkup(state, events, agents, active, historyReady)}
   ${state.run?.reason ? `<p class="notice">${escape(villageClockText(state.run.reason))}</p>` : ""}

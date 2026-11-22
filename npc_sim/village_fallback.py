@@ -1363,6 +1363,7 @@ def candidates(world: "World") -> list[dict[str, Any]]:
                                     "action_id": action["id"], "arguments": args,
                                     "priority": "P4",
                                     "reason": "A funded local equipment upgrade improves real future capacity."})
+    location = world.actor.location_id
     economy_policy = village_economy.config(world)
     if economy_policy and economy_policy.public_crafts and state.economy:
         civic = next((recipe for recipe in economy_policy.public_crafts.values()

@@ -222,6 +222,7 @@ def test_standing_forecast_backfills_bread_chain_and_herbal_demand(tmp_path):
     rows = {item["id"]: item for item in snapshot["replenishment"]}
 
     assert rows["standing:tavern:meals:0"]["required_output"] == 32
+    assert rows["standing:tavern:meals:0"]["day"] == 1
     bread = rows["standing:bakery:bread:0"]
     assert bread["inputs"] == {"flour": 13, "firewood": 1}
     assert rows["standing:watermill:flour:0"]["inputs"] == {"grain": 13}

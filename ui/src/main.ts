@@ -17,6 +17,7 @@ import { adminTriage, adventureStatus, budgetSummary, canAskQuestions, canExtend
 import type { DashboardTab } from "./view-mode";
 import { startWorldMonitor } from "./world-monitor";
 import { startTownSupply } from "./town-supply";
+import { actionSpeedometerMarkup } from "./action-speedometer";
 import { conditionText } from "./secondary-goals";
 import { savedEpisodesMarkup } from "./episode-saves";
 import { escape } from "./html";
@@ -42,7 +43,7 @@ app.innerHTML = `
     <div id="notice" class="notice" role="alert" hidden></div>
     ${dashboardWorldSummary("No active adventure",
       '<p><span id="episode-status" class="tag" role="status">NO EPISODE</span><span id="episode-name"></span></p>',
-      '<div id="simulation-clock" class="monitor-clock" role="timer" aria-label="Current game time" hidden></div>', "world-summary-title")}
+      '<div id="simulation-clock" class="monitor-time-cards" hidden></div>', "world-summary-title")}
     <section class="toolbar">
       <div class="controls" id="controls">
         ${adminView ? `<div class="scenario-picker"><label class="eyebrow" for="scenario-select">SCENARIO</label><select id="scenario-select" aria-label="Choose scenario"><option value="">Loading scenarios...</option></select></div>
@@ -502,7 +503,7 @@ function renderMetrics(): void {
   const clock = simulationClock(state.world ?? state.observation, state.observation);
   const display = element("simulation-clock");
     display.hidden = state.run === null;
-    display.innerHTML = `<span class="eyebrow">CURRENT GAME TIME</span><strong>${clock?.time ?? "Untimed world"}</strong>${clock ? `<small>${clock.description}</small>` : ""}`;
+    display.innerHTML = `${actionSpeedometerMarkup(state.run)}<div class="monitor-clock" role="timer" aria-label="Current game time"><span class="eyebrow">CURRENT GAME TIME</span><strong>${clock?.time ?? "Untimed world"}</strong>${clock ? `<small>${clock.description}</small>` : ""}</div>`;
   const run = state.run;
   const status = run?.status ?? "idle";
   if (!adminView) {

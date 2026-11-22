@@ -773,7 +773,22 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
                 continue
             if _receive(world, actor, notice, "inbox" if action == "village_inbox_read" else "noticeboard"):
                 learned.append(notice)
-                _emit(world, "notice_read", notice)
+                terms = notice.terms
+                recipients = ", ".join(terms.recipients) or "the village"
+                learned_text = (f"Read {notice.id}: {terms.subject}. "
+                                f"Message to {recipients}: {terms.description} "
+                                f"Status: {notice.status}; version {notice.version}.")
+                if terms.quantity is not None:
+                    learned_text += f" Quantity: {terms.quantity}."
+                if terms.unit_price is not None:
+                    learned_text += f" Unit price: {terms.unit_price} coins."
+                if terms.delivery_fee is not None:
+                    learned_text += f" Delivery fee: {terms.delivery_fee} coins."
+                if terms.due_at is not None:
+                    learned_text += f" Due: {village.clock_time(terms.due_at)}."
+                if notice.linked_order_id:
+                    learned_text += f" Confirmed commitment: {notice.linked_order_id}."
+                _emit(world, "notice_read", notice, text=learned_text)
         source = entity.name.lower()
         summaries = [f"{notice.terms.subject}: {notice.terms.description}" for notice in learned]
         detail = "; ".join(summaries)

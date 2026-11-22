@@ -342,6 +342,69 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "87d255c70a4845f0a6b8b30009e38704",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real firewood, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Keep occupied cottage hearths and working ovens/forge supplied with paid, physically delivered firewood. Care daily for the physical farm cows and twenty-four hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed. Preserve the village's inherited family history, readable chronicle and optional same-scenario midnight generation handoff while using the communal depot and feed store physically.",
+      "recorded_at": "2026-11-21T20:02:32.227577+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: shovel recovered, well dug, mill repaired, bread supply resumed, every resident contributed, working wagon, evening reached, everyone fed, everyone home, everyone asleep, resource reserves ready.",
+          "evidence_ids": [
+            "87d255c70a4845f0a6b8b30009e38704:419"
+          ]
+        },
+        {
+          "reason": "The shovel was not recovered, the well and mill were not restored, and the wagon was not operational. Bread supply had not resumed, and the resident contribution check failed.",
+          "evidence_ids": [
+            "87d255c70a4845f0a6b8b30009e38704:419"
+          ]
+        },
+        {
+          "reason": "The attempt ended before the 19:00 supper. The final checks for everyone being fed, home, and asleep all failed.",
+          "evidence_ids": [
+            "87d255c70a4845f0a6b8b30009e38704:419"
+          ]
+        },
+        {
+          "reason": "Configured reserves were not met: the mill had 2 of 8 flour, the farm had 8 of 10 grain, and the tavern was still 4 firewood short.",
+          "evidence_ids": [
+            "87d255c70a4845f0a6b8b30009e38704:419",
+            "87d255c70a4845f0a6b8b30009e38704:409"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "136f2c40a7c64b0299371e8beef6ee57",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real firewood, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Keep occupied cottage hearths and working ovens/forge supplied with paid, physically delivered firewood. Care daily for the physical farm cows and twenty-four hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed. Preserve the village's inherited family history, readable chronicle and optional same-scenario midnight generation handoff while using the communal depot and feed store physically.",
+      "recorded_at": "2026-11-21T20:07:17.467415+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: shovel recovered, well dug, mill repaired, bread supply resumed, every resident contributed, working wagon, evening reached, everyone fed, everyone home, everyone asleep, resource reserves ready.",
+          "evidence_ids": [
+            "136f2c40a7c64b0299371e8beef6ee57:374"
+          ]
+        },
+        {
+          "reason": "Final verification confirmed that the shovel was not recovered, the well and mill were not restored, and the wagon was not operational.",
+          "evidence_ids": [
+            "136f2c40a7c64b0299371e8beef6ee57:374"
+          ]
+        },
+        {
+          "reason": "Bread supply had not resumed, not every resident contributed, and configured reserves remained below target.",
+          "evidence_ids": [
+            "136f2c40a7c64b0299371e8beef6ee57:374"
+          ]
+        },
+        {
+          "reason": "The attempt ended at 06:45. The required 19:00 supper and the checks for everyone being fed, home, and asleep were incomplete.",
+          "evidence_ids": [
+            "136f2c40a7c64b0299371e8beef6ee57:374"
+          ]
+        }
+      ]
     }
   ]
 }

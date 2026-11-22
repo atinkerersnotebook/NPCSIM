@@ -73,7 +73,8 @@ def test_npc_context_keeps_current_constraints_and_known_facts_but_bounds_short_
     value = json.loads(messages[1]["content"])
     assert value["goal"] == goal
     assert value["observation"]["self"] == observation["self"]
-    assert value["observation"]["actions"] == observation["actions"]
+    assert [item["id"] for item in value["observation"]["actions"]] == [item["id"] for item in observation["actions"]]
+    assert value["observation"]["actions"][0]["arguments_schema"] == {"type": "object"}
     assert value["observation"]["secondary_goals"] == observation["secondary_goals"]
     assert value["observation"]["village"]["personal"] == observation["village"]["personal"]
     assert len(value["observation"]["village"]["events"]) == RECENT_MESSAGES
@@ -92,6 +93,23 @@ def test_npc_context_keeps_current_constraints_and_known_facts_but_bounds_short_
     else:
         assert value["validation_error"] == "Use only available actions."
     assert (observation, memory) == before
+
+
+def test_npc_context_caps_oversized_read_history_without_removing_actions_or_current_facts():
+    observation = observed()
+    observation["village"]["events"] = [{
+        "minute": index, "result": "R" * 5000, "details": {"ignored": "x" * 5000}
+    } for index in range(20)]
+    observation["village"]["legacy"] = {"chronicle": ["entry " * 20_000]}
+    proxy = Proxy(ProxyConfig())
+    messages = proxy.context({"objective": "Work", "revealed": True}, observation, remembered())
+    value = json.loads(messages[1]["content"])
+    assert [item["id"] for item in value["observation"]["actions"]] == [item["id"] for item in observation["actions"]]
+    assert value["observation"]["village"]["minute"] == observation["village"]["minute"]
+    assert "legacy" not in value["observation"]["village"]
+    assert len(value["observation"]["village"]["events"]) == RECENT_MESSAGES
+    assert all(len(item["result"]) < 1000 and "details" not in item
+               for item in value["observation"]["village"]["events"])
 
 
 def review_payload(count=REVIEW_EVENTS):
@@ -179,5 +197,5 @@ def test_short_term_result_text_is_bounded_without_trimming_current_action_schem
     assert len(result["explanation"]) < 650
     assert result["explanation"].endswith("[truncated]")
     assert result["explanation_truncated"]
-    assert payload["observation"]["actions"] == observation["actions"]
+    assert [item["id"] for item in payload["observation"]["actions"]] == [item["id"] for item in observation["actions"]]
     assert memory == before
