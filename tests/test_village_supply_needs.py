@@ -1,4 +1,4 @@
-from npc_sim import village_fallback
+from npc_sim import village_fallback, village_planning
 from npc_sim.models import VillageSupplyNeed
 from npc_sim.world import World
 from test_village_communication import actor, create_world, flour, post, ready
@@ -22,6 +22,56 @@ def test_personally_posted_need_persists_without_leaking_to_other_residents(tmp_
     assert next(iter(reloaded.state.village.residents["jory"].fallback.supply_needs.values())) == need
     village_fallback.update_supply_needs(jory)
     assert len(needs) == 1
+
+
+def test_supply_needs_keep_only_latest_personal_notice_for_equivalent_key(tmp_path, monkeypatch):
+    world = create_world(tmp_path / "latest-supply-need.json")
+    jory = actor(world, "jory", "village-square")
+    ready(world)
+    old_id = post(jory, flour(), channel="board")
+    village_fallback.update_supply_needs(jory)
+    old = world.state.village.communication.knowledge["jory"][old_id].snapshot
+    world.state.village.communication.knowledge["jory"][old_id].snapshot = old.model_copy(
+        update={"status": "rejected", "updated_at": old.updated_at + 1})
+    newer = old.model_copy(update={
+        "id": "notice-newer", "status": "accepted", "created_at": old.updated_at + 2,
+        "updated_at": old.updated_at + 2})
+    from npc_sim.village_communication_models import NoticeKnowledge
+    world.state.village.communication.knowledge["jory"][newer.id] = NoticeKnowledge(
+        snapshot=newer, heard_at=newer.updated_at, source_type="author")
+    daily_plans = world.state.village.residents["jory"].fallback.daily_plans
+    before = len(daily_plans)
+    reconciliations = []
+    monkeypatch.setattr("npc_sim.village_planning.reconcile",
+                        lambda world, trigger, *, force=False: reconciliations.append((trigger, force)))
+
+    village_fallback.update_supply_needs(jory)
+
+    needs = world.state.village.residents["jory"].fallback.supply_needs
+    assert len(needs) == 1
+    need = next(iter(needs.values()))
+    assert (need.notice_id, need.status) == (newer.id, "accepted")
+    assert len(daily_plans) == before
+    assert reconciliations == [("order accepted", True)]
+
+
+def test_forced_reconciliation_does_not_repeat_unchanged_plan(tmp_path, monkeypatch):
+    world = create_world(tmp_path / "planning-dedup.json")
+    jory = actor(world, "jory", "village-square")
+    ready(world)
+    monkeypatch.setattr(village_planning, "_orders", lambda world, resident: [])
+    monkeypatch.setattr(village_planning, "_requirements", lambda world, resident, days=2: [])
+    monkeypatch.setattr(village_planning, "_component_lines",
+                        lambda world, resident, requirements, orders: [])
+
+    first = village_planning.reconcile(jory, "order accepted", force=True)
+    second = village_planning.reconcile(jory, "order rejected", force=True)
+
+    events = [event for event in world.state.village.events
+              if event.actor == "jory" and event.action == "daily_plan"]
+    assert second is first
+    assert len(events) == 1
+    assert first["trigger"] == "order accepted"
 
 
 def test_supply_need_record_has_explicit_next_follow_up_time():

@@ -1,5 +1,6 @@
 """Resident-facing daily planning, replanning and auditable rationale traces."""
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from npc_sim import village
@@ -127,9 +128,12 @@ def reconcile(world: "World", trigger: str, *, force: bool = False) -> dict[str,
     orders = _orders(world, rid)
     requirements = _requirements(world, rid, days=2)
     component_lines = _component_lines(world, rid, requirements, orders)
-    signature = (trigger, len(orders), sum(item.get("planned_output", 0) for item in requirements),
-                 ",".join(sorted(f"{item['id']}:{item['status']}" for item in orders)))
-    if today and not force and today[-1].get("signature") == signature:
+    signature = json.dumps({
+        "orders": orders,
+        "requirements": requirements,
+        "component_lines": component_lines,
+    }, sort_keys=True, separators=(",", ":"), default=str)
+    if today and today[-1].get("signature") == signature:
         return today[-1]
     resident = config.residents[rid]
     blocked = [item for item in requirements if item["status"] == "blocked"]

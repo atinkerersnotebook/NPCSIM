@@ -34,9 +34,40 @@ async def test_openai_proxy_contract_and_no_auth(monkeypatch):
     decision, metadata = await proxy.choose("local-model", messages, "run:cycle", 10)
     assert decision.action_id == "look"
     assert metadata["usage"]["total_tokens"] == 10
+    assert metadata["compression"]["effective_mode"] == "normal"
     assert all(request.url.host == "127.0.0.1" and request.url.port == 9901 for request in seen)
     assert all("authorization" not in request.headers for request in seen)
     assert seen[-1].headers["x-request-id"] == "run:cycle"
+
+
+@pytest.mark.asyncio
+async def test_compressed_proxy_request_reports_prompt_savings(monkeypatch):
+    original = httpx.AsyncClient
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={
+            "model": "local-model", "usage": {
+                "prompt_tokens": 120,
+                "prompt_tokens_details": {"cached_tokens": 40},
+            },
+            "choices": [{"message": {"content": json.dumps({
+                "action_id": "look", "arguments": {}, "justification": "Observe.",
+                "expected_outcome": "Learn more.", "subgoal": "Explore", "plan": []})}}]})
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(
+        **kwargs, transport=httpx.MockTransport(handler)))
+    proxy = Proxy(ProxyConfig(message_format="fact-shorthand", message_deduplicate=True))
+    messages = proxy.context({"objective": "Collect debt"}, {"visible_entities": []}, {"facts": [{
+        "type": "debt", "debtor": "Arin", "creditor": "Mara", "amount": 3,
+        "currency": "silver", "source": "M-12",
+    }]})
+    _, metadata = await proxy.choose("local-model", messages, "run:compressed", 5)
+    assert seen[0]["messages"][1]["content"].startswith('{"compression"')
+    assert metadata["compression"]["effective_mode"] == "fact-shorthand"
+    assert metadata["compression"]["facts_encoded"] == 1
+    assert metadata["compression"]["cache_read_tokens"] == 40
 
 
 @pytest.mark.asyncio

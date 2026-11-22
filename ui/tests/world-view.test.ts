@@ -5,6 +5,62 @@ import { test } from "node:test";
 import { observationSchema, stateSchema, worldSchema, worldEditProposalSchema, npcChatSchema } from "../src/contracts.ts";
 import { actorPerspective, agentPerspectives, discoveredEntities, goalPresentation, inventoryUnitsUsed, locationNetwork, nutritionLabel, teamLocationNetwork } from "../src/world-view.ts";
 
+async function newSpeedometer(document: string) {
+  const { actionSpeedometerMarkup } = await import(`../src/action-speedometer.ts?document=${document}`);
+  return actionSpeedometerMarkup as typeof import("../src/action-speedometer.ts").actionSpeedometerMarkup;
+}
+
+function mockTabStorage(t: import("node:test").TestContext) {
+  const entries = new Map<string, string>();
+  const original = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
+  Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: {
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => entries.set(key, value),
+  } });
+  t.after(() => {
+    if (original) Object.defineProperty(globalThis, "sessionStorage", original);
+    else Reflect.deleteProperty(globalThis, "sessionStorage");
+  });
+  return entries;
+}
+
+test("the actions meter keeps its rate and minute bars across page navigation for the same run", async t => {
+  mockTabStorage(t);
+  const world = await newSpeedometer("world");
+  const admin = await newSpeedometer("admin");
+  const run = { id: "adventure-a", actions: 10, elapsed_seconds: 60 };
+  world(run);
+  const second = { ...run, actions: 13, elapsed_seconds: 120 };
+  const before = world(second);
+  assert.match(before, /aria-valuenow="3\.0"/);
+  assert.match(before, /1m ago: 10\.0 actions/);
+  assert.equal(admin(second), before);
+
+  const third = { ...run, actions: 15, elapsed_seconds: 180 };
+  const after = admin(third);
+  assert.match(after, /1m ago: 3\.0 actions/);
+  assert.match(after, /0m ago: 2\.0 actions/);
+  assert.equal(world(second), after); // A restored page can still have an older snapshot.
+  const later = { ...run, actions: 16, elapsed_seconds: 31 * 60 };
+  const trimmed = admin(later);
+  assert.doesNotMatch(trimmed, /10\.0 actions/);
+  assert.match(trimmed, /29m ago: 3\.0 actions/);
+  assert.equal(world(later), trimmed);
+  assert.doesNotMatch(world({ ...run, id: "adventure-b" }), /rolling throughput|1m ago: 3\.0 actions/);
+});
+
+test("invalid or unavailable tab storage does not prevent live action sampling", async t => {
+  const entries = mockTabStorage(t);
+  const meter = await newSpeedometer("bad-storage");
+  const run = { id: "adventure", actions: 10, elapsed_seconds: 60 };
+  meter(run);
+  for (const key of entries.keys()) entries.set(key, "{ invalid JSON");
+  const reloaded = await newSpeedometer("bad-storage-reload");
+  assert.equal(reloaded(run), meter(run));
+  Object.defineProperty(globalThis, "sessionStorage", { get() { throw new Error("storage blocked"); } });
+  assert.match(reloaded({ ...run, actions: 12, elapsed_seconds: 120 }), /aria-valuenow="2\.0"/);
+});
+
 function fixture() {
   const scenario = JSON.parse(readFileSync(resolve("..", "data", "scenarios", "two-locked-rooms.json"), "utf8"));
   const world = worldSchema.parse({

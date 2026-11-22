@@ -131,12 +131,18 @@ def update_supply_needs(world: "World") -> None:
         return
     rid = world.actor_id
     fallback = state.residents[rid].fallback
+    authored: dict[str, tuple[tuple[Any, ...], str, Any]] = {}
     for notice_id, memory in state.communication.knowledge.get(rid, {}).items():
         notice = memory.snapshot
         terms = notice.terms
         if notice.author != rid or terms.type != "supply_request" or not terms.recipients:
             continue
         key = f"{rid}:{terms.recipients[0]}:{terms.subject}:{terms.destination}"
+        rank = (notice.updated_at, notice.version, notice.created_at, notice_id)
+        if key not in authored or rank > authored[key][0]:
+            authored[key] = (rank, notice_id, notice)
+    for key, (_, notice_id, notice) in authored.items():
+        terms = notice.terms
         status = ("delivered" if notice.status in {"delivered", "completed"} else
                   "rejected" if notice.status == "rejected" else
                   "expired" if notice.status == "expired" else

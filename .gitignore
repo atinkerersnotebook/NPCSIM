@@ -6,5 +6,6 @@ __pycache__/
 data/runs/
 data/worlds/
 data/saves/
+/data/evaluations/
 data/self-heal-server.log
 *.tmp

@@ -1614,6 +1614,10 @@ class ProxyConfig(StrictModel):
     model: str | None = None
     token_environment: str | None = None
     timeout_seconds: float = Field(default=15, gt=0, le=120)
+    message_format: Literal["normal", "compact", "shorthand", "fact-shorthand"] = "normal"
+    message_deduplicate: bool = False
+    message_relevant_memory: bool = False
+    message_aggregate_events: bool = False
 
 
 class WorldConfig(StrictModel):
