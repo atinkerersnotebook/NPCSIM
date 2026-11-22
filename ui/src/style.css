@@ -410,10 +410,14 @@ main{max-width:none}
 .dashboard-page .monitor-clock strong { font-size: clamp(1.65rem, 3vw, 2.25rem); }
 .dashboard-page .monitor-clock { min-width: 150px; }
 .monitor-time-cards { display: flex; align-items: stretch; justify-content: flex-end; gap: .75rem; max-width: 100%; }
-.monitor-time-cards .action-speedometer { margin: 0; min-width: 210px; padding: .65rem 1rem; border: 1px solid var(--dashboard-border); border-top: 1px solid var(--dashboard-border); border-radius: .75rem; background: #102122; }
-.action-speedometer { margin-top: .6rem; padding-top: .55rem; border-top: 1px solid var(--dashboard-border); display: grid; grid-template-columns: auto 128px; align-items: center; gap: .15rem .65rem; min-width: 0; }
+.monitor-time-cards .action-speedometer { margin: 0; min-width: 310px; padding: .65rem 1rem; border: 1px solid var(--dashboard-border); border-top: 1px solid var(--dashboard-border); border-radius: .75rem; background: #102122; }
+.action-speedometer { margin-top: .6rem; padding-top: .55rem; border-top: 1px solid var(--dashboard-border); display: grid; grid-template-columns: auto auto 128px; align-items: center; gap: .15rem .8rem; min-width: 0; }
 .action-speedometer > div { display: flex; flex-direction: column; align-items: flex-start; }
 .action-speedometer strong { color: var(--teal); font: 700 1.35rem Consolas, monospace; }
+.speedometer-turns { gap: .25rem; padding-left: .75rem; border-left: 1px solid var(--dashboard-border); }
+.speedometer-turns > div { display: flex; align-items: baseline; gap: .45rem; }
+.speedometer-turns .eyebrow { font-size: .52rem; }
+.speedometer-turns strong { font-size: .9rem; }
 .action-speedometer svg { width: 128px; height: 38px; overflow: visible; }
 .action-speedometer small { grid-column: 1 / -1; color: var(--muted); font-size: .68rem; text-align: right; }
 .speedometer-history rect { fill: #68c7b8; }
@@ -421,7 +425,8 @@ main{max-width:none}
 .speedometer-axis { stroke: #355a57; stroke-width: 1; }
 .action-speedometer.slow .speedometer-history rect { fill: #efad63; }
 .action-speedometer.stalled .speedometer-history rect { fill: #ef7169; }
-@media(max-width:700px) { .action-speedometer { grid-template-columns: auto minmax(100px, 128px); } .monitor-time-cards { align-items: stretch; flex-wrap: wrap; } .monitor-time-cards .action-speedometer { flex: 1 1 180px; min-width: 0; } .monitor-time-cards .monitor-clock { flex: 1 1 150px; } }
+@media(max-width:700px) { .action-speedometer { grid-template-columns: auto auto minmax(100px, 128px); } .monitor-time-cards { align-items: stretch; flex-wrap: wrap; } .monitor-time-cards .action-speedometer { flex: 1 1 280px; min-width: 0; } .monitor-time-cards .monitor-clock { flex: 1 1 150px; } }
+@media(max-width:460px) { .action-speedometer { grid-template-columns: auto minmax(100px, 1fr); } .action-speedometer .speedometer-turns { grid-column: 1 / -1; grid-row: 2; padding: .35rem 0 0; border-left: 0; border-top: 1px solid var(--dashboard-border); flex-direction: row; flex-wrap: wrap; gap: .75rem; } .action-speedometer svg { grid-column: 2; grid-row: 1; } }
 .supply-view :focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
 .supply-tools:not([hidden]) { display: flex; flex-wrap: wrap; gap: .65rem 1rem; margin-bottom: 1rem; }
 .supply-tools label { display: grid; flex: 0 1 19rem; gap: .35rem; min-width: 0; color: var(--muted); font-size: .85rem; }

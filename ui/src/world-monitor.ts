@@ -182,7 +182,7 @@ export function worldMonitorMarkup(
         ${agents.filter(agent => agent.visitor && agent.current).length} visitors present`
         : `${agents.length} ${agents.length === 1 ? "agent" : "agents"}`} / Read-only</p>`,
     `<div class="monitor-time-cards">
-      ${actionSpeedometerMarkup(state.run)}
+      ${actionSpeedometerMarkup(state.run, state.world?.village?.minute ?? state.observation?.village?.minute)}
       <div class="monitor-clock" role="timer" aria-label="Current game time">
         <span class="eyebrow">CURRENT GAME TIME</span><strong>${clock?.time ?? "Untimed world"}</strong>
         ${clock ? `<small>${clock.description}</small>` : ""}

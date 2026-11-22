@@ -164,9 +164,9 @@ class Controller:
 
     async def start_worker(self) -> None:
         self._restore_history()
-        if self.story and self.events and self.story.position() < len(self.events.events):
+        if self.story and self.events and self.story.position() < self.events.count:
             from npc_sim.app import _schedule_story
-            _schedule_story(self.story, self.events.directory, len(self.events.events))
+            _schedule_story(self.story, self.events.directory, self.events.count)
         self.worker = asyncio.create_task(self._worker(), name="npc-loop")
         if self.run and self.run["status"] == "paused" and self.run.get("safe_checkpoint"):
             try:
@@ -454,10 +454,10 @@ class Controller:
             self.observation = observation(await self.world.operation("observe", {}), self.world.session_id)
             self.emit("observation", self.observation)
             self.checkpoint()
-        results = {event["payload"]["request_id"] for event in self.events.events
-                   if event["kind"] == "action_result"}
-        pending = any(event["payload"]["request_id"] not in results for event in self.events.events
-                      if event["kind"] == "action_request")
+        results = {event["payload"]["request_id"]
+                   for event in self.events.matching(kinds={"action_result"})}
+        pending = any(event["payload"]["request_id"] not in results
+                  for event in self.events.matching(kinds={"action_request"}))
         resumable = self.run["status"] == "paused" and not pending
         saved = EpisodeSave(
             id=uuid4().hex, name=request.name, saved_at=utc_now(), resumable=resumable,
@@ -515,7 +515,7 @@ class Controller:
             candidate.emit("episode_loaded", loaded_run["loaded_from_save"])
             candidate.checkpoint()
             from npc_sim.app import _schedule_story
-            _schedule_story(candidate.story, directory, len(candidate.events.events))
+            _schedule_story(candidate.story, directory, candidate.events.count)
         except Exception:
             LOGGER.exception("Loading save point failed; preserving the current episode")
             if candidate.world:
@@ -641,8 +641,8 @@ class Controller:
                    "inspect outstanding requests before recovery.")
         if not self.run or not self.events or not {"actor_id", "session_id", "cycles"} <= self.run.keys():
             raise ValueError(message)
-        requests = [event for event in self.events.events if event["kind"] == "action_request"]
-        results = [event for event in self.events.events if event["kind"] == "action_result"]
+        requests = self.events.matching(kinds={"action_request"})
+        results = self.events.matching(kinds={"action_result"})
         result_ids = {event["payload"]["request_id"] for event in results}
         pending = [event for event in requests if event["payload"]["request_id"] not in result_ids]
         event = requests[-1] if requests else None
@@ -1507,7 +1507,7 @@ class Controller:
                     LOGGER.exception("Story checkpoint deferred; events remain authoritative")
             elif story and story.position() < recorded["sequence"] - 1:
                 from npc_sim.app import _schedule_story
-                _schedule_story(story, self.events.directory, len(self.events.events))
+                _schedule_story(story, self.events.directory, self.events.count)
 
     def finish(self, status: str, reason: str) -> None:
         if not self.run:
@@ -1628,8 +1628,8 @@ class Controller:
         if self.run and self.events:
             snapshot = self.status()["world"]
             if snapshot is not None:
-                announced = {event["payload"]["goal_id"] for event in self.events.events
-                             if event["kind"] == "secondary_goal_achieved"}
+                announced = {event["payload"]["goal_id"]
+                             for event in self.events.matching(kinds={"secondary_goal_achieved"})}
                 for gid, goal in snapshot["secondary_goals"].items():
                     if goal["status"] == "achieved" and gid not in announced:
                         self.emit("secondary_goal_achieved", {
@@ -1697,5 +1697,5 @@ class Controller:
                 snapshot = copy.deepcopy(self._world_snapshot)
         return {"run": self.run, "observation": self.observation,
                 "world": snapshot, "memory": self.memory, "in_flight": self.in_flight,
-                "event_count": len(self.events.events) if self.events else 0,
+                "event_count": self.events.count if self.events else 0,
                 "config": self.config.model_dump(mode="json")}

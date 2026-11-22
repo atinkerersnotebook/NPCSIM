@@ -512,7 +512,7 @@ function renderMetrics(): void {
   const clock = simulationClock(state.world ?? state.observation, state.observation);
   const display = element("simulation-clock");
     display.hidden = state.run === null;
-    display.innerHTML = `${actionSpeedometerMarkup(state.run)}<div class="monitor-clock" role="timer" aria-label="Current game time"><span class="eyebrow">CURRENT GAME TIME</span><strong>${clock?.time ?? "Untimed world"}</strong>${clock ? `<small>${clock.description}</small>` : ""}</div>`;
+    display.innerHTML = `${actionSpeedometerMarkup(state.run, state.world?.village?.minute ?? state.observation?.village?.minute)}<div class="monitor-clock" role="timer" aria-label="Current game time"><span class="eyebrow">CURRENT GAME TIME</span><strong>${clock?.time ?? "Untimed world"}</strong>${clock ? `<small>${clock.description}</small>` : ""}</div>`;
   const run = state.run;
   const status = run?.status ?? "idle";
   if (!adminView) {

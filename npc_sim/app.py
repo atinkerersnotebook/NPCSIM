@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from npc_sim.controller import Controller
 from npc_sim.models import AgentProfile, AppConfig, BudgetExtension, ClockRequest, EpisodeLoadRequest, EpisodeSaveRequest, NeedToggle, ReopenRequest, RunModeRequest, Scenario, StartRequest, VillageConfigurationRequest
-from npc_sim.storage import StoryStore, read_json, write_json
+from npc_sim.storage import EventStore, StoryStore, read_json, write_json
 from npc_sim.agents import default_profile_id, load_profiles, save_profile, slots
 from npc_sim.dungeon_master import DungeonMasterConfig, load_config as load_dungeon_master
 from npc_sim.interactions import ApprovalRequest, ChatRequest, DungeonAppealResponse, EditRequest
@@ -30,27 +30,44 @@ async def lifespan(app: FastAPI):
     controller = Controller(ROOT, DATA, config)
     app.state.controller = controller
     await controller.start_worker()
+    global _event_compaction
+    _event_compaction = asyncio.create_task(_compact_event_history(), name="event-compaction")
     try:
         yield
     finally:
+        if _event_compaction:
+            _event_compaction.cancel()
         await controller.shutdown()
 
 
 app = FastAPI(title="NPCSIM Admin", lifespan=lifespan)
 _story_backfills: dict[str, asyncio.Task[None]] = {}
 _story_errors: dict[str, str] = {}
+_event_compaction: asyncio.Task[None] | None = None
+
+
+async def _compact_event_history() -> None:
+    while True:
+        controller = app.state.controller
+        if controller.events and await asyncio.to_thread(controller.events.compact):
+            await asyncio.sleep(1)
+        else:
+            await asyncio.sleep(30)
 
 
 async def _backfill_story(store: StoryStore, directory: Path) -> None:
     try:
         after = await asyncio.to_thread(store.position)
-        for path in sorted((directory / "events").glob("*.json")):
-            sequence = int(path.stem)
-            if sequence <= after:
-                continue
+        try:
+            events = EventStore(directory, store.run_id, validate=False)
+        except ValueError as error:
+            if "Non-contiguous event sequence" in str(error):
+                raise ValueError(f"Missing narrative source event after sequence {after}") from error
+            raise
+        for sequence in range(after + 1, events.count + 1):
             if sequence != after + 1:
                 raise ValueError(f"Missing narrative source event after sequence {after}")
-            await asyncio.to_thread(store.append, await asyncio.to_thread(read_json, path))
+            await asyncio.to_thread(store.append, await asyncio.to_thread(events.get, sequence))
             after = sequence
             if sequence % 100 == 0:
                 await asyncio.sleep(0)
@@ -273,8 +290,18 @@ async def events(request: Request, after: int = 0, compact: bool = False, limit:
     if limit is not None:
         if not 1 <= limit <= 500:
             raise HTTPException(422, "Invalid event page size")
-    recorded = active.events.events if active.events else []
-    recorded = (recorded[after:after + limit] if after > 0 else recorded[-limit:]) if limit else recorded[max(0, after):]
+    if not active.events:
+        recorded = []
+    elif not isinstance(active.events, EventStore):
+        recorded = active.events.events
+        recorded = (recorded[after:after + limit] if after > 0 else recorded[-limit:]) if limit else recorded[max(0, after):]
+    elif limit:
+        if after > 0:
+            recorded = active.events.page(after, limit)
+        else:
+            recorded = active.events.page(max(0, active.events.count - limit), limit)
+    else:
+        recorded = active.events.page(max(0, after), active.events.count - max(0, after))
     payload = {"run_id": active.run["id"] if active.run else None,
                "events": [live_event(event) for event in recorded] if compact else recorded}
     return await asyncio.to_thread(JSONResponse, payload)
@@ -285,9 +312,11 @@ async def event_detail(sequence: int, run_id: str, request: Request):
     active = controller(request)
     if not active.run or active.run["id"] != run_id:
         raise HTTPException(409, "The adventure changed. Refresh before inspecting an event.")
-    if not active.events or not 1 <= sequence <= len(active.events.events):
+    count = active.events.count if isinstance(active.events, EventStore) else len(active.events.events)
+    if not active.events or not 1 <= sequence <= count:
         raise HTTPException(404, "Unknown event sequence")
-    return JSONResponse(active.events.events[sequence - 1])
+    return JSONResponse(active.events.get(sequence) if isinstance(active.events, EventStore)
+                        else active.events.events[sequence - 1])
 
 
 @app.get("/api/stream")
@@ -312,7 +341,9 @@ async def stream(request: Request, run_id: str = "", after: int = 0, compact: bo
                 previous_snapshot = snapshot
                 yield f"event: snapshot\ndata: {snapshot}\n\n"
             if active.events:
-                for index, event in enumerate(active.events.events[sequence:]):
+                page = (active.events.page(sequence, active.events.count - sequence)
+                        if hasattr(active.events, "page") else list(active.events.events)[sequence:])
+                for index, event in enumerate(page):
                     sequence = event["sequence"]
                     yield f"id: {event['id']}\nevent: run-event\ndata: {json.dumps(live_event(event) if compact else event)}\n\n"
                     if index % 20 == 19:
@@ -331,7 +362,7 @@ async def transcript(request: Request):
     active = controller(request)
     return JSONResponse({
         "schema_version": "1.0", "run": active.run,
-        "events": active.events.events if active.events else [],
+        "events": list(active.events.events) if active.events else [],
     }, headers={"Content-Disposition": 'attachment; filename="npc-transcript.json"'})
 
 
@@ -356,8 +387,8 @@ async def recorded_story(run_id: str, request: Request, day: int | None = None,
         raise HTTPException(422, "Unknown story actor")
     store = StoryStore(directory, run_id, team=bool(run.get("agents")))
     active = controller(request)
-    count = (len(active.events.events) if active.run and active.run["id"] == run_id and active.events
-             else len(list((directory / "events").glob("*.json"))))
+    count = (active.events.count if active.run and active.run["id"] == run_id and active.events
+             else EventStore(directory, run_id).count)
     backfilling = _schedule_story(store, directory, count)
     page = await asyncio.to_thread(store.page, day=day, actor=actor, after=after, limit=limit)
     return {**page, "backfilling": backfilling, "total_events": count,

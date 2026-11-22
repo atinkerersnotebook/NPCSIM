@@ -236,3 +236,21 @@ def test_event_rebuild_and_atomic_failure(tmp_path, monkeypatch):
         write_json(path, {"value": "new"})
     assert read_json(path) == {"value": "old"}
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_event_store_compacts_old_events_without_changing_sequence(tmp_path):
+    store = EventStore(tmp_path, "run")
+    payload = {"message": "x" * 4096}
+    for sequence in range(1, EventStore.RECENT_EVENT_COUNT + 4):
+        store.append({"kind": "example", "payload": payload})
+    assert store.compact() == 3
+    assert not (tmp_path / "events" / "000001.json").exists()
+    assert (tmp_path / "events" / "000501.json").exists()
+    assert store.get(1)["payload"] == payload
+    assert store.page(EventStore.RECENT_EVENT_COUNT, 3)[-1]["sequence"] == store.count
+
+    rebuilt = EventStore(tmp_path, "run")
+    assert rebuilt.count == store.count
+    assert rebuilt.events[0] == store.events[0]
+    assert rebuilt.events[-1] == store.events[-1]
+    assert (tmp_path / "events.sqlite3").stat().st_size < (EventStore.RECENT_EVENT_COUNT + 3) * 2000

@@ -33,20 +33,34 @@ test("the actions meter keeps its rate and minute bars across page navigation fo
   const second = { ...run, actions: 13, elapsed_seconds: 120 };
   const before = world(second);
   assert.match(before, /aria-valuenow="3\.0"/);
-  assert.match(before, /1m ago: 10\.0 actions/);
+  assert.match(before, /2m ago: 10\.0 actions/);
   assert.equal(admin(second), before);
 
   const third = { ...run, actions: 15, elapsed_seconds: 180 };
   const after = admin(third);
-  assert.match(after, /1m ago: 3\.0 actions/);
-  assert.match(after, /0m ago: 2\.0 actions/);
+  assert.match(after, /1m ago: 2\.0 actions/);
+  assert.match(after, /2m ago: 3\.0 actions/);
   assert.equal(world(second), after); // A restored page can still have an older snapshot.
   const later = { ...run, actions: 16, elapsed_seconds: 31 * 60 };
   const trimmed = admin(later);
   assert.doesNotMatch(trimmed, /10\.0 actions/);
-  assert.match(trimmed, /29m ago: 3\.0 actions/);
+  assert.match(trimmed, /29m ago: 2\.0 actions/);
   assert.equal(world(later), trimmed);
-  assert.doesNotMatch(world({ ...run, id: "adventure-b" }), /rolling throughput|1m ago: 3\.0 actions/);
+  assert.doesNotMatch(world({ ...run, id: "adventure-b" }), /1m ago: 3\.0 actions/);
+});
+
+test("the actions meter reports completed real-minute and five-minute game turns", async t => {
+  mockTabStorage(t);
+  const meter = await newSpeedometer("turns");
+  const run = { id: "adventure-turns", actions: 0, elapsed_seconds: 0 };
+  meter(run, 0);
+  const first = meter({ ...run, actions: 1, elapsed_seconds: 12 }, 5);
+  assert.match(first, /ACTIONS \/ MIN<\/span><strong>0<\/strong>/);
+  assert.match(first, /ACTIONS \/ TURN<\/span><strong>1<\/strong>/);
+  const second = meter({ ...run, actions: 3, elapsed_seconds: 72 }, 10);
+  assert.match(second, /aria-valuenow="1\.0"/);
+  assert.match(second, /ACTIONS \/ TURN<\/span><strong>2<\/strong>/);
+  assert.match(second, /TIME \/ TURN<\/span><strong>60\.0s<\/strong>/);
 });
 
 test("invalid or unavailable tab storage does not prevent live action sampling", async t => {

@@ -6,6 +6,8 @@ import sqlite3
 import threading
 import tempfile
 import time
+import zlib
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -45,33 +47,240 @@ def write_text(path: Path, value: str) -> None:
             os.unlink(temporary)
 
 
+class EventSequence(Sequence[dict[str, Any]]):
+    def __init__(self, store: "EventStore"):
+        self._store = store
+
+    def __len__(self) -> int:
+        return self._store.count
+
+    def __getitem__(self, index: int | slice) -> dict[str, Any] | list[dict[str, Any]]:
+        if isinstance(index, slice):
+            return [self[position] for position in range(*index.indices(len(self)))]
+        if index < 0:
+            index += len(self)
+        if index < 0 or index >= len(self):
+            raise IndexError(index)
+        return self._store.get(index + 1)
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        for sequence in range(1, len(self) + 1):
+            yield self._store.get(sequence)
+
+    def __reversed__(self) -> Iterator[dict[str, Any]]:
+        for sequence in range(len(self), 0, -1):
+            yield self._store.get(sequence)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, (list, EventSequence)):
+            return False
+        return list(self) == list(other)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> list[dict[str, Any]]:
+        from copy import deepcopy
+        return [deepcopy(event, memo) for event in self]
+
+    def append(self, event: dict[str, Any]) -> dict[str, Any]:
+        with self._store._lock:
+            event = dict(event)
+            event.setdefault("sequence", self._store.count + 1)
+            self._store.count = max(self._store.count, event["sequence"])
+            self._store._cache[event["sequence"]] = event
+            return event
+
+
 class EventStore:
-    def __init__(self, directory: Path, run_id: str):
+    ARCHIVE_DATABASE = "events.sqlite3"
+    RECENT_EVENT_COUNT = 500
+    COMPACT_BATCH_SIZE = 500
+
+    def __init__(self, directory: Path, run_id: str, *, validate: bool = True):
         self.directory = directory
         self.run_id = run_id
-        self.events: list[dict[str, Any]] = []
-        for path in sorted((directory / "events").glob("*.json")):
-            event = read_json(path)
-            if event.get("schema_version") != "1.0" or event.get("run_id") != run_id:
-                raise ValueError(f"Invalid event document: {path.name}")
-            if event.get("sequence") != len(self.events) + 1:
-                raise ValueError(f"Non-contiguous event sequence: {path.name}")
-            self.events.append(event)
+        self.validate = validate
+        self._lock = threading.RLock()
+        self._cache: dict[int, dict[str, Any]] = {}
+        self.count = 0
+        self._initialize_archive()
+        with sqlite3.connect(self._archive_path) as connection:
+            archived = connection.execute("SELECT MAX(sequence) FROM events").fetchone()[0] or 0
+        self.rebuild_index()
+        recent = sorted((directory / "events").glob("*.json"))
+        if recent:
+            try:
+                latest = int(recent[-1].stem)
+            except ValueError as error:
+                raise ValueError(f"Invalid event document: {recent[-1].name}") from error
+            self.count = max(archived, latest)
+        else:
+            self.count = archived
+        self._check_contiguous(archived)
+        self.events: Sequence[dict[str, Any]] = EventSequence(self)
         self._index()
 
+    @property
+    def _archive_path(self) -> Path:
+        return self.directory / self.ARCHIVE_DATABASE
+
+    def _initialize_archive(self) -> None:
+        self.directory.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self._archive_path) as connection:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY, kind TEXT, "
+                "actor_id TEXT, cycle INTEGER, payload BLOB NOT NULL)")
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(events)")}
+            for name, declaration in (("kind", "TEXT"), ("actor_id", "TEXT"), ("cycle", "INTEGER")):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE events ADD COLUMN {name} {declaration}")
+            connection.execute("CREATE INDEX IF NOT EXISTS events_kind_sequence ON events(kind, sequence)")
+
+    def _check_contiguous(self, archived_through: int) -> None:
+        with sqlite3.connect(self._archive_path) as connection:
+            archived_count = connection.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        if archived_count != archived_through:
+            raise ValueError("Non-contiguous event archive")
+        remaining = {int(path.stem) for path in (self.directory / "events").glob("*.json")}
+        expected = set(range(archived_through + 1, self.count + 1))
+        if remaining != expected:
+            raise ValueError("Non-contiguous event sequence or duplicate archive entry")
+
+    @staticmethod
+    def _decode(payload: bytes) -> dict[str, Any]:
+        return json.loads(zlib.decompress(payload))
+
+    @staticmethod
+    def _encode(event: dict[str, Any]) -> bytes:
+        raw = json.dumps(event, ensure_ascii=True, allow_nan=False,
+                         separators=(",", ":")).encode("utf-8")
+        return zlib.compress(raw, level=6)
+
+    def get(self, sequence: int) -> dict[str, Any]:
+        if sequence < 1 or sequence > self.count:
+            raise IndexError(sequence - 1)
+        with self._lock:
+            cached = self._cache.get(sequence)
+            if cached is not None:
+                return cached
+            with sqlite3.connect(self._archive_path) as connection:
+                row = connection.execute(
+                    "SELECT payload FROM events WHERE sequence = ?", (sequence,)).fetchone()
+            if row is not None:
+                event = self._decode(row[0])
+            else:
+                path = self.directory / "events" / f"{sequence:06}.json"
+                event = read_json(path)
+            if self.validate and (event.get("schema_version") != "1.0" or event.get("run_id") != self.run_id
+                    or event.get("sequence") != sequence):
+                raise ValueError(f"Invalid event document for sequence {sequence}")
+            if len(self._cache) >= 64:
+                self._cache.pop(next(iter(self._cache)))
+            self._cache[sequence] = event
+            return event
+
+    def page(self, after: int, limit: int) -> list[dict[str, Any]]:
+        stop = min(self.count, max(0, after) + limit)
+        return [self.get(sequence) for sequence in range(max(0, after) + 1, stop + 1)]
+
+    def compact(self, batch_size: int | None = None) -> int:
+        batch_size = batch_size or self.COMPACT_BATCH_SIZE
+        with self._lock:
+            target = max(0, self.count - self.RECENT_EVENT_COUNT)
+            with sqlite3.connect(self._archive_path) as connection:
+                archived = connection.execute("SELECT MAX(sequence) FROM events").fetchone()[0] or 0
+                for duplicate in (self.directory / "events").glob("*.json"):
+                    if int(duplicate.stem) <= archived:
+                        duplicate.unlink()
+                stop = min(target, archived + batch_size)
+                if stop <= archived:
+                    return 0
+                entries: list[tuple[int, bytes]] = []
+                consumed: list[Path] = []
+                for sequence in range(archived + 1, stop + 1):
+                    path = self.directory / "events" / f"{sequence:06}.json"
+                    event = read_json(path)
+                    self._validate(event, sequence)
+                    entries.append((sequence, event.get("kind"), event.get("actor_id"), event.get("cycle"),
+                                    self._encode(event)))
+                    consumed.append(path)
+                with connection:
+                    connection.executemany(
+                        "INSERT INTO events(sequence, kind, actor_id, cycle, payload) VALUES (?, ?, ?, ?, ?)",
+                        entries)
+                for path in consumed:
+                    path.unlink()
+                return len(entries)
+
+    def rebuild_index(self, batch_size: int = 1000) -> int:
+        updated = 0
+        with sqlite3.connect(self._archive_path) as connection:
+            while True:
+                rows = connection.execute(
+                    "SELECT sequence, payload FROM events WHERE kind IS NULL "
+                    "ORDER BY sequence LIMIT ?", (batch_size,)).fetchall()
+                if not rows:
+                    break
+                with connection:
+                    for sequence, payload in rows:
+                        event = self._decode(payload)
+                        connection.execute(
+                            "UPDATE events SET kind = ?, actor_id = ?, cycle = ? WHERE sequence = ?",
+                            (event.get("kind"), event.get("actor_id"), event.get("cycle"), sequence))
+                updated += len(rows)
+        return updated
+
+    def matching(self, *, kinds: set[str], reverse: bool = False,
+                 limit: int | None = None) -> list[dict[str, Any]]:
+        order = "DESC" if reverse else "ASC"
+        placeholders = ",".join("?" for _ in kinds)
+        query = f"SELECT sequence FROM events WHERE kind IN ({placeholders}) ORDER BY sequence {order}"
+        parameters: list[Any] = list(kinds)
+        if limit is not None:
+            query += " LIMIT ?"
+            parameters.append(limit)
+        archived: list[int]
+        with sqlite3.connect(self._archive_path) as connection:
+            archived = [row[0] for row in connection.execute(query, parameters)]
+        recent = []
+        archived_end = min(self.count - self.RECENT_EVENT_COUNT, self.count)
+        for sequence in range(max(1, archived_end + 1), self.count + 1):
+            try:
+                event = self.get(sequence)
+            except (FileNotFoundError, IndexError):
+                continue
+            if event.get("kind") in kinds:
+                recent.append(sequence)
+        if reverse:
+            recent.reverse()
+        sequences = (*recent, *archived) if reverse else (*archived, *recent)
+        if limit is not None:
+            sequences = sequences[:limit]
+        return [self.get(sequence) for sequence in sequences]
+
+    def _validate(self, event: dict[str, Any], sequence: int) -> None:
+        if (event.get("schema_version") != "1.0" or event.get("run_id") != self.run_id
+                or event.get("sequence") != sequence):
+            raise ValueError(f"Invalid event document for sequence {sequence}")
+
     def _index(self) -> None:
+        if self.count > 100_000:
+            raise ValueError("Event index is too large to materialize")
         write_json(self.directory / "transcript.json", {
             "schema_version": "1.0", "run_id": self.run_id,
-            "events": [event["id"] for event in self.events],
+            "events": [f"{self.run_id}:{sequence}" for sequence in range(1, self.count + 1)],
+            "count": self.count,
         })
 
     def append(self, event: dict[str, Any]) -> dict[str, Any]:
-        sequence = len(self.events) + 1
+        sequence = self.count + 1
         entry = {**event, "schema_version": "1.0", "run_id": self.run_id,
                  "sequence": sequence, "id": f"{self.run_id}:{sequence}"}
         write_json(self.directory / "events" / f"{sequence:06}.json", entry)
-        self.events.append(entry)
-        self._index()
+        self.count = sequence
+        if sequence <= self.RECENT_EVENT_COUNT or sequence % self.COMPACT_BATCH_SIZE == 0:
+            self._index()
+        with self._lock:
+            self._cache[sequence] = entry
         return entry
 
 
