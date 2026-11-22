@@ -1152,7 +1152,9 @@ read-only monitoring: current game time and every agent grouped by actual locati
 with current activity and clearly labeled last actions. It updates live without
 model calls, simulation controls, configuration, private plans, or transcripts. Stopped
 adventures show their last recorded world state; unavailable live positions are
-explicitly labeled. Switching views never pauses or resets the adventure.
+explicitly labeled. Switching views never pauses or resets the adventure. The
+**Actions / min** meter keeps its latest rate and up to 30 minutes of sampled
+history when switching views or refreshing the same adventure in the same tab.
 
 **World now** shows the current turn, last successful recorded move, and blocked
 village work on the **Overview** tab. Switch to **Map**, **Timeline**, **Residents**,

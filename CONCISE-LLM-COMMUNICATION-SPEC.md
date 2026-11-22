@@ -1,6 +1,6 @@
 # Experimental Concise LLM Communication
 
-**Status:** proposed development specification; no runtime behavior is enabled by this document.
+**Status:** initial experimental implementation available through the Admin LLM proxy panel. Delta messages, opaque references and provider-dependent two-pass behavior remain out of scope.
 
 ## Goal
 
@@ -38,7 +38,7 @@ Supported values:
 | `shorthand` | `compact` plus a documented, deterministic representation for repeated structured context. |
 | `fact-shorthand` | `shorthand` plus a labeled, typed projection for explicitly supported memory facts. |
 
-The selection belongs to a new episode configuration snapshot. Changing the global option must not change a running episode. The Admin model/proxy area should eventually expose a clearly labeled **Experimental message format** control and show the selected mode in episode details.
+The selection belongs to the episode configuration snapshot. Changing configuration is blocked while an episode is running; saving while paused updates that episode, and saving before a new episode snapshots the setting there. The Admin model/proxy area exposes an **Experimental message compression** control. Request events report the effective mode and byte reduction.
 
 ## Safety boundary
 
@@ -151,8 +151,8 @@ implemented at that boundary without assuming hidden provider memory.
 | Action-catalog reduction | Implementable with tests | Send all action IDs and concise availability facts, but include full argument schemas for potentially selectable actions only. An unavailable action retains its reason. A compressed catalog must never hide an action that the engine permits. |
 | Repeated-event aggregation | Implementable with provenance | Collapse mechanically identical older observations such as unchanged failures into a count, first/last time and source IDs. Keep recent events and any state-changing event unabridged. |
 | Prompt-prefix caching | Provider-dependent; optional | Place invariant system content and static dictionaries first so a compatible provider/proxy can cache the prefix. Record cache hits through provider telemetry when available; never assume caching exists. |
-| Delta messages | Phase 2 only | A future protocol may send an episode revision, base hash and changed paths only if the selected proxy contract explicitly retains and authorizes that base. The current standalone endpoint cannot safely assume prior-message state. Until then, each request remains self-contained. |
-| Two-pass relevance selection | Deferred | An extra model call can select relevant fact/action IDs before the decision call, but it adds latency, model calls and failure paths. Test only if a single-request relevance strategy cannot meet the target, and count both calls in budgets. |
+| Delta messages | Not implemented | A future protocol may send an episode revision, base hash and changed paths only if the selected proxy contract explicitly retains and authorizes that base. The current standalone endpoint cannot safely assume prior-message state. Each request remains self-contained. |
+| Two-pass relevance selection | Not implemented | An extra model call can select relevant fact/action IDs before the decision call, but it adds latency, model calls and failure paths. Implement only if a single-request relevance strategy cannot meet the target, and count both calls in budgets. |
 | Server-resolvable opaque references | Not implementable in the current contract | IDs such as `MEMORY-42` are invalid unless the actual model/proxy can resolve them. Do not send references that exist only in local application storage. |
 
 For relevance-filtered memory, omission metadata must state the selection method,

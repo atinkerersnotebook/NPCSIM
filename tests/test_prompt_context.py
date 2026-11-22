@@ -9,6 +9,8 @@ from npc_sim.models import ProxyConfig
 from npc_sim.prompt_context import RECENT_ACTIONS, RECENT_MESSAGES, REVIEW_EVENTS, review_context
 from npc_sim.proxy import Proxy
 
+from npc_sim.prompt_codec import encode_prompt_payload
+
 
 def observed(actor="smith"):
     return {
@@ -199,3 +201,85 @@ def test_short_term_result_text_is_bounded_without_trimming_current_action_schem
     assert result["explanation_truncated"]
     assert [item["id"] for item in payload["observation"]["actions"]] == [item["id"] for item in observation["actions"]]
     assert memory == before
+
+
+def test_normal_compression_mode_preserves_existing_proxy_messages_exactly():
+    proxy = Proxy(ProxyConfig(message_format="normal"))
+    messages = proxy.context({"objective": "Continue"}, observed(), remembered())
+    payload = json.loads(messages[-1]["content"])
+    assert payload["goal"] == {"objective": "Continue"}
+    assert payload["observation"]["self"]["actor_id"] == "smith"
+    assert "compression" not in payload
+    assert proxy.context_diagnostics["effective_mode"] == "normal"
+    assert proxy.context_diagnostics["normal_user_bytes"] == proxy.context_diagnostics["sent_user_bytes"]
+
+
+def test_old_proxy_configuration_defaults_to_normal_compression():
+    config = ProxyConfig.model_validate({})
+    assert config.message_format == "normal"
+    assert not config.message_deduplicate
+    assert not config.message_relevant_memory
+    assert not config.message_aggregate_events
+
+
+def test_fact_shorthand_preserves_debt_direction_and_source_without_mutating_memory():
+    payload = {"memory": {"facts": [{
+        "type": "debt", "debtor": "Arin", "creditor": "Mara", "amount": 3,
+        "currency": "silver", "source": "M-12", "day": 4, "confidence": "high",
+        "status": "unpaid",
+    }]}}
+    before = copy.deepcopy(payload)
+    encoded, diagnostics = encode_prompt_payload(payload, "fact-shorthand")
+    fact = encoded["data"]["memory"]["facts"][0]["fact"]
+    assert fact == ("DEBT(debtor=Arin,creditor=Mara,amount=3,currency=silver,"
+                    "source=M-12,day=4,confidence=high,status=unpaid)")
+    assert diagnostics["facts_encoded"] == 1
+    assert payload == before
+
+
+def test_shorthand_uses_self_describing_tables_and_round_trips():
+    payload = {"memory": {"recent": [
+        {"id": index, "action": "wait", "result": "UNCHANGED"} for index in range(4)
+    ]}}
+    encoded, diagnostics = encode_prompt_payload(payload, "shorthand")
+    table = encoded["data"]["memory"]["recent"]["$table"]
+    assert table["columns"] == ["action", "id", "result"]
+    assert len(table["rows"]) == 4
+    assert diagnostics["tables_encoded"] == 1
+    assert diagnostics["fallback_reason"] is None
+
+
+def test_compression_deduplicates_repeated_strings_and_aggregates_identical_events():
+    repeated = "An unchanged blocker that is long enough to qualify for deduplication."
+    payload = {
+        "observation": {"village": {"events": [
+            {"id": f"event-{index}", "minute": index, "code": "BLOCKED", "result": repeated}
+            for index in range(4)
+        ]}},
+        "memory": {"facts": [repeated, repeated]},
+    }
+    encoded, diagnostics = encode_prompt_payload(
+        payload, "compact", deduplicate=True, aggregate_events=True)
+    events = encoded["data"]["obs"]["village"]["events"]
+    assert len(events) == 1
+    assert events[0]["count"] == 4
+    assert events[0]["source_ids"] == [f"event-{index}" for index in range(4)]
+    assert diagnostics["events_aggregated"] == 3
+    assert diagnostics["deduplicated_values"] >= 1
+    assert encoded["compression"]["references"][0] == repeated
+
+
+def test_relevant_memory_selection_keeps_recent_and_goal_related_facts():
+    payload = {
+        "goal": {"objective": "Repair the wagon at the forge"},
+        "observation": {"self": {"actor_id": "smith"}, "location": {"id": "forge"}, "actions": []},
+        "memory": {"facts": [
+            {"id": str(index), "text": ("forge wagon repair" if index == 0 else f"unrelated memory {index}")}
+            for index in range(40)
+        ]},
+    }
+    encoded, diagnostics = encode_prompt_payload(payload, "normal", relevant_memory=True)
+    retained = encoded["data"]["memory"]["facts"]
+    assert any(item.get("id") == "0" for item in retained)
+    assert {item["id"] for item in retained}.issuperset({str(index) for index in range(34, 40)})
+    assert diagnostics["memory_entries_omitted"] == 16

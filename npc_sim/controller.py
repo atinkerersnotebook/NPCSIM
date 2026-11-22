@@ -187,6 +187,8 @@ class Controller:
             raise ValueError("Invalid saved run document.")
         if self.run.get("schema_version") != "1.0":
             raise ValueError("Unsupported saved run schema")
+        frozen = AppConfig.model_validate(self.run["config"])
+        self.proxy = Proxy(frozen.proxy)
         self.events = EventStore(paths[-1].parent, self.run["id"])
         self.story = StoryStore(paths[-1].parent, self.run["id"], team=bool(self.run.get("agents")))
         self.memory = read_json(paths[-1].parent / "npc-memory.json")
@@ -518,6 +520,10 @@ class Controller:
             LOGGER.exception("Loading save point failed; preserving the current episode")
             if candidate.world:
                 await candidate.world.close()
+            if candidate.story is not None:
+                del candidate.story
+                import gc
+                gc.collect()
             for path in (directory, world_directory):
                 if path.exists():
                     shutil.rmtree(path)
@@ -525,6 +531,8 @@ class Controller:
                 await self._connect_saved_world(require_frozen=True)
             raise
         self.run, self.memory, self.events = loaded_run, candidate.memory, candidate.events
+        if type(self.proxy) is Proxy:
+            self.proxy = Proxy(AppConfig.model_validate(loaded_run["config"]).proxy)
         self.story = candidate.story
         self.world, self.observation, self.agents = candidate.world, candidate.observation, candidate.agents
         self.patterns, self.replan_count = candidate.patterns, candidate.replan_count
@@ -1209,7 +1217,8 @@ class Controller:
                     self.finish("budget_exceeded", "Model-call or wall-time budget exhausted.")
                 return
             messages = self.proxy.context(self.run["goal"], self.observation, self.memory, repair)
-            self.emit("proxy_request", {"model": self.run["model"], "messages": messages, "repair": bool(repair)})
+            self.emit("proxy_request", {"model": self.run["model"], "messages": messages, "repair": bool(repair),
+                                        "compression": dict(getattr(self.proxy, "context_diagnostics", {}))})
             self.run["model_calls"] += 1
             self.checkpoint()
             try:
@@ -1364,7 +1373,8 @@ class Controller:
                 self.finish("budget_exceeded", "Episode wall-time budget exhausted before Dungeon Master review.")
                 return
             messages = self.proxy.dungeon_master_context(payload, repair)
-            self.emit("dungeon_master_request", {"model": self.run["model"], "messages": messages})
+            self.emit("dungeon_master_request", {"model": self.run["model"], "messages": messages,
+                                                 "compression": dict(getattr(self.proxy, "context_diagnostics", {}))})
             supervisor["model_calls"] += 1
             self.checkpoint()
             try:

@@ -526,7 +526,11 @@ export const configSchema = z.object({
   schema_version: z.literal("1.0"),
   proxy: z.object({
     base_url: z.string(), model: z.string().nullable(), token_environment: z.string().nullable(),
-    timeout_seconds: z.number()
+    timeout_seconds: z.number(),
+    message_format: z.enum(["normal", "compact", "shorthand", "fact-shorthand"]).default("normal"),
+    message_deduplicate: z.boolean().default(false),
+    message_relevant_memory: z.boolean().default(false),
+    message_aggregate_events: z.boolean().default(false)
   }),
   world: z.object({
     transport: z.enum(["stdio", "streamable_http"]), scenario: z.string(),

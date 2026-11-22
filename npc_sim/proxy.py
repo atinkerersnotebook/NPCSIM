@@ -8,6 +8,7 @@ from npc_sim.models import Decision, ProxyConfig
 from npc_sim.assessment import StoryReview
 from npc_sim.dungeon_master import DungeonMasterReview
 from npc_sim.interactions import NpcReply, WorldEditPlan
+from npc_sim.prompt_codec import compression_instructions, encode_prompt_payload
 from npc_sim.prompt_context import memory_context, observation_context, review_context
 
 
@@ -124,6 +125,25 @@ Provide a concise action explanation, not private chain-of-thought."""
 class Proxy:
     def __init__(self, config: ProxyConfig):
         self.config = config
+        self.context_diagnostics: dict[str, Any] = {}
+        self.message_diagnostics: dict[int, dict[str, Any]] = {}
+
+    def _messages(self, instructions: str, payload: dict[str, Any]) -> list[dict[str, str]]:
+        encoded, diagnostics = encode_prompt_payload(
+            payload, self.config.message_format,
+            deduplicate=self.config.message_deduplicate,
+            relevant_memory=self.config.message_relevant_memory,
+            aggregate_events=self.config.message_aggregate_events,
+        )
+        self.context_diagnostics = diagnostics
+        system = instructions
+        if diagnostics["effective_mode"] != "normal" or self.config.message_deduplicate \
+                or self.config.message_relevant_memory or self.config.message_aggregate_events:
+            system += compression_instructions()
+        messages = [{"role": "system", "content": system},
+                    {"role": "user", "content": json.dumps(encoded, ensure_ascii=True, separators=(",", ":"))}]
+        self.message_diagnostics[id(messages)] = diagnostics
+        return messages
 
     def headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -153,8 +173,7 @@ class Proxy:
         if repair:
             payload["validation_error"] = repair
         instructions = INSTRUCTIONS + self.persona_instructions(memory)
-        return [{"role": "system", "content": instructions},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=True, separators=(",", ":"))}]
+        return self._messages(instructions, payload)
 
     def persona_instructions(self, memory: dict[str, Any]) -> str:
         profile = memory.get("agent_profile")
@@ -189,10 +208,9 @@ Give a concise answer, not private chain-of-thought. A question cannot grant spe
 Return ONLY JSON {"answer":"your in-character answer"}."""
         visible_goal = {key: value for key, value in goal.items()
                         if key != "type" or goal.get("revealed", True)}
-        return [{"role": "system", "content": instructions + self.persona_instructions(memory)},
-                {"role": "user", "content": json.dumps({
-                    "goal": visible_goal, "observation": observation_context(observation), "memory": memory_context(memory),
-                    "operator_question": question}, ensure_ascii=True, separators=(",", ":"))}]
+        return self._messages(instructions + self.persona_instructions(memory), {
+            "goal": visible_goal, "observation": observation_context(observation), "memory": memory_context(memory),
+            "operator_question": question})
 
     async def answer_question(self, model: str, messages: list[dict[str, str]],
                               correlation_id: str, timeout: float) -> tuple[NpcReply, dict[str, Any]]:
@@ -321,8 +339,7 @@ Return ONLY JSON: {"verdict":"continue" or "defeat",
 "findings":[{"reason":"concise evidence-backed judgment","evidence_ids":["supplied event ID"]}]}.
 Provide concise rulings, not private chain-of-thought."""
         value = {**review_context(payload), **({"validation_error": repair} if repair else {})}
-        return [{"role": "system", "content": instructions},
-                {"role": "user", "content": json.dumps(value, ensure_ascii=True, separators=(",", ":"))}]
+        return self._messages(instructions, value)
 
     async def review_progress(self, model: str, messages: list[dict[str, str]],
                               correlation_id: str, timeout: float) -> tuple[DungeonMasterReview, dict[str, Any]]:
@@ -345,4 +362,18 @@ Provide concise rulings, not private chain-of-thought."""
         text = content.strip()
         if text.startswith("```") and text.endswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        return text, {"model": payload.get("model", model), "usage": payload.get("usage", {})}
+        usage = payload.get("usage", {})
+        diagnostics = dict(self.message_diagnostics.pop(id(messages), {
+            "requested_mode": "normal", "effective_mode": "normal", "fallback_reason": None,
+            "normal_user_bytes": len(json.dumps(messages, ensure_ascii=True, separators=(",", ":")).encode()),
+            "sent_user_bytes": len(json.dumps(messages, ensure_ascii=True, separators=(",", ":")).encode()),
+            "facts_encoded": 0, "deduplicated_values": 0, "memory_entries_omitted": 0,
+            "events_aggregated": 0, "tables_encoded": 0,
+        }))
+        diagnostics["sent_message_bytes"] = len(json.dumps(messages, ensure_ascii=True, separators=(",", ":")).encode())
+        diagnostics["estimated_sent_tokens"] = max(1, diagnostics["sent_message_bytes"] // 4)
+        if isinstance(usage, dict):
+            diagnostics["cache_read_tokens"] = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) \
+                if isinstance(usage.get("prompt_tokens_details"), dict) else 0
+        return text, {"model": payload.get("model", model), "usage": usage,
+                      "compression": diagnostics}

@@ -170,6 +170,11 @@ app.innerHTML = `
           <div class="panel-heading"><div><span class="eyebrow">CONNECTION</span><h2>LLM proxy</h2></div><span id="proxy-status" class="tag">NOT CHECKED</span></div>
           <label for="proxy-url">OpenAI-compatible base URL</label><input id="proxy-url" value="http://127.0.0.1:9901/v1" />
           <div class="model-row"><div><label for="model-select">Decision model</label><select id="model-select"><option value="">Discover a model</option></select></div><button id="discover" class="button">Discover</button></div>
+          <label for="message-format">Experimental message compression</label><select id="message-format"><option value="normal">Normal</option><option value="compact">Compact fields</option><option value="shorthand">Shorthand structure</option><option value="fact-shorthand">Fact shorthand</option></select>
+          <label><input id="message-deduplicate" type="checkbox" /> Deduplicate repeated request values</label>
+          <label><input id="message-relevant-memory" type="checkbox" /> Select relevant long-term memories</label>
+          <label><input id="message-aggregate-events" type="checkbox" /> Aggregate identical repeated events</label>
+          <p class="muted">Experimental settings apply immediately to a paused episode and are snapshotted for new episodes. Normal mode preserves existing prompts exactly.</p>
           <div class="proxy-actions"><span>No direct-provider fallback</span><button id="save-proxy" class="button">Save settings</button></div>
           <p id="proxy-message" class="muted"></p>
         </section>
@@ -447,6 +452,10 @@ function applyState(next: State): void {
     if (next.config.proxy.model) {
       element<HTMLSelectElement>("model-select").innerHTML = `<option value="${escape(next.config.proxy.model)}">${escape(next.config.proxy.model)}</option>`;
     }
+    element<HTMLSelectElement>("message-format").value = next.config.proxy.message_format;
+    element<HTMLInputElement>("message-deduplicate").checked = next.config.proxy.message_deduplicate;
+    element<HTMLInputElement>("message-relevant-memory").checked = next.config.proxy.message_relevant_memory;
+    element<HTMLInputElement>("message-aggregate-events").checked = next.config.proxy.message_aggregate_events;
     configured = true;
   }
   element("episode-name").textContent = next.run ? (adminView ?
@@ -1171,7 +1180,14 @@ function eventSummary(event: RunEvent): { title: string; text: string; tone: str
     case "assessment_error": return { title: "Completion review failed", text: String(payload.message), tone: "red" };
     case "observation": return { title: "World observation", text: String(payload.narrative), tone: "neutral" };
     case "goal_discovered": return { title: "Task discovered", text: pretty(payload.goal), tone: "teal" };
-    case "proxy_request": return { title: "LLM proxy request", text: `Model: ${String(payload.model)}${payload.repair ? " · decision repair" : ""}`, tone: "neutral" };
+    case "proxy_request": {
+      const compression = payload.compression && typeof payload.compression === "object"
+        ? record(payload.compression) : {};
+      const normalBytes = Number(compression.normal_user_bytes ?? 0);
+      const sentBytes = Number(compression.sent_user_bytes ?? 0);
+      const saved = normalBytes > sentBytes ? ` · ${Math.round((1 - sentBytes / normalBytes) * 100)}% smaller` : "";
+      return { title: "LLM proxy request", text: `Model: ${String(payload.model)} · ${String(compression.effective_mode ?? "normal")}${saved}${payload.repair ? " · decision repair" : ""}`, tone: "neutral" };
+    }
     case "validation": return { title: payload.valid ? "Decision validated" : "Invalid decision", text: String(payload.error ?? payload.action_id), tone: payload.valid ? "neutral" : "red" };
     case "need_toggle": return { title: `Need ${String(payload.need)} ${payload.enabled ? "enabled" : "disabled"}`, text: `Actor ${String(payload.actor_id)}`, tone: "amber" };
     default: return { title: event.kind.replaceAll("_", " "), text: String(payload.reason ?? payload.command ?? ""), tone: "neutral" };
@@ -1643,6 +1659,10 @@ element("save-proxy").addEventListener("click", () => {
   const config = structuredClone(state.config);
   config.proxy.base_url = element<HTMLInputElement>("proxy-url").value.trim();
   config.proxy.model = element<HTMLSelectElement>("model-select").value || null;
+  config.proxy.message_format = element<HTMLSelectElement>("message-format").value as State["config"]["proxy"]["message_format"];
+  config.proxy.message_deduplicate = element<HTMLInputElement>("message-deduplicate").checked;
+  config.proxy.message_relevant_memory = element<HTMLInputElement>("message-relevant-memory").checked;
+  config.proxy.message_aggregate_events = element<HTMLInputElement>("message-aggregate-events").checked;
   void api("/config", "PUT", config).then(payload => {
     applyState(stateSchema.parse(payload));
     element("proxy-message").textContent = "Saved to data/config.json.";
@@ -1831,8 +1851,14 @@ async function initialize(): Promise<void> {
   } catch (error) {
     notice(`Could not load the simulation: ${errorMessage(error)}`);
   }
+  connectLiveStream();
+}
+
+let liveStream: EventSource | undefined;
+function connectLiveStream(): void {
+  if (liveStream) return;
   const cursor = events.at(-1)?.sequence ?? 0;
-  const stream = new EventSource(`/api/stream?compact=true&run_id=${encodeURIComponent(activeRun ?? "")}&after=${cursor}`);
+  const stream = liveStream = new EventSource(`/api/stream?compact=true&run_id=${encodeURIComponent(activeRun ?? "")}&after=${cursor}`);
   stream.onopen = () => {
     element("connection").textContent = "Live connection";
     document.querySelector(".live-dot")?.classList.add("connected");
@@ -1863,7 +1889,13 @@ async function initialize(): Promise<void> {
       });
     } catch (error) { notice(`Invalid event update: ${errorMessage(error)}`); }
   });
-  window.addEventListener("pagehide", () => stream.close(), {once: true});
 }
+window.addEventListener("pagehide", () => {
+  liveStream?.close();
+  liveStream = undefined;
+});
+window.addEventListener("pageshow", event => {
+  if (event.persisted) connectLiveStream();
+});
 void initialize();
 }

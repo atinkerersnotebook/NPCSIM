@@ -1,33 +1,69 @@
-type RunRate = { id: string; actions: number; elapsed_seconds: number; status?: string };
-type RateSample = { actions: number; elapsed: number; rate: number };
-const histories = new Map<string, RateSample[]>();
-const buckets = new Map<string, Map<number, number>>();
+import { z } from "zod";
+
+type RunRate = { id: string; actions: number; elapsed_seconds: number };
+const sampleLimit = 20;
+const minuteLimit = 30;
+const storageKey = "npcsim:action-speedometer:v1";
+const nonnegative = z.number().nonnegative();
+const savedMeter = z.object({
+  id: z.string(),
+  history: z.array(z.object({ actions: nonnegative, elapsed: nonnegative, rate: nonnegative })).min(1).max(sampleLimit),
+  buckets: z.array(z.tuple([z.number().int().nonnegative(), nonnegative])).max(minuteLimit),
+});
+let current: z.infer<typeof savedMeter> | undefined;
+let lastStored: string | null | undefined;
+
+function restoreMeter() {
+  try {
+    const raw = sessionStorage.getItem(storageKey);
+    if (raw === lastStored) return;
+    lastStored = raw;
+    const saved = raw && savedMeter.safeParse(JSON.parse(raw));
+    if (saved && saved.success) current = saved.data;
+  } catch {
+    // Storage may be blocked or invalid; keep sampling in memory.
+  }
+}
+
+function saveMeter() {
+  try {
+    const raw = JSON.stringify(current);
+    sessionStorage.setItem(storageKey, raw);
+    lastStored = raw;
+  } catch {
+    // Continue in memory if the storage write fails.
+  }
+}
 
 export function actionSpeedometerMarkup(run: RunRate | null | undefined): string {
   if (!run) return "";
-  const history = histories.get(run.id) ?? [];
-  const previous = history.at(-1);
-  if (!previous) {
+  restoreMeter();
+  const minute = Math.floor(run.elapsed_seconds / 60);
+  if (current?.id !== run.id) {
     const rate = run.elapsed_seconds > 0 ? run.actions * 60 / run.elapsed_seconds : 0;
-    history.push({ actions: run.actions, elapsed: run.elapsed_seconds, rate });
-    buckets.set(run.id, new Map([[Math.floor(run.elapsed_seconds / 60), rate]]));
-  } else if (run.actions !== previous.actions || run.elapsed_seconds !== previous.elapsed) {
-    const elapsed = Math.max(0, run.elapsed_seconds - previous.elapsed);
-    const actions = Math.max(0, run.actions - previous.actions);
-    if (elapsed > 0 && actions > 0) history.push({ actions: run.actions, elapsed: run.elapsed_seconds, rate: actions * 60 / elapsed });
-    else history.push({ actions: run.actions, elapsed: run.elapsed_seconds, rate: 0 });
-    const minute = Math.floor(run.elapsed_seconds / 60);
-    const minuteHistory = buckets.get(run.id) ?? new Map<number, number>();
-    minuteHistory.set(minute, (minuteHistory.get(minute) ?? 0) + actions);
-    for (const key of [...minuteHistory.keys()]) if (key < minute - 29) minuteHistory.delete(key);
-    buckets.set(run.id, minuteHistory);
+    current = { id: run.id, history: [{ actions: run.actions, elapsed: run.elapsed_seconds, rate }], buckets: [[minute, rate]] };
+    saveMeter();
+  } else {
+    const { history, buckets } = current;
+    const previous = history[history.length - 1];
+    const elapsed = run.elapsed_seconds - previous.elapsed;
+    const actions = run.actions - previous.actions;
+    // Ignore duplicate samples and older snapshots from a restored page.
+    if (elapsed >= 0 && actions >= 0 && (elapsed > 0 || actions > 0)) {
+      history.push({ actions: run.actions, elapsed: run.elapsed_seconds, rate: elapsed > 0 ? actions * 60 / elapsed : 0 });
+      if (history.length > sampleLimit) history.shift();
+      const minuteHistory = new Map(buckets);
+      minuteHistory.set(minute, (minuteHistory.get(minute) ?? 0) + actions);
+      current.buckets = [...minuteHistory].filter(([key]) => key > minute - minuteLimit);
+      saveMeter();
+    }
   }
-  while (history.length > 20) history.shift();
-  histories.set(run.id, history);
-  const rate = history.at(-1)?.rate ?? 0;
-  const max = Math.max(6, Math.ceil(Math.max(...history.map(sample => sample.rate), rate) / 3) * 3);
-  const currentMinute = Math.floor(run.elapsed_seconds / 60);
-  const minuteHistory = buckets.get(run.id) ?? new Map<number, number>();
+  const { history, buckets } = current;
+  const latest = history[history.length - 1];
+  const rate = latest.rate;
+  const max = Math.max(6, Math.ceil(Math.max(...history.map(sample => sample.rate)) / 3) * 3);
+  const currentMinute = Math.floor(latest.elapsed / 60);
+  const minuteHistory = new Map(buckets);
   const minuteRates = Array.from({ length: 30 }, (_, index) =>
     minuteHistory.get(currentMinute - 29 + index) ?? 0);
   const minuteMax = Math.max(1, ...minuteRates);
