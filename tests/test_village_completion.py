@@ -363,6 +363,54 @@ async def test_recover_committed_action_timeout_without_replaying_or_paying_agai
         await controller.shutdown(preserve_paused=True)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("moved_checkpoint", [False, True])
+async def test_recover_readonly_retry_history(configuration, monkeypatch, moved_checkpoint):
+    data, config = configuration
+    value = scenario()
+    value.village.start_minute = 480
+    value.agents[0].start_location = value.village.residents["torvin"].work
+    write_json(data / "scenarios" / "millhaven-expanded.json", value.model_dump(mode="json"))
+    config.world.scenario = "millhaven-expanded"
+    controller = Controller(ROOT, data, config)
+    controller.proxy = TestProxy(controller.proxy, [("village_wait", {"minutes": 5})])
+    await controller.start_worker()
+    try:
+        await controller.command("start")
+        operation = controller.world.operation
+
+        async def readonly(name, arguments, timeout=15):
+            if name == "act":
+                if moved_checkpoint:
+                    await operation(name, {**arguments, "request_id": "independent-action"}, timeout)
+                raise ValueError("MCP tool world_act failed: Error executing tool world_act: Cannot access "
+                                 "world retry history C:\\old\\world-state.requests.sqlite3: "
+                                 "attempt to write a readonly database")
+            return await operation(name, arguments, timeout)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(controller.world, "operation", readonly)
+            await controller.command("step")
+        assert controller.run["status"] == "error"
+        before = copy.deepcopy(controller.run)
+        pending = next(event["payload"] for event in controller.events.events if event["kind"] == "action_request")
+        args = {"run_id": before["id"]}
+        if moved_checkpoint:
+            with pytest.raises(ValueError, match="no longer matches the saved world revision"):
+                await controller.command("reopen", args)
+            assert controller.run["status"] == "error"
+            assert not any(event["kind"] == "action_result" for event in controller.events.events)
+        else:
+            await controller.command("reopen", args)
+            assert controller.run["status"] == "paused"
+            for key in ("id", "world_id", "actions", "model_calls", "cycles"):
+                assert controller.run[key] == before[key]
+            results = [event["payload"] for event in controller.events.events if event["kind"] == "action_result"]
+            assert [(result["request_id"], result["outcome"]) for result in results] == [(pending["request_id"], "APPLIED")]
+    finally:
+        await controller.shutdown(preserve_paused=True)
+
+
 @pytest.mark.parametrize("damage", [
     "missing", "arguments", "session", "cycle", "revision", "multiple_pending", "world", "recorded_conflict"
 ])

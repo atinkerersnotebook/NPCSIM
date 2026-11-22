@@ -2279,6 +2279,8 @@ SQLite retry archive (Python's standard library; no database service is needed).
 
 Events are immutable numbered JSON documents. Replaceable documents use atomic replacement, with short, logged retries for transient Windows file-handle conflicts. Persistent write failures remain explicit errors. The transcript index is rebuilt from events on restart. Interrupted episodes are archived for inspection, not automatically resumed. Use the archive button to inspect previous runs and **Export JSON** for the current full transcript.
 
+For a local village stopped by a read-only retry archive, run NPCSIM from the writable checkout and use **Recover interrupted day** in Player view. Recovery checks the saved actor, request, and world revision before retrying the same request ID or recording its already committed result. The episode stays paused until continued.
+
 The live world checkpoint retains only the newest retry result, committed atomically
 with its world changes. Previously committed results are durably archived before
 being removed from that checkpoint; retries still return the exact original

@@ -108,7 +108,9 @@ export function canReopenAdventure(run: State["run"], hasWorld: boolean): boolea
       && run.verification.evidence?.completion_scope === "full_village_day"
       && run.verification.evidence.daily_requirements_recoverable === true) ||
     (run.status === "error" && (run.reason.startsWith("Timed out while waiting for response to ClientRequest.")
-      || run.reason === "TimeoutError"))));
+      || run.reason === "TimeoutError"
+      || (run.reason.startsWith("MCP tool world_act failed: Error executing tool world_act: Cannot access world retry history ")
+        && run.reason.endsWith(": attempt to write a readonly database"))))));
 }
 
 export function budgetSummary(state: State): string {

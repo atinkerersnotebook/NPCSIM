@@ -405,38 +405,6 @@
           ]
         }
       ]
-    },
-    {
-      "run_id": "54bb593ba91741ca85b7ed8b8d46fb4b",
-      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real firewood, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Keep occupied cottage hearths and working ovens/forge supplied with paid, physically delivered firewood. Care daily for the physical farm cows and twenty-four hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed. Preserve the village's inherited family history, readable chronicle and optional same-scenario midnight generation handoff while using the communal depot and feed store physically.",
-      "recorded_at": "2026-11-22T16:51:06.309467+00:00",
-      "findings": [
-        {
-          "reason": "Village recovery is still in progress: everyone fed, everyone home, everyone asleep, animals put away, resource reserves ready.",
-          "evidence_ids": [
-            "54bb593ba91741ca85b7ed8b8d46fb4b:30730"
-          ]
-        },
-        {
-          "reason": "All 12 residents missed required daily meals. At 19:00, Rowan's supper attempt was denied because only bread reserved for breakfast remained.",
-          "evidence_ids": [
-            "54bb593ba91741ca85b7ed8b8d46fb4b:14991",
-            "54bb593ba91741ca85b7ed8b8d46fb4b:30730"
-          ]
-        },
-        {
-          "reason": "The final home and sleep checks failed, and the work horse was hitched in the square instead of stabled.",
-          "evidence_ids": [
-            "54bb593ba91741ca85b7ed8b8d46fb4b:30730"
-          ]
-        },
-        {
-          "reason": "Configured reserves were below target at nine stock entries, including timber at the woods and workshop and preserved fish at the riverbank.",
-          "evidence_ids": [
-            "54bb593ba91741ca85b7ed8b8d46fb4b:30730"
-          ]
-        }
-      ]
     }
   ]
 }

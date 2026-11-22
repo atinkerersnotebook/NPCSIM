@@ -4,7 +4,11 @@
     "base_url": "http://192.168.1.15:9901/v1",
     "model": "gpt-6.2-sol",
     "token_environment": null,
-    "timeout_seconds": 120.0
+    "timeout_seconds": 120.0,
+    "message_format": "normal",
+    "message_deduplicate": false,
+    "message_relevant_memory": false,
+    "message_aggregate_events": false
   },
   "world": {
     "transport": "stdio",

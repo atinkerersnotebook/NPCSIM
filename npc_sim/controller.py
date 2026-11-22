@@ -684,6 +684,12 @@ class Controller:
             and (self.run.get("reason", "").startswith("Timed out while waiting for response to ClientRequest.")
                  or self.run.get("reason") == "TimeoutError")
         )
+        storage_recovery = (
+            previous_status == "error"
+            and self.run.get("reason", "").startswith(
+                "MCP tool world_act failed: Error executing tool world_act: Cannot access world retry history ")
+            and self.run.get("reason", "").endswith(": attempt to write a readonly database")
+        )
         scheduler_recovery = (
             previous_status == "error"
             and self.run.get("reason", "").startswith("MCP tool world_next_village_actor failed:")
@@ -713,7 +719,7 @@ class Controller:
                                  and last_ruling.get("verdict") == "defeat")
         if self.run["goal"]["type"] != "village_restored" or not (
                 premature or timeout_recovery or scheduler_recovery or actor_selection_recovery
-                or restart_recovery or daily_defeat_recovery):
+                or restart_recovery or daily_defeat_recovery or storage_recovery):
             raise ValueError("Only a prematurely completed village adventure, a recoverable daily-village AI defeat, "
                              "or a confirmed recoverable world error can be reopened.")
         config = AppConfig.model_validate(self.run["config"]).world
@@ -722,13 +728,36 @@ class Controller:
         retry_actor = None
         stop_at_minute = None
         recovered_action = None
-        if timeout_recovery or scheduler_recovery or actor_selection_recovery or restart_recovery or request.until_midnight:
+        pending_replay = None
+        if (timeout_recovery or scheduler_recovery or actor_selection_recovery or restart_recovery
+                or storage_recovery or request.until_midnight):
             state_path = self.data / "worlds" / self.run["world_id"] / "world-state.json"
             saved_world = WorldState.model_validate(read_json(state_path))
             if saved_world.world_id != self.run["world_id"] or saved_world.village is None:
                 raise ValueError("The saved village identity does not match this adventure.")
             if request.until_midnight:
                 stop_at_minute = (saved_world.village.minute // 1440 + 1) * 1440
+            if storage_recovery:
+                results = {event["payload"]["request_id"] for event in self.events.events
+                           if event["kind"] == "action_result"}
+                requests = [event for event in self.events.events if event["kind"] == "action_request"]
+                pending = [event for event in requests if event["payload"]["request_id"] not in results]
+                if len(pending) != 1 or pending[0] is not requests[-1]:
+                    raise ValueError("Expected exactly one outstanding action for retry-history recovery.")
+                event = pending[0]
+                actor_id, session_id = self.run["actor_id"], self.run["session_id"]
+                actor = saved_world.actors.get(actor_id)
+                if (event["actor_id"] != actor_id or event["session_id"] != session_id
+                        or event["cycle"] != self.run["cycles"] or actor is None or actor.session_id != session_id):
+                    raise ValueError("The failed action does not match the saved actor and turn.")
+                payload = event["payload"]
+                cached = WorldStorage(state_path).get_request(saved_world, f"{session_id}:{payload['request_id']}")
+                if cached is not None:
+                    recovered_action = self._confirmed_timeout_action(saved_world, state_path)
+                elif payload["expected_observation_revision"] == f"obs-{saved_world.revision}":
+                    pending_replay = event
+                else:
+                    raise ValueError("The failed action no longer matches the saved world revision.")
             if restart_recovery:
                 results = {event["payload"]["request_id"] for event in self.events.events
                            if event["kind"] == "action_result"}
@@ -832,6 +861,13 @@ class Controller:
             raise ValueError("The world does not confirm unfinished daily-life requirements; no result was changed.")
         if daily_defeat_recovery and not self._daily_requirements_recoverable(verification):
             raise ValueError("The world does not confirm recoverable daily-village requirements; no result was changed.")
+        if pending_replay is not None:
+            payload = pending_replay["payload"]
+            if self.world.session_id != pending_replay["session_id"]:
+                raise ValueError("The connected world does not match the failed action's session.")
+            result = action_result(await self.world.operation("act", payload),
+                                   payload["request_id"], self.world.session_id)
+            recovered_action = pending_replay, result, True
         if recovered_action is not None:
             event, result, missing = recovered_action
             decision_event = next((item for item in reversed(self.events.events)
@@ -848,10 +884,12 @@ class Controller:
                 self.remember(self.observation)
             self.emit("action_result_recovered", {
                 "request_id": event["payload"]["request_id"], "request_event_id": event["id"],
-                "source": "durable_world_retry_history", "action_replayed": False})
+                "source": "durable_world_retry_history", "action_replayed": pending_replay is not None})
         self._reopen_attempt("Saved village recovered. Continue when ready."
-                             if timeout_recovery or scheduler_recovery or actor_selection_recovery else
-                             "Daily routines are unfinished. Continue when ready.", reset_achieved=True)
+                             if timeout_recovery or scheduler_recovery or actor_selection_recovery or storage_recovery
+                             else "Daily routines are unfinished. Continue when ready.", reset_achieved=True)
+        if storage_recovery:
+            self.run["safe_checkpoint"] = True
         self.run["verification"] = verification
         if stop_at_minute is not None:
             self.run["village_stop_minute"] = stop_at_minute

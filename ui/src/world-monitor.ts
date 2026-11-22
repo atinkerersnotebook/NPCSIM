@@ -651,8 +651,30 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       render(await response.json());
       streamRun = state?.run?.id ?? "";
       if (streamRun) {
-        streamAfter = seen.size;
-        await replayWorldHistory(streamRun, state!.event_count, streamAfter, event => {
+        const historyThrough = state!.event_count;
+        streamAfter = historyThrough;
+        stream = new EventSource(`/api/stream?compact=true&run_id=${encodeURIComponent(streamRun)}&after=${streamAfter}`);
+        stream.onopen = () => {
+          connection.textContent = "Live connection";
+          dot.classList.add("connected");
+        };
+        stream.onerror = () => {
+          connection.textContent = "Reconnecting / last snapshot";
+          dot.classList.remove("connected");
+          awaitingSnapshot = true;
+        };
+        stream.addEventListener("snapshot", (event: MessageEvent<string>) => {
+          try { render(JSON.parse(event.data)); }
+          catch (failure) { report(failure); }
+        });
+        stream.addEventListener("run-event", (message: MessageEvent<string>) => {
+          try {
+            const event = eventSchema.parse(JSON.parse(message.data));
+            record(event, event.sequence > liveAfterSequence);
+            schedule();
+          } catch (failure) { report(failure); }
+        });
+        await replayWorldHistory(streamRun, historyThrough, seen.size, event => {
           record(event, false);
           streamAfter = event.sequence;
         }, fetch, signal);
@@ -664,27 +686,29 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       report(failure);
     }
     if (signal.aborted) return;
-    stream = new EventSource(`/api/stream?compact=true&run_id=${encodeURIComponent(streamRun)}&after=${streamAfter}`);
-    stream.onopen = () => {
-      connection.textContent = "Live connection";
-      dot.classList.add("connected");
-    };
-    stream.onerror = () => {
-      connection.textContent = "Reconnecting / last snapshot";
-      dot.classList.remove("connected");
-      awaitingSnapshot = true;
-    };
-    stream.addEventListener("snapshot", (event: MessageEvent<string>) => {
-      try { render(JSON.parse(event.data)); }
-      catch (failure) { report(failure); }
-    });
-    stream.addEventListener("run-event", (message: MessageEvent<string>) => {
-      try {
-        const event = eventSchema.parse(JSON.parse(message.data));
-        record(event, event.sequence > liveAfterSequence);
-        schedule();
-      } catch (failure) { report(failure); }
-    });
+    if (!stream) {
+      stream = new EventSource(`/api/stream?compact=true&run_id=${encodeURIComponent(streamRun)}&after=${streamAfter}`);
+      stream.onopen = () => {
+        connection.textContent = "Live connection";
+        dot.classList.add("connected");
+      };
+      stream.onerror = () => {
+        connection.textContent = "Reconnecting / last snapshot";
+        dot.classList.remove("connected");
+        awaitingSnapshot = true;
+      };
+      stream.addEventListener("snapshot", (event: MessageEvent<string>) => {
+        try { render(JSON.parse(event.data)); }
+        catch (failure) { report(failure); }
+      });
+      stream.addEventListener("run-event", (message: MessageEvent<string>) => {
+        try {
+          const event = eventSchema.parse(JSON.parse(message.data));
+          record(event, event.sequence > liveAfterSequence);
+          schedule();
+        } catch (failure) { report(failure); }
+      });
+    }
   };
   window.addEventListener("pageshow", event => {
     if (event.persisted) void initialize();

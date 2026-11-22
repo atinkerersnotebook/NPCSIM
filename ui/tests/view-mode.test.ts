@@ -56,6 +56,13 @@ test("village timeout recovery is offered only for saved MCP timeout worlds", ()
   assert.equal(playerCommandVisible("reopen", "error"), true);
 });
 
+test("village retry history recovery is offered for the read-only action error", () => {
+  const reason = "MCP tool world_act failed: Error executing tool world_act: Cannot access world retry history C:\\old\\world-state.requests.sqlite3: attempt to write a readonly database";
+  const run = {status: "error", reason, goal: {type: "village_restored"}};
+  assert.equal(canReopenAdventure(run, true), true);
+  assert.equal(canReopenAdventure({...run, reason: reason.replace("world_act", "world_observe")}, true), false);
+});
+
 test("recoverable daily AI defeat offers reopening but real world defeat does not", () => {
   const run = {
     status: "blocked", reason: "Dungeon Master rules that the team must admit defeat.",
