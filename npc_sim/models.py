@@ -976,6 +976,7 @@ class VillageStockLot(StrictModel):
 
 
 class VillageShipment(StrictModel):
+    shipment_id: str | None = None
     resource: str
     quantity: int = Field(gt=0, le=6)
     seller: str

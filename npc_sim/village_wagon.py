@@ -28,7 +28,7 @@ def load(world: "World", goods: dict[str, int], destination: str) -> str | None:
         if wagon.driver is None:
             raise ValueError("A goods load has no active wagon driver")
         blocked = village_economy.load_blocker(world, village.resident_location(world, wagon.driver),
-                                               destination, goods)
+                                               destination, goods, mode="wagon")
         return blocked if blocked else village_goods.load(world, wagon.driver, goods, destination, wagon.loads, capacity)
     source = village.resident_location(world, config.courier)
     sellers = [rid for rid, resident in config.residents.items() if resident.work == source]
@@ -87,7 +87,7 @@ def unload(world: "World") -> str | None:
 
 
 def ready_orders(world: "World") -> list[VillageSupplierOrder]:
-    from npc_sim import village_communication
+    from npc_sim import village_communication, village_logistics
 
     state = village.context(world)[1]
     if state.economy is None:
@@ -105,6 +105,7 @@ def ready_orders(world: "World") -> list[VillageSupplierOrder]:
                    and order.source in ROUTE and order.destination in ROUTE
                    and can_arrive(order)
                    and village_economy.loadable_for_order(world, order) > 0
+                   and village_logistics.pickup_available(world, order, world.actor_id, "wagon") > 0
                    and state.coins.get(order.buyer, 0) >= village_economy.commitments(world, order.buyer)
                    and village_communication.can_use_order(world, order)),
                   key=lambda order: (order.deadline, order.id))
@@ -115,8 +116,10 @@ def readiness(world: "World") -> dict[str, Any]:
     wagon = state.wagon
     if wagon is None:
         return {"ready": False, "blocker": "NO_WAGON", "shipments": []}
+    from npc_sim import village_logistics
     shipments = [{"order_id": order.id, "source": order.source, "destination": order.destination,
-                  "product": order.product, "quantity": min(order.loadable, village_economy.loadable_for_order(world, order))}
+                  "product": order.product, "quantity": min(village_logistics.pickup_available(world, order, world.actor_id, "wagon"),
+                                                            village_economy.loadable_for_order(world, order))}
                  for order in ready_orders(world)]
     blocker = ("WAGON_REPAIR_REQUIRED" if not wagon.repaired or broken(world) else
                "HORSE_HITCH_REQUIRED" if config.expanded_rules and not wagon.hitched else
@@ -216,6 +219,9 @@ def advance(world: "World") -> None:
     driver = world.state.actors.get(rid)
     if driver is None or wagon.driver != rid or driver.location_id != world.state.entities["wagon"].location:
         raise ValueError("The standing wagon route lost its physical driver")
+    from npc_sim import village_logistics
+    if village_logistics.enabled(world):
+        world = world.bind(rid, driver.session_id)
     person = state.residents[rid]
 
     def pause(reason: str) -> None:

@@ -47,6 +47,11 @@ INSTANT_GUIDANCE = (
     "Use village_request_supply, village_schedule_crew and village_respond_to_request; "
     "recipients still decide whether to accept. Messages do not reveal remote stock or whereabouts. "
     "Acceptance is not delivery: production, cargo, unloading, payment and project work remain physical."
+    " Tin-Can Logistics Protocol v1 sends confirmed order and delivery facts automatically. "
+    "Use village_assign_shipment to reserve a named carrier and quantity, village_accept_shipment "
+    "to accept an offer, and village_shipment_status for your received carrier manifest. "
+    "Do not duplicate assigned pickups or manually announce engine-confirmed deliveries. "
+    "Allow actual return travel and preparation before fixed duties, especially the innkeeper's cooking."
 )
 
 
@@ -420,6 +425,8 @@ def _create_order(world: "World", notice: NoticeVersion) -> dict[str, Any]:
         order.status, order.production_plan = "accepted_planned", plan
     state.orders[order.id] = order
     state.next_order += 1
+    from npc_sim import village_logistics
+    village_logistics.emit(world, "ORDER_ACCEPTED", order)
     return {"linked_order_id": order.id, "order_snapshot": order.model_dump(mode="json")}
 
 
@@ -1074,6 +1081,8 @@ def learned_orders(world: "World") -> list[dict[str, Any]]:
 
 def can_use_order(world: "World", order: Any) -> bool:
     if not enabled(world) or not order.coordination_notice_id:
+        return True
+    if instant(world) and order.id in _state(world).logistics_knowledge.get(world.actor_id, {}):
         return True
     knowledge = _state(world).knowledge.get(world.actor_id, {}).get(order.coordination_notice_id)
     return bool(knowledge and knowledge.snapshot.order_snapshot.get("status") in village_economy.LOADABLE)

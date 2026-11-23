@@ -1065,6 +1065,41 @@ def test_deferred_flour_shortage_requests_upstream_grain_before_retry(world):
         "APPLIED", "ORDER_ACCEPTED_PLANNED")
 
 
+def test_production_acceptance_can_rely_on_committed_incoming_inputs(world):
+    bakery = actor(world, "jory", "bakery")
+    add(world, "bakery", "bread", 2, expiry=900)
+    flour_delivery = VillageSupplierOrder(
+        id="flour-delivery", request_key="notice:flour", buyer="jory", supplier="mara",
+        source="watermill", destination="bakery", product="flour", quantity=2, price=2,
+        delivery_fee=1, deadline=510, required_fresh_until=900, created_at=480,
+        status="accepted")
+    world.state.village.economy.orders[flour_delivery.id] = flour_delivery
+    bread_order = propose(world, quantity=4, deadline=600, fresh=660)
+
+    result = economy.apply(bakery, "village_accept_order", {"order_id": bread_order.id})
+
+    assert result[:2] == ("APPLIED", "ORDER_ACCEPTED_PLANNED")
+    assert bread_order.production_plan == {
+        "finish": 540, "output": 2, "gather:logs": 0, "input:flour": 2}
+
+
+def test_production_acceptance_rejects_incoming_inputs_after_latest_start(world):
+    bakery = actor(world, "jory", "bakery")
+    add(world, "bakery", "bread", 2, expiry=900)
+    flour_delivery = VillageSupplierOrder(
+        id="late-flour", request_key="notice:flour", buyer="jory", supplier="mara",
+        source="watermill", destination="bakery", product="flour", quantity=2, price=2,
+        delivery_fee=1, deadline=555, required_fresh_until=900, created_at=480,
+        status="accepted")
+    world.state.village.economy.orders[flour_delivery.id] = flour_delivery
+    bread_order = propose(world, quantity=4, deadline=570, fresh=660)
+
+    result = economy.apply(bakery, "village_accept_order", {"order_id": bread_order.id})
+
+    assert result[:2] == ("REJECTED", "SUPPLY_NOT_READY")
+    assert bread_order.status == "deferred"
+
+
 def test_expired_deferred_output_does_not_trigger_upstream_purchase(world):
     bakery = actor(world, "jory", "bakery")
     order = propose(world, quantity=4, deadline=600, fresh=660)

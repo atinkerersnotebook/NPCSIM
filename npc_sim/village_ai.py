@@ -831,6 +831,9 @@ def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
     if (action == "go" and state.wagon and state.wagon.driver == world.actor_id
             and not state.wagon.automatic):
         world.state.entities["wagon"].location = world.actor.location_id
+    if action == "go":
+        from npc_sim import village_logistics
+        village_logistics.advance(world)
     if action not in VERBS:
         target = args.get("target", world.actor.location_id)
         name = world.state.entities[target].name if target in world.state.entities else target

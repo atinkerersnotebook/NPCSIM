@@ -245,6 +245,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   let renderedZoom = 1;
   let recent = false;
   let activity: GanttActivity = "all";
+  let showConnections = true;
   let resetTimelineScroll = false;
   const playbackHost = document.createElement("div");
   const playback = mountScenarioPlayback(playbackHost, {
@@ -318,6 +319,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     }
   });
   let selectedActorId: string | undefined;
+  let selectedGanttLink: string | undefined;
   let dialogue = new TownDialogue();
   let liveAfterSequence = 0;
   let bubbleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -333,7 +335,8 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     const now = Date.now();
     const timelineEvents = [...events.values()]
       .filter(event => !playback.active || event.sequence <= state!.event_count);
-    const markup = worldMonitorMarkup(state, historyReady ? timelineEvents : [], { zoom, viewportWidth, recent, activity },
+    const markup = worldMonitorMarkup(state, historyReady ? timelineEvents : [],
+      { zoom, viewportWidth, recent, activity, showConnections },
       { zoom: mapViews["monitor-map"].zoom, selectedActorId, dialogue, now }, historyReady, mapViews["monitor-scene"].zoom);
     clearTimeout(bubbleTimer);
     const expiries = dialogue.active(now).map(line => line.expiresAt);
@@ -347,7 +350,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
         ?? document.activeElement?.getAttribute("data-scene-actor");
       const residentFocus = document.activeElement?.getAttribute("data-resident-select");
       const residentArea = document.activeElement?.closest("#monitor-residents, #monitor-timeline")?.id;
-      const filterFocus = ["data-timeline-recent", "data-timeline-activity", "data-timeline-reset"]
+      const filterFocus = ["data-timeline-recent", "data-timeline-connections", "data-timeline-activity", "data-timeline-reset"]
         .find(attribute => document.activeElement?.hasAttribute(attribute));
       const mapZoomFocus = document.activeElement?.getAttribute("data-map-zoom");
       const markerFocus = document.activeElement?.getAttribute("data-location-marker");
@@ -360,6 +363,16 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       const hadFocus = old?.contains(document.activeElement);
       const zoomControls = renderedZoom === zoom ? content.querySelector(".gantt-zoom") : null;
       content.innerHTML = markup;
+      if (selectedGanttLink) {
+        const selected = [...content.querySelectorAll<SVGGElement>("[data-gantt-link]")]
+          .find(link => link.dataset.ganttLink === selectedGanttLink);
+        if (selected) {
+          selected.classList.add("is-selected");
+          selected.setAttribute("aria-pressed", "true");
+          content.querySelector(".gantt-scroll")?.classList.add("has-selected-link");
+        }
+        else selectedGanttLink = undefined;
+      }
       content.querySelector(".monitor-time-cards")?.prepend(playback.element);
       tabs.sync();
       const scroll = restoreScroll();
@@ -436,6 +449,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       centerScene = true;
       sceneZoomCenter = undefined;
       selectedActorId = undefined;
+      selectedGanttLink = undefined;
       dialogue = new TownDialogue();
       liveAfterSequence = next.event_count;
     }
@@ -504,6 +518,17 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     const bubble = content.querySelector<HTMLDivElement>("#gantt-tooltip");
     if (bubble) bubble.hidden = true;
   };
+  const selectGanttLink = (selected: SVGGElement | null) => {
+    const links = [...content.querySelectorAll<SVGGElement>("[data-gantt-link]")];
+    const id = selected?.dataset.ganttLink;
+    selectedGanttLink = selectedGanttLink === id ? undefined : id;
+    links.forEach(link => {
+      const active = link.dataset.ganttLink === selectedGanttLink;
+      link.classList.toggle("is-selected", active);
+      link.setAttribute("aria-pressed", String(active));
+    });
+    content.querySelector(".gantt-scroll")?.classList.toggle("has-selected-link", Boolean(selectedGanttLink));
+  };
   content.addEventListener("pointerover", event => {
     if (event.target instanceof Element) {
       const bar = event.target.closest(".gantt-bar, .gantt-marker");
@@ -555,6 +580,14 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   });
   content.addEventListener("scroll", hideGanttTooltip, true);
   content.addEventListener("keydown", event => {
+    if ((event.key === "Enter" || event.key === " ") && event.target instanceof Element) {
+      const link = event.target.closest<SVGGElement>("[data-gantt-link]");
+      if (link) {
+        event.preventDefault();
+        selectGanttLink(link);
+        return;
+      }
+    }
     const viewport = activeMapScroll();
     if (!viewport || event.target !== viewport || mapView(viewport) !== mapViews["monitor-scene"]
       || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -579,6 +612,11 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   });
   content.addEventListener("click", event => {
     if (!(event.target instanceof Element)) return;
+    const link = event.target.closest<SVGGElement>("[data-gantt-link]");
+    if (link) {
+      selectGanttLink(link);
+      return;
+    }
     if (event.target.closest("[data-timeline-export]") && state?.world?.village?.events) {
       const plans = state.world.village.events.filter(item => item.action === "daily_plan"
         || item.action === "customer_adjustment_required");
@@ -588,6 +626,12 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       link.download = `millhaven-planning-${state.run?.id ?? "episode"}.json`;
       link.click();
       URL.revokeObjectURL(url);
+      return;
+    }
+    if (event.target.closest("[data-timeline-connections]")) {
+      showConnections = !showConnections;
+      selectedGanttLink = undefined;
+      schedule();
       return;
     }
     if (event.target.closest("[data-timeline-recent], [data-timeline-reset]")) {

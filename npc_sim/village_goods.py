@@ -94,7 +94,9 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
     if civic_orders:
         sellers = sorted({order.supplier for order in civic_orders})
         buyers = ["town"]
-    from npc_sim import village_communication
+    from npc_sim import village_communication, village_logistics
+    logistics = village_logistics.enabled(world)
+    mode = "wagon" if state.wagon and shipments is state.wagon.loads else "foot"
     transfer = next((item for item in state.communication.transfers.values()
                      if item.status == "authorized" and item.source_site == source
                      and item.destination_site == destination and goods == {item.good: item.quantity - item.loaded}
@@ -141,12 +143,20 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
                     continue
                 if state.minute > order.deadline:
                     continue
-                quantity = min(remaining, order.loadable)
+                quantity = min(remaining, village_logistics.pickup_available(world, order, carrier, mode)
+                               if logistics else order.loadable)
+                if not quantity:
+                    continue
                 planned.append((resource, quantity, order))
                 remaining -= quantity
                 if not remaining:
                     break
             if remaining:
+                if logistics and any(
+                        order.source == source and order.destination == destination and order.product == resource
+                        and order.status in village_economy.LOADABLE
+                        for order in economy.orders.values()):
+                    return "SHIPMENT_RESERVED: quantity is not available to this carrier; check the confirmed manifest."
                 if policy.require_orders:
                     return "ORDER_REQUIRED: loading exceeds confirmed outstanding demand; nothing was loaded."
                 if stock.get(resource, 0) - amount < village_economy.protected_quantity(world, source, resource):
@@ -181,7 +191,26 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
                 remaining -= moved
             if remaining:
                 return "STALE_GOODS: source stock will not remain fresh through the required use time."
-    for resource, amount, order in planned:
+    parts = []
+    try:
+        for resource, amount, order in planned:
+            if logistics and order:
+                route = village.route(world, source, order.destination, road_only=mode == "wagon")
+                if route is None or state.minute + 10 + 5 * len(route) > order.deadline:
+                    return "SHIPMENT_LATE: real loading, travel and unloading cannot meet the order deadline."
+            portions = (village_logistics.load_parts(world, order, carrier, amount, mode)
+                        if logistics and order else [(amount, None)])
+            parts.extend((resource, quantity, order, shipment) for quantity, shipment in portions)
+    except ValueError as error:
+        return str(error)
+    if logistics:
+        unassigned_load = sum(quantity for _, quantity, order, shipment in parts if order and shipment is None)
+        if unassigned_load > village_logistics.capacity(world, carrier, mode):
+            return "SHIPMENT_CAPACITY: existing assignments reserve the carrier's remaining capacity."
+    loaded = []
+    for resource, amount, order, shipment in parts:
+        if logistics and order and shipment is None:
+            shipment = village_logistics._create(world, order, carrier, amount, mode, True)
         contract = next((route for route in config.deliveries if route.source == source
                          and route.destination == destination and route.resource == resource), None)
         values = dict(
@@ -200,9 +229,18 @@ def load(world: "World", carrier: str, goods: dict[str, int], destination: str,
         if order:
             values["order_id"] = order.id
             order.in_transit += amount
+            if logistics:
+                shipment = village_logistics.picked_up(world, order, carrier, amount, mode, shipment)
+                values["shipment_id"] = shipment.id
+                loaded.append((order, shipment))
         shipments.append(VillageShipment(**values))
         if order:
             village_communication.sync_order(world, order, "commitment_in_progress", source)
+    if logistics:
+        if mode == "foot":
+            sync_cargo(world, carrier)
+        for order, shipment in loaded:
+            village_logistics.emit(world, "GOODS_PICKED_UP", order, shipment)
     if "firewood" in goods:
         from npc_sim import village_firewood
         village_firewood.sync_delivery_plans(world, carrier)
@@ -233,6 +271,8 @@ def unload(world: "World", carrier: str, shipments: list[VillageShipment]) -> st
     payments: dict[str, int] = {}
     economy = getattr(state, "economy", None)
     orders = []
+    from npc_sim import village_logistics
+    mode = "wagon" if state.wagon and shipments is state.wagon.loads else "foot"
     for item in deliveries:
         if item.owned_transfer:
             from npc_sim import village_communication
@@ -286,6 +326,14 @@ def unload(world: "World", carrier: str, shipments: list[VillageShipment]) -> st
     if any(state.coins[buyer] < total for buyer, total in payments.items()):
         prefix = "INSUFFICIENT_COINS: " if village_economy.config(world) else ""
         return prefix + "The buyer cannot pay for all goods and the delivery fee; nothing was unloaded."
+    if village_logistics.enabled(world):
+        for item in deliveries:
+            if item.order_id and item.shipment_id:
+                record = economy.shipments.get(item.shipment_id)
+                if (record is None or record.order_id != item.order_id or record.carrier != carrier
+                        or record.mode != mode or record.outstanding != item.quantity
+                        or record.picked_up_at is None or record.status in village_logistics.TERMINAL):
+                    return "SHIPMENT_MISMATCH: cargo does not match its unique carrier shipment."
     for item in deliveries:
         total = item.quantity * item.price
         if not item.owned_transfer:
@@ -331,6 +379,15 @@ def unload(world: "World", carrier: str, shipments: list[VillageShipment]) -> st
                            and (not current.terms.private or rid in {
                                current.author, current.responder, *current.terms.recipients})])
     shipments[:] = [item for item in shipments if item.destination != location]
+    if village_logistics.enabled(world):
+        if mode == "foot":
+            sync_cargo(world, carrier)
+        for item in deliveries:
+            village_logistics.cargo_changed(world, item, carrier, mode, "delivered", item.quantity)
+        for item in deliveries:
+            if item.shipment_id:
+                village_logistics.emit(world, "GOODS_DELIVERED", economy.orders[item.order_id],
+                                       economy.shipments[item.shipment_id])
     if any(item.resource == "firewood" for item in deliveries):
         from npc_sim import village_firewood
         village_firewood.sync_delivery_plans(world, carrier, destination=location)
@@ -408,6 +465,16 @@ def advance(world: "World") -> None:
                     order.in_transit -= item.quantity - quantity
                     order.spoiled_quantity += item.quantity - quantity
                     order.reason = "CARGO_SPOILED"
+                    from npc_sim import village_logistics
+                    record = state.economy.shipments.get(item.shipment_id)
+                    actual_carrier = ((record.carrier if record else state.wagon.driver)
+                                      if carrier == "wagon" else carrier)
+                    if actual_carrier:
+                        village_logistics.cargo_changed(
+                            world, item, actual_carrier, "wagon" if carrier == "wagon" else "foot",
+                            "spoiled", item.quantity - quantity)
+                        village_logistics.emit(world, "SHIPMENT_BLOCKED", order,
+                                               state.economy.shipments.get(item.shipment_id))
                 if quantity:
                     item.quantity, item.lots = quantity, fresh
                 else:

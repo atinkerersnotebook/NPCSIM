@@ -198,6 +198,30 @@ class VillageEconomyMovement(EconomyModel):
     order_id: str | None = None
 
 
+class VillageDeliveryShipment(EconomyModel):
+    id: str
+    order_id: str
+    carrier: str
+    quantity: PositiveQuantity
+    mode: Literal["foot", "wagon"] = "foot"
+    status: Literal["offered", "assigned", "ready", "picked_up", "in_transit",
+                    "delivered", "blocked", "cancelled", "released"] = "offered"
+    created_at: Minute
+    updated_at: Minute
+    accepted_at: Minute | None = None
+    picked_up_at: Minute | None = None
+    delivered_at: Minute | None = None
+    delivered_quantity: Quantity = 0
+    returned_quantity: Quantity = 0
+    spoiled_quantity: Quantity = 0
+    reason: str | None = None
+
+    @property
+    def outstanding(self) -> int:
+        return max(0, self.quantity - self.delivered_quantity
+                   - self.returned_quantity - self.spoiled_quantity)
+
+
 class VillageEconomyState(EconomyModel):
     config: VillageEconomyConfig | None = None
     orders: dict[str, VillageSupplierOrder] = Field(default_factory=dict)
@@ -208,3 +232,5 @@ class VillageEconomyState(EconomyModel):
     public_work_completed_at: dict[str, Minute] = Field(default_factory=dict)
     payments: list[VillageEconomyPayment] = Field(default_factory=list)
     movements: list[VillageEconomyMovement] = Field(default_factory=list)
+    shipments: dict[str, VillageDeliveryShipment] = Field(default_factory=dict)
+    next_shipment: PositiveQuantity = 1

@@ -103,6 +103,7 @@ export interface GanttScale {
   activity?: GanttActivity;
   linkResidents?: boolean;
   selectedActorId?: string;
+  showConnections?: boolean;
 }
 interface Position {
   at: number;
@@ -125,6 +126,19 @@ export interface GanttSpan {
   activity?: Exclude<GanttActivity, "all">;
   kind: "action" | "travel" | "wait" | "sleep" | "route" | "free" | "rejected" | "event";
 }
+export interface GanttLink {
+  at: number;
+  from: string;
+  to: string;
+  label: string;
+  detail: string;
+  kind: "supply" | "dialogue" | "trade";
+  fromStart?: number;
+  fromEnd?: number;
+  toStart?: number;
+  toEnd?: number;
+  reference?: string;
+}
 interface Milestone { at: number; label: string; detail: string }
 
 const colours: Record<string, string> = {
@@ -136,6 +150,12 @@ const colours: Record<string, string> = {
 const palette = ["#9b80c5", "#e4ae65", "#75b5a2", "#db8b95", "#8db0d6", "#b4bd70"];
 export function locationColour(id: string): string {
   return colours[id] ?? palette[[...id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % palette.length];
+}
+
+function linkColour(id: string): string {
+  const colour = locationColour(id).replace("#", "");
+  return `#${[0, 2, 4].map(offset => Math.round(Number.parseInt(colour.slice(offset, offset + 2), 16) * .66)
+    .toString(16).padStart(2, "0")).join("")}`;
 }
 
 function actionLabel(action: string, args: Record<string, unknown>, state: State, actor: string): string {
@@ -199,6 +219,41 @@ function recipientName(args: Record<string, unknown>, state: State, actors: read
     ?? recipient;
   return name === recipient ? name.replaceAll("-", " ").replaceAll("_", " ")
     .replace(/\b\w/g, char => char.toUpperCase()) : name;
+}
+
+function interactionRecipients(action: string, args: Record<string, unknown>, state: State,
+  actorId: string): string[] {
+  const nestedNotice = args.notice && typeof args.notice === "object"
+    ? args.notice as Record<string, unknown> : undefined;
+  const direct = [args.recipient, args.supplier, args.preferred_supplier_id, args.listener,
+    args.listener_id, ...(Array.isArray(args.recipients) ? args.recipients : []),
+    ...(Array.isArray(args.participant_ids) ? args.participant_ids : []),
+    ...(nestedNotice && Array.isArray(nestedNotice.recipients) ? nestedNotice.recipients : [])];
+  const noticeId = typeof args.notice_id === "string" ? args.notice_id
+    : typeof args.request_id === "string" && /notice|request|respond|update/.test(action) ? args.request_id : null;
+  const notice = state.world?.village?.dashboard?.communication?.notices.find(item => item.id === noticeId);
+  if (notice) {
+    if (notice.author === actorId || notice.recipient_ids?.includes(actorId)) {
+      direct.push(...(notice.author === actorId
+        ? notice.recipient_ids ?? notice.recipients
+        : [notice.author]));
+    }
+  }
+  const interaction = action === "say" || action === "village_propose_order"
+    || /^(village_)(ask|tell|notice_|inbox_|request_supply$|respond_to_request$|update_request$|share_known_|propose_meeting$|schedule_crew$)/.test(action);
+  if (!interaction) return [];
+  return [...new Set(direct.filter((id): id is string => typeof id === "string" && id !== actorId))];
+}
+
+function interactionLabel(action: string, args: Record<string, unknown>): { label: string; kind: GanttLink["kind"] } {
+  if (action === "say") return { label: "Chat", kind: "dialogue" };
+  if (/order|supply|request/.test(action)) {
+    const product = typeof args.product === "string" ? `: ${args.product}`
+      : typeof args.good === "string" ? `: ${args.good}` : "";
+    return { label: `Supply request${product}`, kind: "supply" };
+  }
+  if (/reply|respond|update/.test(action)) return { label: "Request response", kind: "supply" };
+  return { label: action.replace(/^village_/, "").replaceAll("_", " "), kind: "dialogue" };
 }
 
 function speakerName(row: { id: string; name: string }): string {
@@ -279,6 +334,7 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
   const walkingPlans = new Map<string, { destination: string; purpose: string }>();
   const milestones: Milestone[] = [];
   const routeChanges: { at: number; actor: string; active: boolean }[] = [];
+  const links: GanttLink[] = [];
   const recordObservation = (raw: z.infer<typeof observedSchema>, order: number) => {
     const at = turns ? now : timeOf(raw);
     const row = byId.get(raw.self.actor_id);
@@ -388,6 +444,19 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
         ...(linked.decision?.subgoal?.trim() ? { subgoal: linked.decision.subgoal.trim() } : {}),
         ...(linked.decision?.plan?.length ? { plan: linked.decision.plan } : {})
       });
+      const link = interactionLabel(action, args);
+      const reference = typeof args.notice_id === "string" ? args.notice_id
+        : /order|supply|request/.test(action) ? linked.request.request_id : undefined;
+      const recipients = interactionRecipients(action, args, state, event.actor_id);
+      if (!recipients.length && reference) {
+        const earlier = links.find(link => link.reference === reference && link.to === event.actor_id);
+        if (earlier) recipients.push(earlier.from);
+      }
+      for (const recipient of recipients) {
+        links.push({ at: start, from: event.actor_id, to: recipient, label: link.label,
+          detail: `${row.name} to ${recipientName({ recipient }, state, cast) ?? recipient}: ${result.explanation}`,
+          kind: link.kind, fromStart: start, fromEnd: Math.max(start, Math.min(now, end)), reference });
+      }
       if (walkingPlan && result.observation.self.location_id === walkingPlan.destination) {
         walkingPlans.delete(event.actor_id);
       }
@@ -483,6 +552,9 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       if (row) row.spans.push({ start: trade.minute, end: trade.minute,
         location: trade.location, kind: "event", label: "Completed trade", detail, status: "settled" });
     }
+    links.push({ at: trade.minute, from: trade.resident, to: trade.visitor,
+      label: "Completed trade", detail, kind: "trade", fromStart: trade.minute,
+      fromEnd: trade.minute, toStart: trade.minute, toEnd: trade.minute });
   }
   for (const row of rows) {
     const visitor = visitors.find(person => person.id === row.id);
@@ -574,7 +646,23 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
   }
   const times = rows.flatMap(row => [...row.positions.map(point => point.at), ...row.spans.map(span => span.start)]);
   const start = Math.min(now, ...times);
-  return { start, now, village, turns, rows, milestones: milestones.filter(mark => mark.at >= start && mark.at <= now) };
+  const paired = new Set<GanttLink>();
+  const resolvedLinks: GanttLink[] = links.filter(link => link.kind === "trade");
+  const interactions = links.filter(link => link.kind !== "trade").sort((a, b) => a.at - b.at);
+  for (const call of interactions) {
+    if (paired.has(call)) continue;
+    const response = interactions.find(item => item !== call && !paired.has(item)
+      && item.from === call.to && item.to === call.from && item.at >= call.at
+      && (call.reference && item.reference ? call.reference === item.reference
+        : item.at - call.at <= 120));
+    if (!response) continue;
+    paired.add(call);
+    paired.add(response);
+    resolvedLinks.push({ ...call, toStart: response.fromStart, toEnd: response.fromEnd,
+      detail: `${call.detail} Response: ${response.detail}` });
+  }
+  return { start, now, village, turns, rows, links: resolvedLinks,
+    milestones: milestones.filter(mark => mark.at >= start && mark.at <= now) };
 }
 
 export function worldGanttMarkup(state: State, events: readonly RunEvent[], agents: readonly GanttAgent[],
@@ -605,8 +693,12 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     ?? Math.ceil(spacing / 1440) * 1440;
   const start = Math.floor(chart.start / tick) * tick;
   const end = Math.max(start + tick * 2, Math.ceil(chart.now / tick) * tick + tick);
-  const top = 58, rowHeight = 100, height = top + rowHeight * chart.rows.length + 30;
+  const top = 58, rowHeight = 116, height = top + rowHeight * chart.rows.length + 30;
   const x = (minute: number) => (minute - start) / (end - start) * (width - 20) + 10;
+  const rowY = (id: string, instant = false) => {
+    const index = chart.rows.findIndex(row => row.id === id);
+    return index < 0 ? null : top + index * rowHeight + (instant ? 92 : 51);
+  };
   const placeName = (id: string) => state.world?.entities[id]?.name ?? id.replaceAll("-", " ");
   const tooltip = (text: string) => `<title>${escape(text)}</title>`;
   const shorten = (text: string, characters: number) => text.length > characters
@@ -637,7 +729,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     const bars = durationSpans.map((item, barIndex) => {
       const left = x(Math.max(cutoff, item.start));
       const w = x(item.end) - left;
-      const inset = Math.min(1.5, w / 8);
+      const inset = Math.min(10, w / 5);
       const tileWidth = w - inset * 2;
       const id = `gantt-clip-${index}-${barIndex}`;
       const location = item.location ? placeName(item.location) : "";
@@ -690,6 +782,50 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     return `<g data-gantt-agent="${escape(row.id)}">${row.id === scale.selectedActorId
       ? `<rect class="gantt-selected-lane" x="1" y="${y + 1}" width="${width - 2}" height="${rowHeight - 2}" rx="6"/>` : ""}<line x1="0" x2="${width}" y1="${y + rowHeight}" y2="${y + rowHeight}" class="gantt-gridline"/>${locations}${bars}${dots}</g>`;
   }).join("");
+  const usedLanes = new Set<number>();
+  const showConnections = scale.showConnections ?? true;
+  const links = (showConnections ? chart.links : []).filter(link => link.at >= cutoff && link.at <= chart.now).map((link, index) => {
+    const fromRow = chart.rows.find(row => row.id === link.from);
+    const toRow = chart.rows.find(row => row.id === link.to);
+    const sourceSpan = fromRow?.spans.find(span => span.start === link.fromStart
+      && (link.fromEnd === undefined || span.end === link.fromEnd));
+    const destinationSpan = toRow?.spans.find(span => span.start === link.toStart
+      && (link.toEnd === undefined || span.end === link.toEnd));
+    if (!sourceSpan || !destinationSpan) return "";
+    const fromY = rowY(link.from, sourceSpan.start === sourceSpan.end);
+    const toY = rowY(link.to, destinationSpan.start === destinationSpan.end);
+    if (fromY === null || toY === null || fromY === toY) return "";
+    const sourceTimed = sourceSpan.end > sourceSpan.start;
+    const destinationTimed = destinationSpan.end > destinationSpan.start;
+    const sourceWidth = x(sourceSpan.end) - x(sourceSpan.start);
+    const destinationWidth = x(destinationSpan.end) - x(destinationSpan.start);
+    const sourceX = sourceTimed ? x(sourceSpan.end) - Math.min(10, sourceWidth / 5) : x(sourceSpan.start) + 4;
+    const destinationX = destinationTimed
+      ? x(destinationSpan.start) + Math.min(10, destinationWidth / 5) : x(destinationSpan.start) - 4;
+    const exitX = sourceX + 16;
+    const entryX = destinationX - 16;
+    const proposedLane = entryX >= exitX ? (exitX + entryX) / 2 : entryX;
+    let laneX = Math.round(proposedLane);
+    let offset = 0;
+    while (usedLanes.has(laneX)) laneX = Math.round(proposedLane + ++offset * 12);
+    usedLanes.add(laneX);
+    laneX = Math.min(width - 8, Math.max(8, laneX));
+    const path = `M ${sourceX} ${fromY} H ${laneX} V ${toY} H ${destinationX}`;
+    const hidden = activity !== "all" && !(activity === "dialogue" && link.kind === "dialogue")
+      && !(activity === "events" && link.kind === "trade");
+    const colour = linkColour(link.from);
+    const id = `${link.from}:${link.to}:${link.fromStart ?? link.at}:${link.toStart ?? link.at}:${index}`;
+    return `<g class="gantt-link ${link.kind}${hidden ? " is-filtered-out" : ""}" tabindex="0" role="button"
+      data-gantt-link="${escape(id)}" aria-pressed="false"
+      style="--gantt-link-color:${colour}"
+      aria-label="${escape(`${format(link.at)} / ${link.detail}`)}">
+      ${tooltip(`${format(link.at)} / ${link.label}: ${link.detail}`)}
+      <path d="${path}"/>
+      <circle class="gantt-link-start" cx="${sourceX}" cy="${fromY}" r="4"/>
+      <circle class="gantt-link-end" cx="${destinationX}" cy="${toY}" r="4"/>
+      ${index === 0 || index === chart.links.length - 1 ? `<text x="${laneX + 6}" y="${(fromY + toY) / 2 - 6}">${escape(link.label)}</text>` : ""}
+    </g>`;
+  }).join("");
   const milestones = new Map<number, Milestone[]>();
   for (const mark of chart.milestones) {
     if (mark.at < cutoff) continue;
@@ -714,6 +850,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
         </div></div></div>
     ${scale.linkResidents ? `<div class="gantt-filters" aria-label="Timeline filters" role="group">
       <button type="button" class="button subtle" data-timeline-recent aria-pressed="${Boolean(scale.recent)}">${model.turns ? "Last 20 turns" : "Last simulated hour"}</button>
+      <button type="button" class="button subtle" data-timeline-connections aria-pressed="${showConnections}">${showConnections ? "Connections on" : "Connections off"}</button>
       <label>Timeline cells <select data-timeline-activity>${([
         ["all", "All cells"], ["actions", "Other actions"], ["movement", "Walking"], ["route", "Routes"],
         ["work", "Work"], ["planning", "Daily planning"], ["dialogue", "Dialogue"], ["meals", "Meals"], ["diary", "Diary entries"],
@@ -726,7 +863,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     <p class="gantt-help">Location colours show recorded positions. ${chart.turns
       ? "Turns count recorded action attempts across all agents, including inspections and rejected actions, not elapsed time. Turn 0 is the initial observation. Boxes show recorded actions; red diamonds mark rejected attempts."
       : "Boxes show action time or reserved availability, not model thinking time. Diamonds mark instant or free actions; red diamonds are rejected actions."}
-      Hover or focus for details. Scroll sideways to explore.</p>
+      Arrows connect an NPC's request, chat, or response to the other NPC. Hover or focus for details. Scroll sideways to explore.</p>
     ${activity !== "all" && events.length && !chart.rows.some(row => row.spans.some(item => visible(item) && matches(item)))
       && !(activity === "milestones" && chart.milestones.some(mark => mark.at >= cutoff))
       ? '<p class="gantt-help">No matching activities in this time range.</p>' : ""}
@@ -742,7 +879,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
             </linearGradient>
             <pattern id="gantt-route" width="7" height="7" patternUnits="userSpaceOnUse"><path d="M0 7L7 0" stroke="#87bee2" stroke-width="1"/></pattern>
           </defs>
-          ${grid.join("")}${rows}${lines}
+          ${grid.join("")}${rows}${links}${lines}
           <rect x="${x(chart.now)}" y="${top - 10}" width="${width - x(chart.now)}" height="${height - top - 10}" class="gantt-future"/>
           <line x1="${x(chart.now)}" x2="${x(chart.now)}" y1="4" y2="${height - 20}" class="gantt-now"/>
           <text x="${Math.max(100, x(chart.now) - 5)}" y="48" text-anchor="end" class="gantt-now-label">${escape(state.run?.status === "running" ? "Now" : state.run?.status === "paused" ? "Paused" : state.run?.status === "ready" ? "Ready" : "Stopped")} ${escape(format(chart.now))}</text>
@@ -752,6 +889,9 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     <div class="gantt-legend">${[...legend].map(([id, name]) =>
       `<span><i style="background:${locationColour(id)}"></i>${escape(name)}</span>`).join("")}
       ${chart.turns ? "" : '<span><i class="route"></i>Wagon route</span><span><i class="sleep"></i>Sleeping</span>'}<span><i class="travel"></i>Walking</span>
+      ${showConnections && chart.links.some(link => link.kind === "supply") ? '<span><i class="link supply"></i>Supply link</span>' : ""}
+      ${showConnections && chart.links.some(link => link.kind === "dialogue") ? '<span><i class="link dialogue"></i>Chat / notice</span>' : ""}
+      ${showConnections && chart.links.some(link => link.kind === "trade") ? '<span><i class="link trade"></i>Completed trade</span>' : ""}
     </div>
     ${events.length ? "" : '<p class="gantt-help">Waiting for recorded history. Unknown earlier positions are left blank.</p>'}
   </section>`;

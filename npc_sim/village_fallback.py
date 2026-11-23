@@ -62,6 +62,9 @@ def _context_values(world: "World") -> dict[str, Any]:
         "heard_messages": world.actor.messages,
         "beliefs": {key: belief.model_dump(exclude={"learned_at"}) for key, belief in person.beliefs.items()},
         "known_notices": {key: memory.snapshot.model_dump() for key, memory in known.items()},
+        "known_shipments": {key: memory.model_dump(exclude={"confirmed_at"})
+                            for key, memory in state.communication.logistics_knowledge.get(
+                                world.actor_id, {}).items()} if state.communication else {},
         "communication_blocker": state.communication.recent_blockers.get(world.actor_id) if state.communication else None,
         "supply_needs": {key: need.model_dump() for key, need in person.fallback.supply_needs.items()},
         "route_goal": person.fallback.route_goal.model_dump(exclude={"attempted_edges", "last_progress_at", "retry_after"})
@@ -770,6 +773,8 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
                             "action_id": "village_execute_fuel_delivery",
                             "arguments": {"route_id": plan.route_id}, "priority": "P1",
                             "reason": "Deliver a confirmed funded fuel load before its deadline."})
+    from npc_sim import village_logistics
+    logistics = village_logistics.enabled(world)
     if world.actor_id == "nella" and state.communication and state.economy:
         from npc_sim import village_services
         orders = [order for order in village_economy._personal_orders(world)
@@ -787,7 +792,7 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
                                         "Carry paid store stock to the general store.", "P1")
                 if travel:
                     choices.append(travel)
-        elif orders:
+        elif orders and not logistics:
             order = min(orders, key=lambda item: (item.deadline, item.id))
             if location != order.source:
                 travel = _travel_choice(world, order.source, f"store:collect:{order.id}",
@@ -842,7 +847,7 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
                             "priority": "P1",
                             "reason": "Buy real producer surplus above reserve for bounded resale."})
             break
-    if state.economy and (world.actor_id == "nella" or any(
+    if not logistics and state.economy and (world.actor_id == "nella" or any(
             order.buyer == world.actor_id and order.status in village_economy.LOADABLE
             for order in village_economy._personal_orders(world)) or any(
                 order.public_work and order.supplier == world.actor_id and order.status in village_economy.LOADABLE
@@ -1019,7 +1024,7 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
                       if order.supplier == "rowan" and order.buyer == "finn"
                       and order.product == "logs" and order.status in village_economy.COMMITTED
                       and order.coordination_notice_id in known]
-            if orders:
+            if orders and not logistics:
                 order = min(orders, key=lambda item: item.deadline)
                 cargo = person.shipments
                 if any(item.order_id == order.id for item in cargo):
@@ -1167,6 +1172,10 @@ def _feed_store_choices(world: "World") -> list[dict[str, Any]]:
 
 def _freight_choices(world: "World") -> dict[str, Any] | None:
     from npc_sim import village_services, village_wagon
+    from npc_sim import village_logistics
+
+    if village_logistics.enabled(world):
+        return village_logistics.freight_choice(world)
 
     config, state = village.context(world)
     person = state.residents[world.actor_id]
@@ -1317,6 +1326,11 @@ def candidates(world: "World") -> list[dict[str, Any]]:
             if _meal_funded(world) and action_blocker(world, "village_eat", {}, check_wait=False) is None:
                 choices.append({"task_id": "need:meal", "action_id": "village_eat", "arguments": {},
                                 "priority": "P1", "reason": "A due meal has actual local food; payment is validated on eating."})
+    from npc_sim import village_logistics
+    if village_logistics.enabled(world):
+        freight = village_logistics.freight_choice(world)
+        if freight:
+            choices.append(freight)
     if purposeful(world):
         for step in village_economy.meal_delivery_actions(world):
             action_id, args = step["action"], step["args"]

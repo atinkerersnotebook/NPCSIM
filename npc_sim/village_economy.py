@@ -566,6 +566,42 @@ def available_for_order(world: "World", location: str, product: str, use_at: int
                and (bucket["expires_at"] is None or bucket["expires_at"] > use_at))
 
 
+def _production_input_ready_at(world: "World", location: str, product: str, required: int,
+                               available_by: int, fresh_through: int, reserved: int = 0,
+                               *, excluding: str | None = None
+                               ) -> tuple[int | None, int, int]:
+    """Return arrival time and available input after higher-priority reservations."""
+    state, economy = world.state.village, _state(world)
+    buckets, _ = _allocated_stock(world, location, product, excluding=excluding)
+    if economy:
+        buckets.extend({
+            "quantity": incoming.remaining,
+            "available_at": max(state.minute, incoming.deadline),
+            "expires_at": incoming.required_fresh_until + 1,
+            "confirmed": True,
+        } for incoming in economy.orders.values()
+            if incoming.status in COMMITTED and incoming.destination == location
+            and incoming.product == product and incoming.remaining
+            and incoming.id != excluding)
+    needed = required + reserved
+    allocated = 0
+    ready_at = state.minute
+    for bucket in sorted(buckets, key=lambda item: (
+            item["available_at"],
+            item["expires_at"] if item["expires_at"] is not None else float("inf"))):
+        if (bucket["available_at"] > available_by
+                or bucket["expires_at"] is not None and bucket["expires_at"] <= fresh_through):
+            continue
+        amount = min(needed - allocated, bucket["quantity"])
+        allocated += amount
+        if amount:
+            ready_at = max(ready_at, bucket["available_at"])
+        if allocated >= needed:
+            break
+    available = max(0, allocated - reserved)
+    return (ready_at if allocated >= needed else None, available, max(0, required - available))
+
+
 def order_feasibility(world: "World", order: VillageSupplierOrder) -> tuple[bool, str]:
     """Only on-hand surplus and already committed production can back a firm order."""
     state = world.state.village
@@ -644,10 +680,14 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
                     max((other.production_plan.get("finish", 0) for other in pending), default=0),
                     village_research.blocked_until(world, order.supplier) or 0)
         duration = discovery.proposal.duration * village_life.cooldown_factor(world, order.supplier)
+        home = village.route(world, order.source, resident.home)
+        if home is None:
+            return {}, "No route home after recipe production"
+        latest = min(latest_start, closing,
+                     production_day * 1440 + resident.bed_minute - 5 * (len(home) + 1))
         finish = start + missing * duration
         if shelf and start + duration + shelf <= order.required_fresh_until:
             finish = order.required_fresh_until - shelf + 1 + (missing - 1) * duration
-        home = village.route(world, order.source, resident.home)
         if home is None or finish > min(latest_start, closing,
                                         production_day * 1440 + resident.bed_minute - 5 * (len(home) + 1)):
             return {}, "No free recipe production slot before delivery and closing time"
@@ -656,9 +696,18 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
             required = missing * amount
             reserved = sum(other.production_plan.get(f"input:{product}", 0) for other in pending
                            if other.source == order.source)
-            if available_for_order(world, order.source, product, finish) - reserved < required:
+            ready_at, available, _ = _production_input_ready_at(
+                world, order.source, product, required,
+                max(state.minute, latest - missing * duration), finish, reserved,
+                excluding=order.id)
+            if available < required:
                 return {}, f"Insufficient uncommitted {product} inputs above reserves"
             inputs[f"input:{product}"] = required
+            start = max(start, ready_at or finish)
+        finish = start + missing * duration
+        if finish > min(latest_start, closing,
+                        production_day * 1440 + resident.bed_minute - 5 * (len(home) + 1)):
+            return {}, "No free recipe production slot before delivery and closing time"
         return {"finish": finish, "output": missing, **inputs}, ""
     policy = config(world)
     public_craft = policy.public_crafts.get(order.product) if policy else None
@@ -669,14 +718,22 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
         finish = start + batches * public_craft.minutes * village_life.cooldown_factor(world, order.supplier)
         if finish > min(latest_start, closing):
             return {}, "No low-priority civic production slot before delivery and closing time"
+        latest = min(latest_start, closing) - batches * public_craft.minutes
         inputs = {}
         for product, amount in public_craft.inputs.items():
             required = batches * amount
             reserved = sum(other.production_plan.get(f"input:{product}", 0) for other in pending
                            if other.source == order.source)
-            if available_for_order(world, order.source, product, finish) - reserved < required:
+            ready_at, available, _ = _production_input_ready_at(
+                world, order.source, product, required, latest, finish, reserved,
+                excluding=order.id)
+            if available < required:
                 return {}, f"Insufficient uncommitted {product} inputs above reserves"
             inputs[f"input:{product}"] = required
+            start = max(start, ready_at or finish)
+        finish = start + batches * public_craft.minutes * village_life.cooldown_factor(world, order.supplier)
+        if finish > min(latest_start, closing):
+            return {}, "No low-priority civic production slot before delivery and closing time"
         return {"finish": finish, "output": missing, "public_craft": 1, **inputs}, ""
     from npc_sim import village_firewood
     fuel_world = None
@@ -717,25 +774,36 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
         finish = earliest + batches * interval
         if finish > min(latest_start, closing):
             return {}, "No free production slot before the deadline and closing time"
+        latest = min(latest_start, closing) - batches * interval
         inputs = {}
         gather_needed = 0
         for product, amount in job.inputs.items():
             required = ceil(missing / job.outputs[order.product]) * amount
             reserved = sum(other.production_plan.get(f"input:{product}", 0) for other in pending
                            if other.source == order.source)
-            available_input = available_for_order(world, order.source, product, finish) - reserved
-            if available_input < required and product == "logs" and order.product == "firewood":
+            ready_at, available_input, missing_input = _production_input_ready_at(
+                world, order.source, product, required, latest, finish, reserved,
+                excluding=order.id)
+            if missing_input and product == "logs" and order.product == "firewood":
                 gathering = resident.job.interval * village_life.cooldown_factor(world, order.supplier)
-                needed_logs = required - max(0, available_input)
+                needed_logs = missing_input
                 gather_needed += needed_logs
                 extra_time = ceil(needed_logs / 2) * gathering
                 finish += extra_time
                 if finish > min(latest_start, closing):
                     return {}, "Insufficient time to fell logs and split fuel before delivery"
-            elif available_input < required:
+            elif missing_input:
                 return {}, f"Insufficient uncommitted {product} inputs above reserves"
             inputs[f"input:{product}"] = required
-        return {"finish": finish, "output": missing,
+            if ready_at is not None:
+                earliest = max(earliest, ready_at)
+        planned_finish = earliest + batches * interval
+        if gather_needed:
+            planned_finish += (ceil(gather_needed / 2) * resident.job.interval
+                               * village_life.cooldown_factor(world, order.supplier))
+        if planned_finish > min(latest_start, closing):
+            return {}, "No free production slot before the deadline and closing time"
+        return {"finish": planned_finish, "output": missing,
                 "gather:logs": gather_needed, **inputs}, ""
     livestock = state.livestock
     if (livestock and livestock.config.enabled and order.supplier == livestock.config.keeper
@@ -827,11 +895,13 @@ def loadable_for_order(world: "World", order: VillageSupplierOrder) -> int:
 
 
 def load_blocker(world: "World", source: str, destination: str,
-                 goods: dict[str, int]) -> str | None:
+                 goods: dict[str, int], *, mode: str = "foot") -> str | None:
     """Check real loadable allocations before either foot or wagon loading."""
     economy, policy = _state(world), config(world)
     if not economy or not policy:
         return None
+    from npc_sim import village_logistics
+    logistics = village_logistics.enabled(world)
     for product, amount in goods.items():
         remaining = amount
         for order in sorted(economy.orders.values(), key=lambda item: order_priority(world, item)):
@@ -841,7 +911,8 @@ def load_blocker(world: "World", source: str, destination: str,
             from npc_sim import village_communication
             if not village_communication.can_use_order(world, order):
                 continue
-            quantity = min(remaining, order.loadable)
+            quantity = min(remaining, village_logistics.pickup_available(world, order, world.actor_id, mode)
+                           if logistics else order.loadable)
             if quantity > loadable_for_order(world, order):
                 return ("RAW_MATERIAL_RESERVE: promised stock is not fresh and available "
                         "above reserves and other accepted orders; nothing was loaded.")
@@ -982,7 +1053,8 @@ def meal_delivery_forecast(world: "World") -> list[dict[str, Any]]:
 
 def meal_delivery_actions(world: "World") -> list[dict[str, Any]]:
     """Offer only actions supported by the actor's own order knowledge and location."""
-    if not _food_policy(world):
+    from npc_sim import village_logistics
+    if not _food_policy(world) or village_logistics.enabled(world):
         return []
     from npc_sim import village_communication, village_services
     base, state = village.context(world)
@@ -1294,8 +1366,14 @@ def _personal_orders(world: "World") -> list[VillageSupplierOrder]:
         return []
     if not village_communication.enabled(world):
         return list(economy.orders.values())
-    return [order for order in economy.orders.values() if not order.coordination_notice_id] + [
-        VillageSupplierOrder.model_validate(order) for order in village_communication.learned_orders(world)]
+    orders = {order.id: order for order in economy.orders.values() if not order.coordination_notice_id}
+    orders.update({order["id"]: VillageSupplierOrder.model_validate(order)
+                   for order in village_communication.learned_orders(world)})
+    if village_communication.instant(world):
+        orders.update({oid: memory.order.model_copy(deep=True)
+                       for oid, memory in world.state.village.communication.logistics_knowledge.get(
+                           world.actor_id, {}).items()})
+    return list(orders.values())
 
 
 def suggestions(world: "World", buyer: str | None = None, *, personal: bool = False) -> list[dict[str, Any]]:
@@ -1788,7 +1866,7 @@ def advance(world: "World") -> None:
 
 
 def _return_cargo(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]:
-    from npc_sim import village_goods
+    from npc_sim import village_goods, village_logistics
     state = world.state.village
     wagon = bool(args.get("wagon", False))
     if wagon:
@@ -1834,6 +1912,11 @@ def _return_cargo(world: "World", args: dict[str, Any]) -> tuple[str, str, str, 
         if order:
             order.in_transit -= item.quantity
             order.returned_quantity += item.quantity
+            village_logistics.cargo_changed(
+                world, item, world.actor_id, "wagon" if wagon else "foot", "returned", item.quantity)
+            if village_logistics.enabled(world):
+                village_logistics.emit(world, "SHIPMENT_RELEASED", order,
+                                       economy.shipments[item.shipment_id])
         shipments.remove(item)
         returned.append(f"{item.quantity} {item.resource}")
     if not returned:
@@ -2175,7 +2258,7 @@ def production_blocker(world: "World", action: str, *, personal: bool = False) -
 
 def delivery_runs(world: "World", carrier: str | None = None) -> list[dict[str, Any]]:
     from npc_sim.village_services import foot_capacity
-    from npc_sim import village_equipment
+    from npc_sim import village_equipment, village_communication, village_logistics
     state, economy = world.state.village, _state(world)
     if economy is None:
         return []
@@ -2189,6 +2272,8 @@ def delivery_runs(world: "World", carrier: str | None = None) -> list[dict[str, 
     for order in sorted(economy.orders.values(), key=lambda order: order_priority(world, order)):
         if order.status not in LOADABLE or order.source != location or order.loadable <= 0:
             continue
+        if village_logistics.enabled(world) and not village_communication.can_use_order(world, order):
+            continue
         run = runs.setdefault(order.destination, {"destination": order.destination,
                               "goods": {}, "orders": {}, "capacity": max(0, capacity),
                               "delivery_fee": order.delivery_fee})
@@ -2197,6 +2282,13 @@ def delivery_runs(world: "World", carrier: str | None = None) -> list[dict[str, 
         amount = min(loadable_for_order(world, order), max(0, remaining),
                      max(0, usable_stock(world, location, order.product, order.required_fresh_until)
                          - policy_reserve(world, location, order.product) - used_product))
+        if village_logistics.enabled(world):
+            amount = min(amount, village_logistics.pickup_available(
+                world, order, carrier, "wagon" if wagon else "foot"))
+            try:
+                village_logistics.load_parts(world, order, carrier, amount, "wagon" if wagon else "foot")
+            except ValueError:
+                continue
         if amount:
             run["goods"][order.product] = used_product + amount
             run["orders"][order.id] = amount

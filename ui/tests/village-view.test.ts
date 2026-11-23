@@ -1362,6 +1362,71 @@ test("timeline shows order parameters and the complete decision plan", () => {
   assert.match(markup, /data-gantt-plan="Check demand\nRequest delivery\nConfirm acceptance"/);
 });
 
+test("timeline links requests, chats, and trades between NPC lanes", () => {
+  const state = expanded();
+  state.world!.village!.minute = 500;
+  state.world!.village!.dashboard = {
+    orders: [], products: [], accounts: [], activities: [], projects: [], quests: [],
+    visitors: [{ id: "merchant-1", name: "Cora", location: "bakery", arrival: 490, departure: null,
+      status: "present", activities: [] }],
+    incidents: [], time_use: {}, communication: communicationSchema.parse({
+      enabled: true, scope: "operator world view", policy: "Physical channels only.", boxes: [],
+      share_candidates: [], notices: [{
+        id: "fish-request", version: 1, author: "Torvin", recipients: ["Finn"], recipient_ids: ["finn"],
+        subject: "Fish for supper", description: "Need three fish", type: "supply_request", status: "posted",
+        quantity: 3, destination: "Tavern", due_at: 1080, updated_at: 485, private: false,
+        response: null, source: "authoritative world", learned_at: 485, confidence: "direct", hops: 0,
+        source_chain: [], freshness: "World state", appointment: null, commitment: null
+      }]
+    }),
+    trades: [{ id: "trade-1", resident: "elsie", visitor: "merchant-1", direction: "export",
+      resource: "bread", quantity: 1, payment: 2, minute: 490, location: "bakery", source: "Recorded cargo" }]
+  };
+  const events = [
+    timelineEvent(1, "action_request", 480, { request_id: "chat", action_id: "say",
+      arguments: { recipient: "elsie", message: "Can you take this request?" } }),
+    timelineEvent(2, "action_result", 480, { request_id: "chat", outcome: "APPLIED",
+      explanation: "Torvin spoke with Elsie.", observation: timelineObservation(480) }),
+    timelineEvent(3, "action_request", 485, { request_id: "reply", action_id: "say",
+      arguments: { recipient: "torvin", message: "I can handle the request." } }, "elsie"),
+    timelineEvent(4, "action_result", 485, { request_id: "reply", outcome: "APPLIED",
+      explanation: "Elsie replied to Torvin.", observation: { ...timelineObservation(485),
+        self: { actor_id: "elsie", location_id: "tavern" } } }, "elsie"),
+    timelineEvent(5, "action_request", 490, { request_id: "order", action_id: "village_propose_order",
+      arguments: { supplier: "finn", product: "fish", quantity: 3, deadline: 1080 } }),
+    timelineEvent(6, "action_result", 490, { request_id: "order", outcome: "APPLIED",
+      explanation: "Supply requested.", observation: timelineObservation(490) }),
+    timelineEvent(7, "action_request", 495, { request_id: "order-response", action_id: "village_notice_reply",
+      arguments: { notice_id: "order", expected_version: 1, response: "accept" } }, "finn"),
+    timelineEvent(8, "action_result", 495, { request_id: "order-response", outcome: "APPLIED",
+      explanation: "Finn accepted the request.", observation: { ...timelineObservation(495),
+        self: { actor_id: "finn", location_id: "riverbank" } } }, "finn")
+  ];
+  const timeline = buildWorldTimeline(state, events, monitoredAgents(state))!;
+  assert.ok(timeline.links.some(link => link.from === "torvin" && link.to === "elsie" && link.kind === "dialogue"));
+  assert.ok(timeline.links.some(link => link.from === "torvin" && link.to === "finn" && link.kind === "supply"));
+  assert.ok(timeline.links.some(link => link.from === "elsie" && link.to === "merchant-1" && link.kind === "trade"));
+  for (const link of timeline.links) {
+    const from = timeline.rows.find(row => row.id === link.from)!;
+    const to = timeline.rows.find(row => row.id === link.to)!;
+    assert.ok(from.spans.some(span => span.start === link.fromStart));
+    assert.ok(to.spans.some(span => span.start === link.toStart));
+  }
+  const markup = worldGanttMarkup(state, events, monitoredAgents(state));
+  assert.match(markup, /class="gantt-link dialogue/);
+  assert.doesNotMatch(markup, /marker-end=/);
+  assert.match(markup, /style="--gantt-link-color:#[0-9a-f]{6}"/);
+  assert.match(markup, /M [\d.]+ [\d.]+ H [\d.]+ V [\d.]+ H [\d.]+/);
+  assert.ok((markup.match(/data-gantt-link=/g) ?? []).length >= 2);
+  assert.ok((markup.match(/class="gantt-link-start"/g) ?? []).length >= 2);
+  assert.ok((markup.match(/class="gantt-link-end"/g) ?? []).length >= 2);
+  assert.match(markup, /Supply link/);
+  assert.match(markup, /data-timeline-connections aria-pressed="true"/);
+  const hidden = worldMonitorMarkup(state, events, { showConnections: false });
+  assert.match(hidden, /data-timeline-connections aria-pressed="false"/);
+  assert.doesNotMatch(hidden, /class="gantt-link /);
+});
+
 test("timeline does not attribute a different or absent decision to an action", () => {
   const state = expanded();
   state.world!.village!.minute = 500;
@@ -1907,8 +1972,8 @@ test("Gantt uses taller aligned rows and rounded tiles without changing recorded
   const agents = monitoredAgents(state);
   const before = buildWorldTimeline(state, events, agents);
   const markup = worldGanttMarkup(state, events, agents);
-  assert.equal((markup.match(/style="height:100px"/g) ?? []).length, 12);
-  assert.ok(markup.includes('viewBox="0 0 900 1288"'));
+  assert.equal((markup.match(/style="height:116px"/g) ?? []).length, 12);
+  assert.ok(markup.includes('viewBox="0 0 900 1480"'));
   assert.match(markup, /<rect[^>]*height="64" rx="7"/);
   assert.match(markup, /<rect[^>]*height="82" rx="8"/);
   assert.ok(markup.includes('id="gantt-tile"'));

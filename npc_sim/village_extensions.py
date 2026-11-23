@@ -3,12 +3,13 @@ from typing import TYPE_CHECKING, Any
 from npc_sim import village, village_economy, village_events, village_social, village_maintenance, village_research, village_mining, village_livestock
 from npc_sim.models import VillageConfigurationPatch, VillageDashboard, VillageDayPolicy, VillageTimeUse
 from npc_sim import village_communication, village_firewood, village_legacy, village_equipment
+from npc_sim import village_logistics
 
 if TYPE_CHECKING:
     from npc_sim.world import World
 
 
-VERBS = village_economy.VERBS | village_events.VERBS | village_social.VERBS | village_maintenance.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | village_legacy.VERBS | village_equipment.VERBS | {"village_wait_event"}
+VERBS = village_economy.VERBS | village_events.VERBS | village_social.VERBS | village_maintenance.VERBS | village_research.VERBS | village_mining.VERBS | village_livestock.VERBS | village_communication.VERBS | village_logistics.VERBS | village_legacy.VERBS | village_equipment.VERBS | {"village_wait_event"}
 
 
 def policy(world: "World") -> VillageDayPolicy:
@@ -37,6 +38,7 @@ def observation(world: "World") -> dict[str, Any]:
     result: dict[str, Any] = {}
     for module in modules(world):
         result.update(module.observation(world))
+    result.update(village_logistics.observation(world))
     result["day_policy"] = policy(world).model_dump(include=set(VillageDayPolicy.model_fields))
     from npc_sim import village_fallback
     result.update(village_fallback.observation(world))
@@ -45,6 +47,7 @@ def observation(world: "World") -> dict[str, Any]:
 
 def actions(world: "World") -> list[dict[str, Any]]:
     result = [action for module in modules(world) for action in module.actions(world)]
+    result.extend(village_logistics.actions(world))
     if policy(world).event_driven_waits or policy(world).anti_idle:
         result.append({
             "id": "village_wait_event", "description": "Wait until your next work, meal or bedtime; new commitments can wake you.",
@@ -83,6 +86,8 @@ def next_personal_event(world: "World") -> int:
 
 
 def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, str, None]:
+    if action in village_logistics.VERBS:
+        return village_logistics.apply(world, action, args)
     if action == "village_wait_event":
         _, state = village.context(world)
         from npc_sim import village_fallback
@@ -107,6 +112,7 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
 def advance(world: "World") -> None:
     for module in modules(world):
         module.advance(world)
+    village_logistics.advance(world)
     wake_local_waiters(world)
     from npc_sim import village_fallback
     village_fallback.advance(world)

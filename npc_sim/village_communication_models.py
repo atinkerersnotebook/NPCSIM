@@ -4,6 +4,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from npc_sim.village_economy_models import VillageDeliveryShipment, VillageSupplierOrder
+
 Number = Annotated[int, Field(strict=True, ge=0)]
 Positive = Annotated[int, Field(strict=True, gt=0)]
 Text = Annotated[str, Field(strict=True, min_length=1, max_length=500)]
@@ -100,6 +102,24 @@ class TransferAuthorization(CommunicationModel):
     reason: str | None = None
 
 
+class LogisticsSnapshot(CommunicationModel):
+    order: VillageSupplierOrder
+    shipments: list[VillageDeliveryShipment] = Field(default_factory=list)
+    unassigned_quantity: Number
+    confirmed_at: Number
+
+
+class LogisticsMessage(CommunicationModel):
+    sequence: Positive
+    type: Literal["ORDER_ACCEPTED", "SHIPMENT_OFFERED", "SHIPMENT_ASSIGNED", "GOODS_READY",
+                  "GOODS_PICKED_UP", "GOODS_DELIVERED", "SHIPMENT_BLOCKED", "SHIPMENT_RELEASED"]
+    minute: Number
+    order_id: Text
+    shipment_id: Text | None = None
+    recipients: list[Text]
+    snapshot: LogisticsSnapshot
+
+
 class VillageCommunicationState(CommunicationModel):
     config: VillageCommunicationConfig
     notices: dict[str, list[NoticeVersion]] = Field(default_factory=dict)
@@ -113,6 +133,9 @@ class VillageCommunicationState(CommunicationModel):
     recent_blockers: dict[str, dict[str, Any]] = Field(default_factory=dict)
     next_notice: Positive = 1
     transfers: dict[str, TransferAuthorization] = Field(default_factory=dict)
+    logistics_knowledge: dict[str, dict[str, LogisticsSnapshot]] = Field(default_factory=dict)
+    logistics_messages: list[LogisticsMessage] = Field(default_factory=list)
+    logistics_sent: dict[str, str] = Field(default_factory=dict)
 
 
 class Channel(CommunicationModel):

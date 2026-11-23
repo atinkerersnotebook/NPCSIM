@@ -647,6 +647,42 @@ To regenerate the test fixture after intentionally updating Living Millhaven:
 
 This overwrites only the specified scenario fixture, not existing adventures.
 
+#### Tin-Can Logistics Protocol v1
+
+Tin-can worlds with an economy separate purchase orders from carrier shipments.
+`village_assign_shipment` reserves an order quantity and real carrying capacity
+for a named carrier. Offering someone else a load requires their
+`village_accept_shipment`; accepting your own assignment needs no separate reply.
+Offers also reserve demand, so another carrier cannot claim the same goods.
+Stock may still be awaiting production: neither an offer nor acceptance creates it.
+
+Each physical order load has a persistent shipment ID. The engine sends
+`ORDER_ACCEPTED`, `SHIPMENT_ASSIGNED`, `GOODS_READY`, `GOODS_PICKED_UP`,
+`GOODS_DELIVERED`, and `SHIPMENT_BLOCKED` facts through the network. Offers and
+releases additionally send `SHIPMENT_OFFERED` and `SHIPMENT_RELEASED`.
+Unchanged facts are not resent, and receipt requires no extra AI action.
+Order participants receive a carrier/quantity manifest, not remote inventories
+or whereabouts. `village_shipment_status` refreshes a personally known order's
+last confirmed manifest; unrelated residents cannot query it.
+
+Loading still requires eligible physical stock; travel still takes real time.
+Only successful unloading updates destination stock, order delivery, and payment.
+`village_release_shipment` frees unpicked reservations.
+`village_reassign_shipment` retains the shipment ID and order; loaded foot cargo
+requires the new carrier to accept a physical, co-located handoff with capacity.
+Otherwise, return unpaid goods to their supplier before releasing them.
+Deadline failures and spoilage retain surviving cargo rather than duplicating it.
+
+Freight choices use those assignments and account for delivery, return travel,
+and preparation before cooking, appointments, and bedtime. They prefer other
+couriers over the innkeeper when another trip can meet the deadline. An explicit
+`allow_duty_conflict` override permits an essential trip; it does not waive
+physical capacity, routes, freshness, or the delivery deadline.
+The deterministic regression in `tests/test_village_logistics.py` exercises
+the twelve-loaf brunch, protected flour, real travel and settlement, and Elsie's
+availability at the tavern. This is engine evidence, not a measured live-model run.
+Physical-notice-only worlds keep their existing behavior.
+
 #### Physical village communication (Phases 1 and 2)
 
 New **Millhaven Living** scenarios enable physical communication by default.
