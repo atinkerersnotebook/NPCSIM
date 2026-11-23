@@ -1227,6 +1227,39 @@ test("World now only reports completed moves and labels a stopped snapshot", () 
   assert.match(worldMonitorMarkup(state, events), /Adventure is not running[\s\S]*Last recorded blocked work/);
 });
 
+test("world timeline renders an action while its result is still pending", () => {
+  const state = expanded();
+  state.in_flight = true;
+  state.run!.actor_id = "torvin";
+  state.world!.village!.minute = 485;
+  const pending = timelineEvent(1, "action_request", 485, {
+    request_id: "pending", action_id: "village_work", arguments: { task: "repair_mill" }
+  });
+  const timeline = buildWorldTimeline(state, [pending], monitoredAgents(state))!;
+  const row = timeline.rows.find(item => item.id === "torvin")!;
+  assert.equal(row.spans.length, 1);
+  assert.equal(row.spans[0].status, "IN_PROGRESS");
+  assert.match(row.spans[0].detail, /Waiting for the world result/);
+});
+
+test("world timeline advances from streamed results before the turn snapshot catches up", () => {
+  const state = expanded();
+  state.run!.status = "running";
+  state.run!.actor_id = "torvin";
+  state.world!.village!.minute = 480;
+  const request = timelineEvent(1, "action_request", 485, {
+    request_id: "streamed", action_id: "go", arguments: { target: "village-square" }
+  });
+  const result = timelineEvent(2, "action_result", 485, {
+    request_id: "streamed", outcome: "APPLIED", explanation: "Walked.",
+    observation: timelineObservation(485, "village-square")
+  });
+  const timeline = buildWorldTimeline(state, [request, result], monitoredAgents(state))!;
+  assert.equal(timeline.now, 485);
+  assert.equal(timeline.rows.find(row => row.id === "torvin")!.spans.length, 1);
+  assert.match(timeline.rows.find(row => row.id === "torvin")!.spans[0].detail, /Walked/);
+});
+
 test("World separates the overview, map, residents, and village systems and omits unavailable trades", () => {
   const state = expanded();
   state.world!.village!.dashboard = { orders: [], products: [], accounts: [], projects: [], quests: [], activities: [], incidents: [], visitors: [], time_use: {} };

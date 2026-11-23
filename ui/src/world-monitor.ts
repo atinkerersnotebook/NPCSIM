@@ -14,6 +14,7 @@ import { actionSpeedometerMarkup } from "./action-speedometer.ts";
 import { npcPortrait } from "./npc-sprite.ts";
 import { sectionTabPanel, sectionTabs } from "./section-tabs.ts";
 import { sceneAnchors, sceneHeight, sceneWidth } from "./millhaven-orthographic.ts";
+import { mountScenarioPlayback } from "./scenario-playback.ts";
 
 const escape = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
@@ -236,6 +237,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   const dot = app.querySelector<HTMLSpanElement>(".live-dot")!;
   let previous = "";
   let state: State | null = null;
+  let liveState: State | null = null;
   const events = new Map<string, RunEvent>();
   const seen = new Set<string>();
   let historyReady = false;
@@ -244,6 +246,19 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   let recent = false;
   let activity: GanttActivity = "all";
   let resetTimelineScroll = false;
+  const playbackHost = document.createElement("div");
+  const playback = mountScenarioPlayback(playbackHost, {
+    snapshotPath: sequence => `/api/world/playback/${sequence}`,
+    onSnapshot: (payload, live) => {
+      const next = live ? liveState : stateSchema.parse(payload);
+      if (next) {
+        state = next;
+        previous = "";
+        schedule();
+      }
+    },
+    onError: message => report(new Error(message))
+  });
   const mapViews = {
     "monitor-map": { zoom: 1, left: 0, top: 0 },
     "monitor-scene": { zoom: 1, left: 0, top: 0 }
@@ -316,7 +331,9 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     const old = content.querySelector<HTMLDivElement>("#monitor-timeline:not([hidden]) .gantt-scroll");
     const viewportWidth = old?.clientWidth || content.clientWidth - (window.matchMedia("(max-width: 700px)").matches ? 102 : 132);
     const now = Date.now();
-    const markup = worldMonitorMarkup(state, historyReady ? [...events.values()] : [], { zoom, viewportWidth, recent, activity },
+    const timelineEvents = [...events.values()]
+      .filter(event => !playback.active || event.sequence <= state!.event_count);
+    const markup = worldMonitorMarkup(state, historyReady ? timelineEvents : [], { zoom, viewportWidth, recent, activity },
       { zoom: mapViews["monitor-map"].zoom, selectedActorId, dialogue, now }, historyReady, mapViews["monitor-scene"].zoom);
     clearTimeout(bubbleTimer);
     const expiries = dialogue.active(now).map(line => line.expiresAt);
@@ -343,6 +360,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       const hadFocus = old?.contains(document.activeElement);
       const zoomControls = renderedZoom === zoom ? content.querySelector(".gantt-zoom") : null;
       content.innerHTML = markup;
+      content.querySelector(".monitor-time-cards")?.prepend(playback.element);
       tabs.sync();
       const scroll = restoreScroll();
       if (panelFocus) document.getElementById(panelFocus)?.focus({ preventScroll: true });
@@ -404,6 +422,8 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   };
   const render = (payload: unknown) => {
     const next = stateSchema.parse(payload);
+    liveState = next;
+    if (playback.active) return;
     if (next.run?.id !== state?.run?.id) {
       events.clear();
       seen.clear();
@@ -639,6 +659,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     window.addEventListener("pagehide", () => {
       controller.abort();
       stream?.close();
+      playback.destroy();
       clearTimeout(bubbleTimer);
       if (frame !== null) cancelAnimationFrame(frame);
       frame = null;
@@ -649,6 +670,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       const response = await fetch("/api/state", { signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       render(await response.json());
+      await playback.refresh(signal);
       streamRun = state?.run?.id ?? "";
       if (streamRun) {
         const historyThrough = state!.event_count;
@@ -664,7 +686,10 @@ export function startWorldMonitor(app: HTMLDivElement): void {
           awaitingSnapshot = true;
         };
         stream.addEventListener("snapshot", (event: MessageEvent<string>) => {
-          try { render(JSON.parse(event.data)); }
+          try {
+            render(JSON.parse(event.data));
+            void playback.refresh(signal).catch(failure => report(failure));
+          }
           catch (failure) { report(failure); }
         });
         stream.addEventListener("run-event", (message: MessageEvent<string>) => {
@@ -698,7 +723,10 @@ export function startWorldMonitor(app: HTMLDivElement): void {
         awaitingSnapshot = true;
       };
       stream.addEventListener("snapshot", (event: MessageEvent<string>) => {
-        try { render(JSON.parse(event.data)); }
+        try {
+          render(JSON.parse(event.data));
+          void playback.refresh(signal).catch(failure => report(failure));
+        }
         catch (failure) { report(failure); }
       });
       stream.addEventListener("run-event", (message: MessageEvent<string>) => {

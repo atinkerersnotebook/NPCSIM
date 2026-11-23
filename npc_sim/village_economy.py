@@ -576,8 +576,8 @@ def order_feasibility(world: "World", order: VillageSupplierOrder) -> tuple[bool
     approach = village.route(world, village.resident_location(world, order.supplier), source)
     if capacity < 1 or route is None or approach is None:
         return False, "No real carrying capacity or physical delivery route is available."
-    trips = ceil(order.loadable / capacity)
-    transport = len(approach) * 5 + trips * (len(route) * 5 + 10) + (trips - 1) * len(route) * 5
+    trips = 1
+    transport = len(approach) * 5 + len(route) * 5 + 10
     if state.minute + transport > order.deadline:
         return False, "Deadline leaves insufficient time to load, travel and unload."
     buckets, scheduled = _allocated_stock(world, source, order.product, excluding=order.id)
@@ -606,8 +606,7 @@ def production_plan(world: "World", order: VillageSupplierOrder) -> tuple[dict[s
     delivery = village.route(world, order.source, order.destination)
     if capacity < 1 or approach is None or delivery is None:
         return {}, "No real carrying capacity or delivery route"
-    trips = ceil(order.loadable / capacity)
-    transport = len(approach) * 5 + trips * (len(delivery) * 5 + 10) + (trips - 1) * len(delivery) * 5
+    transport = len(approach) * 5 + len(delivery) * 5 + 10
     stock = available_for_order(world, order.source, order.product, order.required_fresh_until,
                                 excluding=order.id)
     missing = max(0, order.loadable - stock)
@@ -1332,7 +1331,9 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
                                  {product: amount * batches for product, amount in job.inputs.items()}))
     reserves = policy.reserve_targets.get(destination, {})
     if reserves:
-        requests.append((f"{state.minute // 1440}:reserve", (state.minute // 1440 + 1) * 1440, reserves))
+        next_business_close = ((state.minute // 1440 + 1) * 1440
+                               + base.residents[buyer].bed_minute)
+        requests.append((f"{state.minute // 1440}:reserve", next_business_close, reserves))
     from npc_sim import village_research
     requests.extend(village_research.requests(world, buyer))
     from npc_sim import village_mining
@@ -1402,6 +1403,16 @@ def suggestions(world: "World", buyer: str | None = None, *, personal: bool = Fa
                         continue
                 deadline = (_meal_delivery_deadline(world, plan, product)
                             if next_breakfast else use_at - lead)
+                if key.endswith(":reserve"):
+                    delivery_day = state.minute // 1440 * 1440
+                    latest = base.residents[buyer].bed_minute
+                    if buyer != policy.innkeeper:
+                        supper = next((plan for plan in meal_requirements(world)
+                                       if plan["id"].endswith(":supper")
+                                       and plan["due"] // 1440 == state.minute // 1440), None)
+                        if supper and supper["due"] // 1440 == state.minute // 1440:
+                            latest = min(latest, supper["due"] % 1440)
+                    deadline = min(deadline, delivery_day + latest - lead)
                 if deadline <= state.minute and buyer != policy.innkeeper:
                     continue
                 deadline = max(state.minute, deadline)

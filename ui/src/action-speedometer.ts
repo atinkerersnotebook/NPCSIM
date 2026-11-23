@@ -62,7 +62,6 @@ export function actionSpeedometerMarkup(
 ): string {
   if (!run) return "";
   restoreMeter();
-  const minute = Math.floor(run.elapsed_seconds / 60);
   const turnMinute = gameMinute === null || gameMinute === undefined ? undefined : Math.floor(gameMinute / 5);
   const latestGameMinute = gameMinute ?? 0;
   if (current?.id !== run.id) {
@@ -109,6 +108,7 @@ export function actionSpeedometerMarkup(
   const priorTurn = displayTurn === undefined ? undefined : previousBucket(current.turns, displayTurn);
   const actionsPerTurn = priorTurn?.actions;
   const timePerTurn = priorTurn?.elapsed;
+  const minutesPerTurn = timePerTurn === undefined ? undefined : timePerTurn / 60;
   const minuteHistory = new Map(current.minutes);
   const minuteRates = Array.from({ length: 30 }, (_, index) =>
     minuteHistory.get(displayMinute - 29 + index)?.actions ?? 0);
@@ -126,7 +126,7 @@ export function actionSpeedometerMarkup(
     </div>
     <div class="speedometer-turns">
       <div><span class="eyebrow">ACTIONS / TURN</span><strong>${actionsPerTurn === undefined ? "—" : fixed(actionsPerTurn)}</strong></div>
-      <div><span class="eyebrow">TIME / TURN</span><strong>${timePerTurn === undefined ? "—" : `${timePerTurn.toFixed(1)}s`}</strong></div>
+      <div><span class="eyebrow">MIN / TURN</span><strong>${minutesPerTurn === undefined ? "—" : `${minutesPerTurn.toFixed(1)}m`}</strong></div>
     </div>
     <svg class="speedometer-history" viewBox="0 0 128 38" role="img" aria-label="Actions per completed real minute over the past 30 minutes">
       <line x1="1" y1="35" x2="127" y2="35" class="speedometer-axis"/>${bars}

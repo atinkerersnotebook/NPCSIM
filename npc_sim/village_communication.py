@@ -161,7 +161,10 @@ def _ready(world: "World", actor: str) -> None:
     if blocked:
         raise ValueError(blocked[1])
     from npc_sim import village_extensions
-    if village_extensions.blocked_until(world, actor) is not None:
+    person = village_state.residents[actor]
+    interruptible_idle = person.fallback.wait is not None or (
+        person.current_action == "village_wait_event" and person.available_at > village_state.minute)
+    if village_extensions.blocked_until(world, actor) is not None and not interruptible_idle:
         raise ValueError("That resident is occupied with a real task")
 
 
@@ -170,6 +173,16 @@ def _local_listener(world: "World", listener: str) -> None:
             or listener not in village.local_residents(world, world.actor.location_id)):
         raise ValueError("Speak only to a different resident actually here")
     _ready(world, listener)
+    person = world.state.village.residents[listener]
+    if person.current_action == "village_wait_event" or person.fallback.wait is not None:
+        person.available_at = min(person.available_at, world.state.village.minute)
+        person.fallback.wait = None
+        person.fallback.last_wait_end = None
+        from npc_sim import village_fallback
+        bound = world.bind(listener, world.state.actors[listener].session_id)
+        village_fallback._emit(bound, "WAIT_INTERRUPTED", "wait:event",
+                               "Idle waiting was replaced by a direct conversation.",
+                               reason_code="PERSONAL_CONTEXT_CHANGED")
 
 
 def _channel(world: "World", request: Channel, terms: NoticeTerms,
@@ -386,10 +399,6 @@ def _create_order(world: "World", notice: NoticeVersion) -> dict[str, Any]:
         raise ValueError("Only the named supplier can accept")
     _validate_terms(world, terms, notice.author)
     source = base.residents[supplier].work
-    if any(order.buyer == notice.author and order.supplier == supplier
-           and order.product == terms.subject and order.destination == terms.destination
-           and order.status in village_economy.ACTIVE for order in state.orders.values()):
-        raise ValueError("An equivalent active supplier order already covers this need")
     order = VillageSupplierOrder(
         id=f"order-{state.next_order}", request_key=f"notice:{notice.id}",
         buyer=notice.author, supplier=supplier, source=source, destination=terms.destination,
@@ -600,7 +609,7 @@ def _intent_request(world: "World", action: str, request: Any) -> tuple[str, str
         if previous:
             return "NOTICE_UNCHANGED", f"Existing request {previous.id} version {previous.version}; no duplicate posted."
         duplicate = next((history[-1] for history in state.notices.values()
-                          if history[-1].author == actor and history[-1].status not in TERMINAL
+                          if history[-1].author == actor and history[-1].status in {"posted", "seen"}
                           and _need_key(actor, history[-1].terms) == _need_key(actor, terms)), None)
         if duplicate:
             if duplicate.appointment and duplicate.status == "accepted":
@@ -724,8 +733,11 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                     and "manipulate" not in world.actor.body.capabilities):
                 raise ValueError("Writing a physical note requires actual manipulation capability")
             result = _apply(world, action, request)
-            if action in {"village_notice_reply", "village_notice_update", "village_respond_to_request",
-                         "village_update_request"}:
+        if action in {"village_request_supply", "village_respond_to_request",
+                     "village_update_request", "village_close_request",
+                     "village_notice_reply", "village_notice_update"}:
+            config = world.scenario.village
+            if config is not None and config.snapshot is not None:
                 from npc_sim import village_planning
                 village_planning.reconcile(world, f"communication {action}", force=True)
         state = _state(world)
@@ -1414,7 +1426,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
         "village_notice_tell": (TellNotice, "Tell one listed relevant new candidate to an actually present available listener."),
         "village_inbox_read": (ReadInbox, "Read only your owned physical workplace box while actually there."),
         "village_inbox_leave": (PostNotice, "Write a directed request at its actual recipient's box (channel inbox); no teleporting."),
-        "village_request_supply": (SupplyIntent, "Request priced supply with a real supplier, purpose, quantity, deadline and freshness. For learned foods and crops, use requestable_food's product and supplier IDs. The engine resolves your workplace and price; post only at a physical channel."),
+        "village_request_supply": (SupplyIntent, "Request priced supply with a real supplier, purpose, quantity, deadline and freshness. Accepted totals may be divided among several physical carrier loads; do not split an order merely for carrying capacity. For learned foods and crops, use requestable_food's product and supplier IDs. The engine resolves your workplace and price; post only at a physical channel."),
         "village_propose_meeting": (MeetingIntent, "Propose a project appointment; the engine resolves the work site and partner."),
         "village_schedule_crew": (CrewIntent, "Schedule a crew by project, earliest_start and participant_ids. The engine sets a 60-minute window; use a real encounter, board or partner inbox for consent. Accepted partners may confirm together at the site without another paper receipt."),
         "village_respond_to_request": (RespondIntent, "Respond through a physical channel. For infeasible same-day supply, propose a next-day deadline and proposed_fresh_until; the buyer must revise terms before acceptance."),

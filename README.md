@@ -53,10 +53,14 @@ outcome without configuration editors or technical logs.
 **Run mode & call/action budget** in Admin view includes **Run until
 complete (ignore budget limits)**. This opt-in setting applies only to the current
 adventure and bypasses action, model-call and active-time caps without changing the
-configured budgets. Model charges can continue without a spending limit. Village
-cycles pause at the next midnight (even if their goal is achieved earlier);
-Continue starts the next daily cycle. Other adventures stop at authoritative goal
-completion. Manual pause/cancel, bounded per-request timeouts, error handling and
+configured budgets. Model charges can continue without a spending limit. Daily village
+cycles continue toward midnight even if their goal is achieved earlier; Continue starts
+the next daily cycle. Other adventures stop at authoritative goal completion.
+
+**Millhaven Snapshot I** succeeds by 11:00 when the tavern has the fresh bread and
+fuel for 24 brunch portions and Elsie can start cooking. Cooking and serving do not
+need to finish. Only Elsie, Jory, Mara, Ada, and Nella take turns; the other seven
+residents remain in town as background characters. These settings apply to new episodes. Manual pause/cancel, bounded per-request timeouts, error handling and
 non-progress safeguards remain active. Turning the option off restores the original
 limits against the actual accumulated usage. Changing it does not start play.
 Budget-exhausted saved local adventures can enable it and reopen paused.

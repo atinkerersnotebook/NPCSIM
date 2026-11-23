@@ -1127,6 +1127,32 @@ def test_evening_forecast_renews_funded_next_day_bread_without_reusing_spent_sto
     assert all(request["commitment"] <= world.state.village.coins["elsie"] for request in requests)
 
 
+def test_reserve_delivery_is_fresh_after_breakfast_and_arrives_before_supper(world):
+    policy = economy.config(world)
+    policy.reserve_targets = {"general-store": {"grain": 1}}
+    world.scenario.village.economy = policy
+    world.state.village.minute = 480
+    requests = economy.suggestions(actor(world, "nella", "general-store"), personal=True)
+    grain = next(request for request in requests if request["request_key"] ==
+                 "0:reserve:nella:grain")
+    assert grain["deadline"] == 1110
+    assert grain["required_fresh_until"] == 2760
+    assert grain["required_fresh_until"] == world.scenario.village.residents["nella"].bed_minute + 1440
+
+
+def test_tavern_reserves_can_arrive_later_but_other_buyers_stop_before_supper(world):
+    policy = economy.config(world)
+    policy.reserve_targets = {"tavern": {"bread": 1}, "general-store": {"grain": 1}}
+    world.scenario.village.economy = policy
+    world.state.village.minute = 480
+    ella = economy.suggestions(actor(world, "elsie", "tavern"), personal=True)
+    nella = economy.suggestions(actor(world, "nella", "general-store"), personal=True)
+    tavern = next(request for request in ella if request["request_key"].endswith(":reserve:elsie:bread"))
+    store = next(request for request in nella if request["request_key"].endswith(":reserve:nella:grain"))
+    assert tavern["deadline"] == 1350
+    assert store["deadline"] == 1110
+
+
 def test_next_breakfast_orders_bread_before_previous_bedtime(world):
     world.scenario.village.breakfast = True
     world.scenario.village.prices["eggs"] = 2

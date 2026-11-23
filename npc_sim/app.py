@@ -129,6 +129,32 @@ async def town_supply(request: Request) -> JSONResponse:
     return JSONResponse(controller(request).town_supply(), headers={"Cache-Control": "no-store"})
 
 
+@app.get("/api/town-supply/playback")
+async def town_supply_playback(request: Request) -> dict[str, Any]:
+    try:
+        return {"checkpoints": await asyncio.to_thread(controller(request).town_supply_playback_checkpoints)}
+    except (OSError, ValueError) as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@app.get("/api/town-supply/playback/{sequence}")
+async def town_supply_playback_snapshot(sequence: int, request: Request) -> JSONResponse:
+    try:
+        snapshot = await asyncio.to_thread(controller(request).town_supply_playback, sequence)
+        return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
+    except (OSError, ValueError) as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@app.get("/api/world/playback/{sequence}")
+async def world_playback_snapshot(sequence: int, request: Request) -> JSONResponse:
+    try:
+        snapshot = await asyncio.to_thread(controller(request).world_playback, sequence)
+        return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
+    except (OSError, ValueError) as error:
+        raise HTTPException(409, str(error)) from error
+
+
 @app.get("/api/scenarios")
 async def scenarios() -> dict[str, Any]:
     choices = [Scenario.model_validate(read_json(path)) for path in sorted((DATA / "scenarios").glob("*.json"))]

@@ -708,6 +708,20 @@ class VillageConfigurationRequest(StrictModel):
     configuration: VillageConfigurationPatch
 
 
+class VillageSnapshotOrder(StrictModel):
+    buyer: str
+    supplier: str
+    product: str
+    quantity: int = Field(gt=0, strict=True)
+
+
+class VillageSnapshotConfig(StrictModel):
+    deadline: int = Field(ge=0)
+    required_orders: list[VillageSnapshotOrder] = Field(min_length=1)
+    required_plans: list[str] = Field(min_length=1)
+    cooking_service: str | None = None
+
+
 class VillageConfig(VillageDayPolicy):
     firewood: VillageFirewoodConfig | None = None
     communication: VillageCommunicationConfig | None = None
@@ -724,6 +738,7 @@ class VillageConfig(VillageDayPolicy):
     livestock: VillageLivestockConfig | None = None
     equipment: VillageEquipmentConfig | None = None
     legacy: VillageLegacyConfig | None = None
+    snapshot: VillageSnapshotConfig | None = None
     delivery_fee: int = Field(default=0, ge=0)
     meal_price: int = Field(default=0, ge=0)
     spoil_after: dict[str, int] = Field(default_factory=dict)
@@ -1230,7 +1245,7 @@ class Scenario(StrictModel):
     initial_objective: str | None = None
     goal_note_id: str | None = None
     opening_narrative: str | None = None
-    goal_type: Literal["actor_outside_start_location", "actor_at_exit_location", "all_actors_at_exit_location", "entity_prepared", "bread_batches_served", "treasures_returned", "rps_match_completed", "tic_tac_toe_completed", "erp_invoice_released", "bbq_temperature_controlled", "village_restored"]
+    goal_type: Literal["actor_outside_start_location", "actor_at_exit_location", "all_actors_at_exit_location", "entity_prepared", "bread_batches_served", "treasures_returned", "rps_match_completed", "tic_tac_toe_completed", "erp_invoice_released", "bbq_temperature_controlled", "village_restored", "village_snapshot_completed"]
     goal_entity_id: str | None = None
     goal_location_id: str | None = None
     failure_outputs: dict[str, str] = Field(default_factory=dict)
@@ -1270,6 +1285,9 @@ class Scenario(StrictModel):
                 raise ValueError("Agent starting locations must name existing locations")
         if self.goal_type == "all_actors_at_exit_location" and len(self.agents) < 2:
             raise ValueError("The cooperative exit goal requires at least two declared agents")
+        if self.goal_type == "village_snapshot_completed" and (self.village is None
+                or not self.village.ai_controlled or self.village.snapshot is None):
+            raise ValueError("Snapshot goals require an AI-controlled village with snapshot criteria")
         if self.goal_note_id is not None:
             note = self.entities.get(self.goal_note_id)
             if (note is None or not note.readable_text or not note.readable_text.strip()
@@ -1522,8 +1540,29 @@ class Scenario(StrictModel):
         if self.village is not None:
             from npc_sim.village import validate_config
             validate_config(self)
-        elif self.goal_type == "village_restored":
+        elif self.goal_type in {"village_restored", "village_snapshot_completed"}:
             raise ValueError("Village goals require village configuration")
+        if self.village is not None and self.village.snapshot is not None:
+            snapshot = self.village.snapshot
+            residents = self.village.residents
+            if snapshot.deadline <= self.village.start_minute:
+                raise ValueError("Snapshot deadline must be after the village start time")
+            if self.goal_type != "village_snapshot_completed":
+                raise ValueError("Snapshot criteria require a village snapshot goal")
+            if any(order.buyer not in residents or order.supplier not in residents
+                   or order.buyer == order.supplier for order in snapshot.required_orders):
+                raise ValueError("Snapshot orders must name distinct real residents")
+            if set(snapshot.required_plans) - set(residents):
+                raise ValueError("Snapshot plans must name real residents")
+            if snapshot.cooking_service is not None:
+                economy = self.village.economy
+                if economy is None or not any(
+                    plan.id == snapshot.cooking_service and plan.use_minute == snapshot.deadline % 1440
+                    and plan.portions > 0 and set(plan.recipe_portions) == {"bread"}
+                    and not (plan.additional_inputs or plan.bread_service or plan.tea_portions)
+                    for plan in economy.meal_plans
+                ):
+                    raise ValueError("Snapshot cooking readiness needs a bread-only meal service at its deadline")
         return self
 
 

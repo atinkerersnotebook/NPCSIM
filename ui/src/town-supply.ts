@@ -3,6 +3,7 @@ import { escape } from "./html.ts";
 import { dashboardHeader, dashboardWorldSummary, simulationClock, trackDashboardHeader, villageClockTime } from "./view-mode.ts";
 import { sectionTabPanel, sectionTabs } from "./section-tabs.ts";
 import { renderDungeonAppeal } from "./dungeon-appeal.ts";
+import { mountScenarioPlayback } from "./scenario-playback.ts";
 
 const quantity = z.number().int().nonnegative();
 const text = z.string();
@@ -69,6 +70,9 @@ const table = (caption: string, headings: string[], rows: (string | number | nul
 
 type Snapshot = NonNullable<Supply>;
 type InventoryRow = Snapshot["inventory"][number];
+export const supplyPlaybackSchema = z.object({ checkpoints: z.array(z.object({
+  sequence: quantity, revision: quantity, minute: quantity.nullable()
+})) });
 const name = (id: string | null, list: Record<string, string>) => id === null ? "—" : list[id] ?? label(id);
 const stockKey = (row: InventoryRow) => JSON.stringify([row.location, row.product]);
 const stockLabel = (row: InventoryRow, data: Snapshot) => `${label(row.product)} · ${name(row.location, data.sites)}`;
@@ -422,6 +426,7 @@ export function startTownSupply(app: HTMLDivElement): void {
     phase => phase === "before" ? rememberScroll() : restoreScroll());
   let forecastKey = "";
   let snapshot: Supply = null;
+  let liveSnapshot: Supply = null;
   const exportWaterfall = app.querySelector<HTMLButtonElement>("#export-waterfall");
   exportWaterfall?.addEventListener("click", () => {
     if (!snapshot?.waterfall) return;
@@ -452,6 +457,7 @@ export function startTownSupply(app: HTMLDivElement): void {
   const render = (preserveScroll = false) => {
     const heading = snapshot ? supplyWorldSummary(snapshot) : "";
     if (summary.innerHTML !== heading) summary.innerHTML = heading;
+    summary.querySelector(".monitor-clock")?.before(playback.element);
     tools.hidden = !snapshot;
     if (snapshot) {
       void fetch("/api/state").then(response => response.ok ? response.json() : null)
@@ -472,6 +478,16 @@ export function startTownSupply(app: HTMLDivElement): void {
     if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
     if (preserveScroll) restoreScroll();
   };
+  const playbackHost = document.createElement("div");
+  const playback = mountScenarioPlayback(playbackHost, {
+    snapshotPath: sequence => `/api/town-supply/playback/${sequence}`,
+    onSnapshot: (payload, live) => {
+      snapshot = live ? liveSnapshot : townSupplySchema.parse(payload);
+      previous = JSON.stringify(snapshot);
+      render(true);
+    },
+    onError: message => { error.textContent = message; error.hidden = false; }
+  });
   locationFilter.addEventListener("change", () => render());
   content.addEventListener("change", event => {
     const picker = event.target;
@@ -499,10 +515,14 @@ export function startTownSupply(app: HTMLDivElement): void {
       if (request.signal.aborted) return;
       const signature = JSON.stringify(data);
       if (signature !== previous) {
-        snapshot = townSupplySchema.parse(data);
-        render(true);
-        previous = signature;
+        liveSnapshot = townSupplySchema.parse(data);
+        if (!playback.active) {
+          snapshot = liveSnapshot;
+          render(true);
+          previous = signature;
+        }
       }
+      await playback.refresh(request.signal);
       error.hidden = true;
     } catch (failure) {
       if (request.signal.aborted) return;
@@ -512,7 +532,7 @@ export function startTownSupply(app: HTMLDivElement): void {
       if (!request.signal.aborted) timer = setTimeout(() => void refresh(), 5000);
     }
   };
-  window.addEventListener("pagehide", () => { controller?.abort(); clearTimeout(timer); });
+  window.addEventListener("pagehide", () => { controller?.abort(); clearTimeout(timer); playback.destroy(); });
   window.addEventListener("pageshow", event => { if (event.persisted) void refresh(); });
   void refresh();
 }

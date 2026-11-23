@@ -610,6 +610,8 @@ class World:
             return bbq.evaluate_goal(self)
         if goal_type == "village_restored":
             return village.evaluate_goal(self)
+        if goal_type == "village_snapshot_completed":
+            return village.evaluate_goal(self)
         if goal_type == "all_actors_at_exit_location":
             checks: dict[str, Any] = {}
             team_ready = True

@@ -989,6 +989,8 @@ def test_local_event_waiter_can_be_contacted_without_freeing_remote_or_busy_resi
     assert result["code"] == "NOTICE_POSTED", result
     assert person.available_at == state.minute + 5
     assert state.communication.knowledge["mara"]
+    assert person.fallback.wait is None
+    assert person.current_action == "village_wait_event"
 
     person.available_at = 1140
     assert listener.act("busy-mara", listener.revision(), "village_notice_read", {})["code"] == "ACTOR_BUSY"

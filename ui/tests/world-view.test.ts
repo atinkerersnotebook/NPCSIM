@@ -60,7 +60,7 @@ test("the actions meter reports completed real-minute and five-minute game turns
   const second = meter({ ...run, actions: 3, elapsed_seconds: 72 }, 10);
   assert.match(second, /aria-valuenow="1\.0"/);
   assert.match(second, /ACTIONS \/ TURN<\/span><strong>2<\/strong>/);
-  assert.match(second, /TIME \/ TURN<\/span><strong>60\.0s<\/strong>/);
+  assert.match(second, /MIN \/ TURN<\/span><strong>1\.0m<\/strong>/);
 });
 
 test("invalid or unavailable tab storage does not prevent live action sampling", async t => {

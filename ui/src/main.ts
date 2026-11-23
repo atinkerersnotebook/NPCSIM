@@ -22,6 +22,7 @@ import { conditionText } from "./secondary-goals";
 import { savedEpisodesMarkup } from "./episode-saves";
 import { escape } from "./html";
 import { renderDungeonAppeal } from "./dungeon-appeal";
+import { mountScenarioPlayback } from "./scenario-playback.ts";
 import "./style.css";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -259,6 +260,9 @@ const panels = document.getElementById("dashboard-panels");
 if (!tabs || !panels) throw new Error("Missing dashboard navigation");
 const shell = document.createElement("div");
 shell.className = "command-shell";
+const playbackHost = document.createElement("div");
+playbackHost.id = "scenario-playback-host";
+playbackHost.className = "main-playback-tools";
 const header = document.querySelector("#observatory > header");
 if (!header) throw new Error("Missing dashboard header");
 header.before(shell);
@@ -352,6 +356,7 @@ window.addEventListener("hashchange", () => {
 });
 
 let state: State | null = null;
+let liveState: State | null = null;
 let events: RunEvent[] = [];
 let activeRun: string | null = null;
 let busy = false;
@@ -386,6 +391,17 @@ let recordedPage: RecordedStory | null = null;
 let storyRequest = 0;
 let storyPageRun: string | null = null;
 let storyRefresh: number | null = null;
+const playback = mountScenarioPlayback(playbackHost, {
+  snapshotPath: sequence => `/api/world/playback/${sequence}`,
+  onSnapshot: (payload, live) => {
+    const next = live ? liveState : stateSchema.parse(payload);
+    if (next) {
+      applyState(next, true);
+      renderTimeline(false);
+    }
+  },
+  onError: message => notice(message)
+});
 const expanded = new Set<string>();
 selectTab(dashboardTab(location.hash, adminView, false));
 
@@ -419,7 +435,9 @@ async function api(path: string, method = "GET", body?: unknown): Promise<unknow
   return payload;
 }
 
-function applyState(next: State): void {
+function applyState(next: State, playbackSnapshot = false): void {
+  liveState = playbackSnapshot ? liveState : next;
+  if (!playbackSnapshot && playback.active) return;
   state = next;
   const id = next.run?.id ?? null;
   if (id !== activeRun) {
@@ -513,6 +531,7 @@ function renderMetrics(): void {
   const display = element("simulation-clock");
     display.hidden = state.run === null;
     display.innerHTML = `${actionSpeedometerMarkup(state.run, state.world?.village?.minute ?? state.observation?.village?.minute)}<div class="monitor-clock" role="timer" aria-label="Current game time"><span class="eyebrow">CURRENT GAME TIME</span><strong>${clock?.time ?? "Untimed world"}</strong>${clock ? `<small>${clock.description}</small>` : ""}</div>`;
+  display.prepend(playback.element);
   const run = state.run;
   const status = run?.status ?? "idle";
   if (!adminView) {
@@ -712,7 +731,7 @@ function renderControls(): void {
     button.hidden = (!adminView && !playerCommandVisible(command, status)) ||
       (command === "reopen" && !canReopen);
     if (!adminView && button.closest("#controls")) button.classList.toggle("primary", command === primary);
-    button.disabled = busy || interactionBusy || Boolean(state?.in_flight) ||
+    button.disabled = playback.active || busy || interactionBusy || Boolean(state?.in_flight) ||
       ((command === "step" || command === "run") && (terminal || status === "running")) ||
       (command === "pause" && status !== "running") ||
       (command === "resume" && status !== "paused") ||
@@ -1334,8 +1353,9 @@ function renderTimeline(updateStory = true): void {
     renderStory();
     renderNarrative();
   }
-  element("event-count").textContent = String(events.length);
-  const shown = events.filter(event => filter === "all" || event.kind === filter || (filter === "error" && ["validation", "finished"].includes(event.kind)));
+  const timelineEvents = events.filter(event => !playback.active || event.sequence <= (state?.event_count ?? 0));
+  element("event-count").textContent = String(timelineEvents.length);
+  const shown = timelineEvents.filter(event => filter === "all" || event.kind === filter || (filter === "error" && ["validation", "finished"].includes(event.kind)));
   if (!shown.length) {
     element("timeline").innerHTML = '<div class="empty"><span class="empty-icon">⌁</span><h3>Watch a goal become action</h3><p>Start an episode, connect the proxy, then step or run the agent.</p></div>';
     return;
@@ -1354,7 +1374,7 @@ function renderTimeline(updateStory = true): void {
       completionAnalysisSchema.shape.story.optional().parse(payload.story) ?? [] : [];
     return `<details class="event ${summary.tone}" data-event-id="${escape(event.id)}" ${expanded.has(event.id) ? "open" : ""}>
       <summary><span class="event-marker"></span><div class="event-body"><div class="event-meta">CYCLE ${event.cycle.toString().padStart(2, "0")} <span>${escape(villageTimeline(event, state?.run?.agent_profiles) ?? event.actor_name ?? event.actor_id)}</span>${event.free_action ? "<span>FREE LOOK/READ</span>" : ""}<span>${new Date(event.timestamp).toLocaleTimeString()}</span><span>#${event.sequence}</span></div><strong>${escape(summary.title)}</strong><p>${escape(summary.text)}</p></div><span class="expand-icon">＋</span></summary>
-      <div class="event-detail">${event.kind === "decision" ? `<div class="expected"><span class="eyebrow">EXPECTED OUTCOME</span><p>${escape(payload.expected_outcome)}</p></div>` : ""}${evidence.length ? `<h4>Evidence explained</h4>${evidenceMarkup(evidence, events, story)}` : ""}<details data-technical-id="${escape(event.id)}"><summary>Original technical JSON</summary><pre></pre></details></div>
+      <div class="event-detail">${event.kind === "decision" ? `<div class="expected"><span class="eyebrow">EXPECTED OUTCOME</span><p>${escape(payload.expected_outcome)}</p></div>` : ""}${evidence.length ? `<h4>Evidence explained</h4>${evidenceMarkup(evidence, timelineEvents, story)}` : ""}<details data-technical-id="${escape(event.id)}"><summary>Original technical JSON</summary><pre></pre></details></div>
     </details>`;
   }).join("");
 }
@@ -1829,6 +1849,7 @@ element("episode-saves-content").addEventListener("click", event => {
 async function initialize(): Promise<void> {
   try {
     applyState(stateSchema.parse(await api("/state")));
+    await playback.refresh();
     const [scenarioPayload, agentPayload, supervisorPayload] = await Promise.all([
       api("/scenarios"), api("/agents"), api("/dungeon-master")]);
     const choices = scenariosSchema.parse(scenarioPayload).scenarios;
@@ -1868,7 +1889,10 @@ function connectLiveStream(): void {
     document.querySelector(".live-dot")?.classList.remove("connected");
   };
   stream.addEventListener("snapshot", (event: MessageEvent<string>) => {
-    try { applyState(stateSchema.parse(JSON.parse(event.data))); }
+    try {
+      applyState(stateSchema.parse(JSON.parse(event.data)));
+      void playback.refresh().catch(error => notice(`Could not refresh playback: ${errorMessage(error)}`));
+    }
     catch (error) { notice(`Invalid state update: ${errorMessage(error)}`); }
   });
   stream.addEventListener("run-event", (message: MessageEvent<string>) => {
@@ -1893,6 +1917,7 @@ function connectLiveStream(): void {
 window.addEventListener("pagehide", () => {
   liveStream?.close();
   liveStream = undefined;
+  playback.destroy();
 });
 window.addEventListener("pageshow", event => {
   if (event.persisted) connectLiveStream();

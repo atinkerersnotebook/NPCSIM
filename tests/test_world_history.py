@@ -35,6 +35,52 @@ def test_checkpoint_stays_small_and_old_retries_survive_restart(world):
     assert restored.act("first", first_request[1], "close", {"target": "box"})["code"] == "REQUEST_ID_CONFLICT"
 
 
+def test_committed_world_checkpoints_support_playback_without_changing_live_state(world):
+    storage = WorldStorage(world.path)
+    initial = world.snapshot()
+    world.act("open", world.revision(), "open", {"target": "box"})
+    opened = world.snapshot()
+    checkpoints = storage.snapshots()
+    assert len(checkpoints) >= 2
+    assert checkpoints[0]["turn"] == 1 and checkpoints[0]["turn_start"] is True
+    assert storage.snapshot(checkpoints[0]["sequence"]).entities["box"].open is False
+    assert storage.snapshot(checkpoints[-1]["sequence"]).entities["box"].open is True
+    assert world.snapshot() == opened != initial
+
+
+def test_playback_checkpoints_mark_full_turn_boundaries(world):
+    storage = WorldStorage(world.path)
+    initial_turn = storage.snapshots()[-1]["turn"]
+    world.state.actors[world.actor_id].action_clock += 1
+    world.state.revision += 1
+    world.save()
+    world.state.entities["box"].hidden = True
+    world.state.revision += 1
+    world.save()
+    checkpoints = storage.snapshots()
+    assert [(item["turn"], item["turn_start"]) for item in checkpoints[-2:]] == [
+        (initial_turn + 1, True), (initial_turn + 1, False)]
+
+
+def test_playback_turn_is_a_full_five_minute_village_period(tmp_path):
+    from npc_sim.world import World
+
+    scenario = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-snapshot-i.json"))
+    village = World(scenario, tmp_path / "world-state.json", "world", "elsie", "session-elsie")
+    village.state.village.minute = 540
+    village.state.revision += 1
+    village.save()
+    village.state.village.minute = 544
+    village.state.revision += 1
+    village.save()
+    village.state.village.minute = 545
+    village.state.revision += 1
+    village.save()
+    checkpoints = WorldStorage(village.path).snapshots()
+    assert [(item["turn"], item["turn_start"]) for item in checkpoints[-2:]] == [
+        (checkpoints[-3]["turn"], False), (checkpoints[-3]["turn"] + 1, True)]
+
+
 def test_legacy_inline_history_is_migrated_without_changing_the_world(world):
     request = ("legacy", world.revision(), "open", {"target": "box"})
     result = world.act(*request)

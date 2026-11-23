@@ -879,8 +879,107 @@ def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
     return minutes
 
 
+def _evaluate_snapshot_cooking(world: "World", service: str, deadline: int) -> dict[str, Any]:
+    from npc_sim import village_economy, village_firewood
+
+    base, state = village.context(world)
+    policy = state.economy.config
+    plan = next(plan for plan in base.economy.meal_plans if plan.id == service)
+    cook = policy.innkeeper
+    site = base.residents[cook].work
+    recipe = policy.recipes["bread"]
+    prepared = min(plan.portions, village_economy.usable_stock(world, site, "meals", deadline))
+    remaining = plan.portions - prepared
+    batches = (remaining + recipe.portions - 1) // recipe.portions
+    required = {product: amount * batches for product, amount in recipe.inputs.items()}
+    stock = {product: village_economy.usable_stock(world, site, product, deadline)
+             for product in required}
+    actor = world.state.actors.get(cook)
+    blocker = "The innkeeper must be at the tavern and ready to work."
+    fuel_needed = 0
+    fuel = village_economy.usable_stock(world, site, "firewood", deadline)
+    if actor is not None and actor.location_id == site and state.minute <= deadline:
+        view = world.bind(cook, actor.session_id)
+        if village_firewood.fuel_required(view, "village_work"):
+            job = production_job(view, "village_work")
+            batch_size = job.batch_size if job else 1
+            if job and state.equipment is not None:
+                from npc_sim import village_equipment
+                _, batch_size = village_equipment.production_profile(view, job.equipment, job.duration, batch_size)
+            fuel_needed = (batches + batch_size - 1) // batch_size
+        rejected = view._village_action_blocker("village_work", {}) or production_ready(view, "village_work")
+        blocker = rejected[1] if rejected else ""
+    if not remaining:
+        blocker = ""
+    checks = {
+        "before_deadline": state.minute <= deadline,
+        "ingredients_at_tavern": all(stock[product] >= amount for product, amount in required.items()),
+        "fuel_at_tavern": fuel >= fuel_needed,
+        "can_start_cooking": not blocker,
+    }
+    status = "achieved" if all(checks.values()) else "active" if checks["before_deadline"] else "failed"
+    return {"status": status,
+            "reason": {"achieved": f"All supplies for {plan.portions} portions are at the tavern; the innkeeper can start cooking.",
+                       "active": "Brunch supplies or cooking prerequisites are not yet ready.",
+                       "failed": "The brunch deadline passed before cooking was ready to start."}[status],
+            "evidence": {"checks": checks, "deadline": deadline, "minute": state.minute,
+                         "portions": plan.portions, "required_ingredients": required, "fresh_ingredients": stock,
+                         "fuel_needed": fuel_needed, "fuel_on_hand": fuel, "cooking_blocker": blocker or None},
+            "observation_revision": world.revision()}
+
+
 def evaluate_goal(world: "World") -> dict[str, Any]:
     config, state = village.context(world)
+    if config.snapshot is not None:
+        snapshot = config.snapshot
+        if state.economy is None:
+            raise ValueError("A village snapshot requires an economy ledger")
+        if snapshot.cooking_service is not None:
+            return _evaluate_snapshot_cooking(world, snapshot.cooking_service, snapshot.deadline)
+        active_statuses = {"accepted", "accepted_planned", "in_production", "ready_to_collect",
+                           "in_transit", "fulfilled"}
+        matching = []
+        for required in snapshot.required_orders:
+            planned_statuses = {"accepted_planned", "in_production", "ready_to_collect",
+                                "in_transit", "fulfilled"}
+            orders = [order for order in state.economy.orders.values()
+                      if order.buyer == required.buyer and order.supplier == required.supplier
+                      and order.product == required.product
+                      and order.created_at < snapshot.deadline
+                      and order.status in active_statuses and order.deadline <= snapshot.deadline
+                      and (order.status in planned_statuses or bool(order.production_plan))]
+            confirmed_quantity = sum(order.quantity for order in orders)
+            matching.append({"buyer": required.buyer, "supplier": required.supplier,
+                             "product": required.product, "quantity": required.quantity,
+                             "confirmed_quantity": confirmed_quantity,
+                             "complete": confirmed_quantity >= required.quantity,
+                             "orders": [order.id for order in orders]})
+        planned = {}
+        for resident in snapshot.required_plans:
+            person = state.residents.get(resident)
+            relevant = [] if person is None else [
+                plan for plan in person.fallback.daily_plans
+                if plan.get("created_at", -1) < snapshot.deadline
+                and any(order.get("buyer") == resident or order.get("supplier") == resident
+                        for order in plan.get("orders", []))]
+            planned[resident] = {"complete": bool(relevant), "plan_count": len(relevant)}
+        checks = {
+            "required_orders_confirmed": all(row["complete"] for row in matching),
+            "supply_chain_planned": all(row["complete"] for row in planned.values()),
+        }
+        checks["before_deadline"] = (checks["required_orders_confirmed"]
+                                      and checks["supply_chain_planned"])
+        if state.minute > snapshot.deadline:
+            status = "failed" if not checks["before_deadline"] else "achieved"
+        else:
+            status = "achieved" if checks["before_deadline"] else "active"
+        return {"status": status,
+                "reason": ("The hidden snapshot criteria are complete." if status == "achieved" else
+                           "The snapshot deadline passed before the supply chain was fully planned."
+                           if status == "failed" else "The snapshot negotiation is still in progress."),
+                "evidence": {"checks": checks, "deadline": snapshot.deadline, "minute": state.minute,
+                             "orders": matching, "plans": planned},
+                "observation_revision": world.revision()}
     if config.investigation is not None:
         investigation = config.investigation
         interviewed = {event.target for event in state.events

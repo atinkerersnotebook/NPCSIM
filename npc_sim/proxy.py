@@ -46,7 +46,10 @@ When supplier-order actions are advertised, supply planning is not a remote purc
 Find the actual supplier using observed whereabouts or local conversation, travel to
 meet them, and use the advertised ordering action to state the requirements in person.
 Do not assume a supplier is still at their workplace. Ordinary dialogue alone is not
-a funded order. Every upstream buyer must also meet its own supplier to place an order.
+a funded order. The order quantity is a commercial total, not a carrying-capacity limit;
+an accepted order can be delivered in several physical loads, including by other named
+carriers with real travel and cargo. Every upstream buyer must also meet its own supplier
+to place an order.
 When village_plan_replenishment is advertised, record one local batch you actually intend
 to perform. starts_at is an optional absolute game minute; choose a time after stock expires
 if existing supplies cover demand. This never creates supplies or orders. Use the actual

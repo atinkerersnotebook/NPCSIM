@@ -1,5 +1,7 @@
 import json
+import logging
 import sqlite3
+import zlib
 from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any, Generator
@@ -9,10 +11,14 @@ from npc_sim.models import WorldState
 from npc_sim.storage import read_json, write_json
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 class WorldStorage:
     def __init__(self, path: Path):
         self.path = path
         self.history_path = path.with_suffix(".requests.sqlite3")
+        self.snapshot_path = path.with_suffix(".snapshots.sqlite3")
         self._committed_requests: dict[str, dict[str, Any]] = {}
 
     @contextmanager
@@ -84,6 +90,101 @@ class WorldStorage:
         state.requests = retained
         state.request_history_id = history_id
         self._committed_requests = retained.copy()
+        try:
+            self._record_snapshot(state)
+        except (OSError, sqlite3.Error) as error:
+            LOGGER.exception("World playback checkpoint could not be recorded: %s", error)
+
+    def _snapshot_document(self, state: WorldState) -> bytes:
+        snapshot = state.model_dump(mode="json", exclude={
+            "requests", "admin_requests", "request_history_id"})
+        raw = json.dumps(snapshot, ensure_ascii=True, allow_nan=False,
+                         separators=(",", ":")).encode("utf-8")
+        return zlib.compress(raw, level=6)
+
+    def _connect_snapshots(self) -> sqlite3.Connection:
+        self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(self.snapshot_path)
+        connection.execute("PRAGMA synchronous=FULL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS snapshots ("
+            "sequence INTEGER PRIMARY KEY AUTOINCREMENT, revision INTEGER NOT NULL, "
+            "minute INTEGER, state BLOB NOT NULL)")
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(snapshots)")}
+        if "turn" not in columns:
+            connection.execute("ALTER TABLE snapshots ADD COLUMN turn INTEGER")
+        if "turn_start" not in columns:
+            connection.execute("ALTER TABLE snapshots ADD COLUMN turn_start INTEGER")
+        return connection
+
+    @staticmethod
+    def _turn_key(state: WorldState) -> tuple[Any, ...]:
+        village = state.village
+        if village is not None:
+            return ("village", village.minute // 5)
+        return ("world", sum(actor.action_clock for actor in state.actors.values()))
+
+    def _record_snapshot(self, state: WorldState) -> None:
+        with closing(self._connect_snapshots()) as connection, connection:
+            latest = connection.execute(
+                "SELECT state, turn, turn_start FROM snapshots ORDER BY sequence DESC LIMIT 1"
+            ).fetchone()
+            encoded = self._snapshot_document(state)
+            if latest is not None and (latest[1] is None or latest[2] is None):
+                self._backfill_turns(connection)
+                latest = connection.execute(
+                    "SELECT state, turn, turn_start FROM snapshots ORDER BY sequence DESC LIMIT 1"
+                ).fetchone()
+            if latest is not None and latest[0] == encoded:
+                return
+            minute = state.village.minute if state.village else None
+            previous = (WorldState.model_validate(json.loads(zlib.decompress(latest[0])))
+                        if latest is not None else None)
+            starts_turn = previous is None or self._turn_key(previous) != self._turn_key(state)
+            turn = 1 if previous is None else int(latest[1]) + int(starts_turn)
+            connection.execute(
+                "INSERT INTO snapshots(revision, minute, state, turn, turn_start) VALUES (?, ?, ?, ?, ?)",
+                (state.revision, minute, encoded, turn, int(starts_turn)))
+
+    def _backfill_turns(self, connection: sqlite3.Connection) -> None:
+        previous_key: tuple[Any, ...] | None = None
+        turn = 0
+        rows = connection.execute(
+            "SELECT sequence, state FROM snapshots ORDER BY sequence"
+        ).fetchall()
+        for sequence, compressed in rows:
+            state = WorldState.model_validate(json.loads(zlib.decompress(compressed)))
+            key = self._turn_key(state)
+            starts_turn = previous_key != key
+            turn += int(starts_turn)
+            connection.execute(
+                "UPDATE snapshots SET turn = ?, turn_start = ? WHERE sequence = ?",
+                (turn, int(starts_turn), sequence))
+            previous_key = key
+
+    def snapshots(self) -> list[dict[str, Any]]:
+        if not self.path.exists():
+            return []
+        self._record_snapshot(self.load())
+        with closing(self._connect_snapshots()) as connection, connection:
+            self._backfill_turns(connection)
+            rows = connection.execute(
+                "SELECT sequence, revision, minute, turn, turn_start FROM snapshots "
+                "ORDER BY sequence"
+            ).fetchall()
+        return [{"sequence": row[0], "revision": row[1], "minute": row[2],
+                 "turn": row[3], "turn_start": bool(row[4])} for row in rows]
+
+    def snapshot(self, sequence: int) -> WorldState:
+        if not self.snapshot_path.exists():
+            raise ValueError("World playback checkpoint not found.")
+        with closing(self._connect_snapshots()) as connection:
+            row = connection.execute(
+                "SELECT state FROM snapshots WHERE sequence = ?", (sequence,)
+            ).fetchone()
+        if row is None:
+            raise ValueError("World playback checkpoint not found.")
+        return WorldState.model_validate(json.loads(zlib.decompress(row[0])))
 
     def get_request(self, state: WorldState, identity: str) -> dict[str, Any] | None:
         if identity in state.requests:

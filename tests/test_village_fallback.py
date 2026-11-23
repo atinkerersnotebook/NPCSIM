@@ -7,7 +7,7 @@ from npc_sim import (village, village_communication, village_economy, village_ex
                      village_wagon)
 from npc_sim.contracts import observation
 from npc_sim.living_village import build_scenario
-from npc_sim.models import Scenario, VillageDayPolicy, VillageEconomyConfig
+from npc_sim.models import Scenario, VillageDayPolicy, VillageEconomyConfig, VillageIdleWait
 from npc_sim.village_communication_models import (NoticeKnowledge, NoticeTerms, NoticeVersion,
                                                  VillageCommunicationConfig, VillageCommunicationState)
 from npc_sim.village_economy_models import VillageSupplierOrder
@@ -352,6 +352,8 @@ def test_finn_preservation_requires_funded_physical_log_and_uncommitted_fish(tmp
     state = world.state.village
     for rid in ("finn", "rowan"):
         state.residents[rid].life.last_woke = 420
+    state.residents["finn"].fallback.daily_plans = [{"day": 0}]
+    state.residents["rowan"].fallback.daily_plans = [{"day": 0}]
     assert state.stocks["riverbank"]["logs"] == 0
     assert not [item for item in village_fallback.candidates(finn)
                 if item["task_id"] == "preservation:smoke-fish"]
@@ -429,6 +431,36 @@ def test_finn_preservation_requires_funded_physical_log_and_uncommitted_fish(tmp
     finn.save()
     restored = World(value, finn.path, "smoking", "finn", "session-finn")
     assert restored.state.village.stocks["riverbank"]["preserved-fish"] == 1
+
+
+def test_finn_asks_rowan_directly_when_both_are_together(tmp_path):
+    base = scenario()
+    base.village.start_minute = 600
+    value = build_scenario(base, purposeful_downtime=True)
+    for agent in value.agents:
+        agent.start_location = value.village.residents[agent.id].work
+    world = World(value, tmp_path / "smoking-together.json", "smoking-together", "finn", "session-finn")
+    finn = world
+    rowan = world.bind("rowan", "session-rowan")
+    finn.actor.location_id = rowan.actor.location_id = "tavern"
+    state = world.state.village
+    for rid in ("finn", "rowan"):
+        state.residents[rid].life.last_woke = 420
+    state.residents["rowan"].available_at = state.minute
+    state.residents["rowan"].current_action = "village_wait_event"
+    state.residents["rowan"].fallback.wait = VillageIdleWait(
+        start=state.minute, planned_end=state.minute + 5, wake_on=[],
+        next_safety_review=state.minute + 5, context_revision="")
+    state.residents["finn"].fallback.daily_plans = [{"day": 0}]
+    request = next(item for item in village_fallback.candidates(finn)
+                   if item["task_id"] == "preservation:request-log")
+    assert act(finn, request["action_id"], **request["arguments"])["outcome"] == "APPLIED"
+    notice = next(iter(state.communication.notices.values()))[-1]
+    assert state.communication.knowledge["rowan"][notice.id].source_type == "conversation"
+    assert not state.communication.placements.get("workplace-inbox-rowan", {}).get(notice.id)
+    assert state.residents["rowan"].fallback.wait is None
+    assert state.residents["rowan"].available_at == state.minute + 5
+    assert state.economy.orders == {}
 
 
 def test_daytime_food_requires_surplus_and_sleep_waits_for_bedtime(tmp_path):

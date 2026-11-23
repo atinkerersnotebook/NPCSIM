@@ -1,0 +1,239 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "millhaven-snapshot-i",
+  "failures": [
+    {
+      "run_id": "051a85e8211949d18d3e6a75787dfa1f",
+      "objective": "By 10:00, negotiate and record a complete supply plan for 24 extra meals requested by a travelling party. Elsie must secure 12 bread from Jory; every upstream input needed by Jory and Mara must be confirmed with real supplier commitments and each resident involved must record an auditable daily plan. Travel, quantities, freshness, deadlines, raw materials and production schedules must be realistic.",
+      "recorded_at": "2026-11-22T23:16:35.346401+00:00",
+      "findings": [
+        {
+          "reason": "The snapshot negotiation is still in progress.",
+          "evidence_ids": [
+            "051a85e8211949d18d3e6a75787dfa1f:18"
+          ]
+        },
+        {
+          "reason": "The final check was before 10:00, but none of the required orders were confirmed: Elsie\u2019s 12 bread from Jory, Jory\u2019s flour, milk, and eggs, or Mara\u2019s grain.",
+          "evidence_ids": [
+            "051a85e8211949d18d3e6a75787dfa1f:18"
+          ]
+        },
+        {
+          "reason": "Elsie, Jory, Mara, and Ada had no recorded daily plans, so the supply plan for 24 extra meals was incomplete.",
+          "evidence_ids": [
+            "051a85e8211949d18d3e6a75787dfa1f:18"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "70c2dff121dc40a3ba470feda3adf237",
+      "objective": "By 10:00, negotiate and record a complete supply plan for 24 extra meals requested by a travelling party. Elsie must secure 12 bread from Jory; every upstream input needed by Jory and Mara must be confirmed with real supplier commitments and each resident involved must record an auditable daily plan. Travel, quantities, freshness, deadlines, raw materials and production schedules must be realistic.",
+      "recorded_at": "2026-11-22T23:17:42.498006+00:00",
+      "findings": [
+        {
+          "reason": "The snapshot negotiation is still in progress.",
+          "evidence_ids": [
+            "70c2dff121dc40a3ba470feda3adf237:27"
+          ]
+        },
+        {
+          "reason": "At 08:00, Elsie had no confirmed order for 12 bread from Jory, and none of the required flour, milk, egg, or grain orders were confirmed.",
+          "evidence_ids": [
+            "70c2dff121dc40a3ba470feda3adf237:27"
+          ]
+        },
+        {
+          "reason": "Elsie, Jory, Mara, and Ada had no recorded daily plans, so the supply-chain planning check failed.",
+          "evidence_ids": [
+            "70c2dff121dc40a3ba470feda3adf237:27"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "56912cba423343608976296440e67497",
+      "objective": "Before 10:00, negotiate a credible supply plan for 24 extra breakfast portions requested by a travelling party. Account for real stock, supplier capacity, travel, freshness, production timing and the raw-material chain before promising the party. Escalate unsupported shortages rather than inventing supplies.",
+      "recorded_at": "2026-11-23T11:12:22.828531+00:00",
+      "findings": [
+        {
+          "reason": "The snapshot negotiation is still in progress.",
+          "evidence_ids": [
+            "56912cba423343608976296440e67497:816"
+          ]
+        },
+        {
+          "reason": "At 08:30, the deadline had not passed, but the final check found no confirmed required orders and no completed supply-chain plan for the 24 portions.",
+          "evidence_ids": [
+            "56912cba423343608976296440e67497:816"
+          ]
+        },
+        {
+          "reason": "Elsie escalated the shortage after Jory ruled out the full batch. Ada ruled out farm ingredients by the trial-batch cutoff, and the store inquiry did not establish a verified alternative or a final answer to the party.",
+          "evidence_ids": [
+            "56912cba423343608976296440e67497:261",
+            "56912cba423343608976296440e67497:363",
+            "56912cba423343608976296440e67497:594",
+            "56912cba423343608976296440e67497:612",
+            "56912cba423343608976296440e67497:816"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "ac4639f122494bd19cc8b6f3bceeaf8f",
+      "objective": "Between 11:00 and 12:00, negotiate and confirm a credible supply plan for 24 extra breakfast portions requested by a travelling party. Use the abundant opening stock in the communal store and producer stockpiles where appropriate, but still account for stock ownership, travel, freshness and production timing. Escalate unsupported shortages rather than inventing supplies.",
+      "recorded_at": "2026-11-23T11:38:48.887828+00:00",
+      "findings": [
+        {
+          "reason": "The snapshot negotiation is still in progress.",
+          "evidence_ids": [
+            "ac4639f122494bd19cc8b6f3bceeaf8f:211"
+          ]
+        },
+        {
+          "reason": "The attempt ended before noon, but final verification found none of the required orders confirmed.",
+          "evidence_ids": [
+            "ac4639f122494bd19cc8b6f3bceeaf8f:208",
+            "ac4639f122494bd19cc8b6f3bceeaf8f:211"
+          ]
+        },
+        {
+          "reason": "Jory identified usable bread and discussed hauling and freshness, but final verification found no completed supply-chain plan for the 24 portions.",
+          "evidence_ids": [
+            "ac4639f122494bd19cc8b6f3bceeaf8f:177",
+            "ac4639f122494bd19cc8b6f3bceeaf8f:211"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "1fd004af379f4fe6bcfd648b9faf5ad5",
+      "objective": "Between 11:00 and 12:00, negotiate and confirm a credible supply plan for 24 extra breakfast portions requested by a travelling party. Jory has almost enough bread, but must account for a small flour shortfall while preserving the bakery reserve. Confirm funded orders, realistic production, travel, freshness and the full raw-material chain before promising the party.",
+      "recorded_at": "2026-11-23T12:09:26.919238+00:00",
+      "findings": [
+        {
+          "reason": "The snapshot negotiation is still in progress.",
+          "evidence_ids": [
+            "1fd004af379f4fe6bcfd648b9faf5ad5:1498"
+          ]
+        },
+        {
+          "reason": "No supply plan was confirmed for the party by noon. Final verification found no confirmed bread, flour, or grain orders.",
+          "evidence_ids": [
+            "1fd004af379f4fe6bcfd648b9faf5ad5:1269",
+            "1fd004af379f4fe6bcfd648b9faf5ad5:1498"
+          ]
+        },
+        {
+          "reason": "Mill stock could cover the flour shortfall without using the bakery reserve, but oven fuel, baking, delivery, and freshness through serving were not confirmed. The final supply-chain check failed.",
+          "evidence_ids": [
+            "1fd004af379f4fe6bcfd648b9faf5ad5:630",
+            "1fd004af379f4fe6bcfd648b9faf5ad5:1278",
+            "1fd004af379f4fe6bcfd648b9faf5ad5:1389",
+            "1fd004af379f4fe6bcfd648b9faf5ad5:1498"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "e89660df2bfa46b7a75ace1f4476bccd",
+      "objective": "Between 9:00 and 11:00, use the village tin-can network to negotiate and confirm a credible supply and preparation plan for 24 brunch portions for a travelling party arriving at the inn at 11:00. Jory has almost enough bread, but must account for a small flour shortfall while preserving the bakery reserve. Confirm funded requests and replies instantly, while production, travel, loading and delivery remain physical.",
+      "recorded_at": "2026-11-23T12:51:47.716046+00:00",
+      "findings": [
+        {
+          "reason": "The snapshot negotiation is still in progress.",
+          "evidence_ids": [
+            "e89660df2bfa46b7a75ace1f4476bccd:18"
+          ]
+        },
+        {
+          "reason": "The deadline had not passed, but none of the required bread, flour, or grain orders had a confirmed funded request and reply.",
+          "evidence_ids": [
+            "e89660df2bfa46b7a75ace1f4476bccd:18"
+          ]
+        },
+        {
+          "reason": "The supply-chain check failed: no plan was recorded for closing the flour shortfall without using the bakery reserve or for preparing and delivering 24 portions by 11:00.",
+          "evidence_ids": [
+            "e89660df2bfa46b7a75ace1f4476bccd:1",
+            "e89660df2bfa46b7a75ace1f4476bccd:18"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "7f9f5418558a436282b13470dadacce0",
+      "objective": "Between 9:00 and 11:00, use the village tin-can network to negotiate and confirm a credible supply and preparation plan for 24 brunch portions for a travelling party arriving at the inn at 11:00. Jory has almost enough bread, but must account for a small flour shortfall while preserving the bakery reserve. Confirm funded requests and replies instantly, while production, travel, loading and delivery remain physical.",
+      "recorded_at": "2026-11-23T13:43:24.376246+00:00",
+      "findings": [
+        {
+          "reason": "The snapshot negotiation is still in progress.",
+          "evidence_ids": [
+            "7f9f5418558a436282b13470dadacce0:2047"
+          ]
+        },
+        {
+          "reason": "The flour order was verified, but the required 12-loaf bread order and one-unit grain order were not confirmed. The inn-stock fallback did not satisfy those checks.",
+          "evidence_ids": [
+            "7f9f5418558a436282b13470dadacce0:2047",
+            "7f9f5418558a436282b13470dadacce0:2044"
+          ]
+        },
+        {
+          "reason": "Elsie and Jory had recorded plans, but Mara and Ada did not, leaving the required supply chain plan incomplete.",
+          "evidence_ids": [
+            "7f9f5418558a436282b13470dadacce0:2047"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "b79f3e962cea4f0fa55c2e4cef5925f7",
+      "objective": "Between 9:00 and 11:00, use the village tin-can network to negotiate and confirm a credible supply and preparation plan for 24 brunch portions for a travelling party arriving at the inn at 11:00. Jory has almost enough bread, but must account for a small flour shortfall while preserving the bakery reserve. Confirm funded requests and replies instantly, while production, travel, loading and delivery remain physical.",
+      "recorded_at": "2026-11-23T14:35:40.525531+00:00",
+      "findings": [
+        {
+          "reason": "The snapshot negotiation is still in progress.",
+          "evidence_ids": [
+            "b79f3e962cea4f0fa55c2e4cef5925f7:1706"
+          ]
+        },
+        {
+          "reason": "The final check passed supply-chain planning and confirmed the one-unit flour order without drawing down the bakery reserve, but counted 0 of the 12 required loaves as confirmed.",
+          "evidence_ids": [
+            "b79f3e962cea4f0fa55c2e4cef5925f7:1706",
+            "b79f3e962cea4f0fa55c2e4cef5925f7:634"
+          ]
+        },
+        {
+          "reason": "Six loaves were in transit, four remained at the bakery, and the final two still needed a 30-minute bake. Jory could not return and finish baking before 11:00, even before delivery and preparation.",
+          "evidence_ids": [
+            "b79f3e962cea4f0fa55c2e4cef5925f7:1686",
+            "b79f3e962cea4f0fa55c2e4cef5925f7:1703"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "6ebd4bac078346d4b6b0d2a177ab081c",
+      "objective": "Between 9:00 and 11:00, use the village tin-can network to negotiate and confirm a credible supply and preparation plan for 24 brunch portions for a travelling party arriving at the inn at 11:00. Jory has almost enough bread, but must account for a small flour shortfall while preserving the bakery reserve. Confirm funded requests and replies instantly, while production, travel, loading and delivery remain physical.",
+      "recorded_at": "2026-11-23T15:33:15.013133+00:00",
+      "findings": [
+        {
+          "reason": "The snapshot deadline passed before the supply chain was fully planned.",
+          "evidence_ids": [
+            "6ebd4bac078346d4b6b0d2a177ab081c:2276"
+          ]
+        },
+        {
+          "reason": "The final check confirmed both required orders and a complete supply-chain plan, but failed the deadline check: the snapshot was at 11:05, five minutes after the 11:00 cutoff.",
+          "evidence_ids": [
+            "6ebd4bac078346d4b6b0d2a177ab081c:2276"
+          ]
+        }
+      ]
+    }
+  ]
+}

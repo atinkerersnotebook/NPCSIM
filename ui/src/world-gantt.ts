@@ -231,11 +231,35 @@ function activityIcon(item: GanttSpan): string {
 export function buildWorldTimeline(state: State, events: readonly RunEvent[], agents: readonly GanttAgent[]) {
   const snapshot = timeSchema.parse(state.world ?? state.observation ?? {});
   const villageMinute = latestVillageMinute(state.world, state.observation);
-  const clockNow = villageMinute ?? timeOf(snapshot);
-  const turns = clockNow === undefined;
+  const hasVillageContext = Boolean(snapshot.village);
+  const hasClockContext = Boolean(snapshot.clock || snapshot.bbq);
+  const eventMinute = events.reduce<number | undefined>((latest, event) => {
+    if (event.run_id !== state.run?.id) return latest;
+    let candidate = hasVillageContext ? event.village_minute : undefined;
+    let clockCandidate: number | undefined;
+    if (event.kind === "observation") {
+      const parsed = observedSchema.safeParse(event.payload);
+      if (parsed.success) {
+        if (!hasVillageContext) candidate = undefined;
+        clockCandidate = timeOf(parsed.data);
+      }
+    }
+    if (event.kind === "action_result") {
+      const parsed = resultSchema.safeParse(event.payload);
+      if (parsed.success) {
+        if (!hasVillageContext) candidate = undefined;
+        clockCandidate = timeOf(parsed.data.observation);
+      }
+    }
+    const value = hasVillageContext ? candidate : hasClockContext ? clockCandidate : undefined;
+    return value === undefined ? latest : Math.max(latest ?? value, value);
+  }, undefined);
+  const clockNow = Math.max(villageMinute ?? -Infinity, eventMinute ?? -Infinity, timeOf(snapshot) ?? -Infinity);
+  const effectiveClockNow = Number.isFinite(clockNow) ? clockNow : undefined;
+  const turns = effectiveClockNow === undefined;
   if (turns && !state.run) return null;
-  let now = clockNow ?? 0;
-  const village = villageMinute !== undefined;
+  let now = effectiveClockNow ?? 0;
+  const village = hasVillageContext;
   const visitors = (state.world?.village?.dashboard?.visitors ?? []).filter(visitor =>
     visitor.arrival <= now && visitor.status !== "scheduled");
   const existing = new Set(agents.map(agent => agent.id));
@@ -281,9 +305,10 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       const result = resultSchema.parse(event.payload);
       const linked = requests.get(result.request_id);
       const row = byId.get(event.actor_id);
-      if (turns && (!linked || !row || completedRequests.has(result.request_id))) continue;
+      const duplicate = completedRequests.has(result.request_id);
+      completedRequests.add(result.request_id);
+      if (turns && (!linked || !row || duplicate)) continue;
       if (turns) {
-        completedRequests.add(result.request_id);
         now += 1;
       }
       const at = turns ? now : timeOf(result.observation);
@@ -391,6 +416,28 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
         status: appeal.status, activity: "dialogue"
       });
     }
+  }
+  for (const [requestId, linked] of requests) {
+    if (!state.in_flight || completedRequests.has(requestId)) continue;
+    const row = byId.get(linked.event.actor_id);
+    if (!row) continue;
+    const at = turns ? now : linked.event.village_minute
+      ?? row.positions.filter(point => point.order < linked.event.sequence).at(-1)?.at ?? now;
+    if (at > now) continue;
+    const action = linked.request.action_id;
+    row.spans.push({
+      start: at, end: at,
+      location: row.positions.filter(point => point.order < linked.event.sequence).at(-1)?.location ?? row.locationId,
+      label: actionLabel(action, linked.request.arguments, state, linked.event.actor_id),
+      detail: "Action in progress. Waiting for the world result.", status: "IN_PROGRESS",
+      kind: "free",
+      activity: ["say", "village_ask", "village_tell", "village_share_route", "village_meeting"].includes(action)
+        ? "dialogue" : action === "go" || action === "village_plan_walk" ? "movement" : undefined,
+      arguments: actionArguments(action, linked.request.arguments, state, cast),
+      ...(linked.decision?.justification.trim() ? { reasoning: linked.decision.justification.trim() } : {}),
+      ...(linked.decision?.subgoal?.trim() ? { subgoal: linked.decision.subgoal.trim() } : {}),
+      ...(linked.decision?.plan?.length ? { plan: linked.decision.plan } : {})
+    });
   }
   for (const event of state.world?.village?.events ?? []) {
     if (event.minute > now) continue;

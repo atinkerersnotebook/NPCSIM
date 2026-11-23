@@ -23,7 +23,7 @@ def validate_config(scenario: Scenario) -> None:
     config = scenario.village
     if config is None:
         raise ValueError("Missing village configuration")
-    if scenario.goal_type != "village_restored" or any((
+    if scenario.goal_type not in {"village_restored", "village_snapshot_completed"} or any((
             scenario.bakery, scenario.voyage, scenario.rps, scenario.erp, scenario.bbq)):
         raise ValueError("Villages require their own village goal without other simulation modes")
     if bool(scenario.agents) != config.ai_controlled:

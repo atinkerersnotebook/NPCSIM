@@ -1126,7 +1126,8 @@ class Controller:
         self.emit("verification", result)
         if result["status"] == "achieved":
             stop = self.run.get("village_stop_minute")
-            if stop is not None and self.run.get("village_minute", 0) < stop:
+            if (self.run["goal"]["type"] == "village_restored"
+                    and stop is not None and self.run.get("village_minute", 0) < stop):
                 return False
             reason = ("The world verified that this NPC reached the final exit."
                       if self.run["goal"]["type"] in {"actor_outside_start_location", "actor_at_exit_location"}
@@ -1674,6 +1675,64 @@ class Controller:
             self._supply_snapshot = {"title": self.run["title"], **snapshot} if snapshot is not None else None
             self._supply_key = key
         return self._supply_snapshot
+
+    def town_supply_playback(self, sequence: int) -> dict[str, Any] | None:
+        from npc_sim import town_supply
+        from npc_sim.world_storage import WorldStorage
+
+        if not self.run:
+            raise ValueError("No active adventure is available for playback.")
+        if sequence < 1:
+            raise ValueError("Invalid playback checkpoint.")
+        world_path = self.data / "worlds" / self.run["world_id"] / "world-state.json"
+        scenario_path = self.events.directory / "scenario.json" if self.events else None
+        if scenario_path is None or not scenario_path.exists():
+            scenario_path = self.data / "scenarios" / f"{self.run['scenario_id']}.json"
+        world = WorldStorage(world_path).snapshot(sequence)
+        config = Scenario.model_validate(read_json(scenario_path)).village
+        report = town_supply.report(world, config)
+        return {"title": self.run["title"], **report} if report is not None else None
+
+    def town_supply_playback_checkpoints(self) -> list[dict[str, int | None]]:
+        from npc_sim.world_storage import WorldStorage
+
+        if not self.run:
+            return []
+        path = self.data / "worlds" / self.run["world_id"] / "world-state.json"
+        return WorldStorage(path).snapshots()
+
+    def world_playback(self, sequence: int) -> dict[str, Any]:
+        from npc_sim.world_storage import WorldStorage
+
+        if not self.run:
+            raise ValueError("No active adventure is available for playback.")
+        if sequence < 1:
+            raise ValueError("Invalid playback checkpoint.")
+        path = self.data / "worlds" / self.run["world_id"] / "world-state.json"
+        typed = WorldStorage(path).snapshot(sequence)
+        world = typed.model_dump(
+            mode="json", exclude={"requests", "admin_requests", "request_history_id"})
+        village = world.get("village")
+        if village and village.get("dashboard"):
+            from npc_sim import village_events
+            village["dashboard"]["trades"] = village_events.completed_trades(typed.village)
+        snapshot = self.status()
+        event_count = 0
+        if self.events:
+            for event in self.events.events:
+                if event["kind"] != "action_result":
+                    continue
+                observed = event.get("payload", {}).get("observation", {})
+                revision = observed.get("observation_revision")
+                prefix = "obs-"
+                if isinstance(revision, str) and revision.startswith(prefix) and revision[len(prefix):].isdigit():
+                    if int(revision[len(prefix):]) <= typed.revision:
+                        event_count = event["sequence"]
+                elif event.get("village_minute") is not None and typed.village is not None:
+                    if event["village_minute"] <= typed.village.minute:
+                        event_count = event["sequence"]
+        snapshot.update(world=world, observation=None, memory={}, in_flight=False, event_count=event_count)
+        return snapshot
 
     def status(self) -> dict[str, Any]:
         snapshot = None
