@@ -24,6 +24,7 @@ def test_baseline_is_reproducible_and_does_not_change_scenario(tmp_path):
     assert first["starting_state"]["minute"] == scenario().village.start_minute
     assert first["starting_state"]["stocks"] == scenario().village.stocks
     assert first["starting_state"]["orders"] == {}
+    assert first["starting_state"]["shipments"] == {}
     assert first["starting_state"]["meal_reservations"]["daily"]["expected"] == 12
     with pytest.raises(FileExistsError):
         create_baseline(source, tmp_path / "first")

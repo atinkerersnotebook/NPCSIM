@@ -46,6 +46,8 @@ def capture(world: World, diagnostic: dict[str, Any] | None = None) -> dict[str,
                           for site, owners in state.depot_lots.items()}),
         "orders": {key: order.model_dump(mode="json") for key, order in state.economy.orders.items()}
                   if state.economy else {},
+        "shipments": {key: shipment.model_dump(mode="json")
+                      for key, shipment in state.economy.shipments.items()} if state.economy else {},
         "meals": {rid: {key: meal.model_dump(mode="json") for key, meal in person.life.meals.items()}
                   for rid, person in state.residents.items() if person.life},
         "meal_reservations": {kind: village_life.meal_plan(world, kind, day)

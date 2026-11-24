@@ -6,7 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from npc_sim import village, village_communication, village_economy
 from npc_sim.village_communication_models import LogisticsMessage, LogisticsSnapshot
-from npc_sim.village_economy_models import VillageDeliveryShipment, VillageSupplierOrder
+from npc_sim.village_economy_models import (
+    VillageDeliveryShipment, VillageShipmentReassignment, VillageSupplierOrder,
+)
 
 if TYPE_CHECKING:
     from npc_sim.models import VillageShipment
@@ -38,6 +40,7 @@ class Acceptance(ShipmentRequest):
 
 class Reassignment(Acceptance):
     carrier_id: str = Field(min_length=1)
+    reason: str = Field(default="Carrier reassigned", min_length=1, max_length=500)
 
 
 class Release(ShipmentRequest):
@@ -232,8 +235,29 @@ def _validate_carrier(world: "World", order: VillageSupplierOrder, carrier: str,
         raise ValueError(conflict + "; choose another carrier or explicitly allow a duty conflict")
 
 
+def _consolidate(world: "World", order: VillageSupplierOrder, carrier: str, quantity: int,
+                 mode: str, accepted: bool) -> VillageDeliveryShipment | None:
+    candidates = [shipment for shipment in records(world, order.id)
+                  if pending(shipment) and shipment.carrier == carrier and shipment.mode == mode
+                  and shipment.status != "blocked"]
+    if len(candidates) != 1:
+        return None
+    shipment = candidates[0]
+    shipment.quantity += quantity
+    shipment.updated_at = world.state.village.minute
+    if accepted and shipment.accepted_at is None:
+        shipment.accepted_at = world.state.village.minute
+    shipment.status = "assigned" if shipment.accepted_at is not None else "offered"
+    emit(world, "SHIPMENT_ASSIGNED" if shipment.accepted_at is not None else "SHIPMENT_OFFERED",
+         order, shipment)
+    return shipment
+
+
 def _create(world: "World", order: VillageSupplierOrder, carrier: str, quantity: int,
             mode: str, accepted: bool) -> VillageDeliveryShipment:
+    consolidated = _consolidate(world, order, carrier, quantity, mode, accepted)
+    if consolidated is not None:
+        return consolidated
     state = world.state.village
     while f"shipment-{state.economy.next_shipment}" in state.economy.shipments:
         state.economy.next_shipment += 1
@@ -402,13 +426,16 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
                                   loaded=loaded)
                 if loaded:
                     _handoff(world, shipment, request.carrier_id)
+                shipment.reassignments.append(VillageShipmentReassignment(
+                    from_carrier=shipment.carrier, to_carrier=request.carrier_id,
+                    reassigned_at=state.minute, reassigned_by=world.actor_id,
+                    reason=request.reason))
                 shipment.carrier = request.carrier_id
                 shipment.accepted_at = state.minute if request.carrier_id == world.actor_id else None
                 shipment.status = "in_transit" if loaded else "assigned" if shipment.accepted_at is not None else "offered"
-                shipment.reason = None
+                shipment.reason = request.reason
                 shipment.updated_at = state.minute
-                emit(world, "SHIPMENT_ASSIGNED" if shipment.accepted_at is not None else "SHIPMENT_OFFERED",
-                     order, shipment)
+                emit(world, "SHIPMENT_REASSIGNED", order, shipment)
             else:
                 if world.actor_id != shipment.carrier:
                     raise ValueError("Only the named carrier can accept this shipment")

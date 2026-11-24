@@ -30,6 +30,16 @@ class VillageMealPlan(EconomyModel):
     resident_portions: Quantity = 12
     visitor_portions: Quantity = 0
 
+    @model_validator(mode="before")
+    @classmethod
+    def default_portion_split(cls, values: object) -> object:
+        if not isinstance(values, dict):
+            return values
+        split_supplied = "resident_portions" in values or "visitor_portions" in values
+        if not split_supplied and "portions" in values:
+            return {**values, "resident_portions": values["portions"], "visitor_portions": 0}
+        return values
+
     @model_validator(mode="after")
     def check_portions(self) -> "VillageMealPlan":
         if self.resident_portions + self.visitor_portions != self.portions:
@@ -198,6 +208,14 @@ class VillageEconomyMovement(EconomyModel):
     order_id: str | None = None
 
 
+class VillageShipmentReassignment(EconomyModel):
+    from_carrier: str
+    to_carrier: str
+    reassigned_at: Minute
+    reassigned_by: str
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class VillageDeliveryShipment(EconomyModel):
     id: str
     order_id: str
@@ -215,6 +233,7 @@ class VillageDeliveryShipment(EconomyModel):
     returned_quantity: Quantity = 0
     spoiled_quantity: Quantity = 0
     reason: str | None = None
+    reassignments: list[VillageShipmentReassignment] = Field(default_factory=list)
 
     @property
     def outstanding(self) -> int:

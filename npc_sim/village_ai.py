@@ -911,6 +911,9 @@ def _evaluate_snapshot_cooking(world: "World", service: str, deadline: int) -> d
                 _, batch_size = village_equipment.production_profile(view, job.equipment, job.duration, batch_size)
             fuel_needed = (batches + batch_size - 1) // batch_size
         rejected = view._village_action_blocker("village_work", {}) or production_ready(view, "village_work")
+        if (rejected and rejected[0] == "OUTSIDE_PREPARATION_WINDOW"
+                and state.minute < deadline - policy.cooking_lead_minutes):
+            rejected = None
         blocker = rejected[1] if rejected else ""
     if not remaining:
         blocker = ""

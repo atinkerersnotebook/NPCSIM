@@ -47,6 +47,17 @@ def test_snapshot_scenario_keeps_private_success_criteria_out_of_observation(tmp
     assert len(item.state.village.residents) == 12
 
 
+def test_snapshot_demand_is_twelve_loaves_not_twelve_plus_stock_buffer(tmp_path):
+    item = world(tmp_path)
+    requirement = village_economy.meal_requirements(item)[0]
+    suggestions = village_economy.suggestions(item, "elsie")
+    bread = [request for request in suggestions if request["product"] == "bread"]
+
+    assert requirement["portions"] == 24
+    assert requirement["inputs"]["bread"] == 12
+    assert bread and sum(request["quantity"] for request in bread) == 12
+
+
 def test_snapshot_needs_physical_stock_not_just_funded_orders(tmp_path):
     item = world(tmp_path)
     item.state.village.minute = 620

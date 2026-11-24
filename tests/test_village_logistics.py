@@ -213,6 +213,11 @@ def test_reassignment_and_release_never_teleport_loaded_cargo(world):
         "shipment_id": shipment.id, "carrier_id": "nella"})
     assert result[0] == "APPLIED"
     assert shipment.id in world.state.village.economy.shipments and shipment.status == "offered"
+    assert shipment.reassignments[-1].model_dump() == {
+        "from_carrier": "ada", "to_carrier": "nella", "reassigned_at": 540,
+        "reassigned_by": "elsie", "reason": "Carrier reassigned",
+    }
+    assert message_types(world)[-1] == "SHIPMENT_REASSIGNED"
     assert logistics.apply(actor(world, "nella"), "village_accept_shipment", {"shipment_id": shipment.id})[0] == "APPLIED"
     carrier = actor(world, "nella", "bakery")
     assert village_services.foot_load(carrier, "nella", {"bread": 3}, "tavern") is None
@@ -233,6 +238,17 @@ def test_reassignment_and_release_never_teleport_loaded_cargo(world):
     assert logistics.unassigned(world, order) == 3
     assert world.state.village.stocks["bakery"]["bread"] == 3
     assert order.paid == 0
+
+
+def test_matching_carrier_assignments_are_consolidated(world):
+    order = bread_order(world, quantity=3, stock=3)
+    first = assign(world, order, "ada", quantity=2)
+    second = assign(world, order, "ada", quantity=1)
+
+    assert second.id == first.id
+    assert first.quantity == 3
+    assert len(world.state.village.economy.shipments) == 1
+    assert logistics.unassigned(world, order) == 0
 
 
 def test_failed_unloading_changes_no_stock_payment_or_shipment(world):

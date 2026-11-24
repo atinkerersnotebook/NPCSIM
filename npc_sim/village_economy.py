@@ -1265,8 +1265,10 @@ def meal_requirements(world: "World") -> list[dict[str, Any]]:
                 inputs["tea"] = inputs.get("tea", 0) + max(0, plan.tea_portions - eaten)
             for product, quantity in plan.additional_inputs.items():
                 inputs[product] = inputs.get(product, 0) + max(0, quantity - eaten)
-            inputs = {product: amount + policy.stock_buffer.get(product, 0)
-                      for product, amount in inputs.items() if amount or policy.stock_buffer.get(product, 0)}
+            if base.snapshot is None:
+                inputs = {product: amount + policy.stock_buffer.get(product, 0)
+                          for product, amount in inputs.items()
+                          if amount or policy.stock_buffer.get(product, 0)}
             result.append({"id": f"{service_day}:{plan.id}", "due": due, "portions": plan.portions,
                            "eaten_portions": eaten, "remaining_portions": remaining_portions,
                            "covered_portions": covered, "inputs": inputs,

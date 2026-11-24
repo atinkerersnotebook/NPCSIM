@@ -111,8 +111,9 @@ class LogisticsSnapshot(CommunicationModel):
 
 class LogisticsMessage(CommunicationModel):
     sequence: Positive
-    type: Literal["ORDER_ACCEPTED", "SHIPMENT_OFFERED", "SHIPMENT_ASSIGNED", "GOODS_READY",
-                  "GOODS_PICKED_UP", "GOODS_DELIVERED", "SHIPMENT_BLOCKED", "SHIPMENT_RELEASED"]
+    type: Literal["ORDER_ACCEPTED", "SHIPMENT_OFFERED", "SHIPMENT_ASSIGNED", "SHIPMENT_REASSIGNED",
+                  "GOODS_READY", "GOODS_PICKED_UP", "GOODS_DELIVERED", "SHIPMENT_BLOCKED",
+                  "SHIPMENT_RELEASED"]
     minute: Number
     order_id: Text
     shipment_id: Text | None = None
