@@ -2136,16 +2136,17 @@ test("untimed Gantt shows Unknown Room actions and backtracking on integer turns
   assert.equal(model.turns, true);
   assert.equal(model.now, 8);
   assert.equal(model.start, 0);
-  assert.equal(model.rows.length, 1);
-  assert.deepEqual(model.rows[0].spans.map(span => [span.start, span.end]), [
+  assert.equal(model.rows[0].id, "__dungeon_master__");
+  assert.equal(model.rows.length, 2);
+  assert.deepEqual(model.rows[1].spans.map(span => [span.start, span.end]), [
     [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8]
   ]);
-  assert.deepEqual(model.rows[0].locations, [
+  assert.deepEqual(model.rows[1].locations, [
     { start: 0, end: 4, location: "room-one" },
     { start: 4, end: 5, location: "room-two" },
     { start: 5, end: 8, location: "room-one" }
   ]);
-  assert.equal(model.rows[0].spans.filter(span => span.kind === "travel").length, 3);
+  assert.equal(model.rows[1].spans.filter(span => span.kind === "travel").length, 3);
   const markup = worldMonitorMarkup(state, projected);
   assert.ok(markup.includes("World timeline"));
   assert.ok(markup.includes("Turn 8"));

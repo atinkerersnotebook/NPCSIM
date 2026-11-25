@@ -2,11 +2,11 @@ import { z } from "zod";
 import {
   stateSchema, eventSchema, eventsSchema, modelsSchema, scenariosSchema, historySchema, historyDetailSchema,
   recordedStorySchema, reportFormatSchema,
-  agentsSchema, agentProfileSchema, skillModeSchema, dungeonMasterConfigSchema, dungeonMasterRulingSchema,
+  agentsSchema, agentProfileSchema, skillModeSchema, turnModeSchema, dungeonMasterConfigSchema, dungeonMasterRulingSchema,
   completionAnalysisSchema, npcChatSchema, budgetExtensionSchema, runModeSchema,
   episodeSaveRequestSchema, episodeLoadRequestSchema, episodeSavesSchema, episodeSaveResultSchema
 } from "./contracts";
-import type { AgentProfile, CompletionAnalysis, DungeonMasterConfig, SkillMode, State, RunEvent, RecordedStory } from "./contracts";
+import type { AgentProfile, CompletionAnalysis, DungeonMasterConfig, SkillMode, TurnMode, State, RunEvent, RecordedStory } from "./contracts";
 import { effectiveBody, profileText, slotLabel, validateAssignments } from "./agent-profiles";
 import { evidenceReferences, explainEvidence } from "./evidence";
 import { copyRecordedPages, villageTimeline } from "./story";
@@ -74,6 +74,9 @@ app.innerHTML = `
         <label for="skill-mode">Skills policy</label>
         <select id="skill-mode"><option value="scenario">Scenario-specific profile skills (check required skills)</option><option value="npc_only">NPC skills only (allow impossible tasks)</option></select>
         <p id="skill-mode-help" class="muted" role="status"></p>
+        <label for="turn-mode">Turn structure</label>
+        <select id="turn-mode"><option value="round_robin">One action per Step (round robin)</option><option value="shared_round">One action per agent per Step (ordered shared round)</option></select>
+        <p id="turn-mode-help" class="muted" role="status"></p>
       </div>
       </details>
       <div id="agent-assignments" class="agent-assignment-grid"></div>
@@ -384,6 +387,7 @@ let profiles: AgentProfile[] = [];
 let scenarioChoices: z.infer<typeof scenariosSchema>["scenarios"] = [];
 let assignments: Record<string, string> = {};
 let skillMode: SkillMode = "scenario";
+let turnMode: TurnMode = "round_robin";
 let dungeonMasterConfig: DungeonMasterConfig | null = null;
 let archivedRuns = new Map<string, z.infer<typeof historySchema>["runs"][number]>();
 let archivedRun: z.infer<typeof historySchema>["runs"][number] | null = null;
@@ -468,6 +472,7 @@ function applyState(next: State, playbackSnapshot = false): void {
     if (adminView) element<HTMLSelectElement>("scenario-select").value = selectedScenario;
     assignments = next.run?.agent_assignments ? { ...next.run.agent_assignments } : {};
     skillMode = next.run?.skill_mode ?? "scenario";
+    turnMode = next.run?.turn_mode ?? "round_robin";
     renderAssignments();
     renderTimeline();
   }
@@ -584,6 +589,10 @@ element("metrics").addEventListener("click", event => {
 
 function renderAssignments(): void {
   element<HTMLSelectElement>("skill-mode").value = skillMode;
+  element<HTMLSelectElement>("turn-mode").value = turnMode;
+  element("turn-mode-help").textContent = turnMode === "shared_round" ?
+    "Each Step or automatic cycle gives every active agent one action. Agents decide and act in a fixed order against the updated world state." :
+    "Each Step or automatic cycle gives exactly one agent an action, rotating through the cast.";
   element("skill-mode-help").textContent = skillMode === "npc_only" ?
     "Only each NPC's base abilities and carrying capacity apply. Scenario ability overrides are ignored. Missing skills are allowed: the task may be impossible, and blocked actions stay blocked." :
     "Use each profile's scenario-specific body when configured. Teams missing required challenge skills are rejected before starting.";
@@ -1448,6 +1457,10 @@ async function command(name: string): Promise<void> {
   notice("");
   renderControls();
   try {
+    if (name === "start") {
+      skillMode = skillModeSchema.parse(element<HTMLSelectElement>("skill-mode").value);
+      turnMode = turnModeSchema.parse(element<HTMLSelectElement>("turn-mode").value);
+    }
     const scenario = name === "reset" ? state?.run?.scenario_id : selectedScenario;
     if (name === "start") {
       const choice = scenarioChoices.find(choice => choice.id === scenario);
@@ -1456,7 +1469,7 @@ async function command(name: string): Promise<void> {
     }
     const nextState = stateSchema.parse(await api(name === "reopen" ? "/adventure/reopen" : `/control/${name}`, "POST",
       name === "reopen" ? {run_id: state?.run?.id} : (name === "start" || name === "reset") && scenario ? {
-        scenario_id: scenario, ...(name === "start" ? { agent_assignments: assignments, skill_mode: skillMode } : {})
+        scenario_id: scenario, ...(name === "start" ? { agent_assignments: assignments, skill_mode: skillMode, turn_mode: turnMode } : {})
       } : {}));
     notice("");
     applyState(nextState);
@@ -1573,6 +1586,10 @@ if (adminView) element("scenario-select").addEventListener("change", () => {
 });
 element("skill-mode").addEventListener("change", () => {
   skillMode = skillModeSchema.parse(element<HTMLSelectElement>("skill-mode").value);
+  renderAssignments();
+});
+element("turn-mode").addEventListener("change", () => {
+  turnMode = turnModeSchema.parse(element<HTMLSelectElement>("turn-mode").value);
   renderAssignments();
 });
 element("agent-assignments").addEventListener("change", event => {

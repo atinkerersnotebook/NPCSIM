@@ -254,7 +254,7 @@ async def test_unhandled_automatic_cycle_reports_error_without_stopping_worker(c
 
 
 @pytest.mark.asyncio
-async def test_three_separated_agents_take_round_robin_turns_over_mcp(configuration):
+async def test_three_separated_agents_take_ordered_actions_in_shared_rounds(configuration):
     data, config = configuration
     config.world.scenario = "storm-signal"
     actions = [
@@ -273,21 +273,26 @@ async def test_three_separated_agents_take_round_robin_turns_over_mcp(configurat
     controller.proxy = fake
     await controller.start_worker()
     try:
-        await controller.command("start")
+        await controller.command("start", {"turn_mode": "shared_round"})
         session = controller.world.session
         actors = controller.status()["world"]["actors"]
         assert {key: actor["location_id"] for key, actor in actors.items()} == {
             "raven": "rookery", "badger": "quarry", "otter": "river-landing"}
         assert len({agent["session_id"] for agent in controller.run["agents"].values()}) == 3
-        for index in range(len(actions)):
+        for index in range(3):
             await controller.command("step")
             assert controller.world.session is session
-            assert controller.run["actor_id"] == ("raven", "badger", "otter")[index % 3]
+            assert controller.run["actor_id"] == "otter"
             assert controller.run["status"] == "paused"
+            assert controller.run["cycles"] == index + 1
+            assert controller.run["actions"] == (index + 1) * 3
         assert controller.run["actions"] == len(actions)
         assert [context["observation"]["self"]["actor_id"] for context in fake.contexts] == [
             "raven", "badger", "otter"] * 3
         assert len({id(agent["memory"]) for agent in controller.run["agents"].values()}) == 3
+        action_events = [event for event in controller.events.events if event["kind"] == "action_request"]
+        assert [event["round"] for event in action_events] == [1, 1, 1, 2, 2, 2, 3, 3, 3]
+        assert [event["round_action_index"] for event in action_events] == [1, 2, 3] * 3
     finally:
         await controller.shutdown()
 

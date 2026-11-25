@@ -1,6 +1,6 @@
 import { eventSchema, stateSchema } from "./contracts.ts";
 import type { RunEvent, State } from "./contracts.ts";
-import { timelineEventProjection, worldGanttMarkup } from "./world-gantt.ts";
+import { recordedActionRequest, timelineEventProjection, worldGanttMarkup } from "./world-gantt.ts";
 import type { GanttActivity, GanttScale } from "./world-gantt.ts";
 import { renderDungeonAppeal } from "./dungeon-appeal.ts";
 import { slotLabel } from "./agent-profiles.ts";
@@ -409,7 +409,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
         const target = focused ? [...scroll.querySelectorAll<SVGElement>("[data-gantt-focus]")]
           .find(element => element.getAttribute("data-gantt-focus") === focused) : undefined;
         (target ?? scroll).focus({ preventScroll: true });
-        if (target?.matches(".gantt-bar, .gantt-marker")) showGanttTooltip(target);
+        if (target?.matches(".gantt-bar, .gantt-marker, .gantt-dm-tile")) showGanttTooltip(target);
       }
       if (zoomFocus) {
         const button = content.querySelector<HTMLButtonElement>(`[data-timeline-zoom="${zoomFocus}"]`);
@@ -417,7 +417,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
           ?.focus({ preventScroll: true });
       }
       if (pointerPosition) {
-        const hovered = document.elementFromPoint(pointerPosition.x, pointerPosition.y)?.closest(".gantt-bar, .gantt-marker");
+        const hovered = document.elementFromPoint(pointerPosition.x, pointerPosition.y)?.closest(".gantt-bar, .gantt-marker, .gantt-dm-tile");
         if (hovered) showGanttTooltip(hovered);
       }
       resetTimelineScroll = false;
@@ -488,14 +488,38 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       facts.append(element("dt", "", label), element("dd", "", value));
     }
     bubble.append(facts);
-    const detail = text("detail");
-    if (detail && detail !== title && detail !== `${title} / ${text("status")}`) {
-      const result = element("div", "gantt-tooltip-result", "");
-      result.append(element("small", "", "Recorded detail"), element("p", "", detail));
-      bubble.append(result);
+    if (text("kind") === "dm-state") {
+      const narrative = element("div", "gantt-tooltip-result", "");
+      narrative.append(element("small", "", "World-state narrative"), element("p", "", text("detail")));
+      bubble.append(narrative);
+      bubble.hidden = false;
+      const bounds = bar.getBoundingClientRect();
+      const { width, height } = bubble.getBoundingClientRect();
+      bubble.style.left = `${Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8))}px`;
+      bubble.style.top = `${Math.max(8, Math.min(bounds.bottom + 8 + height > window.innerHeight
+        ? bounds.top - height - 8 : bounds.bottom + 8, window.innerHeight - height - 8))}px`;
+      return;
     }
-    for (const [name, label] of [["arguments", "Action details"], ["subgoal", "Current subgoal"],
-      ["expected", "Expected outcome"], ["plan", "Plan"]] as const) {
+    if (text("kind") === "dm") {
+      const rationale = element("div", "gantt-tooltip-result", "");
+      rationale.append(element("small", "", "DM thought process"), element("p", "", text("detail")));
+      bubble.append(rationale);
+      bubble.hidden = false;
+      const bounds = bar.getBoundingClientRect();
+      const { width, height } = bubble.getBoundingClientRect();
+      bubble.style.left = `${Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8))}px`;
+      bubble.style.top = `${Math.max(8, Math.min(bounds.bottom + 8 + height > window.innerHeight
+        ? bounds.top - height - 8 : bounds.bottom + 8, window.innerHeight - height - 8))}px`;
+      return;
+    }
+    if (text("observation")) {
+      const observation = element("div", "gantt-tooltip-result", "");
+      observation.append(element("small", "", "Observation"),
+        element("p", "", text("observation")));
+      bubble.append(observation);
+    }
+    for (const [name, label] of [["subgoal", "Current subgoal"], ["arguments", "Action details"],
+      ["expected", "Expected outcome"]] as const) {
       const value = text(name);
       if (!value) continue;
       const section = element("div", "gantt-tooltip-result", "");
@@ -506,6 +530,13 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       const reasoning = element("div", "gantt-tooltip-result", "");
       reasoning.append(element("small", "", "Why this action"), element("p", "", text("reasoning")));
       bubble.append(reasoning);
+    }
+    if (title) {
+      const request = element("div", "gantt-tooltip-result", "");
+      request.classList.add("gantt-recorded-request");
+      request.append(element("small", "", "Recorded action request"),
+        element("p", "", recordedActionRequest(title, text("arguments"))));
+      bubble.append(request);
     }
     bubble.hidden = false;
     const bounds = bar.getBoundingClientRect();
@@ -531,7 +562,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   };
   content.addEventListener("pointerover", event => {
     if (event.target instanceof Element) {
-      const bar = event.target.closest(".gantt-bar, .gantt-marker");
+      const bar = event.target.closest(".gantt-bar, .gantt-marker, .gantt-dm-tile");
       if (bar) {
         pointerPosition = { x: event.clientX, y: event.clientY };
         showGanttTooltip(bar);
@@ -573,10 +604,10 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     }
   });
   content.addEventListener("focusin", event => {
-    if (event.target instanceof Element && event.target.matches(".gantt-bar, .gantt-marker")) showGanttTooltip(event.target);
+    if (event.target instanceof Element && event.target.matches(".gantt-bar, .gantt-marker, .gantt-dm-tile")) showGanttTooltip(event.target);
   });
   content.addEventListener("focusout", event => {
-    if (event.target instanceof Element && event.target.matches(".gantt-bar, .gantt-marker")) hideGanttTooltip();
+    if (event.target instanceof Element && event.target.matches(".gantt-bar, .gantt-marker, .gantt-dm-tile")) hideGanttTooltip();
   });
   content.addEventListener("scroll", hideGanttTooltip, true);
   content.addEventListener("keydown", event => {

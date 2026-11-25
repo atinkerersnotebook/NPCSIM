@@ -177,6 +177,132 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "7b9149befa134e26a3d1187c054bbe7d",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-25T11:06:56.989744+00:00",
+      "findings": [
+        {
+          "reason": "The team admits defeat: no assigned agent has the required skills: light work, water engineering. Mandatory cooperative work cannot be completed; retrying will not grant these abilities.",
+          "evidence_ids": [
+            "7b9149befa134e26a3d1187c054bbe7d:13"
+          ]
+        },
+        {
+          "reason": "Beacon restoration was blocked because no assigned companion had the water engineering or light work skills needed to repair the wiring and focus the signal.",
+          "evidence_ids": [
+            "7b9149befa134e26a3d1187c054bbe7d:13"
+          ]
+        },
+        {
+          "reason": "None of the companions reached the hilltop refuge: Raven remained at the rookery, Badger at the quarry, and Otter at the river landing.",
+          "evidence_ids": [
+            "7b9149befa134e26a3d1187c054bbe7d:13"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "aba76063d9824a038efcc0bf04502367",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-25T11:07:26.280228+00:00",
+      "findings": [
+        {
+          "reason": "The team admits defeat: no assigned agent has the required skills: light work, water engineering. Mandatory cooperative work cannot be completed; retrying will not grant these abilities.",
+          "evidence_ids": [
+            "aba76063d9824a038efcc0bf04502367:13"
+          ]
+        },
+        {
+          "reason": "The beacon was not restored: final verification confirmed that no assigned companion had the water engineering or light work skills needed to repair the wiring and focus the signal.",
+          "evidence_ids": [
+            "aba76063d9824a038efcc0bf04502367:13"
+          ]
+        },
+        {
+          "reason": "None of the three companions reached the hilltop refuge; Raven remained at the rookery, Badger at the quarry, and Otter at the river landing.",
+          "evidence_ids": [
+            "aba76063d9824a038efcc0bf04502367:13"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "94fc44f5714b48ca8abd5a48193b54cc",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-25T11:09:58.924799+00:00",
+      "findings": [
+        {
+          "reason": "The team admits defeat: no assigned agent has the required skills: light work, water engineering. Mandatory cooperative work cannot be completed; retrying will not grant these abilities.",
+          "evidence_ids": [
+            "94fc44f5714b48ca8abd5a48193b54cc:13"
+          ]
+        },
+        {
+          "reason": "The beacon was not restored: the final check confirmed that no assigned companion had the required light work or water engineering skills.",
+          "evidence_ids": [
+            "94fc44f5714b48ca8abd5a48193b54cc:13"
+          ]
+        },
+        {
+          "reason": "None of the companions reached the hilltop refuge. The final check placed Raven at the rookery, Badger at the quarry, and Otter at the river landing.",
+          "evidence_ids": [
+            "94fc44f5714b48ca8abd5a48193b54cc:13"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "a79e5fe2d5104e378ccd1e7127b0de65",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-25T11:10:50.591997+00:00",
+      "findings": [
+        {
+          "reason": "The team admits defeat: no assigned agent has the required skills: light work, water engineering. Mandatory cooperative work cannot be completed; retrying will not grant these abilities.",
+          "evidence_ids": [
+            "a79e5fe2d5104e378ccd1e7127b0de65:13"
+          ]
+        },
+        {
+          "reason": "The beacon was not restored: final verification confirmed that no assigned companion had the water engineering or light work skills needed to repair the wiring and focus the signal.",
+          "evidence_ids": [
+            "a79e5fe2d5104e378ccd1e7127b0de65:13"
+          ]
+        },
+        {
+          "reason": "None of the companions reached the hilltop refuge: Raven remained at the rookery, Badger at the quarry, and Otter at the river landing.",
+          "evidence_ids": [
+            "a79e5fe2d5104e378ccd1e7127b0de65:13"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "1375474409d8489dbad802e9a95ff88b",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-25T11:45:20.719414+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "1375474409d8489dbad802e9a95ff88b:39"
+          ]
+        },
+        {
+          "reason": "Raven released the lens using flight, but the final check shows that the mast was not braced, the lens was not mounted, the submerged coil was not released, the wiring was not repaired, and the signal was not focused.",
+          "evidence_ids": [
+            "1375474409d8489dbad802e9a95ff88b:11",
+            "1375474409d8489dbad802e9a95ff88b:39"
+          ]
+        },
+        {
+          "reason": "None of the companions reached the hilltop refuge: Raven was in the rookery, Badger in the quarry, and Otter in the submerged chamber.",
+          "evidence_ids": [
+            "1375474409d8489dbad802e9a95ff88b:39"
+          ]
+        }
+      ]
     }
   ]
 }

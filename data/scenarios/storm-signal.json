@@ -112,7 +112,7 @@
     "signal-yard": {
       "name": "Central signal yard",
       "kind": "location",
-      "description": "Three paths meet beneath a storm beacon. Its mast needs a heavy counterweight, its lens cradle is empty, and its wet wiring needs a replacement coil. A high focusing mirror controls the beacon light. The refuge gate remains sealed until the beacon works."
+      "description": "Three paths meet beneath a storm beacon. Its mast, lens, wiring and focusing mirror show their current condition through direct observation. The refuge gate reacts to completed beacon work."
     },
     "refuge": {
       "name": "Hilltop refuge",

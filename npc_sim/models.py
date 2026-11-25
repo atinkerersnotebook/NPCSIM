@@ -37,6 +37,7 @@ class Body(StrictModel):
 
 
 SkillMode = Literal["scenario", "npc_only"]
+TurnMode = Literal["round_robin", "shared_round"]
 
 
 class AgentProfile(StrictModel):
@@ -1794,6 +1795,7 @@ class StartRequest(StrictModel):
     scenario_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]+$")
     agent_assignments: dict[str, str] | None = None
     skill_mode: SkillMode | None = None
+    turn_mode: TurnMode | None = None
     generation_save_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
 

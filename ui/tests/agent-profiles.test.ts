@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { effectiveBody, profileText, slotLabel, validateAssignments } from "../src/agent-profiles.ts";
-import { agentProfileSchema, runSchema, skillModeSchema, dungeonMasterConfigSchema, dungeonMasterRulingSchema } from "../src/contracts.ts";
+import { agentProfileSchema, runSchema, skillModeSchema, turnModeSchema, dungeonMasterConfigSchema, dungeonMasterRulingSchema } from "../src/contracts.ts";
 
 const raven = agentProfileSchema.parse({
   schema_version: "1.0", id: "raven", name: "Raven", identity: "A scout.",
@@ -73,6 +73,8 @@ test("NPC-only previews ignore scenario additions and keep the NPC's own carryin
   assert.deepEqual(body.capabilities, ["fly"]);
   assert.equal(body.capacity, 1);
   assert.ok(runSchema.shape.skill_mode.isOptional());
+  assert.ok(runSchema.shape.turn_mode.isOptional());
+  assert.equal(turnModeSchema.safeParse("shared_round").success, true);
   assert.equal(skillModeSchema.safeParse("npc_only").success, true);
   assert.equal(skillModeSchema.safeParse("invented").success, false);
 });

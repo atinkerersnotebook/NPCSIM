@@ -48,6 +48,8 @@ export const agentsSchema = z.object({ agents: z.array(agentProfileSchema) });
 export type AgentProfile = z.infer<typeof agentProfileSchema>;
 export const skillModeSchema = z.enum(["scenario", "npc_only"]);
 export type SkillMode = z.infer<typeof skillModeSchema>;
+export const turnModeSchema = z.enum(["round_robin", "shared_round"]);
+export type TurnMode = z.infer<typeof turnModeSchema>;
 export const dungeonMasterConfigSchema = z.strictObject({
   schema_version: z.literal("1.0"), enabled: z.boolean(), name: z.string().min(1),
   identity: z.string(), personality: z.string(),
@@ -600,6 +602,7 @@ export const runSchema = z.object({
   agent_assignments: z.record(z.string(), z.string()).optional(),
   world_edit_proposals: z.record(z.string(), worldEditProposalSchema).optional(),
   skill_mode: skillModeSchema.optional(),
+  turn_mode: turnModeSchema.optional(),
   dungeon_master: z.object({
     config: dungeonMasterConfigSchema, model_calls: z.number().int().nonnegative(),
     last_review_action: z.number().int().nonnegative()
@@ -654,6 +657,8 @@ export const stateSchema = z.object({
 export const eventSchema = z.object({
   id: z.string(), sequence: z.number(), run_id: z.string(), session_id: z.string(),
   actor_id: z.string(), kind: z.string(), cycle: z.number(), timestamp: z.string(),
+  round: z.number().int().positive().nullable().optional(),
+  round_action_index: z.number().int().nonnegative().optional(),
   village_minute: z.number().int().nonnegative().optional(), actor_name: z.string().optional(),
   free_action: z.boolean().optional(),
   payload: z.unknown()

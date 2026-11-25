@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from npc_sim.contracts import action_result, goal_result, observation
 from npc_sim.mcp_client import WorldClient
-from npc_sim.models import AppConfig, BudgetExtension, Budgets, ClockMode, ClockRequest, Decision, EpisodeLoadRequest, EpisodeSave, EpisodeSaveRequest, ReopenRequest, RunModeRequest, Scenario, SkillMode, VillagePlanStep, WorldState
+from npc_sim.models import AppConfig, BudgetExtension, Budgets, ClockMode, ClockRequest, Decision, EpisodeLoadRequest, EpisodeSave, EpisodeSaveRequest, ReopenRequest, RunModeRequest, Scenario, SkillMode, TurnMode, VillagePlanStep, WorldState
 from npc_sim.proxy import EmptyModelResponse, Proxy
 from npc_sim.prompt_context import REVIEW_EVENTS, public_proxy_messages
 from npc_sim.storage import EventStore, StoryStore, read_json, write_json
@@ -76,14 +76,18 @@ class Controller:
                 replan_count=self.replan_count, wait_until=self.wait_until,
                 wait_revision=self.wait_revision, goal=self.run["goal"])
 
-    async def _select_turn(self) -> bool:
+    async def _select_turn(self, forced_actor_id: str | None = None) -> bool:
         if not self.agents or not self.run or not self.world:
             return True
         self._save_agent()
         ids = list(self.agents)
         scheduler = self.world.manifest.get("village_scheduler") if self.run["status"] != "ready" else None
         retry_actor = self.run.pop("pending_actor_id", None) or self.run.pop("pending_budget_actor", None)
-        if retry_actor:
+        if forced_actor_id is not None:
+            if forced_actor_id not in self.agents:
+                raise ValueError("Round contains an unknown actor")
+            index = ids.index(forced_actor_id)
+        elif retry_actor:
             index = ids.index(retry_actor)
         elif scheduler:
             stop = self.run.get("village_stop_minute")
@@ -290,13 +294,17 @@ class Controller:
                 scenario_id = self.run["scenario_id"]
             assignments = args.get("agent_assignments")
             skill_mode = args.get("skill_mode")
+            turn_mode = args.get("turn_mode")
             if (name == "reset" and assignments is None and self.run
                     and scenario_id == self.run["scenario_id"]):
                 assignments = self.run.get("agent_assignments")
             if (name == "reset" and skill_mode is None and self.run
                     and scenario_id == self.run["scenario_id"]):
                 skill_mode = self.run.get("skill_mode")
-            await self.new_run(args.get("objective"), scenario_id, assignments, skill_mode,
+            if (name == "reset" and turn_mode is None and self.run
+                    and scenario_id == self.run["scenario_id"]):
+                turn_mode = self.run.get("turn_mode", "round_robin")
+            await self.new_run(args.get("objective"), scenario_id, assignments, skill_mode, turn_mode,
                                args.get("generation_save_id"))
         elif name == "assess":
             if not self.run or self.run["status"] not in TERMINAL:
@@ -926,7 +934,9 @@ class Controller:
     async def new_run(self, objective: str | None, scenario_id: str | None = None,
                       agent_assignments: dict[str, str] | None = None,
                       skill_mode: SkillMode | None = None,
+                      turn_mode: TurnMode = "round_robin",
                       generation_save_id: str | None = None) -> None:
+        turn_mode = turn_mode or "round_robin"
         scenario_id = scenario_id or self.config.world.scenario
         if not scenario_id or any(not (character.isascii() and (character.isalnum() or character in "_-")) for character in scenario_id):
             raise ValueError("Invalid scenario ID")
@@ -1007,7 +1017,7 @@ class Controller:
                      "revealed": scenario.goal_note_id is None},
             "config": self.config.model_dump(mode="json"),
             "agent_assignments": {slot: profile.id for slot, profile in profiles.items()},
-            "skill_mode": scenario.skill_mode,
+            "skill_mode": scenario.skill_mode, "turn_mode": turn_mode,
             "agent_profiles": {slot: profile.model_dump(mode="json") for slot, profile in profiles.items()},
             "dungeon_master": {"config": dungeon_master.model_dump(mode="json"), "model_calls": 0,
                                "last_review_action": 0},
@@ -1181,10 +1191,40 @@ class Controller:
                 if self.run["status"] in TERMINAL:
                     return
                 self.run.pop("pending_dungeon_master_review")
-            if not await self._select_turn():
-                return
-            selected_turn = True
-            await self._cycle()
+            shared_round = (self.run.get("turn_mode", "round_robin") == "shared_round"
+                            and bool(self.agents) and len(self.agents) > 1 and self.world is not None
+                            and not self.world.manifest.get("village_scheduler"))
+            if shared_round:
+                pending = self.run.get("round_pending_actor_ids")
+                if not pending:
+                    self.run["cycles"] += 1
+                    pending = [actor_id for actor_id, saved in self.agents.items()
+                               if not (self.run["goal"]["type"] == "all_actors_at_exit_location"
+                                       and (saved.get("observation") or {}).get("self", {}).get("location_id")
+                                       == self.run["exit_location"])]
+                    self.run["round_pending_actor_ids"] = pending.copy()
+                    self.run["round_action_index"] = 0
+                while self.run.get("round_pending_actor_ids"):
+                    if self.run["status"] in TERMINAL:
+                        break
+                    actor_id = self.run["round_pending_actor_ids"][0]
+                    if not await self._select_turn(actor_id):
+                        break
+                    selected_turn = True
+                    self.run["round_action_index"] += 1
+                    await self._cycle(advance_cycle=False)
+                    if actor_id in self.run.get("round_pending_actor_ids", []):
+                        self.run["round_pending_actor_ids"].remove(actor_id)
+                    if self.run["status"] in TERMINAL:
+                        break
+                if not self.run.get("round_pending_actor_ids"):
+                    self.run.pop("round_pending_actor_ids", None)
+                    self.run["round_action_index"] = 0
+            else:
+                if not await self._select_turn():
+                    return
+                selected_turn = True
+                await self._cycle()
             self._llm_retry_delay = 2.0
         except LLMUnavailable as error:
             LOGGER.warning("Pausing adventure: %s", error, exc_info=True)
@@ -1246,7 +1286,7 @@ class Controller:
                 raise
             raise LLMUnavailable(self.safe_error(error), phase) from error
 
-    async def _cycle(self) -> None:
+    async def _cycle(self, *, advance_cycle: bool = True) -> None:
         if not self.run or not self.world or not self.events:
             raise ValueError("No active episode")
         if self.remaining() <= 0 or (not self.run_until_complete and self.run["actions"] >= self.budgets.max_actions):
@@ -1263,7 +1303,8 @@ class Controller:
         self.wait_until, self.wait_revision = None, None
         if clock is not None and clock.get("mode") == "decision_paused" and clock["running"]:
             await self._set_clock(False)
-        self.run["cycles"] += 1
+        if advance_cycle:
+            self.run["cycles"] += 1
         self.emit("observation", self.observation)
         self.remember(self.observation)
         if await self.verify():
@@ -1293,7 +1334,8 @@ class Controller:
             try:
                 started = time.monotonic()
                 decision, metadata = await self._call_proxy(self.proxy.choose(
-                    self.run["model"], messages, f"{self.run['id']}:{self.run['cycles']}:{attempt}",
+                    self.run["model"], messages,
+                    f"{self.run['id']}:{self.run['cycles']}:{self.run['actor_id']}:{attempt}",
                     max(0.1, self.remaining())))
                 self.emit("decision", {**decision.model_dump(mode="json"), **metadata,
                                        "latency_ms": round((time.monotonic() - started) * 1000)})
@@ -1656,7 +1698,10 @@ class Controller:
                             if request is not None:
                                 metadata["free_action"] = request["action_id"] in free_actions
             recorded = self.events.append({"kind": kind, "timestamp": utc_now(), **metadata,
-                                "cycle": self.run["cycles"], "session_id": session_id,
+                                "cycle": self.run["cycles"],
+                                "round": self.run["cycles"] if "round_pending_actor_ids" in self.run else None,
+                                "round_action_index": self.run.get("round_action_index", 0),
+                                "session_id": session_id,
                                 "actor_id": actor_id, "payload": payload})
             story = self.story
             if story and story.position() == recorded["sequence"] - 1:
