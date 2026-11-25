@@ -268,3 +268,101 @@ INFO:     127.0.0.1:62584 - "GET /api/events/1?run_id=ef24ff4e164344218d7052fe7e
 INFO:     127.0.0.1:60720 - "GET /api/stream?compact=true&run_id=ef24ff4e164344218d7052fe7e6e52bf&after=231 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:62584 - "GET /api/events?compact=true&after=1&limit=230 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:57057 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58844 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58844 - "GET /assets/index-CC20vkAE.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:53994 - "GET /assets/index-C_hpvzKl.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:53994 - "GET /api/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53994 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53994 - "GET /api/scenarios HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58844 - "GET /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56451 - "GET /api/dungeon-master HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56451 - "GET /api/events?compact=true&limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56451 - "GET /api/stream?compact=true&run_id=ef24ff4e164344218d7052fe7e6e52bf&after=231 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58844 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58844 - "GET /api/story/ef24ff4e164344218d7052fe7e6e52bf?after=0&format=narrative HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58844 - "GET /api/story/ef24ff4e164344218d7052fe7e6e52bf?after=0&format=narrative HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53376 - "GET /?view=world HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52470 - "GET /assets/index-C_hpvzKl.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:53376 - "GET /assets/index-CC20vkAE.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:53376 - "GET /api/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53376 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53376 - "GET /api/events/1?run_id=ef24ff4e164344218d7052fe7e6e52bf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52470 - "GET /api/stream?compact=true&run_id=ef24ff4e164344218d7052fe7e6e52bf&after=231 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53376 - "GET /api/events?compact=true&after=1&limit=230 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56313 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56313 - "GET /?view=admin HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56313 - "GET /api/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56313 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56313 - "GET /api/scenarios HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53376 - "GET /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54531 - "GET /api/dungeon-master HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54531 - "GET /api/events?compact=true&limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54531 - "GET /api/stream?compact=true&run_id=ef24ff4e164344218d7052fe7e6e52bf&after=231 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53376 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53376 - "GET /api/transcript HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62336 - "GET /api/story/ef24ff4e164344218d7052fe7e6e52bf?after=0&format=narrative HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59271 - "GET /?view=world HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59271 - "GET /assets/index-CC20vkAE.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:61566 - "GET /assets/index-C_hpvzKl.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:61566 - "GET /api/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61566 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61566 - "GET /api/events/1?run_id=ef24ff4e164344218d7052fe7e6e52bf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59271 - "GET /api/stream?compact=true&run_id=ef24ff4e164344218d7052fe7e6e52bf&after=231 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61566 - "GET /api/events?compact=true&after=1&limit=230 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51742 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54398 - "GET /?view=world HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54398 - "GET /assets/index-DY2prmZn.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60319 - "GET /assets/index-C_hpvzKl.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60319 - "GET /api/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60319 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60319 - "GET /api/events/1?run_id=ef24ff4e164344218d7052fe7e6e52bf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54398 - "GET /api/stream?compact=true&run_id=ef24ff4e164344218d7052fe7e6e52bf&after=231 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60319 - "GET /api/events?compact=true&after=1&limit=230 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64938 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59100 - "GET /?view=world HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59100 - "GET /assets/index-DyDCIVvm.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60494 - "GET /assets/index-C_hpvzKl.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60494 - "GET /api/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60494 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60494 - "GET /api/events/1?run_id=ef24ff4e164344218d7052fe7e6e52bf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59100 - "GET /api/stream?compact=true&run_id=ef24ff4e164344218d7052fe7e6e52bf&after=231 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60494 - "GET /api/events?compact=true&after=1&limit=230 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58231 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49945 - "GET /?view=world HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49945 - "GET /assets/index-DyDCIVvm.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:54483 - "GET /assets/index-C_hpvzKl.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:54483 - "GET /api/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54483 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54483 - "GET /api/events/1?run_id=ef24ff4e164344218d7052fe7e6e52bf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49945 - "GET /api/stream?compact=true&run_id=ef24ff4e164344218d7052fe7e6e52bf&after=231 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54483 - "GET /api/events?compact=true&after=1&limit=230 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58328 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58401 - "GET /?view=world HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58401 - "GET /assets/index-C_0EiSxE.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56414 - "GET /assets/index-D3TUsJnC.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56414 - "GET /api/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56414 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56414 - "GET /api/stream?compact=true&run_id=ef24ff4e164344218d7052fe7e6e52bf&after=231 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58401 - "GET /api/events/1?run_id=ef24ff4e164344218d7052fe7e6e52bf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58401 - "GET /api/events?compact=true&after=1&limit=230 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58863 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55168 - "GET /?view=admin HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55168 - "GET /assets/index-C_0EiSxE.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:60855 - "GET /assets/index-D3TUsJnC.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:60855 - "GET /api/state HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60855 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60855 - "GET /api/scenarios HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55168 - "GET /api/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56046 - "GET /api/dungeon-master HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56046 - "GET /api/events?compact=true&limit=200 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56046 - "GET /api/stream?compact=true&run_id=ef24ff4e164344218d7052fe7e6e52bf&after=231 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55168 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54413 - "POST /api/control/start HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:55018 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55018 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55018 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51595 - "POST /api/control/reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51595 - "GET /api/town-supply/playback HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59910 - "POST /api/control/start HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:58220 - "POST /api/control/start HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:58220 - "GET /api/state HTTP/1.1" 200 OK

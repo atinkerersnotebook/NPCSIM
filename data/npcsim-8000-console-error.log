@@ -121,3 +121,94 @@ Processing request of type CallToolRequest
 Processing request of type CallToolRequest
 Processing request of type CallToolRequest
 Processing request of type CallToolRequest
+Control operation start failed
+Traceback (most recent call last):
+  File "E:\repos\Source\NPCSIM\npc_sim\agents.py", line 151, in assign_profiles
+    assigned = Scenario.model_validate(value)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\repos\Source\NPCSIM\.venv\Lib\site-packages\pydantic\main.py", line 792, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Scenario
+  Value error, No agent has the required capability: climb_ladder [type=value_error, input_value={'schema_version': '1.0',...'rack-ladder-access']}]}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.14/v/value_error
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\repos\Source\NPCSIM\npc_sim\controller.py", line 276, in _worker
+    result = await self._command(name, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\repos\Source\NPCSIM\npc_sim\controller.py", line 307, in _command
+    await self.new_run(args.get("objective"), scenario_id, assignments, skill_mode, turn_mode,
+  File "E:\repos\Source\NPCSIM\npc_sim\controller.py", line 947, in new_run
+    scenario, profiles = assign_profiles(scenario, load_profiles(self.data), agent_assignments, skill_mode)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\repos\Source\NPCSIM\npc_sim\agents.py", line 153, in assign_profiles
+    raise ValueError(f"Selected agents are incompatible with this task: {error}") from error
+ValueError: Selected agents are incompatible with this task: 1 validation error for Scenario
+  Value error, No agent has the required capability: climb_ladder [type=value_error, input_value={'schema_version': '1.0',...'rack-ladder-access']}]}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.14/v/value_error
+Processing request of type ListToolsRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Control operation start failed
+Traceback (most recent call last):
+  File "E:\repos\Source\NPCSIM\npc_sim\agents.py", line 151, in assign_profiles
+    assigned = Scenario.model_validate(value)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\repos\Source\NPCSIM\.venv\Lib\site-packages\pydantic\main.py", line 792, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Scenario
+  Value error, No agent has the required capability: climb_ladder [type=value_error, input_value={'schema_version': '1.0',...'rack-ladder-access']}]}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.14/v/value_error
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\repos\Source\NPCSIM\npc_sim\controller.py", line 276, in _worker
+    result = await self._command(name, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\repos\Source\NPCSIM\npc_sim\controller.py", line 307, in _command
+    await self.new_run(args.get("objective"), scenario_id, assignments, skill_mode, turn_mode,
+  File "E:\repos\Source\NPCSIM\npc_sim\controller.py", line 947, in new_run
+    scenario, profiles = assign_profiles(scenario, load_profiles(self.data), agent_assignments, skill_mode)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\repos\Source\NPCSIM\npc_sim\agents.py", line 153, in assign_profiles
+    raise ValueError(f"Selected agents are incompatible with this task: {error}") from error
+ValueError: Selected agents are incompatible with this task: 1 validation error for Scenario
+  Value error, No agent has the required capability: climb_ladder [type=value_error, input_value={'schema_version': '1.0',...'rack-ladder-access']}]}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.14/v/value_error
+Control operation start failed
+Traceback (most recent call last):
+  File "E:\repos\Source\NPCSIM\npc_sim\agents.py", line 151, in assign_profiles
+    assigned = Scenario.model_validate(value)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\repos\Source\NPCSIM\.venv\Lib\site-packages\pydantic\main.py", line 792, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Scenario
+  Value error, No agent has the required capability: climb_ladder [type=value_error, input_value={'schema_version': '1.0',...'rack-ladder-access']}]}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.14/v/value_error
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "E:\repos\Source\NPCSIM\npc_sim\controller.py", line 276, in _worker
+    result = await self._command(name, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\repos\Source\NPCSIM\npc_sim\controller.py", line 307, in _command
+    await self.new_run(args.get("objective"), scenario_id, assignments, skill_mode, turn_mode,
+  File "E:\repos\Source\NPCSIM\npc_sim\controller.py", line 947, in new_run
+    scenario, profiles = assign_profiles(scenario, load_profiles(self.data), agent_assignments, skill_mode)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\repos\Source\NPCSIM\npc_sim\agents.py", line 153, in assign_profiles
+    raise ValueError(f"Selected agents are incompatible with this task: {error}") from error
+ValueError: Selected agents are incompatible with this task: 1 validation error for Scenario
+  Value error, No agent has the required capability: climb_ladder [type=value_error, input_value={'schema_version': '1.0',...'rack-ladder-access']}]}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.14/v/value_error

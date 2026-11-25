@@ -351,13 +351,13 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
     spans: [] as GanttSpan[]
   }));
   if (turns) rows.unshift({
-    id: "__dungeon_master__", name: "Dungeon Master", locationId: "", current: true,
+    id: "__dungeon_master__", name: "Supervisor", locationId: "", current: true,
     occupation: "World state", visitor: false,
     positions: [] as Position[], locations: [] as { start: number; end: number; location: string }[],
     spans: [] as GanttSpan[]
   } as typeof rows[number]);
   if (turns) rows.push({
-    id: "__dungeon_master_review__", name: "DM Round Review", locationId: "", current: true,
+    id: "__dungeon_master_review__", name: "Supervisor", locationId: "", current: true,
     occupation: "Actions reviewed", visitor: false,
     positions: [] as Position[], locations: [] as { start: number; end: number; location: string }[],
     spans: [] as GanttSpan[]
@@ -970,7 +970,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
           `<text x="${left + w / 2}" y="${y + 48 + lineIndex * 14}" text-anchor="middle" class="gantt-cell-detail" clip-path="url(#${id})">${escape(line)}</text>`).join("")
           : npcRequestLines.length ? npcRequestLines.map((line, lineIndex) =>
             `<text x="${left + w / 2}" y="${y + 61 + lineIndex * 14}" text-anchor="middle" class="gantt-cell-detail" clip-path="url(#${id})">${escape(line)}</text>`).join("") : ""}
-        ${item.dmComment ? `</g><g tabindex="0" role="img" aria-describedby="gantt-tooltip" data-gantt-focus="${escape(`${row.id}:dm:${item.start}:${item.label}`)}" data-gantt-kind="dm" data-gantt-title="Dungeon Master adjudication" data-gantt-icon="⚖" data-gantt-status="${escape(item.dmVerdict ?? "adjudication")}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.dmComment)}" data-gantt-agent-name="Dungeon Master" class="gantt-dm-tile"><rect x="${left + inset}" y="${y + 88}" width="${tileWidth}" height="64" rx="7" class="gantt-dm-box"/>${dmCommentLines.map((line, lineIndex) => `<text x="${left + w / 2}" y="${y + 104 + lineIndex * 15}" text-anchor="middle" class="gantt-dm-text gantt-dm-comment">${escape(line)}</text>`).join("")}` : ""}</g>`;
+        ${item.dmComment ? `</g><g tabindex="0" role="img" aria-describedby="gantt-tooltip" data-gantt-focus="${escape(`${row.id}:dm:${item.start}:${item.label}`)}" data-gantt-kind="dm" data-gantt-title="Action Adjudication" data-gantt-icon="⚖" data-gantt-status="${escape(item.dmVerdict ?? "adjudication")}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.dmComment)}" data-gantt-agent-name="Supervisor" class="gantt-dm-tile${matches(item) ? "" : " is-filtered-out"}"><rect x="${left + inset}" y="${y + 88}" width="${tileWidth}" height="64" rx="7" class="gantt-dm-box"/>${dmCommentLines.map((line, lineIndex) => `<text x="${left + w / 2}" y="${y + 104 + lineIndex * 15}" text-anchor="middle" class="gantt-dm-text gantt-dm-comment">${escape(line)}</text>`).join("")}` : ""}</g>`;
     }).join("");
     const markers = new Map<number, GanttSpan[]>();
     for (const item of spans.filter(item => item.end === item.start)) {
