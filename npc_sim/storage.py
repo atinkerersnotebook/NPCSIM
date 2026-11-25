@@ -11,6 +11,8 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
+from npc_sim.report_formats import REPORT_FORMATS, format_story_entry
+
 
 LOGGER = logging.getLogger(__name__)
 _story_locks: dict[Path, threading.RLock] = {}
@@ -296,6 +298,9 @@ class StoryStore:
         with self._lock, self._connect() as db:
             db.execute("CREATE TABLE IF NOT EXISTS progress (id INTEGER PRIMARY KEY CHECK(id=1), sequence INTEGER NOT NULL, context TEXT NOT NULL)")
             db.execute("CREATE TABLE IF NOT EXISTS paragraphs (source_sequence INTEGER PRIMARY KEY, source_id TEXT NOT NULL, actor_id TEXT NOT NULL, day INTEGER, text TEXT NOT NULL, version INTEGER NOT NULL)")
+            columns = {row[1] for row in db.execute("PRAGMA table_info(paragraphs)")}
+            if "report_meta" not in columns:
+                db.execute("ALTER TABLE paragraphs ADD COLUMN report_meta TEXT NOT NULL DEFAULT '{}'")
             db.execute("CREATE INDEX IF NOT EXISTS story_day ON paragraphs(day, source_sequence)")
             db.execute("INSERT OR IGNORE INTO progress VALUES (1, 0, '{}')")
 
@@ -359,7 +364,10 @@ class StoryStore:
             paragraphs = build_narrative([event], actor, state)
             merged = state.pop("merged", None)
             if merged:
-                self._insert(db, merged, actor, day, context.get("pending_meta", {}).get(actor, {}))
+                pending_meta = context.get("pending_meta", {}).get(actor, {})
+                report_meta = {key: pending_meta[key] for key in ("action_id", "target") if key in pending_meta}
+                report_meta.update(self._report_meta(event))
+                self._insert(db, merged, actor, day, report_meta)
             for paragraph in paragraphs:
                 if event["kind"] == "observation" and event["payload"].get("opening"):
                     openings = context.setdefault("openings", [])
@@ -370,8 +378,7 @@ class StoryStore:
                 self._insert(db, paragraph.model_dump(), actor, day, event)
             if state.get("pending"):
                 context.setdefault("pending_day", {})[actor] = day
-                context.setdefault("pending_meta", {})[actor] = {
-                    key: event[key] for key in ("village_minute", "free_action", "actor_name") if key in event}
+                context.setdefault("pending_meta", {})[actor] = self._report_meta(event)
             db.execute("UPDATE progress SET sequence=?, context=? WHERE id=1",
                        (event["sequence"], json.dumps(context, ensure_ascii=True)))
 
@@ -390,16 +397,43 @@ class StoryStore:
                       clock, text, flags=re.IGNORECASE)
         name = meta.get("actor_name") or actor.replace("-", " ").replace("_", " ").title()
         label = f"Day {minute // 1440 + 1} {minute % 1440 // 60:02}:{minute % 60:02} / {name}"
-        return f"[{label}{' / FREE LOOK/READ' if meta.get('free_action') else ''}] {text}"
+        return f"[{label}{' / FREE MILESTONE' if meta.get('free_action') else ''}] {text}"
 
     def _insert(self, db: sqlite3.Connection, paragraph: dict[str, str], actor: str,
                 day: int | None, meta: dict[str, Any]) -> None:
         sequence = int(paragraph["id"].rsplit(":", 1)[1])
-        db.execute("INSERT OR IGNORE INTO paragraphs VALUES (?, ?, ?, ?, ?, 1)",
-                   (sequence, paragraph["id"], actor, day, self._text(paragraph["text"], actor, meta)))
+        db.execute("INSERT OR IGNORE INTO paragraphs "
+                   "(source_sequence, source_id, actor_id, day, text, version, report_meta) "
+                   "VALUES (?, ?, ?, ?, ?, 1, ?)",
+                   (sequence, paragraph["id"], actor, day, self._text(paragraph["text"], actor, meta),
+                    json.dumps(self._report_meta(meta), ensure_ascii=True)))
+
+    @staticmethod
+    def _report_meta(event: dict[str, Any]) -> dict[str, Any]:
+        if "payload" not in event:
+            return event
+        payload = event.get("payload", {})
+        observation = payload if event.get("kind") == "observation" else payload.get("observation", {})
+        location = observation.get("self", {}).get("location_id") if isinstance(observation, dict) else None
+        arguments = payload.get("arguments", {})
+        target = arguments.get("target") if isinstance(arguments, dict) else None
+        return {key: value for key, value in (
+            ("kind", event.get("kind")),
+            ("action_id", payload.get("action_id")),
+            ("target", target),
+            ("location", location),
+            ("outcome", payload.get("outcome")),
+            ("status", payload.get("status")),
+            ("village_minute", event.get("village_minute")),
+            ("free_action", event.get("free_action")),
+            ("actor_name", event.get("actor_name")),
+        ) if value is not None}
 
     def page(self, *, day: int | None = None, actor: str | None = None,
-             after: int = 0, limit: int = 100) -> dict[str, Any]:
+             after: int = 0, limit: int = 100,
+             report_format: str = "narrative") -> dict[str, Any]:
+        if report_format not in REPORT_FORMATS:
+            raise ValueError("Unknown report format")
         with self._lock, self._connect() as db:
             sequence, raw = db.execute("SELECT sequence, context FROM progress WHERE id=1").fetchone()
             context = json.loads(raw)
@@ -411,7 +445,7 @@ class StoryStore:
             if actor is not None:
                 conditions.append("actor_id = ?")
                 params.append(actor)
-            rows = db.execute("SELECT source_sequence, source_id, actor_id, day, text FROM paragraphs WHERE " +
+            rows = db.execute("SELECT source_sequence, source_id, actor_id, day, text, report_meta FROM paragraphs WHERE " +
                               " AND ".join(conditions) + " ORDER BY source_sequence LIMIT ?", (*params, limit + 1)).fetchall()
             days = {row[0] for row in db.execute("SELECT DISTINCT day FROM paragraphs WHERE day IS NOT NULL")}
             pending: list[dict[str, Any]] = []
@@ -421,13 +455,63 @@ class StoryStore:
                 if paragraph and (actor is None or actor == key) and (day is None or day == pending_day):
                     position = int(paragraph["id"].rsplit(":", 1)[1])
                     if position > after:
+                        report_meta = context.get("pending_meta", {}).get(key, {})
                         pending.append({"sequence": position, "id": paragraph["id"], "actor_id": key,
                                         "day": pending_day, "text": self._text(paragraph["text"], key,
-                                            context.get("pending_meta", {}).get(key, {})), "version": 1})
+                                            report_meta), "version": 1, "report_meta": report_meta})
                         if pending_day is not None:
                             days.add(pending_day)
-            entries = [{"sequence": seq, "id": sid, "actor_id": who, "day": when, "text": text, "version": 1}
-                       for seq, sid, who, when, text in rows]
+            entries = [{"sequence": seq, "id": sid, "actor_id": who, "day": when, "text": text,
+                        "version": 1, "report_meta": json.loads(meta)}
+                       for seq, sid, who, when, text, meta in rows]
             entries = sorted(entries + pending, key=lambda item: item["sequence"])
+            next_sequence = entries[limit - 1]["sequence"] if len(entries) > limit else None
+            entries = entries[:limit]
+            entries = [{key: value for key, value in item.items() if key != "report_meta"} |
+                       {"text": self._report_text(item["text"], report_format, item["report_meta"], item["actor_id"])}
+                       for item in entries]
             return {"run_id": self.run_id, "cursor": sequence, "days": sorted(days),
-                    "paragraphs": entries[:limit], "next": entries[limit - 1]["sequence"] if len(entries) > limit else None}
+                    "paragraphs": entries, "format": report_format,
+                    "next": next_sequence}
+
+    @staticmethod
+    def _report_text(text: str, report_format: str, meta: dict[str, Any] | None = None,
+                     actor: str = "") -> str:
+        if report_format == "sitrep":
+            details = meta or {}
+            kind = details.get("kind")
+            outcome = details.get("outcome")
+            status = details.get("status")
+            action = str(details.get("action_id") or "the action").replace("_", " ")
+            progress = {
+                "started": "Objective recorded.",
+                "goal_discovered": "Objective identified from discovered instructions.",
+                "observation": "Situation observed and recorded.",
+                "action_request": f"Proposed {action} and recorded the intent.",
+                "error": "Attempt interrupted; see Situation for the recorded error.",
+                "finished": "Goal verified complete." if status == "succeeded" else f"Attempt ended with status {status or 'unknown'}.",
+            }.get(kind, "Story entry recorded.")
+            if kind == "action_result":
+                progress = "Action applied and its verified result recorded." if outcome == "APPLIED" else f"Action outcome recorded as {outcome or 'unknown'}."
+            if outcome == "REJECTED":
+                blockers = "The proposed action was rejected; see Situation for the recorded reason."
+                next_action = "Reassess the constraints and choose another action."
+            elif kind == "error":
+                blockers = "The recorded interruption prevented this step from completing."
+                next_action = "Recover from the interruption or reassess the approach."
+            elif kind == "finished" and status not in {"succeeded", None}:
+                blockers = f"The attempt ended with status {status}."
+                next_action = "Review the ending before starting another attempt."
+            else:
+                blockers = "None established by this entry."
+                next_action = {
+                    "action_request": "Await the verified action result.",
+                    "finished": "No further action is required for this completed attempt.",
+                }.get(kind, "Continue from this verified event.")
+            return ("Situation: " + text + "\nProgress: " + progress +
+                    "\nBlockers: " + blockers + "\nNext action: " + next_action)
+        if report_format == "bluf":
+            return "Current result: " + text
+        if report_format == "narrative":
+            return text
+        return format_story_entry(text, report_format, meta or {}, actor)

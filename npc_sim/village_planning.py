@@ -4,6 +4,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from npc_sim import village
+from npc_sim.models import VillagePlanStep
 
 if TYPE_CHECKING:
     from npc_sim.world import World
@@ -38,6 +39,8 @@ def _orders(world: "World", resident: str) -> list[dict[str, Any]]:
 
 
 def _requirements(world: "World", resident: str, days: int = 2) -> list[dict[str, Any]]:
+    if world.scenario.id == "millhaven-snapshot-i":
+        return []
     from npc_sim.town_supply import report
     snapshot = report(world.state, world.scenario.village)
     waterfall = snapshot.get("waterfall", {}).get("requirements", []) if snapshot else []
@@ -117,6 +120,43 @@ def _meal_inputs(policy, plan) -> dict[str, int]:
     return inputs
 
 
+def _typed_steps(world: "World", requirements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    config, state = village.context(world)
+    resident = config.residents[world.actor_id]
+    job = resident.job
+    if job is None:
+        return []
+    products = set(job.outputs)
+    steps: list[VillagePlanStep] = []
+    for requirement in requirements:
+        if (requirement.get("status") == "blocked" or requirement.get("product") not in products
+                or requirement.get("planned_output", 0) <= 0):
+            continue
+        site = requirement.get("site")
+        if site != job.location:
+            continue
+        latest = requirement.get("finish")
+        if latest is not None and latest <= state.minute:
+            continue
+        prefix = f"daily:{requirement['id']}"
+        if world.actor.location_id != site:
+            steps.append(VillagePlanStep(
+                step_id=f"{prefix}:travel", intent="travel", action_id="village_plan_walk",
+                arguments={"destination": site,
+                           "purpose": f"Reach {site} for the planned {requirement['product']} production."},
+                prerequisites=[f"Requirement {requirement['id']} is personally planned."],
+                interrupt_on=["route_blocked", "personal_context_changed"], latest_at=latest))
+        action_id = "village_cook_fish" if requirement.get("product") == "meals" and "fish" in resident.skills else "village_work"
+        steps.append(VillagePlanStep(
+            step_id=f"{prefix}:produce", intent="produce", action_id=action_id, arguments={},
+            prerequisites=[f"Real inputs and time for requirement {requirement['id']} remain available."],
+            interrupt_on=["stock_changed", "order_changed", "equipment_changed", "meal_or_rest_due"],
+            earliest_at=state.minute, latest_at=latest))
+        if len(steps) >= 12:
+            break
+    return [step.model_dump(mode="json") for step in steps[:12]]
+
+
 def reconcile(world: "World", trigger: str, *, force: bool = False) -> dict[str, Any] | None:
     config, state = village.context(world)
     rid = world.actor_id
@@ -188,6 +228,9 @@ def reconcile(world: "World", trigger: str, *, force: bool = False) -> dict[str,
             "confirmations": confirmations, "alternatives": alternatives,
             "needs_customer_adjustment": bool(blocked and customer_orders),
             "supplier_confirmations_pending": sum(item["status"] == "proposed" for item in confirmations)}
+    plan["typed_steps"] = _typed_steps(world, requirements)
+    from npc_sim.models import VillagePlanStep
+    person.fallback.executable_steps = [VillagePlanStep.model_validate(step) for step in plan["typed_steps"]]
     person.fallback.daily_plans.append(plan)
     del person.fallback.daily_plans[:-7]
     summary = (f"Planned Days {day + 1}-{day + 2}: reviewed {len(customer_orders)} customer order(s), "

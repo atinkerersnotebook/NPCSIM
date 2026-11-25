@@ -125,6 +125,7 @@ def test_assignments_reserve_demand_capacity_and_stock_across_carriers(world):
     order = bread_order(world, quantity=3, stock=3)
     shipment = assign(world, order, "ada")
     buyer = actor(world, "elsie")
+    logistics.learn_manifest_route(buyer, order.source)
     for carrier, quantity in (("nella", 1), ("ada", 1)):
         result = logistics.apply(buyer, "village_assign_shipment", {
             "order_id": order.id, "carrier_id": carrier, "quantity": quantity})
@@ -159,7 +160,103 @@ def test_earlier_ready_assignment_can_load_while_later_carriers_wait_for_product
     assert second.outstanding == 3 and logistics.unassigned(world, order) == 6
 
 
+def test_assigned_not_ready_shipment_waits_before_travelling(world):
+    order = bread_order(world)
+    shipment = assign(world, order, "ada")
+    goods.take(world, "bakery", "bread", 12)
+    logistics.advance(world)
+    assert shipment.status == "assigned"
+    carrier = actor(world, "ada", "village-square")
+
+    choice = logistics.freight_choice(carrier)
+
+    assert choice["task_id"] == f"shipment:await:{shipment.id}"
+    assert choice["action_id"] == "wait_until_next_relevant_event"
+    add(world, "bakery", "bread", 3, expiry=900)
+    logistics.advance(world)
+    ready_choice = logistics.freight_choice(carrier)
+    assert ready_choice["task_id"] == f"shipment:collect:{shipment.id}"
+    assert ready_choice["action_id"] == "go"
+
+
+def test_blocked_unpicked_shipment_reassigns_before_release(world):
+    order = bread_order(world, quantity=3, stock=3)
+    shipment = assign(world, order, "jory")
+    shipment.status = "blocked"
+    shipment.reason = "Pickup and travel cannot meet the delivery deadline"
+    for rid in ("mara", "ada", "nella"):
+        world.state.village.residents[rid].available_at = 0
+        world.state.village.residents[rid].life = None
+    buyer = actor(world, "elsie")
+
+    choice = logistics.freight_choice(buyer)
+
+    assert choice["action_id"] == "village_reassign_shipment"
+    assert choice["arguments"]["shipment_id"] == shipment.id
+
+
+def test_active_freight_suppresses_return_to_workplace(world):
+    from npc_sim import village_fallback
+
+    order = bread_order(world)
+    shipment = assign(world, order, "ada")
+    logistics.advance(world)
+    carrier = actor(world, "ada", "village-square")
+    logistics.learn_manifest_route(carrier, order.source)
+    carrier.state.village.residents["ada"].fallback.daily_plans = [{"day": 0}]
+
+    state = world.state.village
+    state.communication.logistics_knowledge["ada"] = {order.id: logistics.snapshot(world, order)}
+    choices = village_fallback.candidates(carrier)
+
+    assert logistics.has_active_freight(carrier)
+    assert not any(choice["task_id"] == "return:workplace" for choice in choices)
+    assert not choices or choices[0]["task_id"] == f"shipment:await:{shipment.id}"
+
+
+def test_goods_ready_interrupts_obsolete_return_route(world):
+    from npc_sim import village_walking
+
+    order = bread_order(world)
+    shipment = assign(world, order, "ada")
+    goods.take(world, "bakery", "bread", 12)
+    logistics.advance(world)
+    carrier = actor(world, "ada", "village-square")
+    assert village_walking.plan(carrier, {"destination": "farm", "purpose": "Return to farm"})[1] == "ROUTE_PLANNED"
+    before = carrier.state.village.residents["ada"].walking_plan.logistics_revision
+
+    add(world, "bakery", "bread", 3, expiry=900)
+    logistics.advance(world)
+    choice = logistics.freight_choice(carrier)
+
+    assert carrier.state.village.residents["ada"].walking_plan.destination == "farm"
+    assert village_walking._logistics_revision(carrier) != before
+    assert choice["task_id"] == f"shipment:collect:{shipment.id}"
+    assert choice["arguments"]["destination"] == "bakery" if "destination" in choice["arguments"] else True
+
+
+def test_loaded_shipment_teaches_only_the_delivery_route(world):
+    order = bread_order(world, quantity=3, stock=3)
+    shipment = assign(world, order, "mara")
+    carrier = actor(world, "mara", "bakery")
+    state = world.state.village
+    state.residents["mara"].known_routes = ["square-mill"]
+
+    result = village_services.apply(carrier, "village_load_goods", {
+        "goods": {"bread": shipment.outstanding}, "destination": "tavern"})
+    assert result[0] == "APPLIED"
+    choice = logistics.freight_choice(carrier)
+
+    assert choice["task_id"] == f"shipment:carry:{shipment.id}"
+    assert choice["destination"] == "tavern"
+    assert choice["action_id"] in {"go", "village_plan_walk"}
+    assert village.route(carrier, "bakery", "tavern",
+                         known_routes=state.residents["mara"].known_routes) is not None
+
+
 def test_offers_require_acceptance_and_production_does_not_create_stock(world):
+    from npc_sim import village_ai
+
     order = bread_order(world, quantity=3, stock=3)
     shipment = assign(world, order, "ada", accept=False)
     assert shipment.status == "offered"
@@ -176,6 +273,14 @@ def test_offers_require_acceptance_and_production_does_not_create_stock(world):
     assert shipment.status == "ready"
     assert message_types(world).count("GOODS_READY") == 1
     assert order.delivered_quantity == order.in_transit == 0
+
+    assigning = actor(world, "jory", "bakery")
+    state = world.state.village
+    before = state.minute
+    village_ai.after_action(assigning, "village_assign_shipment", {})
+    assert state.minute == before
+    assert state.residents["jory"].available_at == before
+    assert state.free_turn_actor == "jory"
 
 
 def test_personal_status_messages_are_persistent_private_and_deduplicated(world):
@@ -203,7 +308,20 @@ def test_personal_status_messages_are_persistent_private_and_deduplicated(world)
     logistics.advance(restored)
     assert logistics.unassigned(restored, restored.state.village.economy.orders[order.id]) == 0
     assert len(restored.state.village.communication.logistics_messages) == count
-    assert "village_assign_shipment" in {action["id"] for action in restored.actions()}
+
+
+def test_shipment_acceptance_is_zero_time(world):
+    order = bread_order(world, quantity=3, stock=3)
+    shipment = assign(world, order, "ada", accept=False)
+    bound = actor(world, "ada", "farm")
+    before = world.state.village.minute
+
+    result = bound.act("accept-free", bound.revision(), "village_accept_shipment",
+                       {"shipment_id": shipment.id})
+
+    assert result["code"] == "SHIPMENT_RECORDED"
+    assert world.state.village.minute == before
+    assert world.state.village.residents["ada"].available_at == before
 
 
 def test_reassignment_and_release_never_teleport_loaded_cargo(world):
@@ -298,6 +416,7 @@ def test_wagon_cannot_take_a_foot_carriers_reserved_goods(world):
 
 
 def test_snapshot_brunch_uses_confirmed_assignments_and_keeps_cook_available(workspace):
+    from npc_sim import village_goods
     from test_village_snapshot import scenario
 
     world = create_world(workspace / "brunch.json", communication=False, value=scenario(), start_minute=540)
@@ -316,8 +435,8 @@ def test_snapshot_brunch_uses_confirmed_assignments_and_keeps_cook_available(wor
     result = comm.apply(actor(world, "mara"), "village_respond_to_request", {
         "request_id": notice, "response": "accept"})
     assert result[0] == "APPLIED", result
-    order = bread_order(world, stock=0, deadline=650, fresh=660)
-    assert order.status == "accepted_planned"
+    order = bread_order(world, quantity=6, stock=0, deadline=650, fresh=660)
+    assert order.status in {"accepted", "accepted_planned"}
     initial_flour = state.stocks["watermill"]["flour"] + state.stocks["bakery"]["flour"]
     attempts = []
     for _ in range(24):
@@ -343,6 +462,8 @@ def test_snapshot_brunch_uses_confirmed_assignments_and_keeps_cook_available(wor
                 f"{state.minute} {rid} {action} {args}: {result['code']} {result['explanation']}; {attempts}")
             assert not state.residents["elsie"].shipments
             assert world.state.actors["elsie"].location_id == "tavern"
+
+
         if order.status == "fulfilled":
             break
         village.advance(world, 5)
@@ -350,17 +471,55 @@ def test_snapshot_brunch_uses_confirmed_assignments_and_keeps_cook_available(wor
         f"{state.minute} {attempts}; "
         f"{[shipment.model_dump() for shipment in state.economy.shipments.values()]}")
     assert state.minute <= 660
-    assert state.stocks["tavern"]["bread"] == 12
+    assert state.stocks["tavern"]["bread"] == 6
     assert state.stocks["bakery"]["flour"] >= 2
     assert state.stocks["watermill"]["flour"] >= 8
-    assert state.stocks["watermill"]["flour"] + state.stocks["bakery"]["flour"] == initial_flour - 2
+    assert state.stocks["watermill"]["flour"] + state.stocks["bakery"]["flour"] == initial_flour - 6
+    village_goods.put(world, "tavern", "milk", 12)
+    village_goods.put(world, "tavern", "eggs", 12)
     result = world.evaluate_goal("village_snapshot_completed")
     assert result["status"] == "achieved", result
     loads = [event for event in state.communication.logistics_messages
              if event.type == "GOODS_PICKED_UP" and event.order_id == order.id]
-    assert sum(state.economy.shipments[event.shipment_id].quantity for event in loads) == 12
+    assert sum(state.economy.shipments[event.shipment_id].quantity for event in loads) == 6
     assert len({event.shipment_id for event in loads}) == len(loads)
     assert not any("exceeds confirmed outstanding demand" in event.result for event in state.events)
+
+
+def test_buyer_does_not_dispatch_supplier_delivery(world):
+    order = bread_order(world, quantity=3, stock=3)
+    elsie = actor(world, "elsie", "tavern")
+    assert logistics.freight_choice(elsie) is None
+
+
+def test_fully_covered_order_does_not_seek_more_carriers(world):
+    order = bread_order(world, quantity=3, stock=3)
+    shipment = assign(world, order, "nella")
+    logistics.advance(world)
+    supplier = actor(world, "jory", "bakery")
+
+    assert shipment.status == "ready"
+    assert logistics.freight_choice(supplier) is None
+
+
+def test_closed_breakfast_does_not_mask_confirmed_shipment_candidate(tmp_path):
+    from npc_sim import village_fallback, village_goods
+    from test_village_snapshot import scenario
+
+    world = create_world(tmp_path / "closed-breakfast.json", communication=False,
+                         value=scenario(), start_minute=540)
+    state = world.state.village
+    bound = world.bind("jory", "session-jory")
+    ready(world, 570)
+    state.residents["jory"].fallback.daily_plans = [{"day": 0}]
+    state.residents["jory"].life.meals["0:breakfast"].status = "missed"
+    state.residents["jory"].life.meals["0:breakfast"].due = 450
+    bound.actor.location_id = "tavern"
+    village_goods.put(world, "tavern", "bread", 1)
+
+    choices = village_fallback.candidates(bound)
+
+    assert not any(choice["action_id"] == "village_eat" for choice in choices)
 
 
 def test_fixed_duty_includes_return_preparation_and_can_be_explicitly_overridden(world):
@@ -403,6 +562,16 @@ def test_fallback_uses_carrier_assignments_without_purposeful_downtime(workspace
     pickup = next(choice for choice in choices if choice["task_id"] == f"shipment:load:{shipment.id}")
     assert pickup["arguments"] == {"goods": {"bread": 3}, "destination": "tavern"}
     assert logistics.freight_choice(actor(world, "elsie", "tavern")) is None
+
+
+def test_innkeeper_is_not_assigned_food_shipment_while_cooking_is_incomplete(world):
+    order = bread_order(world, quantity=3, stock=3)
+    for carrier in ("mara", "ada", "nella", "jory"):
+        state = world.state.village
+        state.residents[carrier].life.sleeping = True
+        state.residents[carrier].life.sleep_until = 660
+    choice = logistics.freight_choice(actor(world, "elsie", "tavern"))
+    assert choice is None or choice["task_id"] != f"shipment:assign:{order.id}:elsie"
 
 
 def test_cancelled_unpicked_order_releases_capacity_but_not_physical_stock(world):

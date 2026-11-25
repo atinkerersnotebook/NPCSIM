@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "sleepy-room",
   "title": "The Tired Traveler",
+  "public_details": "Leave the room.",
+  "private_details": "",
   "start_location": "cell",
   "exit_location": "courtyard",
   "objective": "Leave the room.",

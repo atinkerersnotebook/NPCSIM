@@ -70,11 +70,40 @@ def unassigned(world: "World", order: VillageSupplierOrder) -> int:
                                       if pending(shipment)))
 
 
+def has_active_freight(world: "World") -> bool:
+    if not enabled(world):
+        return False
+    state = world.state.village
+    if state.residents[world.actor_id].shipments:
+        return True
+    known = state.communication.logistics_knowledge.get(world.actor_id, {})
+    return any(received.carrier == world.actor_id and received.status not in TERMINAL
+               for manifest in known.values() for received in manifest.shipments)
+
+
 def snapshot(world: "World", order: VillageSupplierOrder) -> LogisticsSnapshot:
     return LogisticsSnapshot(
         order=order.model_copy(deep=True),
         shipments=[shipment.model_copy(deep=True) for shipment in records(world, order.id)],
         unassigned_quantity=unassigned(world, order), confirmed_at=world.state.village.minute)
+
+
+def learn_manifest_route(world: "World", destination: str) -> None:
+    """A committed manifest communicates only the route needed for its named endpoint."""
+    if world.actor.location_id == destination:
+        return
+    path = village.route(world, world.actor.location_id, destination)
+    if not path:
+        return
+    known = world.state.village.residents[world.actor_id].known_routes
+    current = world.actor.location_id
+    for following in path:
+        edge = next((eid for eid, entity in world.state.entities.items()
+                     if entity.kind == "door" and not entity.hidden
+                     and {entity.location, entity.destination} == {current, following}), None)
+        if edge and edge not in known:
+            known.append(edge)
+        current = following
 
 
 def participants(world: "World", order: VillageSupplierOrder) -> set[str]:
@@ -536,6 +565,7 @@ def freight_choice(world: "World") -> dict[str, Any] | None:
         returning = bool(order and (order.status not in village_economy.LOADABLE or state.minute > order.deadline))
         destination = order.source if returning else item.destination
         if location != destination:
+            learn_manifest_route(world, destination)
             return village_fallback._travel_choice(
                 world, destination, f"shipment:carry:{item.shipment_id or item.order_id}",
                 "Return closed unpaid cargo." if returning else "Deliver the identified physical shipment.", "P1")
@@ -545,14 +575,32 @@ def freight_choice(world: "World") -> dict[str, Any] | None:
                 "priority": "P1", "reason": "Settle the physically carried shipment."}
     for memory in sorted(known.values(), key=lambda item: (item.order.deadline, item.order.id)):
         order = state.economy.orders[memory.order.id]
+        coverage = sum(shipment.outstanding for shipment in records(world, order.id)
+                       if pending(shipment))
         for received in memory.shipments:
-            if received.carrier != rid or received.mode != "foot" or received.status in TERMINAL:
+            if received.mode != "foot" or received.status in TERMINAL:
                 continue
             shipment = state.economy.shipments[received.id]
-            if shipment.status == "blocked" and pending(shipment):
+            if shipment.status == "blocked" and pending(shipment) and rid in {order.buyer, order.supplier}:
+                for carrier in sorted(set(world.state.actors) & set(base.residents)):
+                    if carrier in {shipment.carrier, state.economy.config.innkeeper, order.supplier}:
+                        continue
+                    person = state.residents[carrier]
+                    if person.life and (person.life.sleeping or person.life.work):
+                        continue
+                    if duty_conflict(world, carrier, order, origin=world.actor.location_id,
+                                     loaded=False) is None:
+                        return {"task_id": f"shipment:reassign:{shipment.id}:{carrier}",
+                                "action_id": "village_reassign_shipment",
+                                "arguments": {"shipment_id": shipment.id, "carrier_id": carrier,
+                                              "reason": "Original carrier can no longer meet the deadline."},
+                                "priority": "P1",
+                                "reason": "Reassign the unpicked load to a feasible carrier before releasing it."}
                 return {"task_id": f"shipment:release:{shipment.id}", "action_id": "village_release_shipment",
                         "arguments": {"shipment_id": shipment.id, "reason": shipment.reason or "Delivery is blocked"},
                         "priority": "P1", "reason": "Release an impossible unpicked load without duplicating goods or orders."}
+            if received.carrier != rid:
+                continue
             if shipment.status == "offered":
                 if duty_conflict(world, rid, order) is not None:
                     return {"task_id": f"shipment:decline:{shipment.id}", "action_id": "village_release_shipment",
@@ -561,8 +609,15 @@ def freight_choice(world: "World") -> dict[str, Any] | None:
                 return {"task_id": f"shipment:accept:{shipment.id}", "action_id": "village_accept_shipment",
                         "arguments": {"shipment_id": shipment.id}, "priority": "P1",
                         "reason": "Accept the specific offered quantity before collecting it."}
+            if shipment.status == "assigned":
+                learn_manifest_route(world, order.source)
+                return {"task_id": f"shipment:await:{shipment.id}",
+                        "action_id": "wait_until_next_relevant_event", "arguments": {}, "priority": "P1",
+                        "reason": ("Your shipment is assigned but the supplier has not announced physical pickup readiness. "
+                                   "Remain at your current site; GO travel starts only after GOODS_READY.")}
             if shipment.status != "ready":
                 continue
+            learn_manifest_route(world, order.source)
             if location != order.source:
                 return village_fallback._travel_choice(
                     world, order.source, f"shipment:collect:{shipment.id}",
@@ -570,8 +625,9 @@ def freight_choice(world: "World") -> dict[str, Any] | None:
             return {"task_id": f"shipment:load:{shipment.id}", "action_id": "village_load_goods",
                     "arguments": {"goods": {order.product: shipment.outstanding}, "destination": order.destination},
                     "priority": "P1", "reason": "Load exactly the assigned physical quantity."}
-        if (rid not in {order.buyer, order.supplier} or order.status not in village_economy.LOADABLE
-                or not memory.unassigned_quantity or state.minute >= order.deadline):
+        if (rid != order.supplier or order.status not in village_economy.LOADABLE
+                or coverage >= order.loadable or not memory.unassigned_quantity
+                or state.minute >= order.deadline):
             continue
         if state.coins.get(order.buyer, 0) < village_economy.commitments(world, order.buyer):
             continue
@@ -582,6 +638,11 @@ def freight_choice(world: "World") -> dict[str, Any] | None:
                 continue
             person = state.residents[carrier]
             if person.life and (person.life.sleeping or person.life.work):
+                continue
+            if (carrier == state.economy.config.innkeeper
+                    and any(plan["remaining_portions"] > plan["covered_portions"]
+                            and plan["due"] >= state.minute
+                            for plan in village_economy.meal_requirements(world))):
                 continue
             if duty_conflict(world, carrier, order) is not None:
                 continue

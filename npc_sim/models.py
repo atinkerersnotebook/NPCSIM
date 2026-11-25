@@ -398,7 +398,7 @@ class VillageJob(StrictModel):
     equipment: str | None = None
     duration: int = Field(default=5, ge=5, multiple_of=5)
     interruptible: bool = True
-    batch_size: int = Field(default=1, ge=1, le=2)
+    batch_size: int = Field(default=1, ge=1, le=6)
 
 
 class VillageResident(StrictModel):
@@ -583,6 +583,7 @@ class VillageDayPolicy(StrictModel):
     require_tea_use: bool = True
     require_manure_use: bool = True
     demand_led_completion: bool = False
+    typed_execution: bool = False
 
 
 class VillageMiningConfig(StrictModel):
@@ -717,9 +718,31 @@ class VillageSnapshotOrder(StrictModel):
 
 class VillageSnapshotConfig(StrictModel):
     deadline: int = Field(ge=0)
-    required_orders: list[VillageSnapshotOrder] = Field(min_length=1)
-    required_plans: list[str] = Field(min_length=1)
+    required_orders: list[VillageSnapshotOrder] = Field(default_factory=list)
+    required_plans: list[str] = Field(default_factory=list)
     cooking_service: str | None = None
+
+
+class VillageWarehouseTask(StrictModel):
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]+$")
+    kind: Literal["pick", "putaway"]
+    product: str
+    quantity: int = Field(gt=0, strict=True)
+    source: str
+    destination: str
+
+
+class VillageWarehouseStockRule(StrictModel):
+    minimum: int = Field(default=0, ge=0)
+    maximum: int = Field(gt=0)
+
+
+class VillageWarehouseConfig(StrictModel):
+    cart: str
+    cart_capacity: int = Field(gt=0, le=20)
+    operators: list[str] = Field(min_length=1)
+    tasks: list[VillageWarehouseTask] = Field(min_length=1)
+    stock_rules: dict[str, dict[str, VillageWarehouseStockRule]]
 
 
 class VillageConfig(VillageDayPolicy):
@@ -739,6 +762,7 @@ class VillageConfig(VillageDayPolicy):
     equipment: VillageEquipmentConfig | None = None
     legacy: VillageLegacyConfig | None = None
     snapshot: VillageSnapshotConfig | None = None
+    warehouse: VillageWarehouseConfig | None = None
     delivery_fee: int = Field(default=0, ge=0)
     meal_price: int = Field(default=0, ge=0)
     spoil_after: dict[str, int] = Field(default_factory=dict)
@@ -902,6 +926,30 @@ class VillageFallbackState(StrictModel):
     active_inspection_location: str | None = None
     decision: dict[str, Any] | None = None
     daily_plans: list[dict[str, Any]] = Field(default_factory=list)
+    executable_steps: list["VillagePlanStep"] = Field(default_factory=list, max_length=12)
+    last_wake_reason: str | None = None
+
+
+class VillagePlanStep(StrictModel):
+    step_id: str = Field(min_length=1, max_length=120)
+    intent: Literal["travel", "acquire", "produce", "deliver", "communicate",
+                    "wait", "rest", "plan", "other"] = "other"
+    action_id: str = Field(min_length=1, max_length=120)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    prerequisites: list[str] = Field(default_factory=list, max_length=32)
+    interrupt_on: list[str] = Field(default_factory=list, max_length=32)
+    earliest_at: int | None = Field(default=None, ge=0)
+    latest_at: int | None = Field(default=None, ge=0)
+    status: Literal["pending", "active", "succeeded", "blocked", "cancelled"] = "pending"
+    attempts: int = Field(default=0, ge=0, le=12)
+    blocker: str | None = None
+
+    @model_validator(mode="after")
+    def valid_window(self) -> "VillagePlanStep":
+        if (self.earliest_at is not None and self.latest_at is not None
+                and self.latest_at < self.earliest_at):
+            raise ValueError("A plan step cannot end before it starts.")
+        return self
 
 
 class VillageWalkingPlan(StrictModel):
@@ -916,6 +964,7 @@ class VillageWalkingPlan(StrictModel):
     rest_due: bool = False
     routine_location: str = ""
     known_notice_versions: dict[str, int] = Field(default_factory=dict)
+    logistics_revision: str = ""
 
 
 class VillageReplenishmentPlan(StrictModel):
@@ -973,6 +1022,15 @@ class VillageStockLot(StrictModel):
     quantity: int = Field(gt=0)
     produced_at: int = Field(ge=0)
     expires_at: int | None = None
+
+
+class VillageWarehouseCartLoad(StrictModel):
+    task_id: str
+    product: str
+    quantity: int = Field(gt=0, strict=True)
+    source: str
+    destination: str
+    lots: list[VillageStockLot] = Field(default_factory=list)
 
 
 class VillageShipment(StrictModel):
@@ -1234,12 +1292,17 @@ class VillageState(StrictModel):
     time_use: dict[str, VillageTimeUse] = Field(default_factory=dict)
     daily_time_use: dict[int, dict[str, VillageTimeUse]] = Field(default_factory=dict)
     dungeon_appeals: list[dict[str, Any]] = Field(default_factory=list)
+    warehouse_cart_loads: list[VillageWarehouseCartLoad] = Field(default_factory=list)
+    warehouse_task_progress: dict[str, int] = Field(default_factory=dict)
+    warehouse_cart_driver: str | None = None
 
 
 class Scenario(StrictModel):
     schema_version: Literal["1.0"]
     id: str
     title: str
+    public_details: str | None = None
+    private_details: str | None = None
     start_location: str
     exit_location: str
     objective: str
@@ -1268,6 +1331,20 @@ class Scenario(StrictModel):
     agents: list[ScenarioAgent] = Field(default_factory=list, max_length=12)
     skill_mode: SkillMode = "scenario"
     skill_challenges: list[SkillChallenge] = Field(default_factory=list)
+
+    @property
+    def resolved_public_details(self) -> str:
+        if self.public_details and self.public_details.strip():
+            return self.public_details.strip()
+        if self.opening_narrative and self.opening_narrative.strip():
+            return self.opening_narrative.strip()
+        return (self.initial_objective or self.objective).strip()
+
+    @property
+    def resolved_private_details(self) -> str | None:
+        if self.private_details and self.private_details.strip():
+            return self.private_details.strip()
+        return None
 
     @model_validator(mode="after")
     def valid_references(self) -> "Scenario":
@@ -1313,7 +1390,8 @@ class Scenario(StrictModel):
                      "village_fit_wagon", "village_start_route", "village_stop_route",
                      "village_load_wagon", "village_unload_wagon", "village_meeting", "village_cook_fish",
                      "village_drive_wagon", "village_plan_walk"}
-        core_ids |= {"village_load_goods", "village_unload_goods", "village_grow_hay",
+        core_ids |= {"village_load_goods", "village_unload_goods", "village_drive_cart",
+                     "village_load_cart", "village_unload_cart", "village_grow_hay",
                      "village_gather_herbs", "village_fell_logs", "village_fertilize",
                      "village_drink_tea", "village_buy_iron", "village_lead_horse",
                      "village_release_horse", "village_hitch", "village_unhitch",
@@ -1550,6 +1628,9 @@ class Scenario(StrictModel):
                 raise ValueError("Snapshot deadline must be after the village start time")
             if self.goal_type != "village_snapshot_completed":
                 raise ValueError("Snapshot criteria require a village snapshot goal")
+            if self.village.warehouse is None and (
+                    not snapshot.required_orders or not snapshot.required_plans):
+                raise ValueError("A standard snapshot needs required orders and plans")
             if any(order.buyer not in residents or order.supplier not in residents
                    or order.buyer == order.supplier for order in snapshot.required_orders):
                 raise ValueError("Snapshot orders must name distinct real residents")
@@ -1560,10 +1641,32 @@ class Scenario(StrictModel):
                 if economy is None or not any(
                     plan.id == snapshot.cooking_service and plan.use_minute == snapshot.deadline % 1440
                     and plan.portions > 0 and set(plan.recipe_portions) == {"bread"}
-                    and not (plan.additional_inputs or plan.bread_service or plan.tea_portions)
+                    and not (plan.bread_service or plan.tea_portions)
                     for plan in economy.meal_plans
                 ):
-                    raise ValueError("Snapshot cooking readiness needs a bread-only meal service at its deadline")
+                    raise ValueError("Snapshot cooking readiness needs a bread meal service at its deadline")
+        warehouse = self.village.warehouse if self.village is not None else None
+        if warehouse is not None:
+            if self.village is None or self.village.snapshot is None:
+                raise ValueError("Warehouse tasks require a snapshot scenario")
+            if warehouse.cart not in self.entities or self.entities[warehouse.cart].kind not in {"cart", "tool"}:
+                raise ValueError("Warehouse cart must be a real cart entity")
+            if set(warehouse.operators) - set(self.village.residents):
+                raise ValueError("Warehouse operators must be residents")
+            task_ids = [task.id for task in warehouse.tasks]
+            if len(task_ids) != len(set(task_ids)):
+                raise ValueError("Warehouse task IDs must be unique")
+            locations = {eid for eid, entity in self.entities.items() if entity.kind == "location"}
+            for task in warehouse.tasks:
+                if task.source not in locations or task.destination not in locations or task.source == task.destination:
+                    raise ValueError("Warehouse tasks require distinct real locations")
+                if task.product not in self.village.prices:
+                    raise ValueError("Warehouse tasks require priced products")
+            for location, rules in warehouse.stock_rules.items():
+                if location not in self.village.stocks or any(
+                        product not in self.village.prices or rule.minimum > rule.maximum
+                        for product, rule in rules.items()):
+                    raise ValueError("Warehouse stocking rules require real stock locations, products and valid bounds")
         return self
 
 
@@ -1658,6 +1761,7 @@ class ProxyConfig(StrictModel):
     message_deduplicate: bool = False
     message_relevant_memory: bool = False
     message_aggregate_events: bool = False
+    message_perception_delta: bool = False
 
 
 class WorldConfig(StrictModel):
@@ -1682,6 +1786,7 @@ class Decision(StrictModel):
     expected_outcome: str = Field(min_length=1)
     subgoal: str = ""
     plan: list[str] = Field(default_factory=list)
+    plan_steps: list[VillagePlanStep] = Field(default_factory=list, max_length=12)
 
 
 class StartRequest(StrictModel):

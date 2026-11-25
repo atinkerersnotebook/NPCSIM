@@ -285,6 +285,10 @@ def test_living_village_morning_wake_schedule(tmp_path, rid, wake):
     assert plan["trigger"] == "resident action"
     assert plan["planning_days"] == 2
     assert all(item["day"] <= 2 for item in plan["requirements"])
+    assert plan["typed_steps"] == [step.model_dump(mode="json") for step in
+                                    world.state.village.residents[rid].fallback.executable_steps]
+    assert all(step["action_id"] in {"village_plan_walk", "village_work", "village_cook_fish"}
+               for step in plan["typed_steps"])
     village.advance(world, configured.village.breakfast_delay)
     assert person.meals["0:breakfast"].due == wake + configured.village.breakfast_delay
 

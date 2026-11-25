@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "millhaven-generation-23",
+  "failures": [
+    {
+      "run_id": "379ff3b6c0ee46ba921c353003492e5c",
+      "objective": "Restore the well, mill and working wagon using the real crew, tools and supplies. Meet accepted orders and maintain configured reserves without unnecessary production. Eat breakfast after waking and supper at 19:00 at the tavern, paying the configured price. Use interests, personal projects, music and optional quests during genuinely free time. Respond to locally discovered events and trade with visitors only when affordable and useful. Complete assigned daily town maintenance at its real sites; unfinished jobs carry forward at midnight. Use free workday time for occupational research; verified discoveries unlock real recipes and useful goods. Keep iron renewable: mine ore, haul it and smelt it with real logs, or buy the daily trader's finite consignment in person. Travel home by bedtime, sleep adequately, stop routes and put the real horse away. Leisure, sidequests, and visitor departures are not mandatory resident victory conditions. Care daily for the physical farm cows and twenty-four hens using real balanced feed, well water and clean housing. Collect milk/eggs only for actual funded demand. Recycle only fresh plant surplus as chicken supplements; spoiled food becomes real compost material, never animal feed.",
+      "recorded_at": "2026-11-24T13:43:29.720034+00:00",
+      "findings": [
+        {
+          "reason": "Village recovery is still in progress: shovel recovered, well dug, mill repaired, bread supply resumed, every resident contributed, working wagon, evening reached, everyone fed, everyone home, everyone asleep, resource reserves ready.",
+          "evidence_ids": [
+            "379ff3b6c0ee46ba921c353003492e5c:341"
+          ]
+        },
+        {
+          "reason": "The shovel was not recovered, the well, mill, and wagon were not restored, bread supply had not resumed, and not every resident had contributed.",
+          "evidence_ids": [
+            "379ff3b6c0ee46ba921c353003492e5c:341"
+          ]
+        },
+        {
+          "reason": "Final verification was at 06:40, before the required 19:00 supper. The checks for everyone being fed, home, and asleep all failed.",
+          "evidence_ids": [
+            "379ff3b6c0ee46ba921c353003492e5c:341"
+          ]
+        },
+        {
+          "reason": "Configured reserves were short: the woods had 0 of 2 timber, and the general store had 3 of 4 grain.",
+          "evidence_ids": [
+            "379ff3b6c0ee46ba921c353003492e5c:341"
+          ]
+        }
+      ]
+    }
+  ]
+}

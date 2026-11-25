@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "forgotten-workshop",
   "title": "The Forgotten Workshop",
+  "public_details": "You wake up on a dusty bench, with no memory of how you arrived. Your stomach aches with hunger. Around you are a warped wooden cabinet, a closed lunch tin, a brittle wooden mallet, and a sturdy door.",
+  "private_details": "",
   "start_location": "workshop",
   "exit_location": "garden",
   "objective": "Find a way out.",

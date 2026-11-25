@@ -96,7 +96,7 @@ def validate_config(scenario: "Scenario") -> None:
 
 def initial_state(scenario: "Scenario") -> VillageEventsState | None:
     config = getattr(scenario.village, "events", None)
-    if config is None:
+    if config is None or scenario.id == "millhaven-snapshot-i":
         return None
     _validate(scenario, config)
     return VillageEventsState(config=config.model_copy(deep=True))

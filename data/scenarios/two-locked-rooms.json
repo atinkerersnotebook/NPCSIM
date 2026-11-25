@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "two-locked-rooms",
   "title": "The Unknown Room",
+  "public_details": "You wake up on a cold stone floor, with no memory of how you got here. You are in a small stone room with a closed wooden box, a rock, and a door.",
+  "private_details": "",
   "start_location": "room-one",
   "exit_location": "outside",
   "objective": "Find a way out.",

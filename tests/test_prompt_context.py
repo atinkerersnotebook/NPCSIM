@@ -6,10 +6,26 @@ import pytest
 from npc_sim.assessment import Finding
 from npc_sim.dungeon_master import DungeonMasterConfig, DungeonMasterReview, validate_review
 from npc_sim.models import ProxyConfig
-from npc_sim.prompt_context import RECENT_ACTIONS, RECENT_MESSAGES, REVIEW_EVENTS, review_context
+from npc_sim.prompt_context import RECENT_ACTIONS, RECENT_MESSAGES, REVIEW_EVENTS, observation_delta, public_proxy_messages, review_context
 from npc_sim.proxy import Proxy
 
 from npc_sim.prompt_codec import encode_prompt_payload
+
+
+def test_observation_delta_is_self_contained_and_non_mutating():
+    previous = {"observation_revision": "obs-1", "self": {"location_id": "forge"},
+                "location": {"id": "forge"}, "actions": [{"id": "look"}],
+                "visible_entities": []}
+    current = {**copy.deepcopy(previous), "observation_revision": "obs-2",
+               "visible_entities": [{"id": "hammer", "name": "Hammer"}]}
+
+    projected = observation_delta(current, previous)
+
+    assert projected["current_essentials"]["self"] == current["self"]
+    assert projected["current_essentials"]["actions"] == current["actions"]
+    assert projected["changed"]["visible_entities"] == current["visible_entities"]
+    assert projected["semantics"].startswith("Unchanged")
+    assert previous["observation_revision"] == "obs-1"
 
 
 def observed(actor="smith"):
@@ -212,6 +228,51 @@ def test_normal_compression_mode_preserves_existing_proxy_messages_exactly():
     assert "compression" not in payload
     assert proxy.context_diagnostics["effective_mode"] == "normal"
     assert proxy.context_diagnostics["normal_user_bytes"] == proxy.context_diagnostics["sent_user_bytes"]
+
+
+def test_scenario_private_details_reach_npc_only_and_are_redacted_from_public_messages():
+    proxy = Proxy(ProxyConfig())
+    memory = {
+        "recent": [],
+        "scenario_details": {
+            "public": "Travel to the observatory.",
+            "private": "Your missing sister is imprisoned beneath it.",
+        },
+    }
+
+    messages = proxy._messages("test", {"scenario_details": memory["scenario_details"]})
+    model_payload = json.loads(messages[1]["content"])
+    public_messages = public_proxy_messages(messages)
+    public_payload = json.loads(public_messages[1]["content"])
+
+    assert model_payload["scenario_details"] == memory["scenario_details"]
+    assert public_payload["scenario_details"] == {
+        "public": "Travel to the observatory.",
+        "npc_private": "Omitted from public diagnostics.",
+    }
+    assert "imprisoned beneath" not in json.dumps(public_messages)
+
+
+def test_scenario_details_are_kept_out_of_public_memory_and_in_npc_goal_context():
+    proxy = Proxy(ProxyConfig())
+    details = {"public": "Travel to the observatory.", "private": "The relic recognizes your voice."}
+    messages = proxy.context({"objective": "Explore"}, observed(), {
+        "recent": [], "scenario_details": details,
+    })
+    payload = json.loads(messages[1]["content"])
+
+    assert payload["scenario_details"] == details
+    assert "scenario_details" not in payload["memory"]
+
+
+def test_private_scenario_details_are_available_during_private_npc_questions():
+    proxy = Proxy(ProxyConfig())
+    memory = {"scenario_details": {"public": "Find the archive.", "private": "The curator is your father."}}
+
+    messages = proxy.question_context({"objective": "Explore"}, observed(), memory, "What matters here?")
+    payload = json.loads(messages[1]["content"])
+
+    assert payload["scenario_details"]["private"] == "The curator is your father."
 
 
 def test_old_proxy_configuration_defaults_to_normal_compression():

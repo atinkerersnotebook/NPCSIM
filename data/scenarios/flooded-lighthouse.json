@@ -1,6 +1,8 @@
 {
   "schema_version": "1.0", "id": "flooded-lighthouse",
   "title": "Merfolk & Engineer - The Flooded Lighthouse",
+  "public_details": "Combine underwater work and electrical repairs to drain the lighthouse, restore its beacon and get both partners to the beacon platform.",
+  "private_details": "",
   "start_location": "dock", "exit_location": "beacon-platform",
   "objective": "Combine underwater work and electrical repairs to drain the lighthouse, restore its beacon and get both partners to the beacon platform.",
   "goal_type": "all_actors_at_exit_location",

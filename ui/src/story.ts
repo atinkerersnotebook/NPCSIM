@@ -134,7 +134,7 @@ function timelineParagraphs(paragraphs: { id: string; text: string }[], events: 
   return paragraphs.map(paragraph => {
     const event = byId.get(paragraph.id);
     const timeline = event ? villageTimeline(event, members) : undefined;
-    const prefix = timeline ? `[${timeline}${event?.free_action ? " / FREE LOOK/READ" : ""}] ` : "";
+    const prefix = timeline ? `[${timeline}${event?.free_action ? " / FREE MILESTONE" : ""}] ` : "";
     const text = timedVillage ? villageClockText(paragraph.text) : paragraph.text;
     return { ...paragraph, text: prefix && !text.startsWith(prefix) ? prefix + text : text };
   });

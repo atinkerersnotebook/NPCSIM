@@ -234,6 +234,515 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "33c548fc982b4afeaa5cfa956b9e73cd",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T14:36:29.867246+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "33c548fc982b4afeaa5cfa956b9e73cd:919"
+          ]
+        },
+        {
+          "reason": "At 10:50, the tavern had enough firewood and Elsie was on site, but none of the seven fresh loaves still needed for 24 portions were there. The final cooking-readiness check failed.",
+          "evidence_ids": [
+            "33c548fc982b4afeaa5cfa956b9e73cd:919",
+            "33c548fc982b4afeaa5cfa956b9e73cd:916"
+          ]
+        },
+        {
+          "reason": "The original bread order expired after five loaves were delivered. The last pickup was rejected for lack of confirmed demand, leaving seven loaves at the bakery.",
+          "evidence_ids": [
+            "33c548fc982b4afeaa5cfa956b9e73cd:793",
+            "33c548fc982b4afeaa5cfa956b9e73cd:906",
+            "33c548fc982b4afeaa5cfa956b9e73cd:916"
+          ]
+        },
+        {
+          "reason": "The bakery finished with one unit of flour, below the required two-unit reserve.",
+          "evidence_ids": [
+            "33c548fc982b4afeaa5cfa956b9e73cd:916"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "15ff555464734bf19dcd4344249ae0c6",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T14:53:08.159884+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "15ff555464734bf19dcd4344249ae0c6:18"
+          ]
+        },
+        {
+          "reason": "The final check found 0 of the 12 required fresh loaves physically at the tavern. Firewood and cooking readiness passed, but the bread requirement was unmet.",
+          "evidence_ids": [
+            "15ff555464734bf19dcd4344249ae0c6:18"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "087f3b67b63041e7a706eddf4cebac0f",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T15:39:22.260596+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "087f3b67b63041e7a706eddf4cebac0f:874"
+          ]
+        },
+        {
+          "reason": "At final verification, the tavern had enough firewood but zero fresh loaves and still needed nine. Elsie was there but could not start cooking without bread.",
+          "evidence_ids": [
+            "087f3b67b63041e7a706eddf4cebac0f:874",
+            "087f3b67b63041e7a706eddf4cebac0f:871"
+          ]
+        },
+        {
+          "reason": "The bakery's two-flour reserve was not preserved: Jory used the last flour on a loaf that would finish at the bakery at 11:00, too late to deliver.",
+          "evidence_ids": [
+            "087f3b67b63041e7a706eddf4cebac0f:799",
+            "087f3b67b63041e7a706eddf4cebac0f:871"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "aaf89eb6b29e48388a89062d50c400f1",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T16:05:29.244586+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "aaf89eb6b29e48388a89062d50c400f1:1037"
+          ]
+        },
+        {
+          "reason": "At 10:45, Elsie was at the tavern with sufficient firewood, but none of the 12 required fresh loaves were there. Final verification confirmed she could not start cooking.",
+          "evidence_ids": [
+            "aaf89eb6b29e48388a89062d50c400f1:1037",
+            "aaf89eb6b29e48388a89062d50c400f1:1034"
+          ]
+        },
+        {
+          "reason": "Tin-can coordination did not result in physical delivery: all four bakery shipments were blocked for the deadline, and no backup bread was in transit. The two-flour reserve was preserved.",
+          "evidence_ids": [
+            "aaf89eb6b29e48388a89062d50c400f1:784",
+            "aaf89eb6b29e48388a89062d50c400f1:1034"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "1f9fa7bfd14648838675159273d045eb",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T16:34:42.340119+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "1f9fa7bfd14648838675159273d045eb:748"
+          ]
+        },
+        {
+          "reason": "At the end of the attempt, the tavern had 0 of the 12 required fresh loaves. The funded bread order expired with none delivered, and no funded backup delivery was confirmed.",
+          "evidence_ids": [
+            "1f9fa7bfd14648838675159273d045eb:748",
+            "1f9fa7bfd14648838675159273d045eb:745"
+          ]
+        },
+        {
+          "reason": "Elsie was at the tavern and had enough firewood, but she could not start cooking without the bread.",
+          "evidence_ids": [
+            "1f9fa7bfd14648838675159273d045eb:745",
+            "1f9fa7bfd14648838675159273d045eb:748"
+          ]
+        },
+        {
+          "reason": "The bakery's two-flour reserve was not preserved: it ended at zero, with no replenishment delivered.",
+          "evidence_ids": [
+            "1f9fa7bfd14648838675159273d045eb:745"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "93c417e99cdf40948b2f4bdb6638e218",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T17:06:43.323288+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "93c417e99cdf40948b2f4bdb6638e218:970"
+          ]
+        },
+        {
+          "reason": "Final verification found zero fresh loaves at the tavern, six short even after crediting prepared meals. Firewood was sufficient.",
+          "evidence_ids": [
+            "93c417e99cdf40948b2f4bdb6638e218:970"
+          ]
+        },
+        {
+          "reason": "The funded tin-can order did not translate into enough physical deliveries: two three-loaf shipments were released without pickup, and no bakery replacement shipment was confirmed.",
+          "evidence_ids": [
+            "93c417e99cdf40948b2f4bdb6638e218:878",
+            "93c417e99cdf40948b2f4bdb6638e218:967"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "b1d41db58ae04d0491693e8cb1c05992",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T18:04:53.745275+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "b1d41db58ae04d0491693e8cb1c05992:953"
+          ]
+        },
+        {
+          "reason": "At 10:55 the tavern had enough firewood but none of the six fresh loaves still needed. Even unloading Elsie\u2019s three loaves would leave a three-loaf shortfall, so she could not start cooking the remaining portions.",
+          "evidence_ids": [
+            "b1d41db58ae04d0491693e8cb1c05992:953",
+            "b1d41db58ae04d0491693e8cb1c05992:950"
+          ]
+        },
+        {
+          "reason": "The bakery\u2019s flour stock fell to zero, violating the two-flour reserve requirement.",
+          "evidence_ids": [
+            "b1d41db58ae04d0491693e8cb1c05992:950"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "fc809aab94af4e8a8a17d26b913d818e",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T18:24:48.489796+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "fc809aab94af4e8a8a17d26b913d818e:982"
+          ]
+        },
+        {
+          "reason": "The funded bakery order missed its delivery cutoff. At 10:50, the tavern had sufficient firewood but none of the 12 required fresh loaves, and no replacement load was underway.",
+          "evidence_ids": [
+            "fc809aab94af4e8a8a17d26b913d818e:979",
+            "fc809aab94af4e8a8a17d26b913d818e:982"
+          ]
+        },
+        {
+          "reason": "Elsie was away from the tavern and unable to start cooking at the final check.",
+          "evidence_ids": [
+            "fc809aab94af4e8a8a17d26b913d818e:979",
+            "fc809aab94af4e8a8a17d26b913d818e:982"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "d52388bff21b45cd84be32b7dcecf70d",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T18:38:42.876665+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "d52388bff21b45cd84be32b7dcecf70d:859"
+          ]
+        },
+        {
+          "reason": "At the final 10:40 check, the tavern had zero of the nine fresh loaves still needed. Elsie was on site and had enough firewood, but could not start cooking the remaining portions.",
+          "evidence_ids": [
+            "d52388bff21b45cd84be32b7dcecf70d:859",
+            "d52388bff21b45cd84be32b7dcecf70d:856"
+          ]
+        },
+        {
+          "reason": "The tin-can network was used and the two-flour reserve was preserved, but the funded bakery order missed its cutoff, leaving six loaves blocked in transit and no confirmed replacement delivery.",
+          "evidence_ids": [
+            "d52388bff21b45cd84be32b7dcecf70d:162",
+            "d52388bff21b45cd84be32b7dcecf70d:856"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "ee5ee030693d4ebf9ad30d097ae48165",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T18:57:55.927681+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "ee5ee030693d4ebf9ad30d097ae48165:941"
+          ]
+        },
+        {
+          "reason": "At 10:45, the tavern had enough firewood but zero fresh loaves and still needed four. Elsie was present but could not start another batch.",
+          "evidence_ids": [
+            "ee5ee030693d4ebf9ad30d097ae48165:941",
+            "ee5ee030693d4ebf9ad30d097ae48165:938"
+          ]
+        },
+        {
+          "reason": "The bakery\u2019s flour reserve stayed intact, but the final shipment was blocked and a new bake could not finish by 11:00. Nella had no funded backup shipment loaded in time to deliver.",
+          "evidence_ids": [
+            "ee5ee030693d4ebf9ad30d097ae48165:938"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "6331b8e974a249f1b684d54fec05dcc2",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T19:24:46.962793+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "6331b8e974a249f1b684d54fec05dcc2:1039"
+          ]
+        },
+        {
+          "reason": "At 10:50, Elsie was at the tavern, firewood was sufficient, and the bakery\u2019s two-flour reserve was intact. But none of the five fresh loaves still needed were on site, and the final check confirmed Elsie could not start cooking.",
+          "evidence_ids": [
+            "6331b8e974a249f1b684d54fec05dcc2:1036",
+            "6331b8e974a249f1b684d54fec05dcc2:1039"
+          ]
+        },
+        {
+          "reason": "The remaining bakery shipment was released without pickup because it could no longer arrive by 11:00. Nella\u2019s backup bread stayed unloaded because no funded backup order was confirmed.",
+          "evidence_ids": [
+            "6331b8e974a249f1b684d54fec05dcc2:1028",
+            "6331b8e974a249f1b684d54fec05dcc2:833",
+            "6331b8e974a249f1b684d54fec05dcc2:1003"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "9105f38d11614795b19734e8be9dd45b",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 12 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T19:56:53.867249+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "9105f38d11614795b19734e8be9dd45b:138"
+          ]
+        },
+        {
+          "reason": "The final check confirmed enough firewood and that Elsie could start cooking, but the tavern had zero of the six required fresh loaves.",
+          "evidence_ids": [
+            "9105f38d11614795b19734e8be9dd45b:138"
+          ]
+        },
+        {
+          "reason": "The tin-can bread request was rejected, so it did not establish a funded supply order.",
+          "evidence_ids": [
+            "9105f38d11614795b19734e8be9dd45b:74",
+            "9105f38d11614795b19734e8be9dd45b:99"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "8d1396f1628f45738ee6cc6435d2ea99",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 12 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T20:03:44.114489+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "8d1396f1628f45738ee6cc6435d2ea99:355"
+          ]
+        },
+        {
+          "reason": "The tavern had enough firewood, but final verification found zero of the six fresh loaves required for 12 portions.",
+          "evidence_ids": [
+            "8d1396f1628f45738ee6cc6435d2ea99:355"
+          ]
+        },
+        {
+          "reason": "The final cooking-readiness check failed.",
+          "evidence_ids": [
+            "8d1396f1628f45738ee6cc6435d2ea99:355"
+          ]
+        },
+        {
+          "reason": "Jory sent a tin-can bread offer and retained the two-flour reserve, but no funded bread order was confirmed.",
+          "evidence_ids": [
+            "8d1396f1628f45738ee6cc6435d2ea99:293",
+            "8d1396f1628f45738ee6cc6435d2ea99:339"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "e2dece745cc64326a0e6ed6134dc809d",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 12 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T22:17:23.717879+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "e2dece745cc64326a0e6ed6134dc809d:816"
+          ]
+        },
+        {
+          "reason": "At 10:10, the tavern had all six fresh loaves and enough firewood for 12 portions, and Elsie had returned, but the final check found she could not start cooking.",
+          "evidence_ids": [
+            "e2dece745cc64326a0e6ed6134dc809d:714",
+            "e2dece745cc64326a0e6ed6134dc809d:816"
+          ]
+        },
+        {
+          "reason": "The funded bread order was coordinated through the tin-can network and physically delivered in two shipments. The bakery retained three flour, preserving its two-flour reserve.",
+          "evidence_ids": [
+            "e2dece745cc64326a0e6ed6134dc809d:75",
+            "e2dece745cc64326a0e6ed6134dc809d:390",
+            "e2dece745cc64326a0e6ed6134dc809d:639",
+            "e2dece745cc64326a0e6ed6134dc809d:768",
+            "e2dece745cc64326a0e6ed6134dc809d:798"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "4905295cf8b54a439ff31b190263c8b3",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 12 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T22:48:49.581485+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "4905295cf8b54a439ff31b190263c8b3:1478"
+          ]
+        },
+        {
+          "reason": "At 11:00, Elsie and enough bread and firewood for 12 portions were at the tavern, but she could not start cooking. Cooking was already blocked before her appeal, and the final check confirmed she was unavailable until 11:05.",
+          "evidence_ids": [
+            "4905295cf8b54a439ff31b190263c8b3:1422",
+            "4905295cf8b54a439ff31b190263c8b3:1478"
+          ]
+        },
+        {
+          "reason": "The funded bread order was coordinated through the tin-can network and physically delivered. Three flour remained at the bakery, preserving the two-flour reserve.",
+          "evidence_ids": [
+            "4905295cf8b54a439ff31b190263c8b3:440",
+            "4905295cf8b54a439ff31b190263c8b3:497",
+            "4905295cf8b54a439ff31b190263c8b3:1300",
+            "4905295cf8b54a439ff31b190263c8b3:1336"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "3223c58189d84ecb8c5c8e8042010135",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 12 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T23:03:36.612770+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "3223c58189d84ecb8c5c8e8042010135:450"
+          ]
+        },
+        {
+          "reason": "The funded tin-can order was in place, but the final check at 09:40 found zero of the six required fresh loaves at the tavern. Fuel and cooking readiness passed; physical bread delivery did not.",
+          "evidence_ids": [
+            "3223c58189d84ecb8c5c8e8042010135:120",
+            "3223c58189d84ecb8c5c8e8042010135:450"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "ad9c469cd8874f8ea813f2fbeb0b6f60",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 12 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T23:12:11.966386+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "ad9c469cd8874f8ea813f2fbeb0b6f60:409"
+          ]
+        },
+        {
+          "reason": "At 09:35, final verification found zero of the six required fresh loaves at the tavern. Jory had baked all six, but both shipments were only offered, not delivered.",
+          "evidence_ids": [
+            "ad9c469cd8874f8ea813f2fbeb0b6f60:409",
+            "ad9c469cd8874f8ea813f2fbeb0b6f60:324",
+            "ad9c469cd8874f8ea813f2fbeb0b6f60:363",
+            "ad9c469cd8874f8ea813f2fbeb0b6f60:372"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "41b48cc9cb08434b9c96a7f398c21b38",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 12 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T23:18:52.643241+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "41b48cc9cb08434b9c96a7f398c21b38:334"
+          ]
+        },
+        {
+          "reason": "The final check confirmed enough firewood and no cooking blocker, but zero of the six required fresh loaves were physically at the tavern. The funded order and shipment assignments did not establish delivery.",
+          "evidence_ids": [
+            "41b48cc9cb08434b9c96a7f398c21b38:334",
+            "41b48cc9cb08434b9c96a7f398c21b38:279",
+            "41b48cc9cb08434b9c96a7f398c21b38:306"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "56bf717d2bb34f4c94a52c84c83f4adf",
+      "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 12 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+      "recorded_at": "2026-11-24T23:40:14.164850+00:00",
+      "findings": [
+        {
+          "reason": "Brunch supplies or cooking prerequisites are not yet ready.",
+          "evidence_ids": [
+            "56bf717d2bb34f4c94a52c84c83f4adf:1019"
+          ]
+        },
+        {
+          "reason": "The tin-can-coordinated, funded bread order was physically delivered. Verification confirmed six fresh loaves and enough firewood for 12 portions before 11:00, and the bakery retained its two-flour reserve.",
+          "evidence_ids": [
+            "56bf717d2bb34f4c94a52c84c83f4adf:93",
+            "56bf717d2bb34f4c94a52c84c83f4adf:648",
+            "56bf717d2bb34f4c94a52c84c83f4adf:936",
+            "56bf717d2bb34f4c94a52c84c83f4adf:1019"
+          ]
+        },
+        {
+          "reason": "Elsie was at the tavern, but the demand gate still prevented her from starting brunch at 10:45. The final cooking-readiness check failed.",
+          "evidence_ids": [
+            "56bf717d2bb34f4c94a52c84c83f4adf:1016",
+            "56bf717d2bb34f4c94a52c84c83f4adf:1019"
+          ]
+        }
+      ]
     }
   ]
 }

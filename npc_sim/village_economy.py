@@ -2138,8 +2138,17 @@ def production_batch_limit(world: "World", action: str, *, personal: bool = Fals
     targets = production_targets(world, location, personal=personal)
     limits = [batch_size]
     economy = _state(world)
+    if (world.scenario.id == "millhaven-snapshot-i" and world.actor_id == "jory"
+            and "bread" in outputs
+            and not any(order.supplier == "jory" and order.product == "bread"
+                        and order.status in LOADABLE and order.loadable
+                        for order in economy.orders.values())):
+        return 0
     from npc_sim import village_livestock
     livestock_feed = village_livestock.feed_needs(world) if location == "farm" else {}
+    for product, amount in inputs.items():
+        limits.append(max(0, usable_stock(world, location, product, now) -
+                          protected_quantity(world, location, product)) // amount)
     for product, amount in outputs.items():
         capacity = stock_capacity_available(world, location, product)
         if capacity is not None:

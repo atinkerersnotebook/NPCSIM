@@ -104,7 +104,9 @@ class WorldStorage:
 
     def _connect_snapshots(self) -> sqlite3.Connection:
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.snapshot_path)
+        connection = sqlite3.connect(self.snapshot_path, timeout=10)
+        connection.execute("PRAGMA busy_timeout=10000")
+        connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA synchronous=FULL")
         connection.execute(
             "CREATE TABLE IF NOT EXISTS snapshots ("
@@ -115,6 +117,12 @@ class WorldStorage:
             connection.execute("ALTER TABLE snapshots ADD COLUMN turn INTEGER")
         if "turn_start" not in columns:
             connection.execute("ALTER TABLE snapshots ADD COLUMN turn_start INTEGER")
+        return connection
+
+    def _connect_snapshot_reader(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(
+            self.snapshot_path.resolve().as_uri() + "?mode=ro", uri=True, timeout=10)
+        connection.execute("PRAGMA busy_timeout=10000")
         return connection
 
     @staticmethod
@@ -163,22 +171,20 @@ class WorldStorage:
             previous_key = key
 
     def snapshots(self) -> list[dict[str, Any]]:
-        if not self.path.exists():
+        if not self.path.exists() or not self.snapshot_path.exists():
             return []
-        self._record_snapshot(self.load())
-        with closing(self._connect_snapshots()) as connection, connection:
-            self._backfill_turns(connection)
+        with closing(self._connect_snapshot_reader()) as connection:
             rows = connection.execute(
                 "SELECT sequence, revision, minute, turn, turn_start FROM snapshots "
                 "ORDER BY sequence"
             ).fetchall()
         return [{"sequence": row[0], "revision": row[1], "minute": row[2],
-                 "turn": row[3], "turn_start": bool(row[4])} for row in rows]
+                 "turn": row[3] or 0, "turn_start": bool(row[4])} for row in rows]
 
     def snapshot(self, sequence: int) -> WorldState:
         if not self.snapshot_path.exists():
             raise ValueError("World playback checkpoint not found.")
-        with closing(self._connect_snapshots()) as connection:
+        with closing(self._connect_snapshot_reader()) as connection:
             row = connection.execute(
                 "SELECT state FROM snapshots WHERE sequence = ?", (sequence,)
             ).fetchone()

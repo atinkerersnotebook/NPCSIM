@@ -273,9 +273,12 @@ class World:
             goals_changed = secondary_goals.refresh(self)
             if discovered or goals_changed:
                 self.save()
+            snapshot_request_owner = (self.scenario.village and self.scenario.village.snapshot
+                                      and self.scenario.id == "millhaven-snapshot-i")
             opening = bool(self.scenario.opening_narrative and actor.action_clock == 0
                            and not actor.examined and not actor.read_entities
-                           and actor.location_id == actor.start_location_id)
+                           and actor.location_id == actor.start_location_id
+                           and (not snapshot_request_owner or actor.actor_id == "elsie"))
             visited = {actor.start_location_id, actor.location_id, *actor.visited_locations}
             entities = []
             for eid in self.visible_ids():
@@ -1096,6 +1099,10 @@ class World:
             text += "".join(f" {detail}" for detail in details if detail)
             return "APPLIED", "BROKEN" if entity.broken or weapon.broken else "DAMAGED", text, None
         elif action == "go":
+            if (self.scenario.village and self.scenario.village.warehouse
+                    and self.state.village.warehouse_cart_driver == self.actor_id
+                    and (entity.required_challenges or entity.max_body_size == "small")):
+                return reject("CART_ROUTE_RESTRICTED", "The warehouse cart cannot use the ladder-only or narrow route. Park it first.")
             if (self.scenario.village and self.scenario.village.expanded_rules
                     and self.state.village.wagon and self.state.village.wagon.driver == self.actor_id
                     and not entity.village_road):

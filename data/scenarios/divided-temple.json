@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "divided-temple",
   "title": "Fire Sprite & Ice Golem - The Divided Temple",
+  "public_details": "Use fire, freezing and strength to make safe shared routes through the divided temple and bring both companions to the sanctuary.",
+  "private_details": "",
   "start_location": "ember-court",
   "exit_location": "sanctuary",
   "objective": "Use fire, freezing and strength to make safe shared routes through the divided temple and bring both companions to the sanctuary.",

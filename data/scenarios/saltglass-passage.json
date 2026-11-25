@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "saltglass-passage",
   "title": "The Saltglass Passage",
+  "public_details": "You wake beneath patched sails in an abandoned waterfront loft. Somewhere below, waves knock against stone. A supply locker, a shipwright's notebook and a closed floor hatch are within reach. There must be a way down to the shore.",
+  "private_details": "",
   "start_location": "sail-loft",
   "exit_location": "escape-quay",
   "objective": "Explore the pirate island and prepare a seaworthy escape skiff in the launch slip at the far quay.",

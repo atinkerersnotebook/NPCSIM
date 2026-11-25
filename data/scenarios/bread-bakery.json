@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "bread-bakery",
   "title": "The Clockwork Bakery",
+  "public_details": "You are the baker on the morning shift. Three empty batch bowls are waiting somewhere in the bakery, and the storeroom holds measured bread supplies. One mixer and two ovens must be shared. A real clock will run during your shift: while one dough rises, another batch can be mixed, proofed or baked. Read the recipe board, explore the cupboards, and keep an eye on every batch's readiness and deadline.",
+  "private_details": "",
   "start_location": "bakery",
   "exit_location": "bakery",
   "objective": "Bake and serve three separate cooled bread batches on the bakery display without overproofing or burning any batch.",

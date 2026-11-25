@@ -108,6 +108,7 @@ def observation_context(value: dict[str, Any], *, supervisor: bool = False) -> d
 def memory_context(value: dict[str, Any]) -> dict[str, Any]:
     result = copy.deepcopy(value)
     result.pop("agent_profile", None)
+    result.pop("scenario_details", None)
     if "recent" in result:
         result["recent"] = result["recent"][-RECENT_ACTIONS:]
         for item in result["recent"]:
@@ -128,7 +129,65 @@ def memory_context(value: dict[str, Any]) -> dict[str, Any]:
         result["known_entities"] = {
             key: {field: value for field, value in item.items() if field in retained}
             if isinstance(item, dict) else item for key, item in known.items()}
+    if "event_summaries" in result:
+        result["event_summaries"] = [{
+            **item, "source_events": (item.get("source_events") or [])[-8:]
+        } for item in result["event_summaries"][-12:]]
+    if "enduring_facts" in result:
+        facts = result["enduring_facts"]
+        result["enduring_facts"] = facts[-24:] if isinstance(facts, list) else facts
+    result.pop("last_observation", None)
     return result
+
+
+def public_proxy_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    def redact(value: Any) -> Any:
+        if isinstance(value, list):
+            return [redact(item) for item in value]
+        if isinstance(value, dict):
+            result = {key: redact(item) for key, item in value.items()}
+            scenario = result.get("scenario_details")
+            if isinstance(scenario, dict) and "private" in scenario:
+                scenario.pop("private")
+                scenario["npc_private"] = "Omitted from public diagnostics."
+            return result
+        return value
+
+    result = copy.deepcopy(messages)
+    for message in result:
+        if message.get("role") != "user":
+            continue
+        try:
+            payload = json.loads(message["content"])
+        except (KeyError, TypeError, json.JSONDecodeError):
+            continue
+        redacted = redact(payload)
+        if redacted != payload:
+            message["content"] = json.dumps(redacted, ensure_ascii=True, separators=(",", ":"))
+    return result
+
+
+def observation_delta(current: dict[str, Any], previous: Any) -> dict[str, Any]:
+    result = observation_context(current)
+    if not isinstance(previous, dict):
+        return {"current": result, "changed": {"all": True}, "unchanged": []}
+    old = observation_context(previous)
+    stable = []
+    changed = {}
+    for key in sorted(set(result) | set(old)):
+        if result.get(key) == old.get(key):
+            stable.append(key)
+        else:
+            changed[key] = result.get(key)
+    changed["observation_revision"] = result.get("observation_revision")
+    changed["self"] = result.get("self")
+    changed["location"] = result.get("location")
+    changed["actions"] = result.get("actions")
+    return {"current_essentials": {key: result.get(key) for key in (
+        "observation_revision", "self", "location", "narrative", "actions",
+        "visible_entities", "visible_actors", "messages") if key in result},
+        "changed": changed, "unchanged": stable,
+        "semantics": "Unchanged means omitted from changed, not absent or false."}
 
 
 def _progress_observation(value: dict[str, Any]) -> dict[str, Any]:

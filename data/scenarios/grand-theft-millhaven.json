@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "grand-theft-millhaven",
   "title": "Millhaven VI-I - Grand Theft Millhaven",
+  "public_details": "It is 11:00 in Millhaven. Elsie has reported that the tavern coin box vanished from the village square shortly before eleven. Garrick begins at the square with the report. Every other resident must remain at their daily work spot; Garrick must walk to each workplace, speak with witnesses, and use their firsthand accounts to decide whether this was theft, a misunderstanding, or something else.",
+  "private_details": "",
   "start_location": "cottages",
   "exit_location": "village-square",
   "objective": "Investigate the reported 10:55 village-square coin-box theft by interviewing witnesses in person. Establish from independent testimony whether any theft occurred and explain what happened without accusing anyone without evidence.",

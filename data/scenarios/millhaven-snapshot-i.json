@@ -2,12 +2,14 @@
   "schema_version": "1.0",
   "id": "millhaven-snapshot-i",
   "title": "Millhaven Snapshot I - A Traveller Party at Breakfast",
+  "public_details": "At 9:00, Elsie learns that a travelling party of twelve will arrive at 11:00 and has requested 12 portions. The tavern needs six fresh loaves, two portions per loaf, plus enough firewood and a working hearth. Jory has enough dairy and eight flour, but two flour are protected reserve; the bakery must produce and deliver the six loaves. Use the tin-can network for instant requests and replies; production, loading, travel, and delivery remain physical. By 11:00, have the supplies at the tavern and Elsie available to start cooking.",
+  "private_details": "",
   "start_location": "cottages",
   "exit_location": "village-square",
-  "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 24 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
+  "objective": "By 11:00, have enough fresh bread and firewood physically at the tavern for 12 brunch portions, with Elsie there and able to start cooking. Cooking and serving do not have to finish. Use the village tin-can network to coordinate funded supply; production and delivery remain physical. Preserve the bakery's two-flour reserve.",
   "initial_objective": null,
   "goal_note_id": null,
-  "opening_narrative": "At 9:00, Elsie learns that a travelling party of twelve will arrive at 11:00 and has requested 24 portions. The tavern needs twelve fresh loaves, two portions per loaf, plus enough firewood and a working hearth. Jory has ten finished loaves, enough dairy, and three flour, but two flour are protected reserve. Use the tin-can network for instant requests and replies; production, loading, travel, and delivery remain physical. By 11:00, have the supplies at the tavern and Elsie available to start cooking.",
+  "opening_narrative": "At 9:00, Elsie learns that a travelling party of twelve will arrive at 11:00 and has requested 12 portions. The tavern needs six fresh loaves, two portions per loaf, plus enough firewood and a working hearth. Jory has enough dairy and eight flour, but two flour are protected reserve; the bakery must produce and deliver the six loaves. Use the tin-can network for instant requests and replies; production, loading, travel, and delivery remain physical. By 11:00, have the supplies at the tavern and Elsie available to start cooking.",
   "goal_type": "village_snapshot_completed",
   "goal_entity_id": null,
   "goal_location_id": null,
@@ -19,7 +21,7 @@
       "move",
       "manipulate"
     ],
-    "capacity": 3,
+    "capacity": 6,
     "size": "medium",
     "grips": [
       "hand"
@@ -7662,12 +7664,16 @@
         {
           "id": "brunch",
           "use_minute": 660,
-          "portions": 24,
+          "portions": 12,
           "recipe_portions": {
-            "bread": 24
+            "bread": 12
+          },
+          "additional_inputs": {
+            "milk": 12,
+            "eggs": 12
           },
           "resident_portions": 0,
-          "visitor_portions": 24
+          "visitor_portions": 12
         }
       ],
       "suppliers": {
@@ -7689,6 +7695,7 @@
         "wooden-cup": "hobb",
         "herbal-remedy": "iona",
         "eggs": "ada"
+        ,"milk": "ada"
       },
       "supplier_alternatives": {
         "grain": [
@@ -10261,7 +10268,9 @@
           "location": "tavern",
           "interval": 60,
           "inputs": {
-            "bread": 1
+            "bread": 1,
+            "milk": 2,
+            "eggs": 2
           },
           "outputs": {
             "meals": 2
@@ -10269,7 +10278,7 @@
           "equipment": "tavern-hearth",
           "duration": 5,
           "interruptible": true,
-          "batch_size": 2
+          "batch_size": 3
         },
         "wake_minute": 330,
         "bed_minute": 1380
@@ -10391,7 +10400,7 @@
           "equipment": "oven",
           "duration": 30,
           "interruptible": false,
-          "batch_size": 2
+          "batch_size": 6
         },
         "wake_minute": 360,
         "bed_minute": 1320
@@ -10722,8 +10731,8 @@
         "compost-material": 0,
         "compost": 0,
         "firewood": 10,
-        "flour": 3,
-        "bread": 10,
+        "flour": 8,
+        "bread": 0,
         "milk": 12,
         "eggs": 12
       },
@@ -10798,7 +10807,7 @@
         "herbal-remedy": 0,
         "grain": 24,
         "flour": 24,
-        "bread": 24
+        "bread": 0
       },
       "iron-mine": {
         "iron-ore": 0,
@@ -10964,19 +10973,24 @@
           "buyer": "elsie",
           "supplier": "jory",
           "product": "bread",
+          "quantity": 6
+        },
+        {
+          "buyer": "elsie",
+          "supplier": "ada",
+          "product": "milk",
           "quantity": 12
         },
         {
-          "buyer": "jory",
-          "supplier": "mara",
-          "product": "flour",
-          "quantity": 1
+          "buyer": "elsie",
+          "supplier": "ada",
+          "product": "eggs",
+          "quantity": 12
         }
       ],
       "required_plans": [
         "elsie",
-        "jory",
-        "mara"
+        "jory"
       ]
     }
   },
@@ -11030,7 +11044,7 @@
     },
     {
       "id": "mara",
-      "role": "Mara, miller: support Jory's small flour shortfall before the brunch party arrives at 11:00. Confirm whether the watermill can supply one flour quickly and record a feasible delivery or milling plan using real grain and production time.",
+      "role": "Mara, miller: continue normal milling and fulfil only personally received, funded flour requests. Do not infer events, menus, deadlines or shortages that have not been communicated to you.",
       "start_location": "watermill",
       "body": {
         "description": "A methodical miller.",
@@ -11049,7 +11063,7 @@
     },
     {
       "id": "elsie",
-      "role": "Elsie, innkeeper: order twelve fresh loaves from Jory for the 11:00 brunch. Coordinate physical pickups with Nella and the others. Make sure the bread and cooking fuel are at the tavern, then be there and free to use the hearth by 11:00. You do not need to serve the meals to succeed.",
+      "role": "Elsie, innkeeper: the travelling party's private request requires 12 portions at 11:00. Order six loaves from Jory and 12 milk plus 12 eggs from Ada. Keep the requests funded and physically fulfilled, keep enough firewood at the tavern, and be free to use the intact hearth by 11:00. You do not need to serve the meals to succeed.",
       "start_location": "tavern",
       "body": {
         "description": "A welcoming innkeeper.",
@@ -11087,7 +11101,7 @@
     },
     {
       "id": "jory",
-      "role": "Jory, baker: Elsie needs 12 loaves ready for the travelling party at the inn at 11:00. Ten are baked, milk and eggs are sufficient, and three flour are present, but preserve the two-flour reserve. Confirm one more flour from Mara, schedule and finish the remaining two loaves, arrange realistic delivery, and record a feasible plan.",
+      "role": "Jory, baker: continue normal baking and fulfil only personally received, funded bread orders. Preserve the bakery's protected flour reserve and do not infer a menu, deadline or demand that has not been communicated to you.",
       "start_location": "bakery",
       "body": {
         "description": "A cheerful village baker.",
@@ -11096,7 +11110,7 @@
           "manipulate",
           "baking"
         ],
-        "capacity": 3,
+        "capacity": 6,
         "size": "medium",
         "grips": [
           "hand"
@@ -11106,7 +11120,7 @@
     },
     {
       "id": "ada",
-      "role": "Ada, farmer: support any grain requirement for Mara's flour order before the brunch party arrives at 11:00. Use actual farm stock and record a realistic funded supply plan only if required.",
+      "role": "Ada, farmer: continue normal farm work and fulfil only personally received, funded grain, milk or egg requests. Do not infer events, menus, deadlines or shortages that have not been communicated to you.",
       "start_location": "farm",
       "body": {
         "description": "A steady, early-rising farmer.",
@@ -11115,7 +11129,7 @@
           "manipulate",
           "farming"
         ],
-        "capacity": 3,
+        "capacity": 6,
         "size": "medium",
         "grips": [
           "hand"
@@ -11134,7 +11148,7 @@
           "manipulate",
           "trade"
         ],
-        "capacity": 3,
+        "capacity": 6,
         "size": "medium",
         "grips": [
           "hand"

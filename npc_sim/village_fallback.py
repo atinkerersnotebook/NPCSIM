@@ -460,7 +460,8 @@ def _travel_choice(world: "World", destination: str, task: str, reason: str,
             if village_walking.check_step(world, {"target": door}) is None:
                 return {"task_id": task, "action_id": "go", "arguments": {"target": door},
                         "destination": destination, "priority": priority, "reason": reason}
-        if plan or village_walking.check_plan(world, destination) is not None:
+        interrupted = plan is not None and village_walking._interruption(world, plan)
+        if (plan and not interrupted) or village_walking.check_plan(world, destination) not in {None, "ROUTE_COMMITTED"}:
             return None
     known = state.residents[world.actor_id].known_routes
     path = village.route(world, world.actor.location_id, destination,
@@ -618,6 +619,8 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
     fallback = person.fallback
     location = world.actor.location_id
     choices: list[dict[str, Any]] = []
+    if world.scenario.id == "millhaven-snapshot-i":
+        return choices
     if not (config.residents[world.actor_id].wake_minute <= state.minute % 1440
             < village_life.production_closing_minute(world, world.actor_id)):
         return choices
@@ -862,7 +865,8 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
     if world.actor_id == village_economy.config(world).innkeeper and state.communication:
         from npc_sim import village_communication
         for request in village_economy.suggestions(world, personal=True):
-            if request["product"] not in {"bread", "fish", "preserved-fish"} or request["deadline"] <= state.minute:
+            if request["product"] not in {"bread", "fish", "preserved-fish", "milk", "eggs"} \
+                    or request["deadline"] <= state.minute:
                 continue
             terms = village_communication.NoticeTerms(
                 type="supply_request", subject=request["product"],
@@ -898,7 +902,6 @@ def _purposeful_choices(world: "World") -> list[dict[str, Any]]:
                 choices.append({"task_id": f"food:request:{request['request_key']}",
                                 "action_id": "village_request_supply", "arguments": args,
                                 "priority": "P1", "reason": "Fund a new physical order for uncovered food service."})
-            break
 
     # The check-in is scheduled, not triggered by privileged knowledge of a remote breakdown.
     personally_informed = any(message.get("actor_id") == config.miller and "mill drive fail" in message.get("text", "")
@@ -1294,7 +1297,50 @@ def candidates(world: "World") -> list[dict[str, Any]]:
         return []
     day = state.minute // 1440
     planned = any(plan["day"] == day for plan in person.fallback.daily_plans)
-    if (not planned and state.minute % 1440 >= resident.wake_minute
+    if (world.scenario.id == "millhaven-snapshot-i" and world.actor_id == "elsie"
+            and world.actor.location_id == config.residents["elsie"].work
+            and state.communication is not None
+            and "snapshot-brunch-request" not in state.communication.knowledge.get("elsie", {})):
+        return [{"task_id": "snapshot:read-brunch-request", "action_id": "village_check_messages",
+                 "arguments": {"channel": "inbox"}, "priority": "P0",
+                 "reason": "Read the travelling party's unlearned brunch request before inspecting or ordering supply."}]
+    if (world.scenario.id == "millhaven-snapshot-i" and world.actor_id == "elsie"
+            and state.communication is not None):
+        from npc_sim import village_communication
+        snapshot_requests = []
+        for request in village_economy.suggestions(world, personal=True):
+            if (request["buyer"] != "elsie"
+                    or request["product"] not in {"bread", "milk", "eggs"}
+                    or request["deadline"] <= state.minute):
+                continue
+            terms = village_communication.NoticeTerms(
+                type="supply_request", subject=request["product"],
+                description=f"Food for {request['request_key']}",
+                recipients=[request["supplier"]], quantity=request["quantity"],
+                destination=request["destination"], due_at=request["deadline"],
+                required_fresh_until=request["required_fresh_until"])
+            if any(history[-1].author == "elsie"
+                   and village_communication._need_key("elsie", history[-1].terms)
+                   == village_communication._need_key("elsie", terms)
+                   and history[-1].status not in village_communication.TERMINAL
+                   for history in state.communication.notices.values()):
+                continue
+            terms = village_communication.preferred_supply_contact(world, terms)
+            if terms is None:
+                continue
+            args = {"good": request["product"], "quantity": request["quantity"],
+                    "purpose": terms.description, "deadline": request["deadline"],
+                    "required_fresh_until": request["required_fresh_until"],
+                    "preferred_supplier_id": terms.recipients[0]}
+            if action_blocker(world, "village_request_supply", args, check_wait=False) is None:
+                snapshot_requests.append({
+                    "task_id": f"food:request:{request['request_key']}",
+                    "action_id": "village_request_supply", "arguments": args,
+                    "priority": "P1", "reason": "Fund every uncovered input for the confirmed brunch service."})
+        if snapshot_requests:
+            return snapshot_requests
+    if (world.scenario.id != "millhaven-snapshot-i"
+            and not planned and state.minute % 1440 >= resident.wake_minute
             and not village_life.early_inn_close_ready(world, world.actor_id)
             and not village_life.rest_due(resident, life, state.minute)):
         return [{"task_id": "daily-plan:required", "action_id": "village_daily_plan", "arguments": {},
@@ -1318,8 +1364,11 @@ def candidates(world: "World") -> list[dict[str, Any]]:
             choices.append({"task_id": "need:sleep", "action_id": "village_sleep", "arguments": {},
                             "priority": "P1", "reason": "Sleep at your actual home; the inn may close after everyone has eaten and gone home."})
         return choices
-    meal = village_life.available_meal(world, world.actor_id, include_missed=True)
-    if meal and world.actor.location_id == "tavern":
+    meal = (None if world.scenario.id == "millhaven-snapshot-i"
+            else village_life.available_meal(world, world.actor_id, include_missed=True))
+    service_open = not meal or meal.kind != "breakfast" or state.minute < meal.due + \
+        village_extensions.policy(world).meal_window
+    if meal and service_open and world.actor.location_id == "tavern":
         stock = state.stocks.get("tavern", {})
         if village_life.inn_open(world) and (stock.get("meals", 0) or stock.get("bread", 0)
                                              or stock.get("fish", 0) and stock.get("tea", 0)):
@@ -1446,7 +1495,8 @@ def candidates(world: "World") -> list[dict[str, Any]]:
                           and (breakfast is None or breakfast.status == "pending"))
     if (not choices and world.actor.location_id != resident.work and not awaiting_breakfast
             and not village_life.rest_due(resident, life, state.minute)
-            and state.minute % 1440 < village_life.production_closing_minute(world, world.actor_id)):
+            and state.minute % 1440 < village_life.production_closing_minute(world, world.actor_id)
+            and not village_logistics.has_active_freight(world)):
         from npc_sim import village_walking
         if village_walking.enabled(world):
             plan = person.walking_plan
@@ -1519,6 +1569,10 @@ def action_blocker(world: "World", action: str, args: dict[str, Any], *,
             return None
         choices = candidates(world)
         required = next((choice for choice in choices if choice["priority"] != "P5"), None)
+        shipment_wait = next((choice for choice in choices
+                              if choice["task_id"].startswith("shipment:await:")), None)
+        if shipment_wait is not None and action == "wait_until_next_relevant_event":
+            return None
         if choices and (action != "wait_until_next_relevant_event" or required):
             choice = required if action == "wait_until_next_relevant_event" else choices[0]
             return "ELIGIBLE_TASK_PENDING", f"Before idle waiting, consider {choice['action_id']}: {choice['reason']}"
@@ -1677,6 +1731,7 @@ def observation(world: "World") -> dict[str, Any]:
                         world, world.actor.location_id, village_depot.FEED_STORE)
     return {"fallback": {
         "context_revision": revision,
+        "executable_steps": [step.model_dump(mode="json") for step in fallback.executable_steps],
         "blocked_tasks": [{**item.model_dump(), "retry_suppressed": item.context_revision == _retry_revision(world, item.action_id)}
                           for item in fallback.blocked.values()],
         "supply_needs": [need.model_dump() for need in fallback.supply_needs.values()],

@@ -124,7 +124,8 @@ function layoutNetwork(nodes: MapLocation[], edges: MapRoute[]) {
     }),
     edges,
     width: 660,
-    height: Math.max(175, Math.ceil(nodes.length / 3) * 180)
+    height: Math.max(175, Math.ceil(nodes.length / 3) * 180),
+    scope: "world"
   };
 }
 
@@ -137,11 +138,13 @@ export function locationNetwork(
   }
   const entities = discoveredEntities(world, actorId, observation, memory);
   const actor = world.actors[actorId];
-  const locationIds = [...new Set([
+  const allLocationIds = [...new Set([
     actor.start_location_id, ...(actor.visited_locations ?? []),
     ...Object.keys(z.record(z.string(), z.string()).parse(memory.visited_locations ?? {})),
     actor.location_id
   ])].filter(id => entities[id]?.kind === "location");
+  const storehouse = actor.location_id.startsWith("warehouse-");
+  const locationIds = storehouse ? allLocationIds.filter(id => id.startsWith("warehouse-")) : allLocationIds;
   const nodes = locationIds.map<MapLocation>((id, index) => ({
     id, number: index + 1, name: entities[id].name,
     description: entities[id].description, current: id === actor.location_id,
@@ -178,7 +181,7 @@ export function locationNetwork(
     }
     return [{ id, name: door.name, source, target, status, requirements }];
   });
-  return layoutNetwork(nodes, edges);
+  return { ...layoutNetwork(nodes, edges), scope: storehouse ? "storehouse" : "world" };
 }
 
 export function teamLocationNetwork(state: State, events: readonly RunEvent[] = []) {
@@ -247,5 +250,5 @@ export function teamLocationNetwork(state: State, events: readonly RunEvent[] = 
       ]
     };
   });
-  return layoutNetwork(nodes, edges);
+  return { ...layoutNetwork(nodes, edges), scope: nodes.some(node => node.id.startsWith("warehouse-")) ? "storehouse" : "world" };
 }

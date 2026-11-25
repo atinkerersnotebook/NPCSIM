@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from npc_sim.controller import Controller
 from npc_sim.models import AgentProfile, AppConfig, BudgetExtension, ClockRequest, EpisodeLoadRequest, EpisodeSaveRequest, NeedToggle, ReopenRequest, RunModeRequest, Scenario, StartRequest, VillageConfigurationRequest
 from npc_sim.storage import EventStore, StoryStore, read_json, write_json
+from npc_sim.report_formats import REPORT_FORMATS
 from npc_sim.agents import default_profile_id, load_profiles, save_profile, slots
 from npc_sim.dungeon_master import DungeonMasterConfig, load_config as load_dungeon_master
 from npc_sim.interactions import ApprovalRequest, ChatRequest, DungeonAppealResponse, EditRequest
@@ -159,6 +160,8 @@ async def world_playback_snapshot(sequence: int, request: Request) -> JSONRespon
 async def scenarios() -> dict[str, Any]:
     choices = [Scenario.model_validate(read_json(path)) for path in sorted((DATA / "scenarios").glob("*.json"))]
     return {"scenarios": [{"id": choice.id, "title": choice.title, "objective": choice.initial_objective or choice.objective,
+                          "public_details": choice.resolved_public_details,
+                          "has_private_details": choice.resolved_private_details is not None,
                           "agent_slots": [{"id": slot, "profile_id": default_profile_id(choice, slot),
                                            "start_location": next((agent.start_location or choice.start_location
                                                                    for agent in choice.agents if agent.id == slot),
@@ -387,20 +390,23 @@ async def stream(request: Request, run_id: str = "", after: int = 0, compact: bo
 async def transcript(request: Request):
     active = controller(request)
     return JSONResponse({
-        "schema_version": "1.0", "run": active.run,
+        "schema_version": "1.0", "run": active.public_value(active.run),
         "events": list(active.events.events) if active.events else [],
     }, headers={"Content-Disposition": 'attachment; filename="npc-transcript.json"'})
 
 
 @app.get("/api/history")
-async def history() -> dict[str, Any]:
-    runs = [read_json(path) for path in DATA.glob("runs/*/run.json")]
+async def history(request: Request) -> dict[str, Any]:
+    project = controller(request).public_value
+    runs = [project(read_json(path))
+            for path in DATA.glob("runs/*/run.json")]
     return {"runs": sorted(runs, key=lambda run: run["created_at"], reverse=True)}
 
 
 @app.get("/api/story/{run_id}")
 async def recorded_story(run_id: str, request: Request, day: int | None = None,
-                         actor: str | None = None, after: int = 0, limit: int = 100) -> dict[str, Any]:
+                         actor: str | None = None, after: int = 0, limit: int = 100,
+                         format: str = "narrative") -> dict[str, Any]:
     if len(run_id) != 32 or any(char not in "0123456789abcdef" for char in run_id):
         raise HTTPException(400, "Invalid run ID")
     if limit < 1 or limit > 100 or after < 0 or (day is not None and day < 1):
@@ -416,7 +422,10 @@ async def recorded_story(run_id: str, request: Request, day: int | None = None,
     count = (active.events.count if active.run and active.run["id"] == run_id and active.events
              else EventStore(directory, run_id).count)
     backfilling = _schedule_story(store, directory, count)
-    page = await asyncio.to_thread(store.page, day=day, actor=actor, after=after, limit=limit)
+    if format not in REPORT_FORMATS:
+        raise HTTPException(422, "Unknown report format")
+    page = await asyncio.to_thread(store.page, day=day, actor=actor, after=after, limit=limit,
+                                   report_format=format)
     return {**page, "backfilling": backfilling, "total_events": count,
             "error": _story_errors.get(run_id)}
 

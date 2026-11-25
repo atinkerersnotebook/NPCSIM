@@ -68,6 +68,9 @@ async def test_compressed_proxy_request_reports_prompt_savings(monkeypatch):
     assert metadata["compression"]["effective_mode"] == "fact-shorthand"
     assert metadata["compression"]["facts_encoded"] == 1
     assert metadata["compression"]["cache_read_tokens"] == 40
+    assert metadata["compression"]["uncached_prompt_tokens"] == 80
+    assert metadata["compression"]["cache_hit_ratio"] == pytest.approx(1 / 3)
+    assert metadata["compression"]["cache_status"] == "reported"
 
 
 @pytest.mark.asyncio

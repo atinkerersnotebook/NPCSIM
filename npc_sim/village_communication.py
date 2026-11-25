@@ -117,14 +117,34 @@ def validate_config(scenario: Any) -> None:
                 raise ValueError("Every configured owner needs its actual fixed workplace box")
 
 
+def _snapshot_supply_buyer(world: "World", product: str) -> str | None:
+    snapshot = world.scenario.village.snapshot
+    if snapshot is None:
+        return None
+    required = next((item for item in snapshot.required_orders if item.product == product), None)
+    return required.buyer if required else None
+
+
 def initial_state(scenario: Any) -> VillageCommunicationState | None:
     policy = scenario.village.communication
     if policy is None:
         return None
-    return VillageCommunicationState(
+    state = VillageCommunicationState(
         config=policy.model_copy(deep=True),
         boxes={key: key.removeprefix("workplace-inbox-") for key in fixture_specs(scenario)}
         if policy.workplace_boxes else {})
+    if scenario.id == "millhaven-snapshot-i" and "workplace-inbox-elsie" in state.boxes:
+        notice = NoticeVersion(
+            id="snapshot-brunch-request", version=1, author="elsie",
+            terms=NoticeTerms(type="general", subject="Travelling party brunch",
+                              description="A party of twelve requests 12 brunch portions at 11:00; arrange six fresh loaves, 12 milk and 12 eggs at the tavern.",
+                              recipients=["elsie"], private=True, priority="urgent",
+                              destination="tavern", due_at=scenario.village.snapshot.deadline,
+                              required_fresh_until=scenario.village.snapshot.deadline),
+            created_at=scenario.village.start_minute, updated_at=scenario.village.start_minute)
+        state.notices[notice.id] = [notice]
+        state.placements["workplace-inbox-elsie"] = {notice.id: notice.version}
+    return state
 
 
 def install_scenario(scenario: Any) -> None:
@@ -499,7 +519,11 @@ def preferred_supply_contact(world: "World", terms: NoticeTerms) -> NoticeTerms 
     if not alternatives:
         return terms
     state = _state(world)
-    if world.state.village.minute < state.cooldowns.get(f"post:{world.actor_id}", 0):
+    snapshot_bundle = (world.scenario.id == "millhaven-snapshot-i"
+                       and terms.type == "supply_request"
+                       and terms.subject in {"bread", "milk", "eggs"}
+                       and world.actor_id == _snapshot_supply_buyer(world, terms.subject))
+    if not snapshot_bundle and world.state.village.minute < state.cooldowns.get(f"post:{world.actor_id}", 0):
         return None
     prior = [history[-1].terms for history in state.notices.values()
              if history[-1].author == world.actor_id]
@@ -573,6 +597,9 @@ def _intent_request(world: "World", action: str, request: Any) -> tuple[str, str
             listener=request.listener_id, notice_id=request.notice_id, known_version=memory.snapshot.version))
     if action in {"village_request_supply", "village_propose_meeting", "village_schedule_crew"}:
         if action == "village_request_supply":
+            buyer = _snapshot_supply_buyer(world, request.good)
+            if buyer is not None and actor != buyer:
+                raise ValueError(f"Only {buyer} may create the snapshot's {request.good} purchase request")
             terms = NoticeTerms(type="supply_request", subject=request.good, description=request.purpose,
                                 recipients=[request.preferred_supplier_id], quantity=request.quantity,
                                 destination=request.destination_id or world.scenario.village.residents[actor].work,
@@ -781,7 +808,7 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
             already_read = bool(memory and memory.snapshot.version >= notice.version
                                 and memory.confidence == "direct")
             return (already_read, actor not in {notice.author, *notice.terms.recipients},
-                    notice.terms.priority != "urgent", -notice.updated_at, -int(nid.removeprefix("notice-")))
+                    notice.terms.priority != "urgent", -notice.updated_at, nid)
         ids = request.notice_ids or sorted(placements, key=rank_paper)[:12]
         for nid in ids:
             version = placements.get(nid)
@@ -860,7 +887,11 @@ def _apply(world: "World", action: str, request: Any) -> tuple[str, str]:
             raise ValueError("Update the existing equivalent open need instead of posting a duplicate")
         if terms.type != "meeting" and any(notice.terms == terms for notice in previous):
             raise ValueError("No material change since the prior failed/closed request")
-        if minute < state.cooldowns.get(f"post:{actor}", 0):
+        snapshot_bundle = (world.scenario.id == "millhaven-snapshot-i"
+                          and terms.type == "supply_request"
+                          and terms.subject in {"bread", "milk", "eggs"}
+                          and actor == _snapshot_supply_buyer(world, terms.subject))
+        if not snapshot_bundle and minute < state.cooldowns.get(f"post:{actor}", 0):
             raise ValueError("Post/check activity has a cooldown; continue useful work")
         nid = f"notice-{state.next_notice}"
         appointment = None
@@ -1397,6 +1428,21 @@ def observation(world: "World") -> dict[str, Any]:
         "network": _tin_can_network(world) if instant(world) else None,
         "recent_blocker": state.recent_blockers.get(world.actor_id),
         "notices": [_view(world, item.snapshot, item) for item in ordered[:12]],
+        "contacts": [{
+            "id": resident_id,
+            "name": village.resident_name(world, resident_id),
+            "usual_workplace": resident.work,
+            "wake_minute": resident.wake_minute,
+            "bed_minute": resident.bed_minute,
+            "locally_present": resident_id in village.local_residents(world, world.actor.location_id),
+            "received_appointment_locations": list(dict.fromkeys(
+                memory.snapshot.appointment.place for memory in memories.values()
+                if memory.snapshot.appointment and resident_id in memory.snapshot.appointment.members)),
+        } for resident_id, resident in world.scenario.village.residents.items()
+            if resident_id != world.actor_id],
+        "fanout": {"personally_received_versions": len(memories),
+                   "direct": sum(item.confidence == "direct" for item in memories.values()),
+                   "secondhand": sum(item.confidence == "secondhand" for item in memories.values())},
         "boxes": [{"id": box, "owner": village.resident_name(world, owner),
                    "place": world.state.entities[world.state.entities[box].location].name,
                    "here": world.state.entities[box].location == world.actor.location_id,
@@ -1416,6 +1462,12 @@ def monitor(world: "World") -> dict[str, Any]:
         "enabled": True, "scope": "privileged operator world view", "policy": guidance(world),
         "network": _tin_can_network(world) if instant(world) else None,
         "notices": [_view(world, history[-1]) for history in state.notices.values()],
+        "fanout": {notice_id: {
+            "versions": len(history),
+            "recipients": sorted({rid for rid, ledger in state.knowledge.items() if notice_id in ledger}),
+            "placements": sorted(fixture for fixture, placements in state.placements.items()
+                                  if notice_id in placements),
+        } for notice_id, history in state.notices.items()},
         "boxes": [{"id": box, "owner": village.resident_name(world, owner),
                    "place": world.state.entities[world.state.entities[box].location].name,
                    "here": False, "can_read": False, "notes": len(state.placements.get(box, {}))}
@@ -1445,6 +1497,9 @@ def actions(world: "World") -> list[dict[str, Any]]:
         "village_share_known_information": (ShareIntent, "Share a personally received, non-private notice with an actually present and available resident; no remote updates."),
     }
     for verb, (model, text) in descriptions.items():
+        if (world.scenario.id == "millhaven-snapshot-i"
+                and verb in {"village_propose_meeting", "village_schedule_crew"}):
+            continue
         if instant(world) and verb in {"village_notice_post", "village_notice_reply",
                                       "village_notice_update", "village_notice_close",
                                       "village_request_supply", "village_propose_meeting",

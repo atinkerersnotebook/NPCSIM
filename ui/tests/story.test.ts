@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildDayNarrative, buildNarrative, buildStory, canCopyStory, copyRecordedStory, copyStory, storyDays, villageTimeline } from "../src/story.ts";
 import type { RunEvent } from "../src/contracts.ts";
-import { observationSchema } from "../src/contracts.ts";
+import { observationSchema, recordedStorySchema, reportFormatSchema } from "../src/contracts.ts";
+
+test("recorded story accepts every selectable report format", () => {
+  const page = {run_id: "run", cursor: 1, total_events: 1, days: [],
+    backfilling: false, error: null, next: null, paragraphs: []};
+  for (const format of reportFormatSchema.options) {
+    assert.equal(recordedStorySchema.parse({...page, format}).format, format);
+  }
+  assert.throws(() => recordedStorySchema.parse({...page, format: "unknown"}));
+});
 
 test("private questions and privileged previews never enter shared narrative", () => {
   const events = [

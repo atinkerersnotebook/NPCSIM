@@ -138,6 +138,99 @@ def configuration(tmp_path):
     return data, config
 
 
+def test_deterministic_village_candidate_bypasses_model_and_preserves_strict_schema(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.run = {"id": "a" * 32, "actions": 0, "actor_id": "villager", "session_id": "session"}
+    controller.observation = {
+        "observation_revision": "obs-1",
+        "village": {"minute": 500, "day_policy": {"typed_execution": True},
+                    "fallback": {"context_revision": "known-state", "eligible_candidates": [{
+                        "task_id": "return:workplace", "action_id": "go",
+                        "arguments": {"target": "door"}, "reason": "Use the known route."}]}},
+        "actions": [{"id": "go", "availability": "available", "arguments_schema": {
+            "type": "object", "properties": {"target": {"type": "string", "enum": ["door"]}},
+            "required": ["target"], "additionalProperties": False}}],
+    }
+    controller.events = None
+
+    decision = controller._deterministic_decision()
+
+    assert decision is not None
+    assert decision.action_id == "go"
+    assert decision.arguments == {"target": "door"}
+    assert controller.memory["active_typed_step"]["action_id"] == "go"
+
+
+def test_deterministic_executor_rejects_unknown_schema_without_dispatch(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.run = {"id": "a" * 32, "actions": 0, "actor_id": "villager", "session_id": "session"}
+    controller.observation = {
+        "village": {"day_policy": {"typed_execution": True}, "minute": 500,
+                    "fallback": {"eligible_candidates": [{
+                        "task_id": "invalid", "action_id": "go", "arguments": {"target": "unknown"}}]}},
+        "actions": [{"id": "go", "availability": "available", "arguments_schema": {
+            "type": "object", "properties": {"target": {"type": "string", "enum": ["door"]}},
+            "required": ["target"], "additionalProperties": False}}],
+    }
+    controller.events = None
+
+    assert controller._deterministic_decision() is None
+    assert "active_typed_step" not in controller.memory
+
+
+def test_deterministic_plan_drops_stale_meal_when_breakfast_is_disabled(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.run = {"id": "a" * 32, "actions": 0, "actor_id": "villager", "session_id": "session"}
+    step = {"step_id": "stale-breakfast", "intent": "other", "action_id": "village_eat",
+            "arguments": {}, "status": "pending", "attempts": 0, "prerequisites": [],
+            "interrupt_on": [], "earliest_at": None, "latest_at": None, "blocker": None}
+    controller.memory["typed_plan"] = [step]
+    controller.observation = {
+        "village": {"minute": 590, "day_policy": {"typed_execution": True, "breakfast": False,
+                                                   "meal_window": 90},
+                    "personal": {"life": {"meals": {"0:breakfast": {
+                        "kind": "breakfast", "status": "pending", "due": 450}}}},
+                    "fallback": {"eligible_candidates": []}},
+        "actions": [{"id": "village_eat", "availability": "available",
+                     "arguments_schema": {"type": "object", "properties": {},
+                                          "additionalProperties": False}}],
+    }
+    controller.events = None
+
+    assert controller._deterministic_decision() is None
+    assert controller.memory["typed_plan"] == []
+
+
+def test_action_memory_aggregates_repeated_results_with_provenance(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.run = {"id": "a" * 32, "actions": 0, "actor_id": "villager", "session_id": "session",
+                     "cycles": 0, "goal": {"revealed": True}}
+    controller.observation = {"self": {"actor_id": "villager", "location_id": "forge"},
+                              "location": {"id": "forge", "description": "Forge"},
+                              "visible_entities": []}
+    controller.events = type("Events", (), {"events": [{"id": "e1"}], "append": lambda self, value: value})()
+    controller.emit = lambda *args, **kwargs: None
+
+    result = {"outcome": "APPLIED", "code": "LOCAL_TOOLS_CHECKED", "explanation": "Inspected.",
+              "observation": {"self": {"actor_id": "villager", "location_id": "forge"},
+                              "location": {"id": "forge", "description": "Forge"},
+                              "visible_entities": [], "village": {"minute": 100}}}
+    controller._accept_action_result({"request_id": "r1", "action_id": "village_observe", "arguments": {}},
+                                     result, None, True)
+    controller.events.events = [{"id": "e2"}]
+    controller._accept_action_result({"request_id": "r2", "action_id": "village_observe", "arguments": {}},
+                                     result, None, True)
+
+    assert controller.memory["event_summaries"] == [{
+        "action_id": "village_observe", "outcome": "APPLIED", "code": "LOCAL_TOOLS_CHECKED",
+        "minute": 100, "first_minute": 100, "count": 2, "source_events": ["e1", "e2"],
+    }]
+
+
 @pytest.mark.asyncio
 async def test_unhandled_automatic_cycle_reports_error_without_stopping_worker(configuration, monkeypatch):
     data, config = configuration

@@ -310,3 +310,5 @@ class CommunicationView(CommunicationModel):
     notices: list[CommunicationNoticeView]
     boxes: list[InboxView]
     share_candidates: list[ListenerCandidates]
+    contacts: list[dict[str, Any]] = Field(default_factory=list)
+    fanout: dict[str, Any] = Field(default_factory=dict)

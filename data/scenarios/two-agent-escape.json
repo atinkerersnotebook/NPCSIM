@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "two-agent-escape",
   "title": "The Two-Agent Escape",
+  "public_details": "Cooperate so that both agents reach the courtyard. Share discoveries and tools, and leave nobody behind.",
+  "private_details": "",
   "start_location": "workroom",
   "exit_location": "courtyard",
   "objective": "Cooperate so that both agents reach the courtyard. Share discoveries and tools, and leave nobody behind.",

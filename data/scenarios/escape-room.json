@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "escape-room",
   "title": "The Locked Room",
+  "public_details": "Leave the room.",
+  "private_details": "",
   "start_location": "room",
   "exit_location": "outside",
   "objective": "Leave the room.",

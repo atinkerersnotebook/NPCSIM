@@ -1,6 +1,8 @@
 {
   "schema_version": "1.0", "id": "sealed-vault",
   "title": "Thief & Mage - The Sealed Vault",
+  "public_details": "Combine lockpicking, trap disarming and magic to open the vault route and bring both adventurers to the courtyard.",
+  "private_details": "",
   "start_location": "entrance", "exit_location": "courtyard",
   "objective": "Combine lockpicking, trap disarming and magic to open the vault route and bring both adventurers to the courtyard.",
   "goal_type": "all_actors_at_exit_location",

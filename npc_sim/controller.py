@@ -17,9 +17,9 @@ from pydantic import ValidationError
 
 from npc_sim.contracts import action_result, goal_result, observation
 from npc_sim.mcp_client import WorldClient
-from npc_sim.models import AppConfig, BudgetExtension, Budgets, ClockMode, ClockRequest, Decision, EpisodeLoadRequest, EpisodeSave, EpisodeSaveRequest, ReopenRequest, RunModeRequest, Scenario, SkillMode, WorldState
+from npc_sim.models import AppConfig, BudgetExtension, Budgets, ClockMode, ClockRequest, Decision, EpisodeLoadRequest, EpisodeSave, EpisodeSaveRequest, ReopenRequest, RunModeRequest, Scenario, SkillMode, VillagePlanStep, WorldState
 from npc_sim.proxy import EmptyModelResponse, Proxy
-from npc_sim.prompt_context import REVIEW_EVENTS
+from npc_sim.prompt_context import REVIEW_EVENTS, public_proxy_messages
 from npc_sim.storage import EventStore, StoryStore, read_json, write_json
 from npc_sim.world_storage import WorldStorage, read_world_state
 from npc_sim.assessment import CompletionAnalysis, grade, load_memory, record_feedback, remove_feedback
@@ -717,7 +717,7 @@ class Controller:
         daily_defeat_recovery = (previous_status == "blocked"
                                  and last_ruling.get("source") == "ai"
                                  and last_ruling.get("verdict") == "defeat")
-        if self.run["goal"]["type"] != "village_restored" or not (
+        if self.run["goal"]["type"] not in {"village_restored", "village_snapshot_completed"} or not (
                 premature or timeout_recovery or scheduler_recovery or actor_selection_recovery
                 or restart_recovery or daily_defeat_recovery or storage_recovery):
             raise ValueError("Only a prematurely completed village adventure, a recoverable daily-village AI defeat, "
@@ -761,13 +761,27 @@ class Controller:
             if restart_recovery:
                 results = {event["payload"]["request_id"] for event in self.events.events
                            if event["kind"] == "action_result"}
-                pending = any(event["payload"]["request_id"] not in results for event in self.events.events
-                              if event["kind"] == "action_request")
+                requests = [event for event in self.events.events if event["kind"] == "action_request"]
+                pending_requests = [event for event in requests
+                                    if event["payload"]["request_id"] not in results]
+                pending = bool(pending_requests)
                 last_action = next((event for event in reversed(self.events.events)
                                     if event["kind"] == "action_result"), None)
-                if (pending or last_action is None or last_action.get("free_action")
-                        or last_action["payload"]["observation"]["observation_revision"]
-                        != f"obs-{saved_world.revision}"):
+                if pending:
+                    if len(pending_requests) != 1 or pending_requests[0] is not requests[-1]:
+                        raise ValueError("The interrupted episode has more than one uncertain action request.")
+                    event = pending_requests[0]
+                    actor = saved_world.actors.get(event["actor_id"])
+                    payload = event["payload"]
+                    if (event["cycle"] != self.run["cycles"] or actor is None
+                            or actor.session_id != event["session_id"]
+                            or event["actor_id"] != self.run["actor_id"]
+                            or payload["expected_observation_revision"] != f"obs-{saved_world.revision}"):
+                        raise ValueError("The interrupted request no longer matches the saved world boundary.")
+                    pending_replay = event
+                elif (last_action is None or last_action.get("free_action")
+                      or last_action["payload"]["observation"]["observation_revision"]
+                      != f"obs-{saved_world.revision}"):
                     raise ValueError("The interrupted episode is not at a confirmed durable action boundary.")
             if actor_selection_recovery:
                 results = {event["payload"]["request_id"] for event in self.events.events
@@ -856,8 +870,10 @@ class Controller:
             raise ValueError("Midnight stopping requires timed village turns.")
         verification = goal_result(await self.world.operation(
             "evaluate_goal", {"goal_type": self.run["goal"]["type"]}, 5))
+        snapshot_goal = self.run["goal"]["type"] == "village_snapshot_completed"
         if (verification["status"] != "active"
-                or verification.get("evidence", {}).get("completion_scope") != "full_village_day"):
+                or (not snapshot_goal
+                    and verification.get("evidence", {}).get("completion_scope") != "full_village_day")):
             raise ValueError("The world does not confirm unfinished daily-life requirements; no result was changed.")
         if daily_defeat_recovery and not self._daily_requirements_recoverable(verification):
             raise ValueError("The world does not confirm recoverable daily-village requirements; no result was changed.")
@@ -1000,6 +1016,11 @@ class Controller:
         self.events = EventStore(directory, rid)
         self.story = StoryStore(directory, rid, team=bool(self.run.get("agents")))
         self.memory = {"schema_version": "1.0", "recent": [], "discoveries": [], "plan": [], "subgoal": ""}
+        self.memory["scenario_details"] = {
+            "public": scenario.resolved_public_details,
+            **({"private": scenario.resolved_private_details}
+               if scenario.resolved_private_details is not None else {}),
+        }
         self.memory["agent_profile"] = profile_context(profiles[actor_id])
         previous = load_memory(self.data, scenario.id)
         self.memory["previous_attempt_feedback"] = {
@@ -1053,11 +1074,16 @@ class Controller:
         if len(scenario.agents) > 1:
             self.run["exit_location"] = scenario.exit_location
             for agent in scenario.agents:
+                agent_goal = copy.deepcopy(self.run["goal"])
+                if scenario.id == "millhaven-snapshot-i" and agent.id != "elsie":
+                    agent_goal["objective"] = (
+                        "Continue your ordinary local duties. Act only on personally observed conditions, "
+                        "received messages, and funded requests; do not infer another resident's private task.")
                 self.agents[agent.id] = {
                     "session_id": self.world.manifest["actor_sessions"][agent.id],
                     "role": agent.role, "memory": copy.deepcopy(self.memory),
                     "observation": None, "patterns": [], "replan_count": 0,
-                    "wait_until": None, "wait_revision": None, "goal": copy.deepcopy(self.run["goal"])}
+                    "wait_until": None, "wait_revision": None, "goal": agent_goal}
                 self.agents[agent.id]["memory"]["agent_profile"] = profile_context(profiles[agent.id])
             for agent in scenario.agents:
                 self.run["actor_id"] = agent.id
@@ -1242,21 +1268,25 @@ class Controller:
         self.remember(self.observation)
         if await self.verify():
             return
+        decision = self._deterministic_decision()
+        deterministic = decision is not None
+        if decision is None:
+            self.memory.pop("active_typed_step", None)
         if not self.run["model"]:
-            models = await self._call_proxy(self.proxy.models())
-            if len(models) != 1:
-                raise ValueError("Multiple models are available. Select one in the admin panel before running.")
-            self.run["model"] = models[0]
+            if decision is None:
+                models = await self._call_proxy(self.proxy.models())
+                if len(models) != 1:
+                    raise ValueError("Multiple models are available. Select one in the admin panel before running.")
+                self.run["model"] = models[0]
         repair: str | None = None
-        decision: Decision | None = None
         empty_attempts = 0
-        for attempt in range(2):
+        for attempt in range(0 if decision is not None else 2):
             if (not self.run_until_complete and self.run["model_calls"] >= self.budgets.max_model_calls) or self.remaining() <= 0:
                 if not await self.verify(final=True):
                     self.finish("budget_exceeded", "Model-call or wall-time budget exhausted.")
                 return
             messages = self.proxy.context(self.run["goal"], self.observation, self.memory, repair)
-            self.emit("proxy_request", {"model": self.run["model"], "messages": messages, "repair": bool(repair),
+            self.emit("proxy_request", {"model": self.run["model"], "messages": public_proxy_messages(messages), "repair": bool(repair),
                                         "compression": dict(getattr(self.proxy, "context_diagnostics", {}))})
             self.run["model_calls"] += 1
             self.checkpoint()
@@ -1319,7 +1349,9 @@ class Controller:
         self._accept_action_result(request, result, decision, goal_was_revealed)
         if await self.verify(final=self.remaining() <= 0):
             return
-        await self.review_team_progress()
+        if (not deterministic or self.run["actions"] -
+                self.run.get("dungeon_master", {}).get("last_review_action", 0) >= 12):
+            await self.review_team_progress()
         if self.run["status"] in TERMINAL:
             return
         pattern = json.dumps([decision.action_id, decision.arguments, result["outcome"], result["code"]], sort_keys=True)
@@ -1339,6 +1371,102 @@ class Controller:
             self.finish("budget_exceeded", "Episode budget exhausted without verified completion.")
         if self.run["status"] == "running" and self.wait_until is not None and not self._continuous_clock():
             await self._set_clock(True)
+
+    def _deterministic_decision(self) -> Decision | None:
+        if not self.run or not self.observation:
+            return None
+        village = self.observation.get("village") or {}
+        policy = village.get("day_policy") or {}
+        if not policy.get("typed_execution", False):
+            return None
+        minute = village.get("minute", 0)
+        advertised = {action["id"]: action for action in self.observation.get("actions", [])}
+        typed = self.memory.get("typed_plan", [])
+        if not typed:
+            typed = list(((self.observation.get("village") or {}).get("fallback") or {}).get("executable_steps") or [])
+        while typed:
+            step = VillagePlanStep.model_validate(typed[0])
+            if step.status == "blocked":
+                typed.pop(0)
+                continue
+            if step.earliest_at is not None and minute < step.earliest_at:
+                return None
+            if step.latest_at is not None and minute > step.latest_at:
+                typed.pop(0)
+                self.emit("typed_plan_expired", step.model_dump(mode="json"))
+                continue
+            descriptor = advertised.get(step.action_id)
+            if descriptor is not None and descriptor.get("availability") != "blocked":
+                if (step.action_id == "village_eat" and not self._typed_meal_step_ready(village, step)):
+                    typed.pop(0)
+                    self.emit("typed_plan_unavailable", {
+                        **step.model_dump(mode="json"),
+                        "reason": "The authoritative meal state no longer permits this step.",
+                    })
+                    continue
+                try:
+                    validate(step.arguments, descriptor["arguments_schema"])
+                except (SchemaError, ValidationError):
+                    step.status, step.blocker = "blocked", "Typed plan arguments are no longer valid."
+                    self.memory["typed_plan"] = typed[1:]
+                    return None
+                step.status = "active"
+                self.memory["active_typed_step"] = step.model_dump(mode="json")
+                self.emit("deterministic_plan_step", {
+                    "step": step.model_dump(mode="json"), "source": "model_plan",
+                    "context_revision": (village.get("fallback") or {}).get("context_revision"),
+                })
+                return Decision(action_id=step.action_id, arguments=step.arguments,
+                                justification="Execute the previously validated typed plan step.",
+                                expected_outcome=step.intent)
+            typed.pop(0)
+            self.emit("typed_plan_unavailable", step.model_dump(mode="json"))
+        candidates = ((village.get("fallback") or {}).get("eligible_candidates") or [])
+        for candidate in candidates:
+            action = advertised.get(candidate.get("action_id"))
+            if (not action or action.get("availability") == "blocked"
+                    or candidate.get("requires_input") or candidate.get("action_id") in {
+                        "say", "village_tell", "village_ask", "village_daily_plan",
+                    }):
+                continue
+            arguments = candidate.get("arguments") or {}
+            try:
+                validate(arguments, action["arguments_schema"])
+            except (SchemaError, ValidationError):
+                continue
+            step = VillagePlanStep(
+                step_id=str(candidate.get("task_id") or uuid4().hex),
+                intent="wait" if candidate["action_id"] in {
+                    "village_wait", "village_wait_event", "wait_until_next_relevant_event"
+                } else "travel" if candidate["action_id"] in {"go", "village_plan_walk"} else "other",
+                action_id=candidate["action_id"], arguments=arguments,
+                status="active", prerequisites=[str(candidate.get("reason") or "engine candidate")])
+            self.memory["active_typed_step"] = step.model_dump(mode="json")
+            self.emit("deterministic_plan_step", {
+                "step": step.model_dump(mode="json"), "source": "eligible_candidate",
+                "context_revision": (village.get("fallback") or {}).get("context_revision"),
+            })
+            return Decision(action_id=step.action_id, arguments=step.arguments,
+                            justification="Execute the engine-validated deterministic candidate.",
+                            expected_outcome=step.intent)
+        return None
+
+    @staticmethod
+    def _typed_meal_step_ready(village: dict[str, Any], step: VillagePlanStep) -> bool:
+        policy = village.get("day_policy") or {}
+        personal = village.get("personal") or {}
+        life = personal.get("life") or {}
+        meal_items = life.get("meals") or {}
+        minute = village.get("minute") or 0
+        pending = [meal for meal in meal_items.values() if isinstance(meal, dict)
+                   and meal.get("status") == "pending" and meal.get("due", 0) <= minute]
+        if not pending:
+            return False
+        meal = min(pending, key=lambda item: item.get("due", 0))
+        if meal.get("kind") == "breakfast":
+            return bool(policy.get("breakfast")) and minute <= meal.get("due", 0) + \
+                int(policy.get("meal_window", 0))
+        return step.action_id == "village_eat"
 
     def _accept_action_result(self, request: dict[str, Any], result: dict[str, Any],
                               decision: Decision | None, goal_was_revealed: bool) -> None:
@@ -1363,8 +1491,36 @@ class Controller:
             "outcome": result["outcome"], "code": result["code"],
             "explanation": result["explanation"],
         }])[-12:]
+        summaries = self.memory.setdefault("event_summaries", [])
+        item = {
+            "action_id": request["action_id"], "outcome": result["outcome"],
+            "code": result["code"], "minute": (result.get("observation") or {}).get("village", {}).get("minute"),
+            "count": 1, "first_minute": (result.get("observation") or {}).get("village", {}).get("minute"),
+            "source_events": [self.events.events[-1]["id"] if self.events and self.events.events else None],
+        }
+        signature = (item["action_id"], item["outcome"], item["code"])
+        previous = summaries[-1] if summaries else None
+        if previous and (previous["action_id"], previous["outcome"], previous["code"]) == signature:
+            previous["count"] += 1
+            previous["minute"] = item["minute"]
+            previous["source_events"] = (previous.get("source_events", []) + item["source_events"])[-12:]
+        else:
+            summaries.append(item)
+        self.memory["event_summaries"] = summaries[-24:]
+        self.memory["last_observation"] = copy.deepcopy(self.observation)
         if decision is not None and (goal_was_revealed or not self.run["goal"].get("revealed", True)):
             self.memory["plan"], self.memory["subgoal"] = decision.plan, decision.subgoal
+            if decision.plan_steps:
+                self.memory["typed_plan"] = [step.model_dump(mode="json") for step in decision.plan_steps]
+        active = self.memory.get("active_typed_step")
+        if active and active.get("action_id") == request["action_id"] and active.get("arguments") == request["arguments"]:
+            active["attempts"] = active.get("attempts", 0) + 1
+            active["status"] = "succeeded" if result["outcome"] == "APPLIED" else "blocked"
+            active["blocker"] = result["explanation"] if result["outcome"] != "APPLIED" else None
+            self.memory.pop("active_typed_step", None)
+            typed = self.memory.get("typed_plan", [])
+            if typed and typed[0].get("step_id") == active.get("step_id"):
+                typed.pop(0)
 
     def dungeon_master_ruling(self, scope: str, verdict: str, reason: str,
                               evidence_ids: list[str], source: str) -> None:
@@ -1489,14 +1645,16 @@ class Controller:
                     if profile:
                         metadata["actor_name"] = profile["name"]
                     if self.world and self.world.manifest.get("village_full_rules"):
+                        free_actions = {"look", "read", "village_plan_walk",
+                                        "village_assign_shipment", "village_accept_shipment"}
                         if kind == "action_request":
-                            metadata["free_action"] = payload["action_id"] in {"look", "read"}
+                            metadata["free_action"] = payload["action_id"] in free_actions
                         elif kind == "action_result":
                             request = next((event["payload"] for event in reversed(self.events.events)
                                             if event["kind"] == "action_request" and event["actor_id"] == actor_id
                                             and event["payload"]["request_id"] == payload["request_id"]), None)
                             if request is not None:
-                                metadata["free_action"] = request["action_id"] in {"look", "read"}
+                                metadata["free_action"] = request["action_id"] in free_actions
             recorded = self.events.append({"kind": kind, "timestamp": utc_now(), **metadata,
                                 "cycle": self.run["cycles"], "session_id": session_id,
                                 "actor_id": actor_id, "payload": payload})
@@ -1734,6 +1892,15 @@ class Controller:
         snapshot.update(world=world, observation=None, memory={}, in_flight=False, event_count=event_count)
         return snapshot
 
+    @staticmethod
+    def public_value(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: Controller.public_value(item) for key, item in value.items()
+                    if key not in {"scenario_details", "private_details"}}
+        if isinstance(value, list):
+            return [Controller.public_value(item) for item in value]
+        return value
+
     def status(self) -> dict[str, Any]:
         snapshot = None
         if self.run:
@@ -1754,7 +1921,7 @@ class Controller:
                         village["dashboard"]["trades"] = village_events.completed_trades(typed.village)
                     self._snapshot_key = key
                 snapshot = copy.deepcopy(self._world_snapshot)
-        return {"run": self.run, "observation": self.observation,
-                "world": snapshot, "memory": self.memory, "in_flight": self.in_flight,
+        return {"run": self.public_value(self.run), "observation": self.observation,
+                "world": snapshot, "memory": self.public_value(self.memory), "in_flight": self.in_flight,
                 "event_count": self.events.count if self.events else 0,
                 "config": self.config.model_dump(mode="json")}

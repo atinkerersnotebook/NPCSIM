@@ -1,3 +1,4 @@
+import json
 import shutil
 from pathlib import Path
 
@@ -23,8 +24,28 @@ def test_versioned_millhaven_scenario_titles(tmp_path, monkeypatch):
     assert response.status_code == 200
     choices = {choice["id"]: choice for choice in response.json()["scenarios"]}
     assert choices["millhaven-instant"]["title"] == "Millhaven VII - Tin Cans and String Test"
+    assert choices["millhaven-instant"]["public_details"]
+    assert choices["millhaven-instant"]["has_private_details"] is False
+    assert "private_details" not in choices["millhaven-instant"]
     assert len(choices["millhaven-instant"]["agent_slots"]) == 12
     assert choices["grand-theft-millhaven"]["title"] == "Millhaven VI-I - Grand Theft Millhaven"
+
+
+def test_scenario_catalog_never_exposes_private_details(tmp_path, monkeypatch):
+    scenarios = tmp_path / "scenarios"
+    scenarios.mkdir()
+    source = read_json(ROOT / "data" / "scenarios" / "escape-room.json")
+    source["public_details"] = "A public arrival briefing."
+    source["private_details"] = "NPC-only secret: the key belonged to the caretaker."
+    (scenarios / "escape-room.json").write_text(json.dumps(source), encoding="utf-8")
+    monkeypatch.setattr(application, "DATA", tmp_path)
+
+    choice = TestClient(application.app).get("/api/scenarios").json()["scenarios"][0]
+
+    assert choice["public_details"] == "A public arrival briefing."
+    assert choice["has_private_details"] is True
+    assert "private_details" not in choice
+    assert "caretaker" not in json.dumps(choice)
 
 
 def test_live_event_projection_keeps_original_details_available(monkeypatch):
@@ -123,6 +144,129 @@ def test_incremental_story_merges_confirmed_action_and_keeps_team_voice(tmp_path
     assert [paragraph["text"] for paragraph in actual] == [paragraph.text for paragraph in expected]
     assert store.position() == 5
     assert StoryStore(tmp_path, run_id).page()["paragraphs"] == actual
+
+
+def test_story_report_formats_are_projection_only(tmp_path):
+    from npc_sim.storage import StoryStore
+
+    run_id = "d" * 32
+    store = StoryStore(tmp_path, run_id)
+    store.append({"id": f"{run_id}:1", "sequence": 1, "actor_id": "otter", "cycle": 1,
+                  "kind": "observation", "payload": {
+                      "narrative": "At the forge.", "self": {"location_id": "forge",
+                          "body": {"carrying": {"rule": "item_count", "limit": 2}}},
+                      "visible_entities": []}})
+
+    narrative = store.page(report_format="narrative")["paragraphs"]
+    sitrep = store.page(report_format="sitrep")["paragraphs"]
+    bluf = store.page(report_format="bluf")["paragraphs"]
+
+    assert store.page(report_format="narrative")["paragraphs"] == narrative
+    assert sitrep[0]["text"].startswith("Situation:")
+    assert all(label in sitrep[0]["text"] for label in ("Progress:", "Blockers:", "Next action:"))
+    assert "Situation observed and recorded." in sitrep[0]["text"]
+    assert "None established by this entry." in sitrep[0]["text"]
+    assert bluf[0]["text"].startswith("Current result:")
+    with pytest.raises(ValueError, match="Unknown report format"):
+        store.page(report_format="unknown")
+
+
+def test_story_sitrep_uses_verified_action_results(tmp_path):
+    from npc_sim.storage import StoryStore
+
+    run_id = "f" * 32
+    store = StoryStore(tmp_path, run_id)
+    observation = {"narrative": "At the forge.", "self": {"location_id": "forge",
+        "body": {"carrying": {"rule": "item_count", "limit": 2}}}, "visible_entities": []}
+    events = [
+        {"kind": "observation", "payload": observation, "cycle": 1},
+        {"kind": "decision", "payload": {"action_id": "open", "justification": "I need the box."}, "cycle": 1},
+        {"kind": "action_request", "payload": {"action_id": "open", "arguments": {"target": "box"}}, "cycle": 1},
+        {"kind": "action_result", "payload": {"outcome": "REJECTED", "explanation": "The box is locked.",
+            "observation": observation}, "cycle": 1},
+        {"kind": "finished", "payload": {"status": "blocked", "reason": "The box remains locked."}, "cycle": 1},
+    ]
+    for sequence, item in enumerate(events, 1):
+        store.append({"id": f"{run_id}:{sequence}", "sequence": sequence,
+                      "actor_id": "otter", **item})
+
+    paragraphs = {entry["sequence"]: entry["text"] for entry in
+                  store.page(report_format="sitrep")["paragraphs"]}
+    assert "Action outcome recorded as REJECTED." in paragraphs[3]
+    assert "The proposed action was rejected" in paragraphs[3]
+    assert "Reassess the constraints and choose another action." in paragraphs[3]
+    assert "Attempt ended with status blocked." in paragraphs[5]
+
+
+def test_story_compact_formats_use_recorded_metadata_and_preserve_story(tmp_path, monkeypatch):
+    import json
+    import shlex
+    from types import SimpleNamespace
+    from npc_sim.storage import StoryStore, write_json
+
+    run_id = "1" * 32
+    directory = tmp_path / "runs" / run_id
+    write_json(directory / "run.json", {"id": run_id, "actor_id": "otter"})
+    observed = {"narrative": 'At the forge. "The key is here."',
+                "self": {"location_id": "forge", "body": {"carrying": {"rule": "item_count", "limit": 2}}},
+                "visible_entities": []}
+    raw = [
+        ("observation", observed, 500),
+        ("decision", {"action_id": "take", "justification": "I need the key."}, 500),
+        ("action_request", {"action_id": "take", "arguments": {"target": "key"}}, 500),
+        ("action_result", {"outcome": "APPLIED", "explanation": "You pick up the key.",
+                           "observation": observed}, 505),
+        ("finished", {"status": "succeeded"}, 505),
+    ]
+    store = StoryStore(directory, run_id)
+    for sequence, (kind, payload, minute) in enumerate(raw, 1):
+        event = {"id": f"{run_id}:{sequence}", "run_id": run_id, "schema_version": "1.0",
+                 "sequence": sequence, "actor_id": "otter", "cycle": 1, "kind": kind,
+                 "payload": payload, "village_minute": minute}
+        write_json(directory / "events" / f"{sequence:06}.json", event)
+        store.append(event)
+
+    monkeypatch.setattr(application, "DATA", tmp_path)
+    monkeypatch.setattr(application.app.state, "controller", SimpleNamespace(run=None), raising=False)
+    client = TestClient(application.app)
+    source = store.page()["paragraphs"]
+    for fmt in ("brevity", "metar", "salute", "telegraphic", "headline", "sbar", "logfmt", "adr", "rfc2119"):
+        response = client.get(f"/api/story/{run_id}", params={"format": fmt, "limit": 2})
+        assert response.status_code == 200
+        page = response.json()
+        assert page["format"] == fmt
+        assert [p["id"] for p in page["paragraphs"]] == [p["id"] for p in source[:2]]
+        assert page["next"] == source[1]["sequence"]
+        if fmt not in {"telegraphic", "headline", "metar", "logfmt"}:
+            assert source[0]["text"] in page["paragraphs"][0]["text"]
+    assert store.page(report_format="brevity")["paragraphs"][1]["text"].startswith("RS ")
+    metar = store.page(report_format="metar")["paragraphs"][1]["text"]
+    assert shlex.split(metar)[:4] == ["RS", "D1-0825", "otter", "forge"]
+    assert shlex.split(metar)[4] == source[1]["text"]
+    logfmt = store.page(report_format="logfmt")["paragraphs"][1]["text"]
+    fields = dict(part.split("=", 1) for part in shlex.split(logfmt))
+    assert fields["act"] == "take" and fields["target"] == "key"
+    assert fields["outcome"] == "APPLIED" and fields["text"] == source[1]["text"]
+    assert '"The key is here."' in store.page(report_format="telegraphic")["paragraphs"][0]["text"]
+    assert "Decision: Not independently recorded" in store.page(report_format="adr")["paragraphs"][0]["text"]
+    assert "Recommendation: Not recorded" in store.page(report_format="sbar")["paragraphs"][0]["text"]
+    assert store.page()["paragraphs"] == source
+    assert client.get(f"/api/story/{run_id}", params={"format": "invalid"}).status_code == 422
+    assert json.loads(store.page(report_format="metar")["paragraphs"][0]["text"].split(" ", 4)[4]) == source[0]["text"]
+
+
+def test_story_formats_handle_missing_legacy_metadata_and_empty_pages(tmp_path):
+    from npc_sim.storage import StoryStore
+
+    store = StoryStore(tmp_path, "2" * 32)
+    with store._connect() as db:
+        db.execute("INSERT INTO paragraphs VALUES (1, ?, 'otter', NULL, ?, 1, '{}')",
+                   ("2" * 32 + ":1", "An old story."))
+    assert store.page(report_format="brevity")["paragraphs"][0]["text"] == "UN An old story."
+    assert 'UN - "otter" "-"' in store.page(report_format="metar")["paragraphs"][0]["text"]
+    assert "Location: -" in store.page(report_format="salute")["paragraphs"][0]["text"]
+    with pytest.raises(ValueError, match="Unknown report format"):
+        store.page(after=1, report_format="invalid")
 
 
 def test_story_backfill_reports_missing_event_instead_of_silent_empty_page(tmp_path):

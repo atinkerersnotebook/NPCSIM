@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 from npc_sim.models import (
     Scenario, VillageBelief, VillageConfig, VillageEvent, VillagePersonState, VillageState, VillageTask, VillageWagon,
-    VillageDeadline, VillageStockLot, VillageStockSnapshot,
+    VillageDeadline, VillageMeal, VillageStockLot, VillageStockSnapshot,
 )
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ def validate_config(scenario: Scenario) -> None:
             raise ValueError("Goal deadlines must name village goals and future five-minute times")
     entities = scenario.entities
     locations = {eid for eid, entity in entities.items() if entity.kind == "location"}
-    if config.time_based_turns and (
+    if config.time_based_turns and config.warehouse is None and (
             not {"farm", "watermill", "bakery", "tavern", "village-square", "forge"} <= locations
             or "noticeboard" not in entities or entities["wagon"].location != "forge"):
         raise ValueError("Timed Millhaven needs its supply circuit, noticeboard and a wagon at the forge")
@@ -180,6 +180,23 @@ def initial_state(scenario: Scenario) -> VillageState:
                                                       if product in config.spoil_after else None),
                                           origin="initial_village_stock", seed_event_id=config.initial_stock_seed_id)]
                 for product, quantity in config.stocks[store].items() if quantity}}
+    residents = {rid: VillagePersonState(
+        beliefs={belief.subject: belief.model_copy(deep=True) for belief in resident.beliefs},
+        trust=resident.relationships.copy(), busy_until=resident.busy_until, available_at=config.start_minute,
+        life=village_life.initial_state(resident, config.start_minute, config) if config.daily_life else None,
+        next_work=config.start_minute if config.ai_controlled
+        else config.start_minute + (resident.job.interval if resident.job else 30))
+        for rid, resident in config.residents.items()}
+    if scenario.id == "millhaven-snapshot-i":
+        day = config.start_minute // 1440
+        for rid, person in residents.items():
+            if person.life is None:
+                continue
+            resident = config.residents[rid]
+            due = day * 1440 + resident.wake_minute + config.breakfast_delay
+            person.life.hungry = False
+            person.life.meals[f"{day}:breakfast"] = VillageMeal(
+                kind="breakfast", due=due, status="eaten", source="snapshot:breakfast-complete")
     return VillageState(
         legacy=village_legacy.initial_state(scenario),
         depot_lots=feed_lots,
@@ -194,13 +211,7 @@ def initial_state(scenario: Scenario) -> VillageState:
         mining=village_mining.initial_state(scenario),
         livestock=village_livestock.initial_state(scenario),
         equipment=village_equipment.initial_state(scenario),
-        residents={rid: VillagePersonState(
-            beliefs={belief.subject: belief.model_copy(deep=True) for belief in resident.beliefs},
-            trust=resident.relationships.copy(), busy_until=resident.busy_until, available_at=config.start_minute,
-            life=village_life.initial_state(resident, config.start_minute, config) if config.daily_life else None,
-            next_work=config.start_minute if config.ai_controlled
-            else config.start_minute + (resident.job.interval if resident.job else 30))
-            for rid, resident in config.residents.items()},
+        residents=residents,
         stocks={location: stock.copy() for location, stock in config.stocks.items()},
         initial_stock_seed_id=config.initial_stock_seed_id,
         coins={**config.coins, "visitor": 20,
@@ -777,7 +788,9 @@ def after_action(world: "World", action: str, arguments: dict[str, Any]) -> int:
     if world.scenario.village.ai_controlled:
         from npc_sim import village_ai
         return village_ai.after_action(world, action, arguments)
-    duration = arguments["minutes"] if action == "village_wait" else 0 if action in {"look", "read"} else 5
+    duration = (arguments["minutes"] if action == "village_wait" else 0
+                if action in {"look", "read", "village_plan_walk", "village_assign_shipment",
+                              "village_accept_shipment"} else 5)
     if duration:
         advance(world, duration)
     return duration

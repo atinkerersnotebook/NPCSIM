@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "moonwake-treasures",
   "title": "The Moonwake Treasures",
+  "public_details": "Rain taps the windows of your harbor home. On the table lies a provision parcel, beside a rug pinned down with an iron fastening strip. A notice names two lost treasures. Upstairs, the late cartographer's study still smells of sea salt.",
+  "private_details": "",
   "start_location": "harbor-home",
   "exit_location": "harbor-home",
   "objective": "Recover the moon coins and the sealed star atlas from the far island, return home, and put both treasures down in the harbor home.",

@@ -51,11 +51,30 @@ def test_destination_is_planned_before_step_and_cannot_ping_pong(tmp_path):
     assert plan.doors == ["square-store", "square-tavern"]
     assert [action for action in world.actions() if action["id"] == "go"][0]["availability"] != "blocked"
     assert world.observe()["village"]["personal"]["walking_plan"]["destination"] == "tavern"
+    assert result["observation"]["village"]["minute"] == world.scenario.village.start_minute
     assert step(world, "go", target="square-store")["outcome"] == "APPLIED"
     assert step(world, "go", target="square-store")["code"] == "ROUTE_DEVIATION"
     assert step(world, "village_plan_walk", destination="general-store", purpose="Check store again")["code"] in {"ACTION_UNAVAILABLE", "ROUTE_COMMITTED"}
     assert step(world, "go", target="square-tavern")["outcome"] == "APPLIED"
     assert person.walking_plan is None
+
+
+def test_snapshot_uses_committed_route_planning(tmp_path):
+    from npc_sim.models import Scenario
+    from npc_sim.storage import read_json
+    from pathlib import Path
+
+    value = Scenario.model_validate(read_json(Path(__file__).resolve().parent.parent /
+                                              "data" / "scenarios" / "millhaven-snapshot-i.json"))
+    world = World(value, tmp_path / "snapshot-walking.json", "snapshot-walking", "nella", "session-nella")
+    world.state.village.residents["nella"].known_routes = ["square-store", "square-tavern", "square-bakery"]
+    world.actor.location_id = "general-store"
+
+    assert step(world, "go", target="square-store")["code"] == "ROUTE_REQUIRED"
+    assert step(world, "village_plan_walk", destination="tavern", purpose="Deliver bread")["code"] == "ROUTE_PLANNED"
+    assert world.state.village.residents["nella"].walking_plan.locations == ["village-square", "tavern"]
+    assert village_walking.check_plan(world, "tavern")[0] == "ROUTE_COMMITTED"
+    assert "village_plan_walk" not in {action["id"] for action in world.actions()}
 
 
 def test_route_minimizes_stops_and_survives_reload(tmp_path):

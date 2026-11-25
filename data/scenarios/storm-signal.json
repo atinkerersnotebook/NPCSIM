@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "storm-signal",
   "title": "Raven, Badger & Otter - The Storm Signal",
+  "public_details": "Rain sweeps across an old coastal signal station. Raven shelters in the cliff rookery, Badger waits in the stone quarry, and Otter stands beside the river landing. Each is alone, with a different path leading toward the central signal yard.\n\nThe hilltop refuge is sealed until the storm beacon shines again. Raven can reach high places and focus its light, Badger can support heavy machinery, and Otter can recover submerged parts and repair the wet wiring. No one can restore the station alone. They will need to explore their surroundings, meet in the yard and share what they find.",
+  "private_details": "",
   "start_location": "rookery",
   "exit_location": "refuge",
   "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",

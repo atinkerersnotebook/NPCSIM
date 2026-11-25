@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "river-crossing",
   "title": "Otter & Fox - The River Crossing",
+  "public_details": "Restore the cable ferry and get both animals safely to the riverside shelter.",
+  "private_details": "",
   "start_location": "near-bank",
   "exit_location": "shelter",
   "objective": "Restore the cable ferry and get both animals safely to the riverside shelter.",

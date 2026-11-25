@@ -10,7 +10,7 @@ from npc_sim.storage import read_json, write_json
 
 
 def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = False, firewood: bool = False,
-                   purposeful_downtime: bool = False) -> Scenario:
+                   purposeful_downtime: bool = False, typed_execution: bool = False) -> Scenario:
     scenario = base.model_copy(deep=True)
     if scenario.village is None or not scenario.village.expanded_rules:
         raise ValueError("The living village requires an expanded timed village")
@@ -31,6 +31,7 @@ def build_scenario(base: Scenario, *, livestock: bool = True, anti_idle: bool = 
     config.event_driven_waits = True
     config.anti_idle = anti_idle or purposeful_downtime
     config.purposeful_downtime = purposeful_downtime
+    config.typed_execution = typed_execution
     config.require_tea_use = False
     config.require_manure_use = False
     config.demand_led_completion = True
@@ -437,6 +438,8 @@ def main() -> None:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--anti-idle", action="store_true", help="Enable Phase 1 fallback planning and anti-idle guards.")
     parser.add_argument("--purposeful-downtime", action="store_true", help="Opt in purposeful planning, optional crafts and a scheduled merchant.")
+    parser.add_argument("--typed-execution", action="store_true",
+                        help="Opt in deterministic typed-plan and fallback-candidate execution.")
     parser.add_argument("--firewood", action="store_true", help="Require real firewood for shared cottage fires, ovens and forge work.")
     parser.add_argument("--instant-from-living", action="store_true",
                         help="Derive the tin-cans-and-string test scenario from --base living JSON.")
@@ -458,7 +461,8 @@ def main() -> None:
     else:
         scenario = (build_instant_scenario(base) if args.instant_from_living else
                     build_scenario(base, anti_idle=args.anti_idle,
-                                   firewood=args.firewood, purposeful_downtime=args.purposeful_downtime))
+                                   firewood=args.firewood, purposeful_downtime=args.purposeful_downtime,
+                                   typed_execution=args.typed_execution))
     write_json(args.output, scenario.model_dump(mode="json"))
     print(f"Generated {scenario.id}: {args.output}")
 

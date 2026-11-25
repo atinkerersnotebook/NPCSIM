@@ -15,7 +15,8 @@ from npc_sim.storage import read_json, write_json
 
 
 FORMATS = ("normal", "compact", "shorthand", "fact-shorthand")
-OPTIONS = ("message_deduplicate", "message_relevant_memory", "message_aggregate_events")
+OPTIONS = ("message_deduplicate", "message_relevant_memory", "message_aggregate_events",
+           "message_perception_delta")
 
 
 def combinations() -> list[dict[str, object]]:
@@ -29,15 +30,20 @@ def combinations() -> list[dict[str, object]]:
 def shortlist_combinations() -> list[dict[str, object]]:
     return [
         {"message_format": "normal", "message_deduplicate": False,
-         "message_relevant_memory": False, "message_aggregate_events": False},
+         "message_relevant_memory": False, "message_aggregate_events": False,
+         "message_perception_delta": False},
         {"message_format": "shorthand", "message_deduplicate": True,
-         "message_relevant_memory": False, "message_aggregate_events": False},
+         "message_relevant_memory": False, "message_aggregate_events": False,
+         "message_perception_delta": False},
         {"message_format": "shorthand", "message_deduplicate": True,
-         "message_relevant_memory": True, "message_aggregate_events": False},
+         "message_relevant_memory": True, "message_aggregate_events": False,
+         "message_perception_delta": False},
         {"message_format": "shorthand", "message_deduplicate": True,
-         "message_relevant_memory": True, "message_aggregate_events": True},
+         "message_relevant_memory": True, "message_aggregate_events": True,
+         "message_perception_delta": True},
         {"message_format": "fact-shorthand", "message_deduplicate": True,
-         "message_relevant_memory": True, "message_aggregate_events": True},
+         "message_relevant_memory": True, "message_aggregate_events": True,
+         "message_perception_delta": True},
     ]
 
 
@@ -82,6 +88,13 @@ def summarize(events: list[dict], elapsed: float, status: str | None, run: dict 
         "deduplicated_values": sum(int(item.get("deduplicated_values", 0)) for item in diagnostics),
         "memory_entries_omitted": sum(int(item.get("memory_entries_omitted", 0)) for item in diagnostics),
         "events_aggregated": sum(int(item.get("events_aggregated", 0)) for item in diagnostics),
+        "cache_read_tokens": sum(int(item.get("cache_read_tokens") or 0) for item in diagnostics),
+        "uncached_prompt_tokens": sum(int(item.get("uncached_prompt_tokens") or 0) for item in diagnostics),
+        "cache_status": ("reported" if any(item.get("cache_status") == "reported" for item in diagnostics)
+                         else "unavailable"),
+        "cache_hit_ratio": (sum(int(item.get("cache_read_tokens") or 0) for item in diagnostics)
+                            / sum(int(item.get("provider_prompt_tokens") or 0) for item in diagnostics))
+        if sum(int(item.get("provider_prompt_tokens") or 0) for item in diagnostics) else None,
     }
 
 
@@ -166,8 +179,8 @@ async def evaluate(args: argparse.Namespace) -> dict:
         "- Trials: 1 per combination",
         "- Accuracy: authoritative goal achievement plus valid/applied action rates",
         "",
-        "| Format | Dedup | Relevant memory | Aggregate events | Achieved | Valid rate | Applied rate | Wall s | Mean decision ms | Prompt tokens | Bytes saved |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Format | Dedup | Relevant memory | Aggregate events | Achieved | Valid rate | Applied rate | Wall s | Mean decision ms | Prompt tokens | Cached tokens | Bytes saved |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for item in results:
         markdown.append(
@@ -176,6 +189,7 @@ async def evaluate(args: argparse.Namespace) -> dict:
             f"{str(item['objective_achieved']).lower()} | {item['valid_rate']:.1%} | "
             f"{item['action_accuracy']:.1%} | {item['wall_seconds']:.2f} | "
             f"{item['mean_decision_latency_ms']:.1f} | {item['provider_prompt_tokens']} | "
+            f"{item['cache_read_tokens']} | "
             f"{item['byte_reduction']:.1%} |")
     markdown.append("")
     markdown.append(report["caveat"])

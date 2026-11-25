@@ -20,7 +20,7 @@ const timeSchema = z.object({
   village: z.object({ minute: z.number().nonnegative(), personal: personalSchema.optional(),
     research: z.object({ projects: z.array(researchProjectSchema) }).optional(),
     fallback: z.object({ decision: z.object({ selected_task_id: z.string().nullable(),
-      reason: z.string() }).nullable() }).optional() }).nullish(),
+      reason: z.string() }).nullable().optional() }).optional() }).nullish(),
   clock: z.object({ seconds: z.number().nonnegative() }).nullish(),
   bbq: z.object({ elapsed_seconds: z.number().nonnegative() }).nullish()
 });

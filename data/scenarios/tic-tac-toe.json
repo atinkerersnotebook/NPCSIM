@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "tic-tac-toe",
   "title": "Tic-Tac-Toe - Two-Agent Showdown",
+  "public_details": "Nova and Atlas sit across a three-by-three tic-tac-toe board. Nova holds X and Atlas holds O.\n\nThey take turns placing one mark in an empty square. Three matching marks across a row, down a column or along a diagonal wins; a full board with no winner is a draw.",
+  "private_details": "",
   "start_location": "arena",
   "exit_location": "arena",
   "objective": "Play a complete game of tic-tac-toe against your opponent. Try to win by making three of your marks in a row, column or diagonal, and block your opponent's threats. Nova is X and moves first; Atlas is O. Alternate turns placing marks in empty cells numbered 1-9, left to right, top to bottom. A full board without a winner is a draw. Completing the game is the verified episode goal, not both players winning.",

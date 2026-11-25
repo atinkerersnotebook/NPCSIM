@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "sandwich-kitchen",
   "title": "The Unfamiliar Kitchen",
+  "public_details": "You wake in an unfamiliar kitchen, not knowing how you arrived or what you are supposed to do. A yellow Post-it note is stuck to the worktop. Nearby stand a cupboard, a bread bin, a fruit bin and a refrigerator.",
+  "private_details": "",
   "start_location": "kitchen",
   "exit_location": "kitchen",
   "objective": "Make a peanut butter and jam sandwich and serve it on the plate. Aim for a richer recognizable sandwich combination with suitable extras; plain PB&J is a passing result.",

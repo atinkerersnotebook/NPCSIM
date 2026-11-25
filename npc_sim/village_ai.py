@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from npc_sim import handling, village, village_goods, village_life, village_services, village_wagon, village_extensions, village_communication, village_depot
-from npc_sim import village_replenishment, village_walking
+from npc_sim import village_replenishment, village_walking, village_warehouse
 from npc_sim.models import VillageCommittedWork, VillageCrewSession, VillageJob
 
 if TYPE_CHECKING:
@@ -16,6 +16,7 @@ VERBS = {"village_wait", "village_ask", "village_tell", "village_observe", "vill
          "village_meeting", "village_cook_fish", "village_share_route", "village_split_firewood",
          "village_appeal_dungeon_master", "village_execute_fuel_delivery", "village_plan_walk", "village_daily_plan",
          "wait_until_next_relevant_event"} | village_wagon.VERBS | village_services.VERBS | set(village_services.JOBS) | village_extensions.VERBS | village_replenishment.VERBS
+VERBS |= village_warehouse.VERBS
 
 
 def observation(world: "World") -> dict[str, Any]:
@@ -53,6 +54,7 @@ def observation(world: "World") -> dict[str, Any]:
             } if village_depot.enabled(world) and
             world.actor.location_id in village_depot.stores(world) else {}),
         "coins": state.coins[rid], "resource_inventory": person.cargo.copy(), "tasks": [],
+        **({"warehouse": village_warehouse.observation(world)} if village_warehouse.enabled(world) else {}),
         "events": [state.events[index].model_dump() for index in person.memories[-12:]],
         **({"notices": [notice.model_dump() for notice in state.notices if rid in notice.witnesses],
             "wagon": {**state.wagon.model_dump(), "location": world.state.entities["wagon"].location}
@@ -225,6 +227,7 @@ def actions(world: "World") -> list[dict[str, Any]]:
             add("village_plan_walk", "Commit to a shortest, traversable route before walking. Replan only for a new task or interruption.",
                 {"destination": {"type": "string", "enum": destinations},
                  "purpose": {"type": "string", "minLength": 3, "maxLength": 160}})
+    result.extend(village_warehouse.actions(world))
     if config.time_based_turns:
         add("wait_until_next_relevant_event", "Wait for the next personal event, bounded by the next meal, appointment or bedtime; other residents keep acting.", {})
     add("village_wait", "Wait without controlling any other villager.",
@@ -584,6 +587,8 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
         return village_firewood.execute_delivery_step(world, args["route_id"])
     if action in village_wagon.VERBS:
         return village_wagon.apply(world, action, args)
+    if action in village_warehouse.VERBS:
+        return village_warehouse.apply(world, action, args)
     if action in village_services.VERBS:
         return village_services.apply(world, action, args)
     if action == "village_meeting":
@@ -831,6 +836,8 @@ def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
     if (action == "go" and state.wagon and state.wagon.driver == world.actor_id
             and not state.wagon.automatic):
         world.state.entities["wagon"].location = world.actor.location_id
+    if action == "go" and config.warehouse is not None and state.warehouse_cart_driver == world.actor_id:
+        world.state.entities[config.warehouse.cart].location = world.actor.location_id
     if action == "go":
         from npc_sim import village_logistics
         village_logistics.advance(world)
@@ -852,10 +859,13 @@ def after_action(world: "World", action: str, args: dict[str, Any]) -> int:
         life = state.residents[rid].life
         if life is None or not life.sleeping:
             village.observe_local(world, rid)
-    minutes = args["minutes"] if action == "village_wait" else 0 if action in {"look", "read"} else 5
+    free_milestones = {"look", "read", "village_plan_walk", "village_assign_shipment",
+                       "village_accept_shipment"}
+    minutes = (args["minutes"] if action == "village_wait" else 0
+               if action in free_milestones else 5)
     if config.time_based_turns:
         if config.expanded_rules:
-            state.free_turn_actor = world.actor_id if action in {"look", "read"} else None
+            state.free_turn_actor = world.actor_id if action in free_milestones else None
             if action == "go":
                 if args["target"] not in person.known_routes:
                     person.known_routes.append(args["target"])
@@ -938,6 +948,8 @@ def evaluate_goal(world: "World") -> dict[str, Any]:
     config, state = village.context(world)
     if config.snapshot is not None:
         snapshot = config.snapshot
+        if config.warehouse is not None:
+            return village_warehouse.evaluate_goal(world)
         if state.economy is None:
             raise ValueError("A village snapshot requires an economy ledger")
         if snapshot.cooking_service is not None:

@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "millhaven",
   "title": "Millhaven I - A Village That Carries On",
+  "public_details": "At eight in the morning, Millhaven is already awake. A hammer rings from Torvin's forge, flour dust drifts above Mara's watermill, and Elsie props open the tavern door. Beyond the square, a farm track, a stable lane and a path toward the river invite a closer look.\n\nElsie hopes for a well behind the tavern. Torvin remembers lending his shovel to Bren, but borrowed tools have a way of travelling. Ask the villagers what they know, offer practical help, and let them get on with their work. Their information may be old; their actions still have to happen in the real village.\n\nEach ordinary action gives the village five minutes. Looking and reading cost no time. A longer wait lets people travel, produce goods and carry out accepted requests without further orders.",
+  "private_details": "",
   "start_location": "village-square",
   "exit_location": "village-square",
   "objective": "Help Millhaven recover: ask Torvin to retrieve the borrowed shovel, receive it at your agreed meeting place, then arrange a real well-digging crew behind Elsie's tavern. When the mill drive fails at 14:00, ask Hobb to repair it with Mara and let the grain-to-flour-to-bread trade resume. Use village_ask, village_request, village_tell and village_wait to cooperate with the residents. Drop supplies at the crew's location; tell them only locations you actually know. Task progress is verified by the engine, never by dialogue.",

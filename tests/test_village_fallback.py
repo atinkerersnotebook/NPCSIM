@@ -553,6 +553,7 @@ def test_resolved_breakfast_cutoff_does_not_prevent_legitimate_waiting(tmp_path)
     world.actor.location_id = "tavern"
     assert act(world, "village_eat")["code"] == "MEAL_MISSED"
     village.advance(world, 90)
+    assert not any(choice["action_id"] == "village_eat" for choice in village_fallback.candidates(world))
     assert act(world, "village_wait_event")["code"] == "ELIGIBLE_TASK_PENDING"
     assert any(choice["task_id"] == "return:workplace" for choice in village_fallback.candidates(world))
 

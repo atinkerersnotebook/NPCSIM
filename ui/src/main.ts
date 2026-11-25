@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   stateSchema, eventSchema, eventsSchema, modelsSchema, scenariosSchema, historySchema, historyDetailSchema,
-  recordedStorySchema,
+  recordedStorySchema, reportFormatSchema,
   agentsSchema, agentProfileSchema, skillModeSchema, dungeonMasterConfigSchema, dungeonMasterRulingSchema,
   completionAnalysisSchema, npcChatSchema, budgetExtensionSchema, runModeSchema,
   episodeSaveRequestSchema, episodeLoadRequestSchema, episodeSavesSchema, episodeSaveResultSchema
@@ -67,7 +67,8 @@ app.innerHTML = `
     <div id="dashboard-panels"></div>
     <section class="panel agent-setup">
       <div class="panel-heading"><div><span class="eyebrow">${adminView ? "CAST / TASK ASSIGNMENTS" : "YOUR NEXT ADVENTURE"}</span><h2>${adminView ? "Choose your agents" : "Choose your cast"}</h2></div><span class="tag">${adminView ? "NEXT EPISODE" : "NEXT ADVENTURE"}</span></div>
-      <p class="timeline-note">${adminView ? "Each agent brings its own personality, rules and physical abilities. Slots retain their task starting locations, not their original character's skills." : "Choose the characters for this world, then click New adventure and Play. Each character brings their own personality and abilities. Scenario selection is available in Admin view."}</p>
+      <div id="scenario-details" class="scenario-details"></div>
+      <p class="timeline-note">${adminView ? "Each agent brings its own personality, rules and physical abilities. Slots retain their task starting locations, not their original character's skills. Public details are safe to share; any NPC-only briefing is sent only to the model controlling an NPC." : "Choose the characters for this world, then click New adventure and Play. Each character brings their own personality and abilities. Scenario selection is available in Admin view."}</p>
       <details class="adventure-options" ${adminView ? "open" : ""}><summary>Skills & challenge options</summary>
       <div class="agent-editor">
         <label for="skill-mode">Skills policy</label>
@@ -175,6 +176,10 @@ app.innerHTML = `
           <label><input id="message-deduplicate" type="checkbox" /> Deduplicate repeated request values</label>
           <label><input id="message-relevant-memory" type="checkbox" /> Select relevant long-term memories</label>
           <label><input id="message-aggregate-events" type="checkbox" /> Aggregate identical repeated events</label>
+          <label><input id="message-perception-delta" type="checkbox" /> Send self-contained actor perception changes</label>
+          <label for="report-format">Story report format</label><select id="report-format"><option value="narrative">Narrative</option><option value="sitrep">SITREP</option><option value="bluf">BLUF</option><option value="brevity">Brevity codes (NPCSIM)</option><option value="metar">Aviation-style slots</option><option value="salute">SALUTE</option><option value="telegraphic">Telegraphic</option><option value="headline">Headlinese</option><option value="sbar">SBAR</option><option value="logfmt">logfmt</option><option value="adr">ADR</option><option value="rfc2119">RFC 2119 style</option></select>
+          <p class="muted">Changes Story display and copied Story text only. Canonical events, prompts and NPC actions remain unchanged.</p>
+          <p class="muted">Telegraphic and headlinese omit articles. Other new formats preserve entry text; unknown fields are not inferred. Codes are NPCSIM-specific, not actual radio or aviation reports.</p>
           <p class="muted">Experimental settings apply immediately to a paused episode and are snapshotted for new episodes. Normal mode preserves existing prompts exactly.</p>
           <div class="proxy-actions"><span>No direct-provider fallback</span><button id="save-proxy" class="button">Save settings</button></div>
           <p id="proxy-message" class="muted"></p>
@@ -386,6 +391,8 @@ let archivedDay: number | null = null;
 let archivedPage: RecordedStory | null = null;
 let archiveRequest = 0;
 let selectedStoryDay: number | null = null;
+const savedReportFormat = localStorage.getItem("npcsim.reportFormat");
+let selectedReportFormat = reportFormatSchema.safeParse(savedReportFormat).data ?? "narrative";
 let copyingStory = false;
 let recordedPage: RecordedStory | null = null;
 let storyRequest = 0;
@@ -474,6 +481,8 @@ function applyState(next: State, playbackSnapshot = false): void {
     element<HTMLInputElement>("message-deduplicate").checked = next.config.proxy.message_deduplicate;
     element<HTMLInputElement>("message-relevant-memory").checked = next.config.proxy.message_relevant_memory;
     element<HTMLInputElement>("message-aggregate-events").checked = next.config.proxy.message_aggregate_events;
+    element<HTMLInputElement>("message-perception-delta").checked = next.config.proxy.message_perception_delta;
+    element<HTMLSelectElement>("report-format").value = selectedReportFormat;
     configured = true;
   }
   element("episode-name").textContent = next.run ? (adminView ?
@@ -580,6 +589,7 @@ function renderAssignments(): void {
     "Use each profile's scenario-specific body when configured. Teams missing required challenge skills are rejected before starting.";
   const scenario = scenarioChoices.find(choice => choice.id === selectedScenario);
   if (!scenario || !profiles.length) return;
+  element("scenario-details").innerHTML = `<span class="eyebrow">PUBLIC SCENARIO DETAILS</span><p>${escape(scenario.public_details)}</p>${adminView && scenario.has_private_details ? '<p class="muted">NPC-only briefing is configured. Its contents are excluded from the dashboard and public transcripts.</p>' : ""}`;
   for (const slot of scenario.agent_slots) assignments[slot.id] ||= slot.profile_id;
   element("agent-assignments").innerHTML = scenario.agent_slots.map((slot, index) => {
     const profile = profiles.find(profile => profile.id === assignments[slot.id]);
@@ -979,7 +989,12 @@ function renderWorld(): void {
   };
   scene.innerHTML = `
     ${perspective.observation?.village ? villageMarkup(perspective.observation.village) : ""}
-    <div class="network-heading"><span class="eyebrow">${team ? "CONSOLIDATED TEAM MAP" : "LOCATION NETWORK"}</span><span>${network.nodes.filter(node => !node.unexplored).length} discovered / ${network.edges.length} routes${team ? ` / ${Object.keys(snapshot.run?.agents ?? {}).length} agents` : ""}</span></div>
+    ${perspective.observation?.village?.warehouse ? `<section class="panel warehouse-manifest" aria-label="Warehouse cart and tasks">
+      <div class="network-heading"><span class="eyebrow">WAREHOUSE CART</span><span>${perspective.observation.village.warehouse.cart_load} / ${perspective.observation.village.warehouse.cart_capacity} units · ${escape(perspective.observation.village.warehouse.cart_driver ?? "parked")}</span></div>
+      <p class="muted">Cart at ${escape(perspective.observation.village.warehouse.cart_location ?? "unknown")}. ${perspective.observation.village.warehouse.loads.length ? `${perspective.observation.village.warehouse.loads.map(load => `${load.quantity} ${load.product} → ${load.destination}`).join("; ")}` : "No cargo aboard."}</p>
+      <details><summary>Pick & putaway manifest</summary><div class="network-routes">${perspective.observation.village.warehouse.tasks.map(task => `<div><b>${escape(task.id)}</b><span>${escape(task.kind.toUpperCase())}</span><span>${task.moved} / ${task.quantity} ${escape(task.product)}</span><span>${escape(task.source)} → ${escape(task.destination)}</span></div>`).join("")}</div></details>
+    </section>` : ""}
+    <div class="network-heading"><span class="eyebrow">${network.scope === "storehouse" ? "GENERAL STOREHOUSE / SUBMAP" : team ? "CONSOLIDATED TEAM MAP" : "LOCATION NETWORK"}</span><span>${network.nodes.filter(node => !node.unexplored).length} discovered / ${network.edges.length} routes${team ? ` / ${Object.keys(snapshot.run?.agents ?? {}).length} agents` : ""}</span></div>
     <div class="network-scroll" tabindex="0" role="region" aria-label="${team ? "Consolidated team location network" : "Numbered location network"}">
       <div class="network-canvas" style="height:${network.height}px">
         <svg class="network-links" viewBox="0 0 ${network.width} ${network.height}" preserveAspectRatio="none" aria-label="Discovered routes">
@@ -1275,6 +1290,7 @@ async function loadRecordedStory(after = 0): Promise<void> {
   const request = ++storyRequest;
   const day = selectedStoryDay;
   const query = new URLSearchParams({after: String(after)});
+  query.set("format", selectedReportFormat);
   if (day !== null) query.set("day", String(day));
   if (!run.agents) query.set("actor", selectedActor || run.actor_id);
   storyPageRun = run.id;
@@ -1315,6 +1331,13 @@ element("story-day").addEventListener("change", () => {
   element("narrative").scrollTop = 0;
 });
 
+element("report-format").addEventListener("change", () => {
+  selectedReportFormat = reportFormatSchema.parse(element<HTMLSelectElement>("report-format").value);
+  localStorage.setItem("npcsim.reportFormat", selectedReportFormat);
+  void loadRecordedStory();
+  if (archivedRun && element<HTMLDialogElement>("history-dialog").open) void loadArchiveStory();
+});
+
 async function copyAdventureStory(copy: () => Promise<void>): Promise<void> {
   try {
     await copy();
@@ -1328,11 +1351,13 @@ element("copy-story").addEventListener("click", () => {
   if (!state?.run || element<HTMLButtonElement>("copy-story").disabled) return;
   const run = state.run;
   const day = selectedStoryDay;
+  const format = selectedReportFormat;
   copyingStory = true;
   renderNarrative();
   void copyAdventureStory(() => copyRecordedPages(
     async after => {
       const query = new URLSearchParams({after: String(after)});
+      query.set("format", format);
       if (day !== null) query.set("day", String(day));
       if (!run.agents) query.set("actor", selectedActor || run.actor_id);
       return recordedStorySchema.parse(await api(`/story/${run.id}?${query}`));
@@ -1373,7 +1398,7 @@ function renderTimeline(updateStory = true): void {
     const story = event.kind === "assessment_result" ?
       completionAnalysisSchema.shape.story.optional().parse(payload.story) ?? [] : [];
     return `<details class="event ${summary.tone}" data-event-id="${escape(event.id)}" ${expanded.has(event.id) ? "open" : ""}>
-      <summary><span class="event-marker"></span><div class="event-body"><div class="event-meta">CYCLE ${event.cycle.toString().padStart(2, "0")} <span>${escape(villageTimeline(event, state?.run?.agent_profiles) ?? event.actor_name ?? event.actor_id)}</span>${event.free_action ? "<span>FREE LOOK/READ</span>" : ""}<span>${new Date(event.timestamp).toLocaleTimeString()}</span><span>#${event.sequence}</span></div><strong>${escape(summary.title)}</strong><p>${escape(summary.text)}</p></div><span class="expand-icon">＋</span></summary>
+      <summary><span class="event-marker"></span><div class="event-body"><div class="event-meta">CYCLE ${event.cycle.toString().padStart(2, "0")} <span>${escape(villageTimeline(event, state?.run?.agent_profiles) ?? event.actor_name ?? event.actor_id)}</span>      ${event.free_action ? "<span>FREE MILESTONE</span>" : ""}<span>${new Date(event.timestamp).toLocaleTimeString()}</span><span>#${event.sequence}</span></div><strong>${escape(summary.title)}</strong><p>${escape(summary.text)}</p></div><span class="expand-icon">＋</span></summary>
       <div class="event-detail">${event.kind === "decision" ? `<div class="expected"><span class="eyebrow">EXPECTED OUTCOME</span><p>${escape(payload.expected_outcome)}</p></div>` : ""}${evidence.length ? `<h4>Evidence explained</h4>${evidenceMarkup(evidence, timelineEvents, story)}` : ""}<details data-technical-id="${escape(event.id)}"><summary>Original technical JSON</summary><pre></pre></details></div>
     </details>`;
   }).join("");
@@ -1683,6 +1708,7 @@ element("save-proxy").addEventListener("click", () => {
   config.proxy.message_deduplicate = element<HTMLInputElement>("message-deduplicate").checked;
   config.proxy.message_relevant_memory = element<HTMLInputElement>("message-relevant-memory").checked;
   config.proxy.message_aggregate_events = element<HTMLInputElement>("message-aggregate-events").checked;
+  config.proxy.message_perception_delta = element<HTMLInputElement>("message-perception-delta").checked;
   void api("/config", "PUT", config).then(payload => {
     applyState(stateSchema.parse(payload));
     element("proxy-message").textContent = "Saved to data/config.json.";
@@ -1703,8 +1729,10 @@ element("history-content").addEventListener("click", event => {
     if (!archivedRun) return;
     const run = archivedRun;
     const day = archivedDay;
+    const format = selectedReportFormat;
     void copyAdventureStory(() => copyRecordedPages(async after => {
       const query = new URLSearchParams({after: String(after)});
+      query.set("format", format);
       if (day !== null) query.set("day", String(day));
       return recordedStorySchema.parse(await api(`/story/${run.id}?${query}`));
     }, run.id, navigator.clipboard));
@@ -1746,6 +1774,7 @@ async function loadArchiveStory(after = 0): Promise<void> {
   const request = ++archiveRequest;
   const day = archivedDay;
   const query = new URLSearchParams({after: String(after)});
+  query.set("format", selectedReportFormat);
   if (day !== null) query.set("day", String(day));
   const node = element("archive-narrative");
   node.textContent = "Loading recorded story…";

@@ -226,6 +226,9 @@ transport rules.
 For the next meal-service and continuity work, see the
 [Generation 12 development plan](GENERATION-12-DEVELOPMENT-PLAN.md).
 
+For event-driven NPC planning, typed execution and prompt-cost controls, see the
+[Generation 23 development plan](GENERATION-23-DEVELOPMENT-PLAN.md).
+
 For Generation 11 P2 continuity evidence, save an opening world before the
 first midnight and the same world's next three consecutive midnight states.
 Capture a read-only, hash-linked ledger without replacing any saved world:
@@ -1581,6 +1584,29 @@ For initial setup, open **Admin view**:
 
 The **NPC's story** panel retells observations, attempted actions and confirmed outcomes chronologically. Single-agent stories use first person; multi-agent stories name the acting agent and use "we" for the team's confirmed success. Decision explanations are also instructed to name the actor, reserving "we" for statements that apply to everyone. Expand **Why this action?** for the decision explanation. The technical log remains below it, and archived episodes and copied stories use the same narration. New stories are recorded incrementally; older episodes are restored from persisted JSON events by a resumable background backfill, without extra model calls or hidden-state spoilers. Archived team prose is displayed with named actors; the saved original grading evidence is not modified.
 
+In Admin **Settings**, **Story report format** changes live and archived Story
+display and copied text only; it does not change model prompts, NPC actions, or
+canonical events. Narrative is the default. In addition to SITREP and BLUF:
+
+- **Brevity codes** prefix each entry with an NPCSIM-specific event code: `ST`
+  started, `GD` goal discovered, `OB` observation, `RQ` action requested,
+  `RS` action result, `ER` error, `FN` finished, or `UN` unknown. These are
+  not standard Q codes.
+- **Aviation-style slots** use `code time actor location text`, with quoted
+  string fields, `D<day>-<HHMM>` time, and `-` for unknown values. This is not
+  a METAR or NOTAM. **SALUTE** uses fixed Size, Activity, Location, Unit,
+  Time and Equipment fields; missing facts are marked unknown.
+- **Telegraphic** and **Headlinese** remove articles outside quoted text;
+  Headlinese also joins sentences with semicolons. These are lossy mechanical
+  transformations, not an LLM-written summary; use Narrative for exact wording.
+- **SBAR** and **ADR** retain the recorded entry and mark absent assessment,
+  recommendation, decision or context information as unrecorded rather than
+  inventing it. **RFC 2119 style** preserves existing wording and does not
+  turn ordinary observations into MUST, SHOULD or MAY requirements.
+- **logfmt** emits JSON-quoted `key=value` fields and the full recorded text.
+  Fields unavailable from recorded event metadata are omitted. Older stored
+  stories may lack metadata and therefore use unknown codes or fields.
+
 Adventure prose, decision explanations, archived stories and copied stories use
 the member names saved with that episode (for example, Avery), not internal actor
 IDs such as `npc-001`. Technical logs and original grading evidence retain their IDs.
@@ -1625,6 +1651,12 @@ hidden room. Click or keyboard-select a node for its description, and expand **R
 details** to match `D1`, `D2`, etc. to door names and states. The current agent and
 nearby observed teammates appear on their room. The map scrolls for larger worlds
 and follows the selected actor's discoveries rather than sharing hidden knowledge.
+
+The warehouse snapshot adds a **General Storehouse / Submap** with receiving,
+bulk aisles, alternate pick-face routes, dispatch and an overhead rack. Warehouse
+operators can load, drive and unload the physical cart, while stock-rule min/max
+checks reject invalid picks or putaways. The ladder must be carried and positioned
+at the rack landing before the elevated route opens; the cart cannot use that route.
 
 Each view shows its page title in the navigation header and the simulation name
 and clock in a separate **World** summary. Choose the scenario in **Admin view**;
@@ -2133,6 +2165,15 @@ The dashboard shows recorded explanations and explicit plans, not private model 
 - Older JSON files using `portable` remain readable as an alias of `takable`; new state uses `takable`.
 
 Use a fresh episode after updating scenario JSON; existing episodes retain their original state.
+
+## Scenario detail visibility
+
+Scenario definitions standardize briefing text with `public_details` and `private_details`.
+`public_details` is shown in the scenario picker and may be shared with the player. `private_details`
+is NPC-only context sent to the controlling model during decisions and private NPC questions; the
+dashboard and public model-request diagnostics never include its contents. Keep legacy scenarios and
+saved episodes compatible: when `public_details` is absent, the opening narrative, initial objective,
+or main objective supplies the public briefing in that order.
 
 ### The Unknown Room (`two-locked-rooms`)
 

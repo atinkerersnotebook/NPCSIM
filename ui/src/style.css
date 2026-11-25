@@ -312,6 +312,9 @@ main{max-width:none}
 .scenario-picker { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; max-width: 100%; }
 .scenario-picker label { margin: 0; }
 .scenario-picker select { width: min(52vw, 15rem); max-width: 100%; }
+.scenario-details { margin: 0 23px 17px; padding: 15px 17px; border: 1px solid var(--line); border-radius: 6px; background: #121a1f; }
+.scenario-details p { margin: 9px 0 0; max-width: 70ch; font-size: 12px; line-height: 1.7; color: #cbdadc; }
+.scenario-details p.muted { color: var(--muted); font-size: 10px; }
 :is(.player-view, .admin-view) .toolbar { background: transparent; border: 0; padding: .65rem 1rem; }
 .dashboard-page .dashboard-tabs { background: transparent; border: 0; padding: .35rem 1rem .65rem; gap: .35rem; }
 .dashboard-tabs[hidden] { display: none; }

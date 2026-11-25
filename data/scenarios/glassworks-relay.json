@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "glassworks-relay",
   "title": "The Glassworks Relay - Precision Assembly",
+  "public_details": "You stand in a silent precision workshop. A copper housing waits beside two unplugged machines. A work order hangs above the bench, and a narrow doorway leads to a room of measuring instruments.\n\nThe parts drawers have no assembly numbers. Some components look almost interchangeable; a small glass disc is labelled expendable.",
+  "private_details": "",
   "start_location": "assembly-room",
   "exit_location": "metrology-room",
   "objective": "Assemble, calibrate, seal and commission a phase relay in the acceptance cradle. A loose assembly or an untested relay does not count.",

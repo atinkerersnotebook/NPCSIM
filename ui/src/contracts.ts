@@ -136,7 +136,7 @@ const villageJobSchema = z.object({
   inputs: z.record(z.string(), z.number().int().positive()).default({}),
   outputs: z.record(z.string(), z.number().int().positive()).default({}), equipment: z.string().nullable().default(null),
   duration: z.number().int().positive().default(5), interruptible: z.boolean().default(true),
-  batch_size: z.number().int().min(1).max(2).default(1)
+  batch_size: z.number().int().min(1).max(6).default(1)
 });
 const villageDeliverySchema = z.object({
   source: z.string(), destination: z.string(), resource: z.string(), seller: z.string(),
@@ -216,7 +216,9 @@ export const communicationSchema = z.object({
       notice_id: z.string(), known_version: z.number().int().positive(), subject: z.string(),
       learned_at: z.number().int().nonnegative(), freshness: z.string()
     }))
-  }))
+  })),
+  contacts: z.array(z.unknown()).default([]),
+  fanout: z.record(z.string(), z.unknown()).default({})
 });
 export type VillageCommunication = z.infer<typeof communicationSchema>;
 export const villageFirewoodSchema = z.object({
@@ -233,6 +235,17 @@ export const villageFirewoodSchema = z.object({
   policy: z.string()
 });
 export const villageObservationSchema = z.object({
+  warehouse: z.object({
+    cart: z.string(), cart_location: z.string().nullable(), cart_driver: z.string().nullable(),
+    cart_capacity: z.number().int().positive(), cart_load: z.number().int().nonnegative(),
+    loads: z.array(z.object({ task_id: z.string(), product: z.string(), quantity: z.number().int().positive(),
+      source: z.string(), destination: z.string() }).passthrough()),
+    tasks: z.array(z.object({ id: z.string(), kind: z.enum(["pick", "putaway"]), product: z.string(),
+      quantity: z.number().int().positive(), moved: z.number().int().nonnegative(), source: z.string(), destination: z.string() })),
+    stock_rules: z.record(z.string(), z.record(z.string(), z.object({
+      minimum: z.number().int().nonnegative(), maximum: z.number().int().positive(), quantity: z.number().int().nonnegative()
+    })))
+  }).optional(),
   legacy: z.object({
     family: z.object({ history: z.string(), inherited_skill: z.string(), obligation: z.string(),
       successor: z.string().nullable().optional() }),
@@ -308,7 +321,8 @@ const villageDayPolicySchema = z.object({
   breakfast: z.boolean(), breakfast_delay: z.number().int(), meal_window: z.number().int(),
   event_driven_waits: z.boolean(), require_tea_use: z.boolean(),
   anti_idle: z.boolean().default(false), purposeful_downtime: z.boolean().default(false), idle_review_minutes: z.number().int().min(15).max(240).default(60),
-  require_manure_use: z.boolean().default(true), demand_led_completion: z.boolean().default(false)
+  require_manure_use: z.boolean().default(true), demand_led_completion: z.boolean().default(false),
+  typed_execution: z.boolean().default(false)
 });
 const villageDashboardSchema = z.object({
   firewood: villageFirewoodSchema.nullable().optional(),
@@ -445,7 +459,11 @@ const villageStateSchema = z.object({
     minute: z.number().int().nonnegative(),
     stocks: z.record(z.string(), z.record(z.string(), z.number().int().nonnegative())),
     coins: z.record(z.string(), z.number().int().nonnegative())
-  })).optional()
+  })).optional(),
+  warehouse_cart_driver: z.string().nullable().optional(),
+  warehouse_task_progress: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  warehouse_cart_loads: z.array(z.object({ task_id: z.string(), product: z.string(),
+    quantity: z.number().int().positive(), source: z.string(), destination: z.string() }).passthrough()).optional()
 });
 export const observationSchema = z.object({
   contract_version: z.literal("1.0"), world_id: z.string(), session_id: z.string(),
@@ -530,7 +548,8 @@ export const configSchema = z.object({
     message_format: z.enum(["normal", "compact", "shorthand", "fact-shorthand"]).default("normal"),
     message_deduplicate: z.boolean().default(false),
     message_relevant_memory: z.boolean().default(false),
-    message_aggregate_events: z.boolean().default(false)
+    message_aggregate_events: z.boolean().default(false),
+    message_perception_delta: z.boolean().default(false)
   }),
   world: z.object({
     transport: z.enum(["stdio", "streamable_http"]), scenario: z.string(),
@@ -640,16 +659,22 @@ export const eventSchema = z.object({
   payload: z.unknown()
 });
 export const eventsSchema = z.object({ run_id: z.string().nullable(), events: z.array(eventSchema) });
+export const reportFormatSchema = z.enum([
+  "narrative", "sitrep", "bluf", "brevity", "metar", "salute",
+  "telegraphic", "headline", "sbar", "logfmt", "adr", "rfc2119"
+]);
 export const recordedStorySchema = z.object({
   run_id: z.string(), cursor: z.number(), total_events: z.number(), days: z.array(z.number()),
   backfilling: z.boolean(), error: z.string().nullable(), next: z.number().nullable(),
+  format: reportFormatSchema.default("narrative"),
   paragraphs: z.array(z.object({ sequence: z.number(), id: z.string(), actor_id: z.string(),
     day: z.number().nullable(), text: z.string(), version: z.number() }))
 });
 export type RecordedStory = z.infer<typeof recordedStorySchema>;
 export const modelsSchema = z.object({ models: z.array(z.string()) });
 export const scenariosSchema = z.object({ scenarios: z.array(z.object({
-  id: z.string(), title: z.string(), objective: z.string(),
+  id: z.string(), title: z.string(), objective: z.string(), public_details: z.string(),
+  has_private_details: z.boolean(),
   agent_slots: z.array(z.object({ id: z.string(), profile_id: z.string(), start_location: z.string() }))
 })) });
 export const historySchema = z.object({ runs: z.array(runSchema) });

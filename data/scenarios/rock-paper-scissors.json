@@ -2,6 +2,8 @@
   "schema_version": "1.0",
   "id": "rock-paper-scissors",
   "title": "Rock, Paper, Scissors - Two-Agent Showdown",
+  "public_details": "Nova and Atlas face each other across a small tournament table. Five rounds will decide their rock-paper-scissors match.\n\nEach locks in a private move before either can see the other's choice. Rock beats scissors, scissors beats paper, and paper beats rock. They can learn from revealed rounds, but neither knows the opponent's next move.",
+  "private_details": "",
   "start_location": "arena",
   "exit_location": "arena",
   "objective": "Play all five rounds of rock-paper-scissors against your opponent. Try to earn the most round wins. A draw earns no points and still counts as a round; the match can end tied. Commit one private move each round with play_rps, without announcing it. The world reveals both moves together and keeps the score. Completing the match is the verified episode goal, not both players winning.",
