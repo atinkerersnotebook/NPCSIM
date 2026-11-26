@@ -1,14 +1,15 @@
 {
   "schema_version": "1.0",
   "proxy": {
-    "base_url": "http://192.168.1.15:9901/v1",
-    "model": "gpt-6.2-sol",
+    "base_url": "http://192.168.1.149:1234/v1",
+    "model": "prism-ml/bonsai-27b",
     "token_environment": null,
     "timeout_seconds": 120.0,
     "message_format": "normal",
     "message_deduplicate": false,
-    "message_relevant_memory": false,
-    "message_aggregate_events": false
+    "message_relevant_memory": true,
+    "message_aggregate_events": false,
+    "message_perception_delta": false
   },
   "world": {
     "transport": "stdio",

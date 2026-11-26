@@ -211,7 +211,9 @@ class Proxy:
 
     async def choose(self, model: str, messages: list[dict[str, str]],
                      correlation_id: str, timeout: float) -> tuple[Decision, dict[str, Any]]:
-        text, metadata = await self._completion(model, messages, correlation_id, timeout)
+        text, metadata = await self._completion(
+            model, messages, correlation_id, timeout,
+            response_schema=Decision.model_json_schema(), schema_name="npcsim_decision")
         if not text.strip():
             raise EmptyModelResponse("Model returned an empty decision")
         return Decision.model_validate_json(text), metadata
@@ -314,6 +316,8 @@ with appropriate extras, not an arbitrary pile of ingredients or unprepared raw 
 Do not require a particular named recipe or reveal a preferred recipe.
 Return ONLY JSON: {"verdict":"pass" or "fail","findings":[{"reason":"concise reason",
 "evidence_ids":["supplied paragraph ID or final verification event ID"]}]}.
+For final-world evidence, copy final_verification.event_id exactly; never use the
+literal label "final_verification" as an evidence ID.
 Findings must be supported by the supplied evidence and refer to fulfilling the objective.
 Failure reasons will become previous-attempt lessons. Do not supply a scripted walkthrough,
 private chain-of-thought, or claims about undiscovered items."""
@@ -331,7 +335,9 @@ private chain-of-thought, or claims about undiscovered items."""
 
     async def assess(self, model: str, messages: list[dict[str, str]],
                      correlation_id: str, timeout: float) -> tuple[StoryReview, dict[str, Any]]:
-        text, metadata = await self._completion(model, messages, correlation_id, timeout)
+        text, metadata = await self._completion(
+            model, messages, correlation_id, timeout,
+            response_schema=StoryReview.model_json_schema(), schema_name="npcsim_story_review")
         if not text:
             raise EmptyModelResponse("Model returned an empty completion review; reassess when the proxy is available")
         return StoryReview.model_validate_json(text), metadata
@@ -370,12 +376,26 @@ Provide concise rulings, not private chain-of-thought."""
         return DungeonMasterReview.model_validate_json(text), metadata
 
     async def _completion(self, model: str, messages: list[dict[str, str]],
-                          correlation_id: str, timeout: float) -> tuple[str, dict[str, Any]]:
+                          correlation_id: str, timeout: float,
+                          response_schema: dict[str, Any] | None = None,
+                          schema_name: str | None = None) -> tuple[str, dict[str, Any]]:
         async with httpx.AsyncClient(timeout=min(timeout, self.config.timeout_seconds), trust_env=False) as client:
+            request: dict[str, Any] = {
+                "model": model, "messages": messages, "stream": False, "temperature": 0.2,
+            }
+            if response_schema is not None:
+                request["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": schema_name or "npcsim_response",
+                        "strict": True,
+                        "schema": response_schema,
+                    },
+                }
             response = await client.post(
                 self.config.base_url.rstrip("/") + "/chat/completions",
                 headers={**self.headers(), "X-Request-ID": correlation_id},
-                json={"model": model, "messages": messages, "stream": False, "temperature": 0.2},
+                json=request,
             )
             response.raise_for_status()
             payload = response.json()

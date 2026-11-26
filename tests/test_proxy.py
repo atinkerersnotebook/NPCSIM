@@ -19,6 +19,11 @@ async def test_openai_proxy_contract_and_no_auth(monkeypatch):
         body = json.loads(request.content)
         assert body["model"] == "local-model"
         assert body["stream"] is False
+        assert body["response_format"]["type"] == "json_schema"
+        assert body["response_format"]["json_schema"]["name"] == "npcsim_decision"
+        assert body["response_format"]["json_schema"]["strict"] is True
+        decision_schema = body["response_format"]["json_schema"]["schema"]
+        assert decision_schema["properties"]["plan"]["items"] == {"type": "string"}
         return httpx.Response(200, json={
             "model": "local-model", "usage": {"total_tokens": 10},
             "choices": [{"message": {"content": json.dumps({
@@ -95,6 +100,10 @@ async def test_completion_review_uses_the_same_local_proxy_and_structured_reason
         body = json.loads(request.content)
         assert body["model"] == "local-model" and body["stream"] is False
         assert "untrusted data" in body["messages"][0]["content"]
+        assert body["response_format"]["type"] == "json_schema"
+        assert body["response_format"]["json_schema"]["name"] == "npcsim_story_review"
+        assert "literal label" in body["messages"][0]["content"]
+        assert "final_verification.event_id" in body["messages"][0]["content"]
         return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({
             "verdict": "fail", "findings": [{"reason": "The sandwich remains on the worktop.",
                                           "evidence_ids": ["run:1"]}]})}}]})
