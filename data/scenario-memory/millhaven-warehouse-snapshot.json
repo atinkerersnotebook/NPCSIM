@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "millhaven-warehouse-snapshot",
+  "failures": [
+    {
+      "run_id": "eab592315e834f87898c485580afecf4",
+      "objective": "By 11:00, complete the assigned warehouse picks and putaways across the general storehouse, keep every configured bin between its minimum and maximum stock, use the warehouse cart for the six-unit move, and carry the ladder to the overhead rack before accessing elevated stock.",
+      "recorded_at": "2026-11-25T15:34:40.836039+00:00",
+      "findings": [
+        {
+          "reason": "Warehouse picks, putaways or stocking rules remain unfinished.",
+          "evidence_ids": [
+            "eab592315e834f87898c485580afecf4:353"
+          ]
+        },
+        {
+          "reason": "Only the flour putaway and grain pick were complete. Both bread tasks and the elevated fish pick remained unfinished, and the final deadline check failed.",
+          "evidence_ids": [
+            "eab592315e834f87898c485580afecf4:353"
+          ]
+        },
+        {
+          "reason": "Pick Face B and the dispatch bread and fish bins were below minimum. The attempted three-loaf cart load was rejected, leaving the bread replenishment unfinished.",
+          "evidence_ids": [
+            "eab592315e834f87898c485580afecf4:324",
+            "eab592315e834f87898c485580afecf4:353"
+          ]
+        },
+        {
+          "reason": "The cart carried three flour units and two grain units in separate trips; the required six-unit move was not completed.",
+          "evidence_ids": [
+            "eab592315e834f87898c485580afecf4:93",
+            "eab592315e834f87898c485580afecf4:159",
+            "eab592315e834f87898c485580afecf4:186",
+            "eab592315e834f87898c485580afecf4:353"
+          ]
+        },
+        {
+          "reason": "The ladder reached the rack base, but setting it down did not position it for access to the elevated stock.",
+          "evidence_ids": [
+            "eab592315e834f87898c485580afecf4:350"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "969ca4649b584a38bf6e86282cadc880",
+      "objective": "By 11:00, complete the assigned warehouse picks and putaways across the general storehouse, keep every configured bin between its minimum and maximum stock, use the warehouse cart for the six-unit move, and carry the ladder to the overhead rack before accessing elevated stock.",
+      "recorded_at": "2026-11-25T16:57:56.850094+00:00",
+      "findings": [
+        {
+          "reason": "Warehouse picks, putaways or stocking rules remain unfinished.",
+          "evidence_ids": [
+            "969ca4649b584a38bf6e86282cadc880:18"
+          ]
+        },
+        {
+          "reason": "All five assigned moves remained at zero, and the authoritative deadline check failed.",
+          "evidence_ids": [
+            "969ca4649b584a38bf6e86282cadc880:18"
+          ]
+        },
+        {
+          "reason": "The grain and bread pick bins and the bread and preserved-fish dispatch bins were below their minimums.",
+          "evidence_ids": [
+            "969ca4649b584a38bf6e86282cadc880:18"
+          ]
+        },
+        {
+          "reason": "No cart loads were recorded, so the required six-unit cart move was not met.",
+          "evidence_ids": [
+            "969ca4649b584a38bf6e86282cadc880:18"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -29,6 +29,48 @@
     ],
     "max_held_items": null
   },
-  "scenario_bodies": {},
-  "documents": {}
+  "scenario_bodies": {
+    "millhaven-expanded": {
+      "description": "A considerate village healer.",
+      "capabilities": [
+        "move",
+        "manipulate",
+        "herbalism"
+      ],
+      "capacity": 3,
+      "size": "medium",
+      "grips": [
+        "hand"
+      ],
+      "max_held_items": null
+    },
+    "millhaven-generation-23": {
+      "description": "A considerate village healer.",
+      "capabilities": [
+        "move",
+        "manipulate",
+        "herbalism"
+      ],
+      "capacity": 3,
+      "size": "medium",
+      "grips": [
+        "hand"
+      ],
+      "max_held_items": null
+    },
+    "millhaven-generations": {
+      "description": "A considerate village healer.",
+      "capabilities": [
+        "move",
+        "manipulate",
+        "herbalism"
+      ],
+      "capacity": 3,
+      "size": "medium",
+      "grips": [
+        "hand"
+      ],
+      "max_held_items": null
+    }
+  }
 }

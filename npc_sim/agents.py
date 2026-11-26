@@ -83,6 +83,13 @@ def seed_profiles(data: Path) -> None:
         path = data / "agents" / f"{pid}.json"
         if not path.exists():
             write_json(path, profile.model_dump(mode="json"))
+            continue
+        existing = AgentProfile.model_validate(read_json(path))
+        missing = {scenario_id: body for scenario_id, body in profile.scenario_bodies.items()
+                   if scenario_id not in existing.scenario_bodies}
+        if missing:
+            existing.scenario_bodies.update(missing)
+            write_json(path, existing.model_dump(mode="json", exclude={"documents"}))
 
 
 def load_profiles(data: Path) -> dict[str, AgentProfile]:

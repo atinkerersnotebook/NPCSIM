@@ -731,6 +731,13 @@ class VillageWarehouseTask(StrictModel):
     quantity: int = Field(gt=0, strict=True)
     source: str
     destination: str
+    minimum_quantity: int = Field(default=0, ge=0, strict=True)
+
+
+class VillageWarehouseTaskAmendment(StrictModel):
+    task: str = Field(pattern=r"^[A-Za-z0-9_-]+$")
+    quantity: int = Field(gt=0, strict=True)
+    requested_by: str = Field(min_length=1)
 
 
 class VillageWarehouseStockRule(StrictModel):
@@ -744,6 +751,7 @@ class VillageWarehouseConfig(StrictModel):
     operators: list[str] = Field(min_length=1)
     tasks: list[VillageWarehouseTask] = Field(min_length=1)
     stock_rules: dict[str, dict[str, VillageWarehouseStockRule]]
+    required_cart_load: int = Field(default=0, ge=0, strict=True)
 
 
 class VillageConfig(VillageDayPolicy):
@@ -1296,6 +1304,9 @@ class VillageState(StrictModel):
     warehouse_cart_loads: list[VillageWarehouseCartLoad] = Field(default_factory=list)
     warehouse_task_progress: dict[str, int] = Field(default_factory=dict)
     warehouse_cart_driver: str | None = None
+    warehouse_task_amendments: list[VillageWarehouseTaskAmendment] = Field(default_factory=list)
+    warehouse_max_cart_load: int = Field(default=0, ge=0)
+    warehouse_final_unload_minute: int | None = Field(default=None, ge=0)
 
 
 class Scenario(StrictModel):
@@ -1657,6 +1668,8 @@ class Scenario(StrictModel):
             task_ids = [task.id for task in warehouse.tasks]
             if len(task_ids) != len(set(task_ids)):
                 raise ValueError("Warehouse task IDs must be unique")
+            if warehouse.required_cart_load > warehouse.cart_capacity:
+                raise ValueError("Required warehouse cart load cannot exceed cart capacity")
             locations = {eid for eid, entity in self.entities.items() if entity.kind == "location"}
             for task in warehouse.tasks:
                 if task.source not in locations or task.destination not in locations or task.source == task.destination:
@@ -1802,6 +1815,7 @@ class StartRequest(StrictModel):
 class ReopenRequest(StrictModel):
     run_id: str = Field(min_length=1)
     until_midnight: bool = False
+    deadline_minute: int | None = Field(default=None, ge=0, strict=True)
 
 
 class RunModeRequest(StrictModel):

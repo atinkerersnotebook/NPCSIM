@@ -16,6 +16,11 @@ def scenario() -> Scenario:
     return Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-snapshot-i.json"))
 
 
+def warehouse_world(tmp_path: Path) -> World:
+    value = Scenario.model_validate(read_json(ROOT / "data" / "scenarios" / "millhaven-warehouse-snapshot.json"))
+    return World(value, tmp_path / "warehouse.json", "warehouse", "nella", "session-nella")
+
+
 def world(tmp_path: Path) -> World:
     value = scenario()
     return World(value, tmp_path / "snapshot.json", "snapshot", "elsie", "session-elsie")
@@ -49,6 +54,107 @@ def test_snapshot_scenario_keeps_private_success_criteria_out_of_observation(tmp
     assert all(person.life.meals["0:breakfast"].status == "eaten"
                for person in item.state.village.residents.values())
     assert item.state.village.incidents is None
+
+
+def test_warehouse_scenario_has_three_loaf_move_ladder_and_six_unit_requirement(tmp_path):
+    item = warehouse_world(tmp_path)
+    warehouse = item.scenario.village.warehouse
+    task = next(task for task in warehouse.tasks if task.id == "pick-bread")
+    assert task.quantity == task.minimum_quantity == 3
+    assert warehouse.required_cart_load == warehouse.cart_capacity == 6
+    assert "climb_ladder" in next(agent for agent in item.scenario.agents if agent.id == "jory").body.capabilities
+
+
+def test_warehouse_task_change_checks_stock_and_bin_limits(tmp_path):
+    from npc_sim import village_warehouse
+
+    item = warehouse_world(tmp_path)
+    state = item.state.village
+    state.stocks["warehouse-bulk-b"]["bread"] = 5
+    result = village_warehouse.apply(item, "village_request_warehouse_change", {
+        "task": "pick-bread", "quantity": 3})
+    assert result[0:2] == ("APPLIED", "WAREHOUSE_TASK_CHANGED")
+    assert village_warehouse.task_quantity(item.scenario.village.warehouse, state, "pick-bread") == 3
+
+    state.stocks["warehouse-bulk-b"]["bread"] = 4
+    rejected = village_warehouse.apply(item, "village_request_warehouse_change", {
+        "task": "pick-bread", "quantity": 3})
+    assert rejected[0:2] == ("REJECTED", "MINIMUM_STOCK")
+
+
+def test_warehouse_goal_requires_observed_six_unit_cart_load(tmp_path):
+    from npc_sim import village_warehouse
+
+    item = warehouse_world(tmp_path)
+    state = item.state.village
+    for task in item.scenario.village.warehouse.tasks:
+        state.warehouse_task_progress[task.id] = task.quantity
+    for location, rules in item.scenario.village.warehouse.stock_rules.items():
+        for product, rule in rules.items():
+            state.stocks[location][product] = max(rule.minimum, min(rule.maximum, state.stocks[location].get(product, 0)))
+
+    active = village_warehouse.evaluate_goal(item)
+    assert active["status"] == "active"
+    assert not active["evidence"]["checks"]["required_cart_load_met"]
+
+    state.warehouse_max_cart_load = 6
+    achieved = village_warehouse.evaluate_goal(item)
+    assert achieved["status"] == "achieved"
+
+
+def test_warehouse_elevated_pick_loads_at_ladder_base_only_after_challenge(tmp_path):
+    from npc_sim import village_warehouse
+
+    item = warehouse_world(tmp_path)
+    state = item.state.village
+    item.actor.location_id = "warehouse-rack-base"
+    cart = item.state.entities[item.scenario.village.warehouse.cart]
+    cart.location = "warehouse-rack-base"
+    state.warehouse_cart_driver = item.actor_id
+
+    blocked = village_warehouse.apply(item, "village_load_cart", {
+        "task": "elevated-fish", "quantity": 1})
+    assert blocked[0:2] == ("REJECTED", "INVALID_CART_TASK")
+
+    item.state.skill_uses["position-warehouse-ladder"] = item.actor_id
+    loaded = village_warehouse.apply(item, "village_load_cart", {
+        "task": "elevated-fish", "quantity": 1})
+    assert loaded[0:2] == ("APPLIED", "WAREHOUSE_CART_LOADED")
+    assert state.warehouse_cart_loads[0].source == "warehouse-overhead"
+
+
+def test_warehouse_observation_shares_route_and_ladder_status(tmp_path):
+    from npc_sim import village_warehouse
+
+    item = warehouse_world(tmp_path)
+    item.actor.location_id = "warehouse-bulk-a"
+    item.state.skill_uses["position-warehouse-ladder"] = "ada"
+    observed = village_warehouse.observation(item)
+    fish = next(task for task in observed["tasks"] if task["id"] == "elevated-fish")
+    assert fish["load_location"] == "warehouse-rack-base"
+    assert fish["ladder_secured"] is True
+    assert "Load at the ladder landing" in fish["load_instructions"]
+    assert observed["suggested_cart_route"]["planned_units"] <= 6
+    assert observed["suggested_cart_route"]["stops"]
+
+
+def test_warehouse_actors_can_plan_and_follow_cart_routes(tmp_path):
+    from npc_sim import village_walking, village_warehouse
+
+    item = warehouse_world(tmp_path)
+    assert village_walking.enabled(item)
+    blocked = village_walking._path(item, "warehouse-bulk-b")
+    assert blocked is not None
+    planned = village_walking.plan(item, {
+        "destination": "warehouse-bulk-b", "purpose": "Load pending warehouse stock"})
+    assert planned[0:2] == ("APPLIED", "ROUTE_PLANNED")
+    route = item.state.village.residents["nella"].walking_plan
+    assert route is not None and route.destination == "warehouse-bulk-b"
+    assert route.doors and village_walking.check_step(item, {"target": route.doors[0]}) is None
+    assert route.destination == "warehouse-bulk-b"
+    assert route.locations[-1] == "warehouse-bulk-b"
+    observed = village_warehouse.observation(item)["suggested_cart_route"]
+    assert observed["final_destination"] in {stop["source"] for stop in observed["stops"]}
 
 
 def test_snapshot_demand_is_six_loaves_not_six_plus_stock_buffer(tmp_path):

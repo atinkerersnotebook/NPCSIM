@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 
 
 def living_scenario(scenario: Any) -> bool:
-    return scenario.id in {"millhaven-living", "millhaven-instant", "millhaven-snapshot-i"}
+    return (scenario.id in {"millhaven-living", "millhaven-instant", "millhaven-snapshot-i"}
+            or bool(scenario.village and scenario.village.warehouse))
 
 
 def enabled(world: "World") -> bool:
@@ -69,8 +70,9 @@ def _path(world: "World", destination: str) -> tuple[list[str], list[str]] | Non
             door = world.state.entities.get(eid)
             if (door is None or door.kind != "door" or door.hidden or not door.open
                     or door.locked or door.broken or world.lock_for(door).locked
-                    or world.lock_for(door).broken or door.traversal_capabilities
-                    or door.required_challenges or door.max_body_size == "small"
+                    or world.lock_for(door).broken                     or door.traversal_capabilities
+                    or any(challenge not in world.state.skill_uses for challenge in door.required_challenges)
+                    or door.max_body_size == "small"
                     or road_only and not door.village_road):
                 continue
             neighbor = (door.destination if door.location == location else
@@ -139,7 +141,11 @@ def plan(world: "World", args: dict[str, Any]) -> tuple[str, str, str, None]:
     itinerary = " -> ".join([origin, *locations])
     village.event(world, world.actor_id, "village_plan_walk", destination,
                   f"Planned walk for {args['purpose']}: {itinerary}.")
-    return "APPLIED", "ROUTE_PLANNED", f"Planned shortest walk: {itinerary}.", None
+    checkpoints = [location for location in locations if location in {
+        "general-store", "warehouse-receiving"}]
+    checkpoint_text = (f" Storehouse checkpoint: {' -> '.join(checkpoints)}."
+                      if checkpoints else "")
+    return "APPLIED", "ROUTE_PLANNED", f"Planned shortest walk: {itinerary}.{checkpoint_text}", None
 
 
 def check_step(world: "World", args: dict[str, Any]) -> tuple[str, str] | None:

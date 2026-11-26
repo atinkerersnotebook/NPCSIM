@@ -56,11 +56,28 @@ def test_seed_does_not_overwrite_edits_and_rejects_mismatched_filenames(data):
     profiles = load_profiles(data)
     profile = profiles["otter"]
     profile.personality = "Quiet and deliberate."
-    write_json(data / "agents" / "otter.json", profile.model_dump(mode="json"))
+    write_json(data / "agents" / "nella.json", profile.model_dump(mode="json"))
     assert load_profiles(data)["otter"].personality == "Quiet and deliberate."
     write_json(data / "agents" / "wrong.json", profile.model_dump(mode="json"))
     with pytest.raises(ValueError, match="filename must match"):
         load_profiles(data)
+
+
+def test_seed_backfills_missing_scenario_bodies_without_overwriting_custom_entries(data):
+    profile = load_profiles(data)["nella"]
+    expected = profile.scenario_bodies["millhaven-warehouse-snapshot"]
+    custom = profile.scenario_bodies["millhaven-warehouse-snapshot"].model_copy(
+        update={"description": "Customized scenario body."})
+    profile.scenario_bodies = {"millhaven-warehouse-snapshot": custom}
+    profile.personality = "Keep custom persona."
+    write_json(data / "agents" / "nella.json", profile.model_dump(mode="json"))
+
+    reloaded = load_profiles(data)["nella"]
+
+    assert reloaded.personality == "Keep custom persona."
+    assert reloaded.scenario_bodies["millhaven-warehouse-snapshot"].description == "Customized scenario body."
+    assert reloaded.scenario_bodies["millhaven-warehouse-snapshot"] == custom
+    assert expected.capabilities != profile.body.capabilities
 
 
 def test_every_npc_gets_the_full_template_layout_without_changing_abilities(data):

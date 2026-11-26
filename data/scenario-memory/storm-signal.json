@@ -303,6 +303,31 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "63410f489c624719877ac59b1863645d",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-25T15:27:48.250596+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "63410f489c624719877ac59b1863645d:9"
+          ]
+        },
+        {
+          "reason": "Beacon restoration was not verified; all six cooperative work checks were unset.",
+          "evidence_ids": [
+            "63410f489c624719877ac59b1863645d:9"
+          ]
+        },
+        {
+          "reason": "None of the companions reached the hilltop refuge: Raven remained in the rookery, Badger in the quarry, and Otter at the river landing.",
+          "evidence_ids": [
+            "63410f489c624719877ac59b1863645d:9"
+          ]
+        }
+      ]
     }
   ]
 }

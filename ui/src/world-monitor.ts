@@ -197,7 +197,7 @@ export function worldMonitorMarkup(
   ${!active && agents.length ? '<p class="muted">Last recorded world state. The adventure is not running.</p>' : ""}
   ${!state.world && agents.length ? '<p class="muted">World snapshot unavailable. Locations below are last observed, not live positions.</p>' : ""}
   </section>
-  ${state.world?.village ? `<section ${sectionTabPanel("monitor-map", "Map")}>${townMapMarkup(state, agents, map)}</section>
+  ${state.world?.village && !state.run?.scenario_id.startsWith("millhaven-warehouse-") ? `<section ${sectionTabPanel("monitor-map", "Map")}>${townMapMarkup(state, agents, map)}</section>
   <section ${sectionTabPanel("monitor-scene", "Millhaven Scene")}>${townMapMarkup(state, agents, { ...map, zoom: sceneZoom, presentation: "scene" })}</section>` : ""}
   ${timeline ? `<section ${sectionTabPanel("monitor-timeline", "Timeline")}>${timeline}</section>` : ""}
   <section ${sectionTabPanel("monitor-residents", "Residents")}><h2 id="monitor-residents-title">Residents &amp; agents</h2>
@@ -244,6 +244,8 @@ export function startWorldMonitor(app: HTMLDivElement): void {
   let zoom = 1;
   let renderedZoom = 1;
   let recent = false;
+  let showUntracked = false;
+  let showSupervisor = true;
   let activity: GanttActivity = "all";
   let showConnections = true;
   let resetTimelineScroll = false;
@@ -336,7 +338,7 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     const timelineEvents = [...events.values()]
       .filter(event => !playback.active || event.sequence <= state!.event_count);
     const markup = worldMonitorMarkup(state, historyReady ? timelineEvents : [],
-      { zoom, viewportWidth, recent, activity, showConnections },
+      { zoom, viewportWidth, recent, activity, showConnections, showUntracked, showSupervisor },
       { zoom: mapViews["monitor-map"].zoom, selectedActorId, dialogue, now }, historyReady, mapViews["monitor-scene"].zoom);
     clearTimeout(bubbleTimer);
     const expiries = dialogue.active(now).map(line => line.expiresAt);
@@ -662,6 +664,16 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     if (event.target.closest("[data-timeline-connections]")) {
       showConnections = !showConnections;
       selectedGanttLink = undefined;
+      schedule();
+      return;
+    }
+    if (event.target.closest("[data-timeline-untracked]")) {
+      showUntracked = !showUntracked;
+      schedule();
+      return;
+    }
+    if (event.target.closest("[data-timeline-supervisor]")) {
+      showSupervisor = !showSupervisor;
       schedule();
       return;
     }

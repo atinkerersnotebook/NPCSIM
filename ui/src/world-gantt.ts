@@ -107,6 +107,8 @@ export interface GanttScale {
   linkResidents?: boolean;
   selectedActorId?: string;
   showConnections?: boolean;
+  showUntracked?: boolean;
+  showSupervisor?: boolean;
 }
 interface Position {
   at: number;
@@ -150,6 +152,11 @@ export interface GanttLink {
 interface Milestone { at: number; label: string; detail: string }
 
 const colours: Record<string, string> = {
+  "warehouse-receiving": "#66b7d2", "warehouse-bulk-a": "#d39a52",
+  "warehouse-bulk-b": "#d7bd59", "warehouse-pick-a": "#74b879",
+  "warehouse-pick-b": "#c77f9c", "warehouse-overhead": "#8174c7",
+  "warehouse-dispatch": "#e07a61", "warehouse-cross-aisle": "#5fb7aa",
+  "warehouse-rack-base": "#9a8bb5",
   rookery: "#cf83a8", quarry: "#d49a52", "river-landing": "#55b6c9",
   "submerged-chamber": "#587fc4", "signal-yard": "#b7c85f", refuge: "#8fcf9b",
   cottages: "#b49a86", "village-square": "#c8ac75", forge: "#e47750", farm: "#99c568",
@@ -157,9 +164,14 @@ const colours: Record<string, string> = {
   workshop: "#4cb7a6", "well-site": "#6fa9d1", "stone-bridge": "#8fa8b4",
   woodlot: "#5ea66b", riverbank: "#65c7e9", "mill-shed": "#b2a292"
 };
-const palette = ["#9b80c5", "#e4ae65", "#75b5a2", "#db8b95", "#8db0d6", "#b4bd70"];
 export function locationColour(id: string): string {
-  return colours[id] ?? palette[[...id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % palette.length];
+  if (colours[id]) return colours[id];
+  let hash = 2166136261;
+  for (const char of id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
+  const hue = hash % 360;
+  const saturation = 48 + (hash >>> 8) % 18;
+  const lightness = 58 + (hash >>> 16) % 12;
+  return `hsl(${hue} ${saturation}% ${lightness}%)`;
 }
 
 function linkColour(id: string): string {
@@ -350,13 +362,13 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
     positions: [] as Position[], locations: [] as { start: number; end: number; location: string }[],
     spans: [] as GanttSpan[]
   }));
-  if (turns) rows.unshift({
+  rows.unshift({
     id: "__dungeon_master__", name: "Supervisor", locationId: "", current: true,
     occupation: "World state", visitor: false,
     positions: [] as Position[], locations: [] as { start: number; end: number; location: string }[],
     spans: [] as GanttSpan[]
   } as typeof rows[number]);
-  if (turns) rows.push({
+  rows.push({
     id: "__dungeon_master_review__", name: "Supervisor", locationId: "", current: true,
     occupation: "Actions reviewed", visitor: false,
     positions: [] as Position[], locations: [] as { start: number; end: number; location: string }[],
@@ -402,10 +414,14 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       const review = z.object({ verdict: z.enum(["continue", "defeat"]),
         findings: z.array(z.object({ reason: z.string() })).min(1) }).parse(event.payload);
       const round = event.round ?? event.cycle;
+      const at = event.village_minute ?? round - 1;
+      const detail = review.findings.map(finding => finding.reason).join(" ");
+      const start = turns ? Math.max(0, round - 1) : Math.floor(at / 5) * 5;
+      roundReview.spans = roundReview.spans.filter(span => span.start !== start);
       roundReview.spans.push({
-        start: Math.max(0, round - 1), end: round, location: "", kind: "event",
+        start, end: turns ? round : start + 5, location: "", kind: "event",
         label: `Round ${round} / DM ${review.verdict}`,
-        detail: review.findings.map(finding => finding.reason).join(" "), status: review.verdict
+        detail, status: review.verdict
       });
     }
     if (event.kind === "decision") {
@@ -419,7 +435,6 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       decisions.delete(event.actor_id);
     } else if (event.kind === "observation") {
       const observation = observationSchema.parse(event.payload);
-      const available = observation.actions.filter(action => action.availability !== "blocked");
       const entities = observation.visible_entities.map(entity => {
         const name = state.world?.entities[entity.id]?.name ?? entity.id;
         const raw = entity as { id: string; open?: boolean; required_work?: string[]; status?: string };
@@ -446,22 +461,26 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
         carrying.length ? `Carrying: ${carrying.join(", ")}.` : "Carrying: nothing.",
         entities.length ? `Nearby: ${entities.join(", ")}.` : "Nothing else is visible nearby.",
         actors.length ? `Other actors visible: ${actors.join(", ")}.` : "No other actors are visible.",
-        messages.length ? `Messages heard: ${messages.join(" ")}` : "",
-        available.length ? `Available actions: ${available.map(action => action.id).join(", ")}.` : "No available actions."
+        messages.length ? `Messages heard: ${messages.join(" ")}` : ""
       ].filter(Boolean).join("\n\n"));
       recordObservation(observation, event.sequence);
       if (worldState && event.sequence === Math.min(...source.filter(item =>
         item.kind === "observation" && item.cycle === event.cycle).map(item => item.sequence))) {
         const round = event.round ?? event.cycle;
+        const at = timeOf(observation);
+        const start = turns ? Math.max(0, round - 1) : Math.floor((at ?? 0) / 5) * 5;
+        const end = turns ? round : start + 5;
         const occupied = rows.filter(row => row.id !== "__dungeon_master__").map(row => {
           const position = row.positions.filter(item => item.order < event.sequence).at(-1);
           return position ? `${row.name} at ${state.world?.entities[position.location]?.name ?? position.location}` : null;
         }).filter((value): value is string => value !== null);
-        worldState.spans.push({
-          start: Math.max(0, round - 1), end: round, location: "", kind: "event",
+        const detail = `${observation.narrative}\n\nCast state: ${occupied.join("; ") || "initializing"}.`;
+        const existing = worldState.spans.find(span => span.start === start);
+        if (existing) existing.detail = detail;
+        else worldState.spans.push({
+          start, end, location: "", kind: "event",
           label: `World state / Round ${round}`,
-          detail: `${observation.narrative}\n\nCast state: ${occupied.join("; ") || "initializing"}.`,
-          status: "RECORDED"
+          detail, status: "RECORDED"
         });
       }
     } else if (event.kind === "action_result") {
@@ -826,6 +845,19 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
   const activity = scale.activity ?? "all";
   const cutoff = scale.recent ? Math.max(model.start, model.now - (model.turns ? 20 : 60)) : model.start;
   const chart = { ...model, start: cutoff };
+  const trackedByScenario: Record<string, Set<string>> = {
+    "millhaven-warehouse-snapshot": new Set(["jory", "ada", "nella"]),
+    "millhaven-warehouse-teamwork": new Set(["jory", "ada", "nella"])
+  };
+  const tracked = trackedByScenario[state.run?.scenario_id ?? ""];
+  const hiddenRows = scale.showUntracked ? new Set<string>() : new Set(chart.rows
+    .filter(row => !row.id.startsWith("__dungeon_master")
+      && (tracked ? !tracked.has(row.id) : !row.current))
+    .map(row => row.id));
+  if (scale.showSupervisor === false) {
+    hiddenRows.add("__dungeon_master__");
+    hiddenRows.add("__dungeon_master_review__");
+  }
   const matches = (item: GanttSpan) => activity === "all"
     || (activity === "actions" && item.kind === "action" && item.activity === undefined)
     || (activity === "movement" && item.kind === "travel")
@@ -882,7 +914,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
     if (result.length > lines) result.splice(lines, result.length, "...");
     return result;
   };
-  const rows = chart.rows.map((row, index) => {
+  const rows = chart.rows.filter(row => !hiddenRows.has(row.id)).map((row, index) => {
     const y = top + index * rowHeight;
     const sourceLocations = row.locations.filter(visible);
     const movementIntervals = row.spans.filter(span => span.kind === "travel"
@@ -965,7 +997,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
         ${movementSplit}
         ${tileWidth >= 28 ? `<text x="${left + inset + 7}" y="${y + 37}" class="gantt-cell-icon" clip-path="url(#${id})">${icon}</text>` : ""}
         ${characters >= 6 && !row.id.startsWith("__dungeon_master") ? `<text x="${left + w / 2 + (tileWidth >= 48 ? iconWidth / 2 : 0)}" y="${y + 37}" text-anchor="middle" class="gantt-cell-title npc-action-request" clip-path="url(#${id})">${escape(shorten(label, characters))}</text>` : ""}
-        ${!row.id.startsWith("__dungeon_master") && !chart.turns && detailCharacters >= 8 ? `<text x="${left + w / 2}" y="${y + 54}" text-anchor="middle" class="gantt-cell-time" clip-path="url(#${id})">${escape(shorten(detailCharacters >= 30 ? timing : duration, detailCharacters))}</text>` : ""}
+        ${false ? `<text x="${left + w / 2}" y="${y + 54}" text-anchor="middle" class="gantt-cell-time" clip-path="url(#${id})">${escape(shorten(detailCharacters >= 30 ? timing : duration, detailCharacters))}</text>` : ""}
         ${dmNarrative.length ? dmNarrative.map((line, lineIndex) =>
           `<text x="${left + w / 2}" y="${y + 48 + lineIndex * 14}" text-anchor="middle" class="gantt-cell-detail" clip-path="url(#${id})">${escape(line)}</text>`).join("")
           : npcRequestLines.length ? npcRequestLines.map((line, lineIndex) =>
@@ -1065,6 +1097,8 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
         </div></div></div>
     ${scale.linkResidents ? `<div class="gantt-filters" aria-label="Timeline filters" role="group">
       <button type="button" class="button subtle" data-timeline-recent aria-pressed="${Boolean(scale.recent)}">${model.turns ? "Full timeline" : "Last simulated hour"}</button>
+      <button type="button" class="button subtle" data-timeline-untracked aria-pressed="${Boolean(scale.showUntracked)}">${scale.showUntracked ? "Hide untracked" : "Show untracked"}</button>
+      <button type="button" class="button subtle" data-timeline-supervisor aria-pressed="${scale.showSupervisor !== false}">${scale.showSupervisor === false ? "Show Supervisor" : "Hide Supervisor"}</button>
       <button type="button" class="button subtle" data-timeline-connections aria-pressed="${showConnections}">${showConnections ? "Connections on" : "Connections off"}</button>
       <label>Timeline cells <select data-timeline-activity>${([
         ["all", "All cells"], ["actions", "Other actions"], ["movement", "Walking"], ["route", "Routes"],
@@ -1084,7 +1118,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       ? '<p class="gantt-help">No matching activities in this time range.</p>' : ""}
     <div id="gantt-tooltip" class="gantt-tooltip" role="tooltip" hidden></div>
     <div class="gantt-layout">
-      <div class="gantt-names" style="padding-top:${top}px">${chart.rows.map(row =>
+      <div class="gantt-names" style="padding-top:${top}px">${chart.rows.filter(row => !hiddenRows.has(row.id)).map(row =>
         `<div class="gantt-name-row${row.id === scale.selectedActorId ? " is-selected" : ""}" style="height:${rowHeight}px"><span class="gantt-name-anchor" data-gantt-name="${escape(row.id)}" tabindex="0" aria-label="${escape(`${row.name}, actor details`)}" aria-describedby="gantt-actor-${escape(row.id)}"><strong>${escape(row.name)}</strong><small>${escape(row.occupation)}</small><span id="gantt-actor-${escape(row.id)}" class="actor-details-popover" role="tooltip"><strong>${escape(row.name)}${row.visitor ? " / Visitor" : ""}</strong>${actorDetailsMarkup(state, { ...row, activity: agents.find(agent => agent.id === row.id)?.activity })}</span></span>${scale.linkResidents ? `<button type="button" class="gantt-resident-link" data-resident-select="${escape(row.id)}" aria-label="Highlight ${escape(row.name)}" aria-pressed="${row.id === scale.selectedActorId}">Highlight</button>` : ""}</div>`).join("")}</div>
       <div class="gantt-scroll" tabindex="0" aria-label="Scrollable activity timeline">
         <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="group" aria-label="Activity from ${escape(format(chart.start))} to ${escape(format(chart.now))}">

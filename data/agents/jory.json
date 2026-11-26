@@ -28,6 +28,50 @@
     ],
     "max_held_items": null
   },
-  "scenario_bodies": {},
-  "documents": {}
+  "scenario_bodies": {
+    "millhaven-snapshot-i": {
+      "description": "A cheerful village baker.",
+      "capabilities": [
+        "move",
+        "manipulate",
+        "baking"
+      ],
+      "capacity": 6,
+      "size": "medium",
+      "grips": [
+        "hand"
+      ],
+      "max_held_items": null
+    },
+    "millhaven-warehouse-snapshot": {
+      "description": "A cheerful village baker.",
+      "capabilities": [
+        "move",
+        "manipulate",
+        "baking",
+        "climb_ladder"
+      ],
+      "capacity": 3,
+      "size": "medium",
+      "grips": [
+        "hand"
+      ],
+      "max_held_items": null
+    },
+    "millhaven-warehouse-teamwork": {
+      "description": "A cheerful village baker.",
+      "capabilities": [
+        "move",
+        "manipulate",
+        "baking",
+        "climb_ladder"
+      ],
+      "capacity": 3,
+      "size": "medium",
+      "grips": [
+        "hand"
+      ],
+      "max_held_items": null
+    }
+  }
 }

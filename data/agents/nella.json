@@ -28,6 +28,50 @@
     ],
     "max_held_items": null
   },
-  "scenario_bodies": {},
-  "documents": {}
+  "scenario_bodies": {
+    "millhaven-snapshot-i": {
+      "description": "An exacting merchant driving a six-unit wagon.",
+      "capabilities": [
+        "move",
+        "manipulate",
+        "trade"
+      ],
+      "capacity": 6,
+      "size": "medium",
+      "grips": [
+        "hand"
+      ],
+      "max_held_items": null
+    },
+    "millhaven-warehouse-snapshot": {
+      "description": "An exacting merchant driving a six-unit wagon.",
+      "capabilities": [
+        "move",
+        "manipulate",
+        "trade",
+        "climb_ladder"
+      ],
+      "capacity": 3,
+      "size": "medium",
+      "grips": [
+        "hand"
+      ],
+      "max_held_items": null
+    },
+    "millhaven-warehouse-teamwork": {
+      "description": "An exacting merchant driving a six-unit wagon.",
+      "capabilities": [
+        "move",
+        "manipulate",
+        "trade",
+        "climb_ladder"
+      ],
+      "capacity": 3,
+      "size": "medium",
+      "grips": [
+        "hand"
+      ],
+      "max_held_items": null
+    }
+  }
 }

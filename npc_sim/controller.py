@@ -725,9 +725,11 @@ class Controller:
         daily_defeat_recovery = (previous_status == "blocked"
                                  and last_ruling.get("source") == "ai"
                                  and last_ruling.get("verdict") == "defeat")
+        deadline_extension = (previous_status == "blocked" and request.deadline_minute is not None
+                              and self.run["goal"]["type"] == "village_snapshot_completed")
         if self.run["goal"]["type"] not in {"village_restored", "village_snapshot_completed"} or not (
                 premature or timeout_recovery or scheduler_recovery or actor_selection_recovery
-                or restart_recovery or daily_defeat_recovery or storage_recovery):
+                or restart_recovery or daily_defeat_recovery or storage_recovery or deadline_extension):
             raise ValueError("Only a prematurely completed village adventure, a recoverable daily-village AI defeat, "
                              "or a confirmed recoverable world error can be reopened.")
         config = AppConfig.model_validate(self.run["config"]).world
@@ -874,6 +876,29 @@ class Controller:
             await self._connect_saved_world(require_frozen=True)
         if self.world is None:
             raise ValueError("The saved world is unavailable.")
+        if deadline_extension:
+            state_path = self.data / "worlds" / self.run["world_id"] / "world-state.json"
+            saved = WorldState.model_validate(read_json(state_path))
+            if (saved.village is None or request.deadline_minute <= saved.village.minute):
+                raise ValueError("The extended deadline must be later than the current game minute.")
+            frozen_path = self.events.directory / "scenario.json"
+            frozen = Scenario.model_validate(read_json(frozen_path))
+            if frozen.village is None or frozen.village.snapshot is None:
+                raise ValueError("Only snapshot scenarios can extend a deadline.")
+            frozen.village.snapshot.deadline = request.deadline_minute
+            frozen.objective = frozen.objective.replace("By 11:00,", "Before the extended deadline,")
+            write_json(frozen_path, frozen.model_dump(mode="json"))
+            self.run["deadline_extended_to"] = request.deadline_minute
+            self.run["goal"]["objective"] = self.run["goal"]["objective"].replace(
+                "By 11:00,", "Before the extended deadline,")
+            for agent in self.agents.values():
+                if agent.get("goal", {}).get("objective"):
+                    agent["goal"]["objective"] = agent["goal"]["objective"].replace(
+                        "By 11:00,", "Before the extended deadline,")
+            if self.world is not None:
+                await self.world.close()
+                self.world = None
+            await self._connect_saved_world(require_frozen=True)
         if request.until_midnight and not self.world.manifest.get("village_scheduler"):
             raise ValueError("Midnight stopping requires timed village turns.")
         verification = goal_result(await self.world.operation(
@@ -883,7 +908,7 @@ class Controller:
                 or (not snapshot_goal
                     and verification.get("evidence", {}).get("completion_scope") != "full_village_day")):
             raise ValueError("The world does not confirm unfinished daily-life requirements; no result was changed.")
-        if daily_defeat_recovery and not self._daily_requirements_recoverable(verification):
+        if daily_defeat_recovery and not deadline_extension and not self._daily_requirements_recoverable(verification):
             raise ValueError("The world does not confirm recoverable daily-village requirements; no result was changed.")
         if pending_replay is not None:
             payload = pending_replay["payload"]
@@ -909,7 +934,8 @@ class Controller:
             self.emit("action_result_recovered", {
                 "request_id": event["payload"]["request_id"], "request_event_id": event["id"],
                 "source": "durable_world_retry_history", "action_replayed": pending_replay is not None})
-        self._reopen_attempt("Saved village recovered. Continue when ready."
+        self._reopen_attempt("Warehouse deadline extended. Continue when ready."
+                             if deadline_extension else "Saved village recovered. Continue when ready."
                              if timeout_recovery or scheduler_recovery or actor_selection_recovery or storage_recovery
                              else "Daily routines are unfinished. Continue when ready.", reset_achieved=True)
         if storage_recovery:

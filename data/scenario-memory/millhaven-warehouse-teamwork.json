@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "millhaven-warehouse-teamwork",
+  "failures": [
+    {
+      "run_id": "2fbe6faf79424b529519acf080ee51b5",
+      "objective": "By 11:00, complete the assigned warehouse picks and putaways across the general storehouse, keep every configured bin between its minimum and maximum stock, use the warehouse cart for the six-unit move, and carry the ladder to the overhead rack before accessing elevated stock.",
+      "recorded_at": "2026-11-25T16:59:48.930582+00:00",
+      "findings": [
+        {
+          "reason": "Warehouse picks, putaways or stocking rules remain unfinished.",
+          "evidence_ids": [
+            "2fbe6faf79424b529519acf080ee51b5:18"
+          ]
+        },
+        {
+          "reason": "All five assigned picks and putaways recorded zero units moved, and the 11:00 deadline check failed.",
+          "evidence_ids": [
+            "2fbe6faf79424b529519acf080ee51b5:18"
+          ]
+        },
+        {
+          "reason": "Both pick bins and both dispatch stock entries were below their minimums.",
+          "evidence_ids": [
+            "2fbe6faf79424b529519acf080ee51b5:18"
+          ]
+        },
+        {
+          "reason": "No cart load was recorded, and the required six-unit cart move check failed.",
+          "evidence_ids": [
+            "2fbe6faf79424b529519acf080ee51b5:18"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "0efd4e6f69644f73bc9ee325b7132a67",
+      "objective": "By 11:00, complete the assigned warehouse picks and putaways across the general storehouse, keep every configured bin between its minimum and maximum stock, use the warehouse cart for the six-unit move, and carry the ladder to the overhead rack before accessing elevated stock.",
+      "recorded_at": "2026-11-25T23:27:30.746368+00:00",
+      "findings": [
+        {
+          "reason": "Warehouse picks, putaways or stocking rules remain unfinished. Final unload occurred at minute 630, -30 minutes versus the deadline.",
+          "evidence_ids": [
+            "0efd4e6f69644f73bc9ee325b7132a67:909"
+          ]
+        },
+        {
+          "reason": "At 11:00, four picks remained unfinished and five units were still on the cart. The flour putaway and six-unit cart move were completed.",
+          "evidence_ids": [
+            "0efd4e6f69644f73bc9ee325b7132a67:909"
+          ]
+        },
+        {
+          "reason": "Pick A grain, Pick B bread, and dispatch bread and preserved fish were all below their configured minimums.",
+          "evidence_ids": [
+            "0efd4e6f69644f73bc9ee325b7132a67:909"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "6d799e9d54fb4892bf96ea9768ac9680",
+      "objective": "Before the extended deadline, complete the assigned warehouse picks and putaways across the general storehouse, keep every configured bin between its minimum and maximum stock, use the warehouse cart for the six-unit move, and carry the ladder to the overhead rack before accessing elevated stock.",
+      "recorded_at": "2026-11-26T00:27:06.257393+00:00",
+      "findings": [
+        {
+          "reason": "The warehouse deadline passed with unfinished cart work. Final unload occurred at minute 785, -40 minutes versus the deadline.",
+          "evidence_ids": [
+            "6d799e9d54fb4892bf96ea9768ac9680:2353"
+          ]
+        },
+        {
+          "reason": "The extended deadline passed with only the three-unit bread transfer complete. The flour putaway and the grain, dispatch bread, and elevated fish picks remained unfinished, with four units still on the cart.",
+          "evidence_ids": [
+            "6d799e9d54fb4892bf96ea9768ac9680:2353"
+          ]
+        },
+        {
+          "reason": "Pick A grain and Dispatch bread and preserved fish were below their configured minimums.",
+          "evidence_ids": [
+            "6d799e9d54fb4892bf96ea9768ac9680:2353"
+          ]
+        },
+        {
+          "reason": "The six-unit cart move was verified, and Jory carried and secured the ladder at the overhead rack landing.",
+          "evidence_ids": [
+            "6d799e9d54fb4892bf96ea9768ac9680:2353",
+            "6d799e9d54fb4892bf96ea9768ac9680:1818",
+            "6d799e9d54fb4892bf96ea9768ac9680:1845"
+          ]
+        }
+      ]
+    }
+  ]
+}
