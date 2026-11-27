@@ -1438,6 +1438,35 @@ test("timeline does not attribute a different or absent decision to an action", 
   ];
   const row = buildWorldTimeline(state, events, monitoredAgents(state))!.rows.find(row => row.id === "torvin")!;
   assert.equal(row.spans[0].reasoning, undefined);
+  assert.equal(row.spans[0].model, undefined);
+  assert.match(worldGanttMarkup(state, events, monitoredAgents(state)),
+    /data-gantt-model="engine" data-gantt-prompt="deterministic" data-gantt-flags="none"/);
+});
+
+test("Gantt action tiles expose model, prompt format and debugging flags", () => {
+  const state = expanded();
+  state.world!.village!.minute = 500;
+  state.run!.config = state.config;
+  const events = [
+    timelineEvent(1, "decision", 485, {
+      action_id: "village_work", justification: "Forge parts.", model: "debug-model",
+      compression: { effective_mode: "fact-shorthand", options: {
+        deduplicate: true, relevant_memory: false, aggregate_events: true, perception_delta: false
+      } }
+    }),
+    timelineEvent(2, "action_request", 485, { request_id: "work", action_id: "village_work", arguments: {} }),
+    timelineEvent(3, "action_result", 485, { request_id: "work", outcome: "APPLIED",
+      explanation: "Made parts.", observation: timelineObservation(485, "forge", 490) })
+  ];
+  const span = buildWorldTimeline(state, events, monitoredAgents(state))!.rows
+    .find(row => row.id === "torvin")!.spans[0];
+  assert.equal(span.model, "debug-model");
+  assert.equal(span.promptFormat, "fact-shorthand");
+  assert.deepEqual(span.debugFlags, ["deduplicate", "aggregate_events"]);
+  const markup = worldGanttMarkup(state, events, monitoredAgents(state), { viewportWidth: 2200 });
+  assert.match(markup, /data-gantt-model="debug-model"/);
+  assert.match(markup, /data-gantt-flags="deduplicate,aggregate_events"/);
+  assert.doesNotMatch(markup, /class="gantt-action-footnote"/);
 });
 
 test("Gantt reconstructs real positions and action durations rather than scheduled workplaces", () => {

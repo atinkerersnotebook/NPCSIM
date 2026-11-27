@@ -99,8 +99,8 @@ class TestProxy:
         self.completion_contexts = []
         self.dungeon_master_contexts = []
 
-    def context(self, goal, observation, memory, repair=None):
-        messages = self.real_proxy.context(goal, observation, memory, repair)
+    def context(self, goal, observation, memory, repair=None, memory_tier="long"):
+        messages = self.real_proxy.context(goal, observation, memory, repair, memory_tier)
         self.contexts.append(json.loads(messages[1]["content"]))
         return messages
 

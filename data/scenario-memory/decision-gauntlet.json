@@ -1,0 +1,354 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "decision-gauntlet",
+  "failures": [
+    {
+      "run_id": "a3292a04118642f683969bb064471cfc",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T13:19:56.225621+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "a3292a04118642f683969bb064471cfc:168"
+          ]
+        },
+        {
+          "reason": "The relay was not restored: final verification shows confirm_evidence, stabilize_frame, install_safety_module, focus_relay, and verify_relay all null.",
+          "evidence_ids": [
+            "a3292a04118642f683969bb064471cfc:168"
+          ]
+        },
+        {
+          "reason": "The specialists were not guided to the shelter; final verification places all three at relay-yard, and the relay gate remains closed pending verify_relay.",
+          "evidence_ids": [
+            "a3292a04118642f683969bb064471cfc:168",
+            "a3292a04118642f683969bb064471cfc:151"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "f8343a70ce8143aa9e7e1bb74b0e1014",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T14:19:21.591694+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "f8343a70ce8143aa9e7e1bb74b0e1014:207"
+          ]
+        },
+        {
+          "reason": "The supported response plan was not confirmed; confirm_evidence remains null in the final verification.",
+          "evidence_ids": [
+            "f8343a70ce8143aa9e7e1bb74b0e1014:207"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored or verified; stabilize_frame, install_safety_module, focus_relay, and verify_relay are all null.",
+          "evidence_ids": [
+            "f8343a70ce8143aa9e7e1bb74b0e1014:207"
+          ]
+        },
+        {
+          "reason": "The three specialists were not guided to the shelter; final locations are evidence-hub, relay-yard, and flood-wing.",
+          "evidence_ids": [
+            "f8343a70ce8143aa9e7e1bb74b0e1014:207"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "d47ae6264ffa4c7eabd9db1f3fb1a835",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T14:43:23.666419+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "d47ae6264ffa4c7eabd9db1f3fb1a835:40"
+          ]
+        },
+        {
+          "reason": "The final world verification shows no required cooperative work was completed: no evidence confirmation, supply release, relay installation, relay verification, or shelter guidance.",
+          "evidence_ids": [
+            "d47ae6264ffa4c7eabd9db1f3fb1a835:40"
+          ]
+        },
+        {
+          "reason": "All three specialists remain in their starting zones rather than being guided to the shelter, so the objective's final condition is not met.",
+          "evidence_ids": [
+            "d47ae6264ffa4c7eabd9db1f3fb1a835:40"
+          ]
+        },
+        {
+          "reason": "The attempt ended with an error before completing the relay restoration and evacuation sequence.",
+          "evidence_ids": [
+            "d47ae6264ffa4c7eabd9db1f3fb1a835:37"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "48c3bb06a0144cb19535c2355871feca",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T14:48:16.518773+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "48c3bb06a0144cb19535c2355871feca:27"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored or verified; final verification shows all cooperative relay tasks null.",
+          "evidence_ids": [
+            "48c3bb06a0144cb19535c2355871feca:27"
+          ]
+        },
+        {
+          "reason": "No correct limited supplies were allocated or carried; Badger remains at the supply depot with empty inventory and no release/installation events.",
+          "evidence_ids": [
+            "48c3bb06a0144cb19535c2355871feca:27"
+          ]
+        },
+        {
+          "reason": "The three specialists were not guided to the shelter; final verification places them at their starting zones.",
+          "evidence_ids": [
+            "48c3bb06a0144cb19535c2355871feca:27"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "3572260958b04319b26cfcce7e5dbf0f",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T15:03:53.487737+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "3572260958b04319b26cfcce7e5dbf0f:53"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored; final verification shows focus_relay and verify_relay are null.",
+          "evidence_ids": [
+            "3572260958b04319b26cfcce7e5dbf0f:53"
+          ]
+        },
+        {
+          "reason": "Required relay work was incomplete: safety module release/installation and frame stabilization are null, and the story only confirms Otter discovered the submerged safety chest.",
+          "evidence_ids": [
+            "3572260958b04319b26cfcce7e5dbf0f:53",
+            "3572260958b04319b26cfcce7e5dbf0f:40"
+          ]
+        },
+        {
+          "reason": "The three specialists were not guided to the shelter; final verification places them at evidence-hub, supply-depot, and submerged-control-room.",
+          "evidence_ids": [
+            "3572260958b04319b26cfcce7e5dbf0f:53"
+          ]
+        },
+        {
+          "reason": "Correct limited supplies were not confirmed allocated to the relay; Badger only read the risk docket, and no installation or allocation result is verified.",
+          "evidence_ids": [
+            "3572260958b04319b26cfcce7e5dbf0f:24",
+            "3572260958b04319b26cfcce7e5dbf0f:53"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "8ba61cac3e5c4951b2ed611e97a390ea",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T15:10:47.475183+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "8ba61cac3e5c4951b2ed611e97a390ea:51"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored; final verification shows all cooperative relay tasks remain null.",
+          "evidence_ids": [
+            "8ba61cac3e5c4951b2ed611e97a390ea:51"
+          ]
+        },
+        {
+          "reason": "The specialists were not guided to the shelter; final verification places them at evidence-hub, supply-depot, and submerged-control-room.",
+          "evidence_ids": [
+            "8ba61cac3e5c4951b2ed611e97a390ea:51"
+          ]
+        },
+        {
+          "reason": "The required safety module was not released or installed; the submerged safety chest remained sealed and the safety-module work was not completed.",
+          "evidence_ids": [
+            "8ba61cac3e5c4951b2ed611e97a390ea:41",
+            "8ba61cac3e5c4951b2ed611e97a390ea:51"
+          ]
+        },
+        {
+          "reason": "The attempt ended in an error before completing the required relay restoration and shelter guidance.",
+          "evidence_ids": [
+            "8ba61cac3e5c4951b2ed611e97a390ea:48"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "f6060c985c484c7e863fcbf2ed908e04",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T15:22:36.154855+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "f6060c985c484c7e863fcbf2ed908e04:157"
+          ]
+        },
+        {
+          "reason": "The supported response plan was not confirmed at the relay evidence board.",
+          "evidence_ids": [
+            "f6060c985c484c7e863fcbf2ed908e04:132",
+            "f6060c985c484c7e863fcbf2ed908e04:157"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored: frame stabilization, safety-module installation, relay focus, and independent verification all remain incomplete.",
+          "evidence_ids": [
+            "f6060c985c484c7e863fcbf2ed908e04:96",
+            "f6060c985c484c7e863fcbf2ed908e04:157"
+          ]
+        },
+        {
+          "reason": "The shelter gate remained closed because the required relay verification had not been performed.",
+          "evidence_ids": [
+            "f6060c985c484c7e863fcbf2ed908e04:157"
+          ]
+        },
+        {
+          "reason": "All three specialists were not guided to the shelter; Otter was still in the submerged control room and the others were only at the relay yard.",
+          "evidence_ids": [
+            "f6060c985c484c7e863fcbf2ed908e04:157"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "b0a1e2be76c147499f5d6a419157f426",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T15:26:50.824382+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "b0a1e2be76c147499f5d6a419157f426:36"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored or independently verified; final verification shows all cooperative work fields null.",
+          "evidence_ids": [
+            "b0a1e2be76c147499f5d6a419157f426:36"
+          ]
+        },
+        {
+          "reason": "The three specialists were not guided to the shelter; final verification places them in evidence-hub, supply-depot, and flood-wing.",
+          "evidence_ids": [
+            "b0a1e2be76c147499f5d6a419157f426:36"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "22937b18b31e42f482003c0f1dcf8a5a",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T15:35:22.731634+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "22937b18b31e42f482003c0f1dcf8a5a:86"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored; final verification shows required relay work such as install_safety_module, focus_relay, and verify_relay remains null.",
+          "evidence_ids": [
+            "22937b18b31e42f482003c0f1dcf8a5a:86"
+          ]
+        },
+        {
+          "reason": "The three specialists were not guided to the shelter; final verification places them at evidence-hub, supply-depot, and submerged-control-room.",
+          "evidence_ids": [
+            "22937b18b31e42f482003c0f1dcf8a5a:86"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "c9a936767d154a068d1e23f7ace435ff",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T15:38:05.525019+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "c9a936767d154a068d1e23f7ace435ff:41"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored or verified; all cooperative relay tasks remain null.",
+          "evidence_ids": [
+            "c9a936767d154a068d1e23f7ace435ff:41"
+          ]
+        },
+        {
+          "reason": "The specialists were not guided to the shelter; final verification shows all three still at their starting zones.",
+          "evidence_ids": [
+            "c9a936767d154a068d1e23f7ace435ff:41"
+          ]
+        },
+        {
+          "reason": "No confirmed allocation of the required limited supplies or completed supported response plan is evidenced.",
+          "evidence_ids": [
+            "c9a936767d154a068d1e23f7ace435ff:1",
+            "c9a936767d154a068d1e23f7ace435ff:41"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "9a53aea4afba4d6da7b68c836594ee9d",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T15:49:47.217786+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "9a53aea4afba4d6da7b68c836594ee9d:183"
+          ]
+        },
+        {
+          "reason": "The supported response plan was not confirmed; confirm_evidence remains null in the final verification.",
+          "evidence_ids": [
+            "9a53aea4afba4d6da7b68c836594ee9d:183"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored; stabilize_frame, install_safety_module, focus_relay, and verify_relay are all null.",
+          "evidence_ids": [
+            "9a53aea4afba4d6da7b68c836594ee9d:183"
+          ]
+        },
+        {
+          "reason": "All three specialists were not guided to the shelter; final locations are relay-yard, relay-yard, and flood-wing, with no completed verification or shelter arrival.",
+          "evidence_ids": [
+            "9a53aea4afba4d6da7b68c836594ee9d:183"
+          ]
+        }
+      ]
+    }
+  ]
+}

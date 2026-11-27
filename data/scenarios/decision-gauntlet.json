@@ -1,0 +1,362 @@
+{
+  "schema_version": "1.0",
+  "id": "decision-gauntlet",
+  "title": "The Decision Gauntlet",
+  "public_details": "A storm-damaged research station must be reopened before its backup power fails. Three specialists begin in separate evidence, supply and flood zones. The station offers plausible but incompatible records, tools and routes.\n\nThis benchmark-only exercise tests evidence selection, capability delegation, resource allocation, prerequisite planning, physical handoffs, recovery after rejected actions and final verification. Select only evidence and components supported by direct inspection, assign work to capable actors, and do not use a route or control that the station has not enabled. All three specialists must reach the shelter after the evacuation relay is verified.",
+  "private_details": "",
+  "start_location": "evidence-hub",
+  "exit_location": "shelter",
+  "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+  "opening_narrative": "A storm-damaged research station must be reopened before its backup power fails. Mira d'Raven begins in the evidence archive, Bram d'Badger in the supply depot and Nia d'Otter in the flood-control wing. The evacuation relay remains locked, and several records and components disagree.\n\nInspect the available evidence and assign each job to the specialist whose body and tools actually support it. Meet at the relay yard only after each specialist has completed the portable work from their own zone. The evacuation shelter opens only after the complete relay is restored and independently verified.",
+  "goal_type": "all_actors_at_exit_location",
+  "body": {
+    "description": "A benchmark specialist able to move and manipulate small objects.",
+    "capabilities": ["move", "manipulate"],
+    "capacity": 1
+  },
+  "agents": [
+    {
+      "id": "benchmark-raven",
+      "role": "Evidence specialist. Starting alone in the archive, choose the record with direct corroboration, inspect the high cache using flight, and carry only the verified relay component to the yard.",
+      "start_location": "evidence-hub",
+      "body": {
+        "description": "A flying evidence specialist with beak and claws; carries one small item and can analyze evidence or focus optics.",
+        "capabilities": ["move", "manipulate", "fly", "evidence_analysis", "optics"],
+        "capacity": 1,
+        "grips": ["beak", "claw"],
+        "max_held_items": 1,
+        "size": "small"
+      }
+    },
+    {
+      "id": "benchmark-badger",
+      "role": "Logistics specialist. Starting alone in the depot, assess the handling risk and reserve the correct heavy component for relay repair; do not overload or substitute an incompatible part.",
+      "start_location": "supply-depot",
+      "body": {
+        "description": "A strong logistics specialist carrying up to three inventory units and able to assess risk and perform rigging and installation work.",
+        "capabilities": ["move", "manipulate", "strength", "rigging", "risk_review"],
+        "capacity": 3,
+        "grips": ["paw", "mouth"],
+        "max_held_items": 2
+      }
+    },
+    {
+      "id": "benchmark-otter",
+      "role": "Safety and recovery specialist. Starting alone in the flood wing, inspect the submerged controls, retrieve the approved safety module and verify the completed relay.",
+      "start_location": "flood-wing",
+      "body": {
+        "description": "A swimming safety specialist carrying one small item, able to perform underwater engineering and independent verification.",
+        "capabilities": ["move", "manipulate", "swim", "water_engineering", "safety_audit"],
+        "capacity": 1,
+        "grips": ["paw", "mouth"],
+        "max_held_items": 2,
+        "size": "small"
+      }
+    }
+  ],
+  "needs": {},
+  "recovery": {},
+  "budgets": {
+    "max_actions": 45,
+    "max_model_calls": 60,
+    "max_seconds": 1200,
+    "repetition_window": 4
+  },
+  "entities": {
+    "evidence-hub": {
+      "name": "Evidence archive",
+      "kind": "location",
+      "description": "An elevated evidence cache and three relay records are visible. One record is an unverified prediction, one names the wrong component, and one is corroborated by the archive's direct sensor log. A sheltered path leads to the relay yard."
+    },
+    "supply-depot": {
+      "name": "Supply depot",
+      "kind": "location",
+      "description": "A risk docket and three relay components are visible. The safe replacement weighs two inventory units; the attractive emergency bypass is prohibited and the oversize brace exceeds any specialist's capacity. A broad service route leads to the relay yard."
+    },
+    "flood-wing": {
+      "name": "Flood-control wing",
+      "kind": "location",
+      "description": "A flooded inspection channel leads to a sealed control room. Only a swimmer can enter. The approved safety module is in a tool chest beyond the water; a dry footpath also connects this wing to the relay yard."
+    },
+    "submerged-control-room": {
+      "name": "Submerged control room",
+      "kind": "location",
+      "description": "A watertight tool chest remains secured beneath the water. Its catch requires underwater engineering."
+    },
+    "relay-yard": {
+      "name": "Evacuation relay yard",
+      "kind": "location",
+      "description": "The three specialist routes meet at a staged relay assembly. The control cradle, power frame and optical head expose their verified prerequisites through direct observation."
+    },
+    "shelter": {
+      "name": "Station shelter",
+      "kind": "location",
+      "description": "A protected shelter beyond the relay gate. All specialists must arrive after the relay has passed its independent safety verification."
+    },
+    "archive-path": {
+      "name": "Archive path",
+      "kind": "door",
+      "description": "A sheltered path between the evidence archive and relay yard.",
+      "location": "evidence-hub",
+      "destination": "relay-yard",
+      "open": true,
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "depot-route": {
+      "name": "Depot service route",
+      "kind": "door",
+      "description": "A broad route between the supply depot and relay yard.",
+      "location": "supply-depot",
+      "destination": "relay-yard",
+      "open": true,
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "flood-path": {
+      "name": "Dry flood-wing path",
+      "kind": "door",
+      "description": "A dry path between the flood wing and relay yard.",
+      "location": "flood-wing",
+      "destination": "relay-yard",
+      "open": true,
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "inspection-channel": {
+      "name": "Flooded inspection channel",
+      "kind": "door",
+      "description": "A fully submerged route. Only a swimmer can use it.",
+      "location": "flood-wing",
+      "destination": "submerged-control-room",
+      "open": true,
+      "traversal_capabilities": ["swim"],
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "relay-gate": {
+      "name": "Verified relay gate",
+      "kind": "door",
+      "description": "The shelter gate opens only after the completed relay passes independent safety verification.",
+      "location": "relay-yard",
+      "destination": "shelter",
+      "open": false,
+      "required_challenges": ["verify_relay"],
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "sensor-log": {
+      "name": "Corroborated sensor log",
+      "kind": "item",
+      "description": "A direct station sensor log records a compatible relay optical head and a requirement for an independent safety check. It corroborates the archive memo.",
+      "location": "evidence-hub",
+      "takable": true,
+      "health": null,
+      "readable_text": "VERIFIED: Install optical head OH-7. Allocate replacement brace B-2. Use safety module S-4. The completed relay requires an independent safety audit before evacuation.",
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"],
+      "carry_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "prediction-note": {
+      "name": "Unverified prediction note",
+      "kind": "item",
+      "description": "A prediction says relay output will recover naturally. It cites no sensor data or completed inspection.",
+      "location": "evidence-hub",
+      "takable": true,
+      "health": null,
+      "readable_text": "PREDICTION: Wait for the relay to recover naturally; no component work should be necessary.",
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"],
+      "carry_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "wrong-component-note": {
+      "name": "Obsolete component list",
+      "kind": "item",
+      "description": "An obsolete list names a part that is not compatible with the current relay frame.",
+      "location": "evidence-hub",
+      "takable": true,
+      "health": null,
+      "readable_text": "OBSOLETE: Use optical head OH-3 and bypass the safety interlock.",
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"],
+      "carry_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "evidence-cache": {
+      "name": "High optical cache",
+      "kind": "container",
+      "description": "A high cache contains optical head OH-7. Flight is required to release its catch.",
+      "location": "evidence-hub",
+      "open": false,
+      "required_challenges": ["release_optical_head"],
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "optical-head": {
+      "name": "Optical head OH-7",
+      "kind": "item",
+      "description": "The verified relay optical head. It is small enough for Raven to carry.",
+      "location": "evidence-cache",
+      "takable": true,
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"],
+      "carry_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "relay-brace": {
+      "name": "Replacement brace B-2",
+      "kind": "item",
+      "description": "The verified two-unit replacement brace. It fits Badger's carrying capacity and the relay frame.",
+      "location": "supply-depot",
+      "takable": true,
+      "inventory_units": 2,
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"],
+      "carry_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "emergency-bypass": {
+      "name": "Prohibited emergency bypass",
+      "kind": "item",
+      "description": "A tempting bypass that would disable the relay safety interlock. The risk docket explicitly prohibits using it.",
+      "location": "supply-depot",
+      "takable": true,
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"],
+      "carry_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "oversize-brace": {
+      "name": "Oversize brace X-9",
+      "kind": "item",
+      "description": "An incompatible brace requiring five inventory units, more than any specialist can carry.",
+      "location": "supply-depot",
+      "takable": true,
+      "inventory_units": 5,
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"],
+      "carry_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "risk-docket": {
+      "name": "Relay risk docket",
+      "kind": "item",
+      "description": "A handling and compatibility review of the available depot components. This is a reference document and need not be carried into the repair area.",
+      "location": "supply-depot",
+      "readable_text": "APPROVED: B-2, two inventory units. PROHIBITED: emergency bypass disables the interlock. REJECTED: X-9 exceeds capacity and does not fit the relay frame.",
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "safety-chest": {
+      "name": "Submerged safety chest",
+      "kind": "container",
+      "description": "A sealed chest in the submerged control room. An underwater engineer can release its catch.",
+      "location": "submerged-control-room",
+      "open": false,
+      "required_challenges": ["release_safety_module"],
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "safety-module": {
+      "name": "Safety module S-4",
+      "kind": "item",
+      "description": "The approved relay safety module. It is waterproof and small enough for Otter to carry.",
+      "location": "safety-chest",
+      "takable": true,
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"],
+      "carry_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "evidence-board": {
+      "name": "Relay evidence board",
+      "kind": "item",
+      "description": "Raven must select the corroborated sensor log here before the team can act on the response plan.",
+      "location": "relay-yard",
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "power-frame": {
+      "name": "Relay power frame",
+      "kind": "item",
+      "description": "Badger can install the verified two-unit brace after the evidence plan has been confirmed.",
+      "location": "relay-yard",
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "control-cradle": {
+      "name": "Relay control cradle",
+      "kind": "item",
+      "description": "Otter can install the approved safety module after the power frame is stabilized.",
+      "location": "relay-yard",
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "optical-mount": {
+      "name": "Relay optical mount",
+      "kind": "item",
+      "description": "Raven can focus OH-7 after Badger installs the brace and Otter installs the safety module.",
+      "location": "relay-yard",
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    },
+    "audit-console": {
+      "name": "Independent verification console",
+      "kind": "item",
+      "description": "Otter can perform the final independent safety audit after all relay components are installed and focused.",
+      "location": "relay-yard",
+      "health": null,
+      "use_grips": ["hand", "paw", "mouth", "beak", "claw"]
+    }
+  },
+  "skill_challenges": [
+    {
+      "id": "release_optical_head",
+      "description": "Fly to the high cache and release optical head OH-7.",
+      "target": "evidence-cache",
+      "capability": "fly",
+      "opens": ["evidence-cache"]
+    },
+    {
+      "id": "confirm_evidence",
+      "description": "Verify the response plan using the corroborated sensor log rather than the prediction or obsolete list.",
+      "target": "evidence-board",
+      "capability": "evidence_analysis",
+      "requires": ["release_optical_head"],
+      "carried": ["sensor-log"]
+    },
+    {
+      "id": "stabilize_frame",
+      "description": "Install verified replacement brace B-2 in the relay power frame without using the prohibited bypass or oversize part.",
+      "target": "power-frame",
+      "capability": "strength",
+      "requires": ["confirm_evidence"],
+      "carried": ["relay-brace"],
+      "installs": ["relay-brace"]
+    },
+    {
+      "id": "release_safety_module",
+      "description": "Release approved safety module S-4 from the submerged safety chest.",
+      "target": "safety-chest",
+      "capability": "water_engineering",
+      "opens": ["safety-chest"]
+    },
+    {
+      "id": "install_safety_module",
+      "description": "Install the approved safety module before the relay optics are focused.",
+      "target": "control-cradle",
+      "capability": "water_engineering",
+      "requires": ["stabilize_frame", "release_safety_module"],
+      "carried": ["safety-module"],
+      "installs": ["safety-module"]
+    },
+    {
+      "id": "focus_relay",
+      "description": "Install and focus the verified optical head on the completed relay frame.",
+      "target": "optical-mount",
+      "capability": "optics",
+      "requires": ["install_safety_module"],
+      "carried": ["optical-head"],
+      "installs": ["optical-head"]
+    },
+    {
+      "id": "verify_relay",
+      "description": "Independently verify the restored relay and open the evacuation gate only after all prerequisites pass.",
+      "target": "audit-console",
+      "capability": "safety_audit",
+      "requires": ["focus_relay"],
+      "opens": ["relay-gate"]
+    }
+  ]
+}

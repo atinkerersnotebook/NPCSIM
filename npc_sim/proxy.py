@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 
-from npc_sim.models import Decision, ProxyConfig
+from npc_sim.models import ActionContext, Decision, ProxyConfig
 from npc_sim.assessment import StoryReview
 from npc_sim.dungeon_master import DungeonMasterReview
 from npc_sim.interactions import NpcReply, WorldEditPlan
@@ -143,17 +143,26 @@ class Proxy:
         self.context_diagnostics: dict[str, Any] = {}
         self.message_diagnostics: dict[int, dict[str, Any]] = {}
 
-    def _messages(self, instructions: str, payload: dict[str, Any]) -> list[dict[str, str]]:
+    def _messages(self, instructions: str, payload: dict[str, Any],
+                  task: str = "decision") -> list[dict[str, str]]:
+        message_format = self.config.message_format_for(task)
         encoded, diagnostics = encode_prompt_payload(
-            payload, self.config.message_format,
-            deduplicate=self.config.message_deduplicate,
-            relevant_memory=self.config.message_relevant_memory,
-            aggregate_events=self.config.message_aggregate_events,
+            payload, message_format,
+            deduplicate=self.config.compression_option_for(task, "deduplicate"),
+            relevant_memory=self.config.compression_option_for(task, "relevant_memory"),
+            aggregate_events=self.config.compression_option_for(task, "aggregate_events"),
         )
         self.context_diagnostics = diagnostics
+        self.context_diagnostics["options"] = {
+            "deduplicate": self.config.compression_option_for(task, "deduplicate"),
+            "relevant_memory": self.config.compression_option_for(task, "relevant_memory"),
+            "aggregate_events": self.config.compression_option_for(task, "aggregate_events"),
+            "perception_delta": self.config.compression_option_for(task, "perception_delta"),
+        }
         system = instructions
-        if diagnostics["effective_mode"] != "normal" or self.config.message_deduplicate \
-                or self.config.message_relevant_memory or self.config.message_aggregate_events:
+        if diagnostics["effective_mode"] != "normal" or self.config.compression_option_for(task, "deduplicate") \
+                or self.config.compression_option_for(task, "relevant_memory") \
+                or self.config.compression_option_for(task, "aggregate_events"):
             system += compression_instructions()
         messages = [{"role": "system", "content": system},
                     {"role": "user", "content": json.dumps(encoded, ensure_ascii=True, separators=(",", ":"))}]
@@ -169,9 +178,12 @@ class Proxy:
             headers["Authorization"] = f"Bearer {token}"
         return headers
 
+    def base_url(self) -> str:
+        return self.config.base_url.replace("\\", "/").rstrip("/")
+
     async def models(self) -> list[str]:
         async with httpx.AsyncClient(timeout=self.config.timeout_seconds, trust_env=False) as client:
-            response = await client.get(self.config.base_url.rstrip("/") + "/models", headers=self.headers())
+            response = await client.get(self.base_url() + "/models", headers=self.headers())
             response.raise_for_status()
             payload = response.json()
             models = [entry["id"] for entry in payload["data"] if isinstance(entry.get("id"), str)]
@@ -180,20 +192,25 @@ class Proxy:
             return models
 
     def context(self, goal: dict[str, Any], observation: dict[str, Any],
-                memory: dict[str, Any], repair: str | None = None) -> list[dict[str, str]]:
+                memory: dict[str, Any], repair: str | None = None,
+                memory_tier: str = "long") -> list[dict[str, str]]:
         visible_goal = {key: value for key, value in goal.items()
                         if key != "type" or goal.get("revealed", True)}
         perceived = (observation_delta(observation, memory.get("last_observation"))
-                     if self.config.message_perception_delta else observation_context(observation))
+                     if self.config.compression_option_for("decision", "perception_delta")
+                     else observation_context(observation))
         payload = {"goal": visible_goal, "observation": perceived,
-                   "memory": memory_context(memory)}
+                   "memory": memory_context(
+                       {**memory, "action_context_mode": self.config.action_context_mode}, memory_tier)}
         scenario_details = memory.get("scenario_details")
         if isinstance(scenario_details, dict):
             payload["scenario_details"] = copy.deepcopy(scenario_details)
         if repair:
             payload["validation_error"] = repair
         instructions = INSTRUCTIONS + self.persona_instructions(memory)
-        return self._messages(instructions, payload)
+        messages = self._messages(instructions, payload, "decision")
+        self.context_diagnostics["memory_tier"] = memory_tier
+        return messages
 
     def persona_instructions(self, memory: dict[str, Any]) -> str:
         profile = memory.get("agent_profile")
@@ -218,6 +235,70 @@ class Proxy:
             raise EmptyModelResponse("Model returned an empty decision")
         return Decision.model_validate_json(text), metadata
 
+    def action_context_context(self, *, actor: str, action: dict[str, Any], result: dict[str, Any],
+                               memory: dict[str, Any]) -> list[dict[str, str]]:
+        instructions = """Create a concise contextual description of a completed action.
+The supplied action result is authoritative and must not be contradicted, expanded into facts,
+or presented as an independently verified judgment. Describe only its atmosphere, practical meaning,
+and relationship to the actor's stated goal and observed situation. Do not invent people, objects,
+locations, consequences, time passing, emotions, or successful outcomes. Do not repeat the engine's
+wording verbatim. Never change whether the action was applied, rejected, unchanged, or observed.
+Use the actor's configured persona when doing so, but keep the description factual and concise.
+Return ONLY JSON: {"description":"contextual description"}."""
+        payload = {
+            "actor": actor,
+            "action": action,
+            "authoritative_result": {
+                key: copy.deepcopy(result[key]) for key in ("request_id", "outcome", "code", "explanation")
+                if key in result
+            },
+            "observed_after": observation_context(result.get("observation") or {}),
+            "memory": memory_context(memory),
+        }
+        return self._messages(instructions + self.persona_instructions(memory), payload, "text_generation")
+
+    async def action_context(self, model: str, messages: list[dict[str, str]],
+                             correlation_id: str, timeout: float) -> tuple[ActionContext, dict[str, Any]]:
+        text, metadata = await self._completion(
+            model, messages, correlation_id, timeout,
+            response_schema=ActionContext.model_json_schema(), schema_name="npcsim_action_context")
+        return ActionContext.model_validate_json(text), metadata
+
+    def adjudication_context_context(self, *, ruling: dict[str, Any]) -> list[dict[str, str]]:
+        instructions = """Rewrite a completed Supervisor adjudication as a concise, readable explanation.
+The supplied ruling is authoritative. Preserve its verdict and factual basis exactly, including rejection
+or non-progress. Do not invent permissions, consequences, evidence, emotions, or world changes. Use no
+more than two sentences. This is presentation text only and never changes the ruling.
+Use plain text only: no Markdown, emphasis markers, bullets, headings, asterisks, or backticks.
+Return ONLY JSON: {"description":"contextual adjudication"}."""
+        return self._messages(instructions, {"authoritative_ruling": ruling}, "text_generation")
+
+    def world_state_context(self, *, observation: dict[str, Any]) -> list[dict[str, str]]:
+        instructions = """Summarize the initial observed world state for a Supervisor timeline tile.
+Use only supplied observations. Preserve factual accuracy, uncertainty, and actor locations. Do not invent
+objectives, hidden information, intentions, outcomes, or future events. Keep it to one or two concise plain-text
+sentences with no Markdown, emphasis markers, headings, bullets, asterisks, or backticks.
+Return ONLY JSON: {"description":"world-state summary"}."""
+        return self._messages(instructions, {"observation": observation_context(observation)}, "text_generation")
+
+    async def describe_world_state(self, model: str, messages: list[dict[str, str]],
+                                   correlation_id: str, timeout: float) -> tuple[ActionContext, dict[str, Any]]:
+        text, metadata = await self._completion(
+            model, messages, correlation_id, timeout,
+            response_schema=ActionContext.model_json_schema(), schema_name="npcsim_world_state_context")
+        context = ActionContext.model_validate_json(text)
+        context.description = context.description.replace("**", "").replace("__", "").replace("`", "")
+        return context, metadata
+
+    async def adjudication_context(self, model: str, messages: list[dict[str, str]],
+                                   correlation_id: str, timeout: float) -> tuple[ActionContext, dict[str, Any]]:
+        text, metadata = await self._completion(
+            model, messages, correlation_id, timeout,
+            response_schema=ActionContext.model_json_schema(), schema_name="npcsim_adjudication_context")
+        context = ActionContext.model_validate_json(text)
+        context.description = context.description.replace("**", "").replace("__", "").replace("`", "")
+        return context, metadata
+
     def question_context(self, goal: dict[str, Any], observation: dict[str, Any],
                          memory: dict[str, Any], question: str) -> list[dict[str, str]]:
         instructions = """Answer a private question as this embodied NPC in its own personality.
@@ -235,7 +316,7 @@ Return ONLY JSON {"answer":"your in-character answer"}."""
             "goal": visible_goal, "observation": observation_context(observation), "memory": memory_context(memory),
             **({"scenario_details": copy.deepcopy(scenario_details)}
                if isinstance(scenario_details, dict) else {}),
-            "operator_question": question})
+            "operator_question": question}, "text_generation")
 
     async def answer_question(self, model: str, messages: list[dict[str, str]],
                               correlation_id: str, timeout: float) -> tuple[NpcReply, dict[str, Any]]:
@@ -283,10 +364,9 @@ actual actor IDs, never invent an actor ID. Do not expose hidden placements or c
 from this privileged snapshot in goal text; disclose only the requested task, not its solution.
 Explain assignments and any/all semantics in the summary. The main goal still ends the
 adventure normally even if optional side goals remain unfinished."""
-        return [{"role": "system", "content": rules},
-                {"role": "user", "content": json.dumps({
-                    "instruction": instruction, "world": snapshot,
-                    "schema": WorldEditPlan.model_json_schema()}, ensure_ascii=True)}]
+        return self._messages(rules, {
+            "instruction": instruction, "world": snapshot,
+            "schema": WorldEditPlan.model_json_schema()}, "reasoning")
 
     async def propose_world_edit(self, model: str, messages: list[dict[str, str]],
                                  correlation_id: str, timeout: float) -> tuple[WorldEditPlan, dict[str, Any]]:
@@ -330,8 +410,7 @@ private chain-of-thought, or claims about undiscovered items."""
                 {**paragraph, "text": paragraph["text"][:400] + " [truncated]"
                  if len(paragraph["text"]) > 400 else paragraph["text"]}
                 for paragraph in selected]}
-        return [{"role": "system", "content": instructions},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=True)}]
+        return self._messages(instructions, payload, "evaluation")
 
     async def assess(self, model: str, messages: list[dict[str, str]],
                      correlation_id: str, timeout: float) -> tuple[StoryReview, dict[str, Any]]:
@@ -368,7 +447,7 @@ Return ONLY JSON: {"verdict":"continue" or "defeat",
 "findings":[{"reason":"concise evidence-backed judgment","evidence_ids":["supplied event ID"]}]}.
 Provide concise rulings, not private chain-of-thought."""
         value = {**review_context(payload), **({"validation_error": repair} if repair else {})}
-        return self._messages(instructions, value)
+        return self._messages(instructions, value, "reasoning")
 
     async def review_progress(self, model: str, messages: list[dict[str, str]],
                               correlation_id: str, timeout: float) -> tuple[DungeonMasterReview, dict[str, Any]]:
@@ -393,7 +472,7 @@ Provide concise rulings, not private chain-of-thought."""
                     },
                 }
             response = await client.post(
-                self.config.base_url.rstrip("/") + "/chat/completions",
+                self.base_url() + "/chat/completions",
                 headers={**self.headers(), "X-Request-ID": correlation_id},
                 json=request,
             )

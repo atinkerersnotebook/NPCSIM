@@ -347,7 +347,7 @@ def _decode_keys(value: Any, aliases: dict[str, str]) -> Any:
 
 
 def _resolve_references(value: Any, references: list[Any]) -> Any:
-    if isinstance(value, dict) and set(value) == {"$ref"}:
+    if isinstance(value, dict) and set(value) == {"$ref"} and isinstance(value["$ref"], int):
         try:
             return copy.deepcopy(references[int(value["$ref"])])
         except (IndexError, TypeError, ValueError) as error:

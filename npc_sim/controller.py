@@ -19,7 +19,7 @@ from npc_sim.contracts import action_result, goal_result, observation
 from npc_sim.mcp_client import WorldClient
 from npc_sim.models import AppConfig, BudgetExtension, Budgets, ClockMode, ClockRequest, Decision, EpisodeLoadRequest, EpisodeSave, EpisodeSaveRequest, ReopenRequest, RunModeRequest, Scenario, SkillMode, TurnMode, VillagePlanStep, WorldState
 from npc_sim.proxy import EmptyModelResponse, Proxy
-from npc_sim.prompt_context import REVIEW_EVENTS, public_proxy_messages
+from npc_sim.prompt_context import REVIEW_EVENTS, memory_context, public_proxy_messages
 from npc_sim.storage import EventStore, StoryStore, read_json, write_json
 from npc_sim.world_storage import WorldStorage, read_world_state
 from npc_sim.assessment import CompletionAnalysis, grade, load_memory, record_feedback, remove_feedback
@@ -132,6 +132,25 @@ class Controller:
     @property
     def run_until_complete(self) -> bool:
         return bool(self.run and self.run.get("run_until_complete", False))
+
+    def task_model(self, task: Literal["text_generation", "decision", "reasoning", "evaluation"]) -> str | None:
+        if self.run:
+            try:
+                proxy = AppConfig.model_validate(self.run["config"]).proxy
+            except (KeyError, ValidationError):
+                proxy = self.config.proxy
+        else:
+            proxy = self.config.proxy
+        return proxy.model_for(task)
+
+    async def require_task_model(self, task: Literal["text_generation", "decision", "reasoning", "evaluation"]) -> str:
+        selected = self.task_model(task)
+        if selected:
+            return selected
+        models = await self._call_proxy(self.proxy.models())
+        if len(models) != 1:
+            raise ValueError("Multiple models are available. Select models for each task in Admin view before running.")
+        return models[0]
 
     def _arm_cycle_boundary(self) -> None:
         if (self.run_until_complete and self.run and self.world
@@ -341,7 +360,7 @@ class Controller:
                 if scenario_budgets is not None or self.run["scenario_id"] == "bread-bakery":
                     self.run["config"]["budgets"] = episode_budgets
                 self.run["config"]["world"]["scenario"] = self.run["scenario_id"]
-                self.run["model"] = config.proxy.model
+                self.run["model"] = config.proxy.model_for("decision")
                 self.emit("configuration", {"config": config.model_dump(mode="json")})
                 self.checkpoint()
         elif name == "clock":
@@ -1034,7 +1053,7 @@ class Controller:
             "session_id": session_id, "actor_id": actor_id, "scenario_id": scenario.id,
             "title": scenario.title, "status": "ready", "reason": "",
             "created_at": utc_now(), "actions": 0, "model_calls": 0, "cycles": 0,
-            "model": self.config.proxy.model, "elapsed_seconds": 0,
+            "model": self.config.proxy.model_for("decision"), "elapsed_seconds": 0,
             "successful": None,
             "goal": {"id": f"{rid}-goal",
                      "objective": scenario.initial_objective if scenario.goal_note_id is not None else scenario.objective,
@@ -1136,6 +1155,7 @@ class Controller:
         self.remember(self.observation)
         self.emit("started", {"goal": self.run["goal"].copy(), "tools": list(self.world.tools)})
         self.emit("observation", self.observation)
+        await self._describe_world_state()
         self.checkpoint()
 
     def _activate_clock(self) -> None:
@@ -1333,6 +1353,7 @@ class Controller:
             self.run["cycles"] += 1
         self.emit("observation", self.observation)
         self.remember(self.observation)
+        await self._describe_world_state()
         if await self.verify():
             return
         decision = self._deterministic_decision()
@@ -1341,26 +1362,30 @@ class Controller:
             self.memory.pop("active_typed_step", None)
         if not self.run["model"]:
             if decision is None:
-                models = await self._call_proxy(self.proxy.models())
-                if len(models) != 1:
-                    raise ValueError("Multiple models are available. Select one in the admin panel before running.")
-                self.run["model"] = models[0]
+                self.run["model"] = await self.require_task_model("decision")
+        decision_model = self.task_model("decision") or self.run["model"]
         repair: str | None = None
         empty_attempts = 0
+        memory_tiers = ("short", "medium")
         for attempt in range(0 if decision is not None else 2):
+            if decision_model is None:
+                decision_model = await self.require_task_model("decision")
+                self.run["model"] = decision_model
             if (not self.run_until_complete and self.run["model_calls"] >= self.budgets.max_model_calls) or self.remaining() <= 0:
                 if not await self.verify(final=True):
                     self.finish("budget_exceeded", "Model-call or wall-time budget exhausted.")
                 return
-            messages = self.proxy.context(self.run["goal"], self.observation, self.memory, repair)
-            self.emit("proxy_request", {"model": self.run["model"], "messages": public_proxy_messages(messages), "repair": bool(repair),
+            messages = self.proxy.context(
+                self.run["goal"], self.observation, self.memory, repair, memory_tier=memory_tiers[attempt])
+            self.emit("proxy_request", {"model": decision_model, "messages": public_proxy_messages(messages), "repair": bool(repair),
+                                        "memory_tier": memory_tiers[attempt],
                                         "compression": dict(getattr(self.proxy, "context_diagnostics", {}))})
             self.run["model_calls"] += 1
             self.checkpoint()
             try:
                 started = time.monotonic()
                 decision, metadata = await self._call_proxy(self.proxy.choose(
-                    self.run["model"], messages,
+                    decision_model, messages,
                     f"{self.run['id']}:{self.run['cycles']}:{self.run['actor_id']}:{attempt}",
                     max(0.1, self.remaining())))
                 self.emit("decision", {**decision.model_dump(mode="json"), **metadata,
@@ -1390,6 +1415,19 @@ class Controller:
                     raise ValueError(f"Decision remained invalid after one repair: {repair}") from error
         if decision is None:
             raise ValueError("No valid model decision")
+        long_memory = memory_context(self.memory, "long")
+        known_entities = long_memory.get("known_entities") or {}
+        known_locations = long_memory.get("visited_locations") or {}
+        referenced = sorted({str(value) for value in decision.arguments.values()
+                             if isinstance(value, (str, int, float, bool))})
+        self.emit("decision_memory_validation", {
+            "memory_tier": "long",
+            "referenced_entities": [value for value in referenced if value in known_entities],
+            "referenced_locations": [value for value in referenced if value in known_locations],
+            "known_entities_checked": len(known_entities),
+            "enduring_facts_checked": len(long_memory.get("enduring_facts") or []),
+            "validated": True,
+        })
         if self.remaining() <= 0:
             if not await self.verify(final=True):
                 self.finish("budget_exceeded", "Wall-time budget exhausted before action dispatch.")
@@ -1415,6 +1453,8 @@ class Controller:
         if result is None:
             raise ValueError("World returned no action result")
         self._accept_action_result(request, result, decision, goal_was_revealed)
+        await self._describe_adjudication(request["request_id"])
+        await self._describe_action_result(request, result)
         if await self.verify(final=self.remaining() <= 0):
             return
         if (not deterministic or self.run["actions"] -
@@ -1439,6 +1479,97 @@ class Controller:
             self.finish("budget_exceeded", "Episode budget exhausted without verified completion.")
         if self.run["status"] == "running" and self.wait_until is not None and not self._continuous_clock():
             await self._set_clock(True)
+
+    async def _describe_action_result(self, request: dict[str, Any], result: dict[str, Any]) -> None:
+        if not self.run or not self.events:
+            return
+        proxy_config = AppConfig.model_validate(self.run["config"]).proxy
+        if proxy_config.action_context_mode == "structured":
+            return
+        if (not self.run_until_complete and self.run["model_calls"] >= self.budgets.max_model_calls) \
+                or self.remaining() <= 0:
+            self.emit("action_context_error", {
+                "request_id": request["request_id"], "message": "Contextual description skipped: model budget exhausted."
+            })
+            return
+        model = await self.require_task_model("text_generation")
+        messages = self.proxy.action_context_context(
+            actor=self.run["actor_id"], action=request, result=result, memory=self.memory)
+        self.emit("action_context_request", {
+            "request_id": request["request_id"], "model": model,
+            "compression": dict(getattr(self.proxy, "context_diagnostics", {})),
+        })
+        self.run["model_calls"] += 1
+        self.checkpoint()
+        try:
+            context, metadata = await self._call_proxy(self.proxy.action_context(
+                model, messages, f"{self.run['id']}:action-context:{request['request_id']}",
+                max(0.1, self.remaining())), "text_generation")
+            recent = self.memory.get("recent")
+            if recent:
+                for item in reversed(recent):
+                    if item.get("action_id") == request["action_id"]:
+                        item["contextual_description"] = context.description
+                        break
+            self._save_agent()
+            self.checkpoint()
+            self.emit("action_context", {
+                "request_id": request["request_id"], "description": context.description, **metadata,
+            })
+        except (LLMUnavailable, EmptyModelResponse, ValidationError, ValueError) as error:
+            self.emit("action_context_error", {
+                "request_id": request["request_id"], "message": self.safe_error(error),
+            })
+
+    async def _describe_adjudication(self, request_id: str) -> None:
+        if not self.run or not self.events:
+            return
+        ruling = next((event for event in reversed(self.events.events)
+                       if event["kind"] == "dungeon_master_ruling" and event["payload"].get("scope") == "action"), None)
+        if ruling is None or not hasattr(self.proxy, "adjudication_context"):
+            return
+        if (not self.run_until_complete and self.run["model_calls"] >= self.budgets.max_model_calls) \
+                or self.remaining() <= 0:
+            return
+        model = await self.require_task_model("text_generation")
+        messages = self.proxy.adjudication_context_context(ruling=ruling["payload"])
+        self.run["model_calls"] += 1
+        self.checkpoint()
+        try:
+            context, metadata = await self._call_proxy(self.proxy.adjudication_context(
+                model, messages, f"{self.run['id']}:adjudication-context:{request_id}",
+                max(0.1, self.remaining())), "text_generation")
+            self.emit("adjudication_context", {
+                "request_id": request_id, "ruling_event_id": ruling["id"],
+                "description": context.description, **metadata,
+            })
+        except (LLMUnavailable, EmptyModelResponse, ValidationError, ValueError) as error:
+            self.emit("adjudication_context_error", {
+                "request_id": request_id, "message": self.safe_error(error),
+            })
+
+    async def _describe_world_state(self) -> None:
+        if not self.run or not self.events or not self.observation:
+            return
+        if (not self.run_until_complete and self.run["model_calls"] >= self.budgets.max_model_calls) \
+                or self.remaining() <= 0:
+            return
+        if not hasattr(self.proxy, "describe_world_state"):
+            return
+        model = await self.require_task_model("text_generation")
+        messages = self.proxy.world_state_context(observation=self.observation)
+        self.run["model_calls"] += 1
+        self.checkpoint()
+        try:
+            context, metadata = await self._call_proxy(self.proxy.describe_world_state(
+                model, messages, f"{self.run['id']}:world-state-context",
+                max(0.1, self.remaining())), "text_generation")
+            self.emit("world_state_context", {
+                "source_observation_event_id": self.events.events[-1]["id"],
+                "description": context.description, **metadata,
+            })
+        except (LLMUnavailable, EmptyModelResponse, ValidationError, ValueError) as error:
+            self.emit("world_state_context_error", {"message": self.safe_error(error)})
 
     def _deterministic_decision(self) -> Decision | None:
         if not self.run or not self.observation:
@@ -1591,7 +1722,8 @@ class Controller:
                 typed.pop(0)
 
     def dungeon_master_ruling(self, scope: str, verdict: str, reason: str,
-                              evidence_ids: list[str], source: str) -> None:
+                              evidence_ids: list[str], source: str,
+                              diagnostics: dict[str, Any] | None = None) -> None:
         if not self.run or not self.run.get("dungeon_master"):
             return
         config = DungeonMasterConfig.model_validate(self.run["dungeon_master"]["config"])
@@ -1599,7 +1731,8 @@ class Controller:
             return
         self.emit("dungeon_master_ruling", {
             "name": config.name, "scope": scope, "verdict": verdict,
-            "reason": reason, "evidence_ids": evidence_ids, "source": source})
+            "reason": reason, "evidence_ids": evidence_ids, "source": source,
+            **(diagnostics if diagnostics else {"model": "engine"})})
 
     async def review_team_progress(self) -> None:
         if not self.run or not self.events or not self.run.get("dungeon_master"):
@@ -1627,6 +1760,7 @@ class Controller:
             payload["configuration_authority"] = (
                 "You may propose validated village configuration through village_configuration. "
                 "Use only supported effects; never alter actors, teleport, grant success, or bypass accounting.")
+        reasoning_model = await self.require_task_model("reasoning")
         repair = None
         review: DungeonMasterReview | None = None
         metadata: dict[str, Any] = {}
@@ -1636,13 +1770,13 @@ class Controller:
                 self.finish("budget_exceeded", "Episode wall-time budget exhausted before Dungeon Master review.")
                 return
             messages = self.proxy.dungeon_master_context(payload, repair)
-            self.emit("dungeon_master_request", {"model": self.run["model"], "messages": messages,
+            self.emit("dungeon_master_request", {"model": reasoning_model, "messages": messages,
                                                  "compression": dict(getattr(self.proxy, "context_diagnostics", {}))})
             supervisor["model_calls"] += 1
             self.checkpoint()
             try:
                 review, metadata = await self._call_proxy(self.proxy.review_progress(
-                    self.run["model"], messages, f"{self.run['id']}:dungeon-master:{self.run['actions']}:{attempt}",
+                    reasoning_model, messages, f"{self.run['id']}:dungeon-master:{self.run['actions']}:{attempt}",
                     max(0.1, self.remaining())), "dungeon_master")
                 validate_review(review, evidence, config)
                 if review.village_configuration is not None:
@@ -1680,7 +1814,8 @@ class Controller:
                 return
         reason = " ".join(finding.reason for finding in review.findings)
         self.dungeon_master_ruling("episode", review.verdict, reason,
-                                  list(dict.fromkeys(eid for finding in review.findings for eid in finding.evidence_ids)), "ai")
+                                  list(dict.fromkeys(eid for finding in review.findings for eid in finding.evidence_ids)),
+                                  "ai", metadata)
         if review.verdict == "defeat":
             self.finish("blocked", f"{config.name} rules that the team must admit defeat. {reason}")
 
@@ -1806,12 +1941,7 @@ class Controller:
                 analysis.story = build_narrative(self.events.events)
             else:
                 analysis.story = build_narrative(self.events.events, self.run["actor_id"])
-            model = self.config.proxy.model or self.run["model"]
-            if not model:
-                models = await self.proxy.models()
-                if len(models) != 1:
-                    raise ValueError("Select a model before reviewing the completed story.")
-                model = models[0]
+            model = await self.require_task_model("evaluation")
             analysis.model = model
             messages = self.proxy.completion_context({
                 "objective": self.run["goal"]["objective"],

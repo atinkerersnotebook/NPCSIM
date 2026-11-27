@@ -173,13 +173,27 @@ app.innerHTML = `
         </section>
         <section class="panel proxy-panel" id="connection-panel" data-admin-only>
           <div class="panel-heading"><div><span class="eyebrow">CONNECTION</span><h2>LLM proxy</h2></div><span id="proxy-status" class="tag">NOT CHECKED</span></div>
-          <label for="proxy-url">OpenAI-compatible base URL</label><input id="proxy-url" value="http://127.0.0.1:9901/v1" />
-          <div class="model-row"><div><label for="model-select">Decision model</label><select id="model-select"><option value="">Discover a model</option></select></div><button id="discover" class="button">Discover</button></div>
-          <label for="message-format">Experimental message compression</label><select id="message-format"><option value="normal">Normal</option><option value="compact">Compact fields</option><option value="shorthand">Shorthand structure</option><option value="fact-shorthand">Fact shorthand</option></select>
-          <label><input id="message-deduplicate" type="checkbox" /> Deduplicate repeated request values</label>
-          <label><input id="message-relevant-memory" type="checkbox" /> Select relevant long-term memories</label>
-          <label><input id="message-aggregate-events" type="checkbox" /> Aggregate identical repeated events</label>
-          <label><input id="message-perception-delta" type="checkbox" /> Send self-contained actor perception changes</label>
+          <div class="proxy-url-row"><div><label for="proxy-url">OpenAI-compatible base URL</label><input id="proxy-url" value="http://127.0.0.1:9901/v1" /></div><button id="discover" class="button">Discover models</button></div>
+          <div class="model-row">
+            ${[["text", "text_generation", "Text generation"], ["decision", "decision", "Decision making"], ["reasoning", "reasoning", "Reasoning"], ["evaluation", "evaluation", "Evaluation"]].map(([modelPrefix, purpose, label]) => `
+              <fieldset class="model-purpose"><legend>${label}</legend>
+                <label for="${modelPrefix}-model-select">Model</label><select id="${modelPrefix}-model-select"><option value="">Use default model</option></select>
+                <label for="${modelPrefix}-format-select">Prompt format</label><select id="${modelPrefix}-format-select"><option value="normal">Normal</option><option value="compact">Compact fields</option><option value="shorthand">Shorthand</option><option value="fact-shorthand">Fact shorthand</option></select>
+                ${[["deduplicate", "Deduplicate"], ["relevant-memory", "Relevant memory"], ["aggregate-events", "Aggregate events"], ["perception-delta", "Perception delta"]].map(([option, optionLabel]) =>
+                  `<label class="compression-toggle"><input id="${purpose}-${option}" type="checkbox" /> ${optionLabel}</label>`).join("")}
+              </fieldset>`).join("")}
+            <fieldset class="model-purpose"><legend>Experimental message compression</legend>
+              <label for="default-model-select">Default model</label><select id="default-model-select"><option value="">Discover a model</option></select>
+              <label for="message-format">Default prompt format</label><select id="message-format"><option value="normal">Normal</option><option value="compact">Compact fields</option><option value="shorthand">Shorthand structure</option><option value="fact-shorthand">Fact shorthand</option></select>
+              <label for="action-context-mode">Action-result memory context</label><select id="action-context-mode"><option value="structured">Authoritative engine text only</option><option value="both">Engine text + LLM context</option><option value="narrative">LLM context replaces result wording</option></select>
+              <label class="compression-toggle"><input id="message-deduplicate" type="checkbox" /> Deduplicate repeated values</label>
+              <label class="compression-toggle"><input id="message-relevant-memory" type="checkbox" /> Relevant long-term memory</label>
+              <label class="compression-toggle"><input id="message-aggregate-events" type="checkbox" /> Aggregate repeated events</label>
+              <label class="compression-toggle"><input id="message-perception-delta" type="checkbox" /> Perception delta</label>
+              <p class="muted">Fallbacks used by task types without an explicit override.</p>
+            </fieldset>
+          </div>
+          <p class="muted">Decision selects NPC actions. Reasoning handles progress review and world proposals. Text generation answers NPC questions. Evaluation reviews completed stories.</p>
           <label for="report-format">Story report format</label><select id="report-format"><option value="narrative">Narrative</option><option value="sitrep">SITREP</option><option value="bluf">BLUF</option><option value="brevity">Brevity codes (NPCSIM)</option><option value="metar">Aviation-style slots</option><option value="salute">SALUTE</option><option value="telegraphic">Telegraphic</option><option value="headline">Headlinese</option><option value="sbar">SBAR</option><option value="logfmt">logfmt</option><option value="adr">ADR</option><option value="rfc2119">RFC 2119 style</option></select>
           <p class="muted">Changes Story display and copied Story text only. Canonical events, prompts and NPC actions remain unchanged.</p>
           <p class="muted">Telegraphic and headlinese omit articles. Other new formats preserve entry text; unknown fields are not inferred. Codes are NPCSIM-specific, not actual radio or aviation reports.</p>
@@ -428,6 +442,11 @@ function record(value: unknown): Record<string, unknown> {
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+function setModelOptions(select: HTMLSelectElement, selected: string | null): void {
+  const fallback = selected ?? "";
+  select.innerHTML = `<option value="">Use default model</option>${fallback ? `<option value="${escape(fallback)}">${escape(fallback)}</option>` : ""}`;
+  select.value = fallback;
+}
 function notice(message: string): void {
   const node = element<HTMLDivElement>("notice");
   node.textContent = message;
@@ -479,10 +498,23 @@ function applyState(next: State, playbackSnapshot = false): void {
   if (!explicitTab) selectTab(dashboardTab("", adminView, Boolean(next.run)));
   if (!configured) {
     element<HTMLInputElement>("proxy-url").value = next.config.proxy.base_url;
-    if (next.config.proxy.model) {
-      element<HTMLSelectElement>("model-select").innerHTML = `<option value="${escape(next.config.proxy.model)}">${escape(next.config.proxy.model)}</option>`;
+    setModelOptions(element<HTMLSelectElement>("decision-model-select"), next.config.proxy.decision_model ?? next.config.proxy.model);
+    setModelOptions(element<HTMLSelectElement>("text-model-select"), next.config.proxy.text_generation_model ?? next.config.proxy.model);
+    setModelOptions(element<HTMLSelectElement>("reasoning-model-select"), next.config.proxy.reasoning_model ?? next.config.proxy.model);
+    setModelOptions(element<HTMLSelectElement>("evaluation-model-select"), next.config.proxy.evaluation_model ?? next.config.proxy.model);
+    setModelOptions(element<HTMLSelectElement>("default-model-select"), next.config.proxy.model);
+    element<HTMLSelectElement>("text-format-select").value = next.config.proxy.text_generation_message_format ?? next.config.proxy.message_format;
+    element<HTMLSelectElement>("decision-format-select").value = next.config.proxy.decision_message_format ?? next.config.proxy.message_format;
+    element<HTMLSelectElement>("reasoning-format-select").value = next.config.proxy.reasoning_message_format ?? next.config.proxy.message_format;
+    element<HTMLSelectElement>("evaluation-format-select").value = next.config.proxy.evaluation_message_format ?? next.config.proxy.message_format;
+    for (const purpose of ["text_generation", "decision", "reasoning", "evaluation"] as const) {
+      element<HTMLInputElement>(`${purpose}-deduplicate`).checked = next.config.proxy[`${purpose}_message_deduplicate`] ?? next.config.proxy.message_deduplicate;
+      element<HTMLInputElement>(`${purpose}-relevant-memory`).checked = next.config.proxy[`${purpose}_message_relevant_memory`] ?? next.config.proxy.message_relevant_memory;
+      element<HTMLInputElement>(`${purpose}-aggregate-events`).checked = next.config.proxy[`${purpose}_message_aggregate_events`] ?? next.config.proxy.message_aggregate_events;
+      element<HTMLInputElement>(`${purpose}-perception-delta`).checked = next.config.proxy[`${purpose}_message_perception_delta`] ?? next.config.proxy.message_perception_delta;
     }
     element<HTMLSelectElement>("message-format").value = next.config.proxy.message_format;
+    element<HTMLSelectElement>("action-context-mode").value = next.config.proxy.action_context_mode;
     element<HTMLInputElement>("message-deduplicate").checked = next.config.proxy.message_deduplicate;
     element<HTMLInputElement>("message-relevant-memory").checked = next.config.proxy.message_relevant_memory;
     element<HTMLInputElement>("message-aggregate-events").checked = next.config.proxy.message_aggregate_events;
@@ -643,13 +675,28 @@ function renderDocumentEditor(): void {
 
 function dungeonMasterMarkup(source: readonly RunEvent[]): string {
   const rulings = source.filter(event => event.kind === "dungeon_master_ruling").slice(-20).reverse();
+  const adjudications = new Map(source.filter(event => event.kind === "adjudication_context").map(event => {
+    const payload = record(event.payload);
+    return [String(payload.ruling_event_id), payload] as const;
+  }));
   if (!rulings.length) return '<p class="muted">No rulings yet. New episodes record action adjudications and round-by-round progress judgments here.</p>';
   return rulings.map(event => {
     const ruling = dungeonMasterRulingSchema.parse(event.payload);
+    const adjudication = adjudications.get(event.id);
+    const displayedReason = typeof adjudication?.description === "string" ? adjudication.description : ruling.reason;
     const title = { allowed: "Action allowed", rejected: "Action rejected", continue: "Continue", defeat: "Admit defeat" }[ruling.verdict];
+    const adjudicationCompression = adjudication?.compression && typeof adjudication.compression === "object"
+      ? record(adjudication.compression) : undefined;
+    const compression = adjudicationCompression ?? (ruling.compression && typeof ruling.compression === "object"
+      ? ruling.compression : undefined);
+    const options = compression?.options && typeof compression.options === "object"
+      ? Object.entries(compression.options).filter((entry): entry is [string, true] => entry[1] === true).map(([name]) => name)
+      : [];
+    const model = typeof adjudication?.model === "string" ? adjudication.model : ruling.model ?? "engine";
+    const diagnostics = `<small>Model: ${escape(model)} · Prompt: ${escape(String(compression?.effective_mode ?? "deterministic"))} · Flags: ${escape(options.join(",") || "none")}</small>`;
     return `<article class="dm-ruling"><strong>${escape(ruling.name)}: ${title}</strong>
       <span class="tag ${ruling.verdict === "defeat" || ruling.verdict === "rejected" ? "amber" : "green"}">${ruling.source === "ai" ? "AI JUDGMENT" : "WORLD / VALIDATION"}</span>
-      <p>${escape(ruling.reason)}</p><details><summary>Evidence / cycle ${event.cycle} / ${escape(event.actor_id)}</summary>${evidenceMarkup(ruling.evidence_ids, source)}</details></article>`;
+      <p>${escape(displayedReason)}</p>${diagnostics}<details><summary>Authoritative engine detail / cycle ${event.cycle} / ${escape(event.actor_id)}</summary><p>${escape(ruling.reason)}</p>${evidenceMarkup(ruling.evidence_ids, source)}</details></article>`;
   }).join("");
 }
 
@@ -1229,7 +1276,7 @@ function eventSummary(event: RunEvent): { title: string; text: string; tone: str
       const normalBytes = Number(compression.normal_user_bytes ?? 0);
       const sentBytes = Number(compression.sent_user_bytes ?? 0);
       const saved = normalBytes > sentBytes ? ` · ${Math.round((1 - sentBytes / normalBytes) * 100)}% smaller` : "";
-      return { title: "LLM proxy request", text: `Model: ${String(payload.model)} · ${String(compression.effective_mode ?? "normal")}${saved}${payload.repair ? " · decision repair" : ""}`, tone: "neutral" };
+      return { title: "LLM proxy request", text: `Model: ${String(payload.model)} · ${String(compression.effective_mode ?? "normal")} · ${String(payload.memory_tier ?? compression.memory_tier ?? "short")}${saved}${payload.repair ? " · decision repair" : ""}`, tone: "neutral" };
     }
     case "validation": return { title: payload.valid ? "Decision validated" : "Invalid decision", text: String(payload.error ?? payload.action_id), tone: payload.valid ? "neutral" : "red" };
     case "need_toggle": return { title: `Need ${String(payload.need)} ${payload.enabled ? "enabled" : "disabled"}`, text: `Actor ${String(payload.actor_id)}`, tone: "amber" };
@@ -1704,9 +1751,12 @@ element("discover").addEventListener("click", () => {
   element("proxy-message").textContent = "Checking the configured proxy…";
   void api("/models").then(payload => {
     const models = modelsSchema.parse(payload).models;
-    const select = element<HTMLSelectElement>("model-select");
-    select.innerHTML = models.map(model => `<option value="${escape(model)}">${escape(model)}</option>`).join("");
-    if (state?.config.proxy.model && models.includes(state.config.proxy.model)) select.value = state.config.proxy.model;
+    for (const id of ["default-model-select", "decision-model-select", "text-model-select", "reasoning-model-select", "evaluation-model-select"]) {
+      const select = element<HTMLSelectElement>(id);
+      const selected = select.value;
+      select.innerHTML = `<option value="">Use default model</option>${models.map(model => `<option value="${escape(model)}">${escape(model)}</option>`).join("")}`;
+      if (models.includes(selected)) select.value = selected;
+    }
     element("proxy-status").textContent = "CONNECTED";
     element("proxy-status").className = "tag green";
     element("proxy-message").textContent = `${models.length} model(s) available. Save your selection before running.`;
@@ -1720,8 +1770,23 @@ element("save-proxy").addEventListener("click", () => {
   if (!state) return;
   const config = structuredClone(state.config);
   config.proxy.base_url = element<HTMLInputElement>("proxy-url").value.trim();
-  config.proxy.model = element<HTMLSelectElement>("model-select").value || null;
+  config.proxy.model = element<HTMLSelectElement>("default-model-select").value || state.config.proxy.model;
+  config.proxy.decision_model = element<HTMLSelectElement>("decision-model-select").value || config.proxy.model;
+  config.proxy.text_generation_model = element<HTMLSelectElement>("text-model-select").value || config.proxy.model;
+  config.proxy.reasoning_model = element<HTMLSelectElement>("reasoning-model-select").value || config.proxy.model;
+  config.proxy.evaluation_model = element<HTMLSelectElement>("evaluation-model-select").value || config.proxy.model;
+  config.proxy.text_generation_message_format = element<HTMLSelectElement>("text-format-select").value as State["config"]["proxy"]["message_format"];
+  config.proxy.decision_message_format = element<HTMLSelectElement>("decision-format-select").value as State["config"]["proxy"]["message_format"];
+  config.proxy.reasoning_message_format = element<HTMLSelectElement>("reasoning-format-select").value as State["config"]["proxy"]["message_format"];
+  config.proxy.evaluation_message_format = element<HTMLSelectElement>("evaluation-format-select").value as State["config"]["proxy"]["message_format"];
+  for (const purpose of ["text_generation", "decision", "reasoning", "evaluation"] as const) {
+    config.proxy[`${purpose}_message_deduplicate`] = element<HTMLInputElement>(`${purpose}-deduplicate`).checked;
+    config.proxy[`${purpose}_message_relevant_memory`] = element<HTMLInputElement>(`${purpose}-relevant-memory`).checked;
+    config.proxy[`${purpose}_message_aggregate_events`] = element<HTMLInputElement>(`${purpose}-aggregate-events`).checked;
+    config.proxy[`${purpose}_message_perception_delta`] = element<HTMLInputElement>(`${purpose}-perception-delta`).checked;
+  }
   config.proxy.message_format = element<HTMLSelectElement>("message-format").value as State["config"]["proxy"]["message_format"];
+  config.proxy.action_context_mode = element<HTMLSelectElement>("action-context-mode").value as State["config"]["proxy"]["action_context_mode"];
   config.proxy.message_deduplicate = element<HTMLInputElement>("message-deduplicate").checked;
   config.proxy.message_relevant_memory = element<HTMLInputElement>("message-relevant-memory").checked;
   config.proxy.message_aggregate_events = element<HTMLInputElement>("message-aggregate-events").checked;

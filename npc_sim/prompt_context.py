@@ -105,13 +105,20 @@ def observation_context(value: dict[str, Any], *, supervisor: bool = False) -> d
     return result
 
 
-def memory_context(value: dict[str, Any]) -> dict[str, Any]:
+def memory_context(value: dict[str, Any], tier: str = "long") -> dict[str, Any]:
     result = copy.deepcopy(value)
     result.pop("agent_profile", None)
     result.pop("scenario_details", None)
+    action_context_mode = result.pop("action_context_mode", "structured")
     if "recent" in result:
         result["recent"] = result["recent"][-RECENT_ACTIONS:]
         for item in result["recent"]:
+            if action_context_mode == "narrative":
+                contextual = item.pop("contextual_description", None)
+                if isinstance(contextual, str) and contextual.strip():
+                    item["explanation"] = contextual
+            elif action_context_mode == "structured":
+                item.pop("contextual_description", None)
             _trim_explanation(item)
     if "operator_conversation" in result:
         result["operator_conversation"] = result["operator_conversation"][-RECENT_MESSAGES:]
@@ -137,6 +144,25 @@ def memory_context(value: dict[str, Any]) -> dict[str, Any]:
         facts = result["enduring_facts"]
         result["enduring_facts"] = facts[-24:] if isinstance(facts, list) else facts
     result.pop("last_observation", None)
+    if tier == "short":
+        short_keys = {"schema_version", "recent", "discoveries", "plan", "subgoal", "active_typed_step",
+                      "replan_warning", "previous_attempt_feedback"}
+        result = {key: item for key, item in result.items() if key in short_keys}
+        if "recent" in result:
+            result["recent"] = result["recent"][-3:]
+        feedback = result.get("previous_attempt_feedback")
+        if isinstance(feedback, dict) and isinstance(feedback.get("failures"), list):
+            feedback["failures"] = feedback["failures"][-1:]
+    elif tier == "medium":
+        long_only = {"enduring_facts", "operator_conversation"}
+        result = {key: item for key, item in result.items() if key not in long_only}
+        result["memory_scope"] = "medium"
+    elif tier != "long":
+        raise ValueError(f"Unknown memory tier: {tier}")
+    if tier == "short":
+        result["memory_scope"] = "short"
+    elif tier == "long":
+        result["memory_scope"] = "long"
     return result
 
 

@@ -32,7 +32,31 @@ const requestSchema = z.object({
 });
 const decisionSchema = z.object({
   action_id: z.string(), justification: z.string(), arguments: z.record(z.string(), z.unknown()).optional(),
-  expected_outcome: z.string().optional(), subgoal: z.string().optional(), plan: z.array(z.string()).optional()
+  expected_outcome: z.string().optional(), subgoal: z.string().optional(), plan: z.array(z.string()).optional(),
+  model: z.string().optional(), compression: z.object({
+    requested_mode: z.string().optional(), effective_mode: z.string().optional(),
+    options: z.object({
+      deduplicate: z.boolean().optional(), relevant_memory: z.boolean().optional(),
+      aggregate_events: z.boolean().optional(), perception_delta: z.boolean().optional()
+    }).optional()
+  }).passthrough().optional()
+});
+const diagnosticCompressionSchema = decisionSchema.shape.compression.unwrap();
+const supervisorReviewSchema = z.object({
+  verdict: z.enum(["continue", "defeat"]),
+  findings: z.array(z.object({ reason: z.string() })).min(1),
+  model: z.string().nullable().optional(), compression: diagnosticCompressionSchema.optional()
+});
+const actionContextSchema = z.object({
+  request_id: z.string(), description: z.string(), model: z.string().nullable().optional(),
+  compression: diagnosticCompressionSchema.optional()
+});
+const adjudicationContextSchema = z.object({
+  request_id: z.string(), ruling_event_id: z.string(), description: z.string(),
+  model: z.string().nullable().optional(), compression: diagnosticCompressionSchema.optional()
+});
+const worldStateContextSchema = actionContextSchema.omit({ request_id: true }).extend({
+  source_observation_event_id: z.string().optional()
 });
 const resultSchema = z.object({
   request_id: z.string(), outcome: z.string(), code: z.string().optional(), explanation: z.string(),
@@ -75,15 +99,16 @@ function dailyPlanDetail(event: { result: string; details?: unknown } | undefine
     details?.needs_customer_adjustment ? "Customer quantities need adjustment before these jobs can be promised." : ""]
     .filter(Boolean).join("\n");
 }
-
 export function timelineEventProjection(event: RunEvent): RunEvent | null {
   const payload = event.kind === "observation" ? observationSchema.parse(event.payload)
     : event.kind === "decision" ? decisionSchema.parse(event.payload)
     : event.kind === "action_request" ? requestSchema.parse(event.payload)
     : event.kind === "action_result" ? resultSchema.parse(event.payload)
     : event.kind === "dungeon_master_ruling" ? dungeonMasterRulingSchema.parse(event.payload)
-    : event.kind === "dungeon_master_review" ? z.object({ verdict: z.enum(["continue", "defeat"]),
-      findings: z.array(z.object({ reason: z.string() })).min(1) }).parse(event.payload)
+    : event.kind === "dungeon_master_review" ? supervisorReviewSchema.parse(event.payload)
+    : event.kind === "action_context" ? actionContextSchema.parse(event.payload)
+    : event.kind === "adjudication_context" ? adjudicationContextSchema.parse(event.payload)
+    : event.kind === "world_state_context" ? worldStateContextSchema.parse(event.payload)
     : event.kind === "control" ? objectSchema.parse(event.payload)
     : event.kind === "dungeon_master_appeal_resolved" ? dungeonAppealSchema.parse(event.payload) : null;
   return payload === null ? null : { ...event, payload };
@@ -127,11 +152,23 @@ export interface GanttSpan {
   expectedOutcome?: string;
   subgoal?: string;
   plan?: string[];
+  model?: string;
+  promptFormat?: string;
+  debugFlags?: string[];
+  contextualDescription?: string;
+  originalDetail?: string;
+  contextualModel?: string;
+  contextualPromptFormat?: string;
+  contextualDebugFlags?: string[];
   observation?: string;
   fromLocation?: string;
   toLocation?: string;
   dmVerdict?: string;
   dmComment?: string;
+  dmNarrative?: string;
+  dmModel?: string;
+  dmPromptFormat?: string;
+  dmDebugFlags?: string[];
   status?: string;
   activity?: Exclude<GanttActivity, "all">;
   kind: "action" | "travel" | "wait" | "sleep" | "route" | "free" | "rejected" | "event";
@@ -297,6 +334,28 @@ function speakerName(row: { id: string; name: string }): string {
     .replace(/\b\w/g, char => char.toUpperCase());
 }
 
+function decisionDiagnostics(state: State, decision?: {
+  model?: string | null; compression?: z.infer<typeof diagnosticCompressionSchema>
+}): {
+  model?: string; promptFormat?: string; debugFlags: string[]
+} {
+  if (!decision) return { debugFlags: [] };
+  const proxy = state.run?.config?.proxy ?? state.config.proxy;
+  const format = decision.compression?.effective_mode ?? proxy.decision_message_format ?? proxy.message_format;
+  const options = decision.compression?.options ?? {
+    deduplicate: proxy.decision_message_deduplicate ?? proxy.message_deduplicate,
+    relevant_memory: proxy.decision_message_relevant_memory ?? proxy.message_relevant_memory,
+    aggregate_events: proxy.decision_message_aggregate_events ?? proxy.message_aggregate_events,
+    perception_delta: proxy.decision_message_perception_delta ?? proxy.message_perception_delta
+  };
+  return {
+    model: decision.model ?? proxy.decision_model ?? proxy.model ?? undefined,
+    promptFormat: format,
+    debugFlags: Object.entries(options).filter((entry): entry is [string, true] => entry[1] === true)
+      .map(([name]) => name)
+  };
+}
+
 function researchDetail(project: z.infer<typeof researchProjectSchema>): string {
   const inputs = Object.entries(project.inputs).map(([item, quantity]) => `${quantity} ${item}`).join(", ") || "none";
   return `Study: ${project.worked_minutes}/${project.required_minutes} min; trials: ${project.successes}/${project.attempts} successful (${project.required_successes} required). `
@@ -408,11 +467,25 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
     const ruling = dungeonMasterRulingSchema.parse(event.payload);
     rulings.set(event.actor_id + ":" + event.cycle, ruling);
   }
+  const actionContexts = new Map<string, z.infer<typeof actionContextSchema>>();
+  for (const event of source.filter(event => event.kind === "action_context")) {
+    const context = actionContextSchema.parse(event.payload);
+    actionContexts.set(context.request_id, context);
+  }
+  const adjudicationContexts = new Map<string, z.infer<typeof adjudicationContextSchema>>();
+  for (const event of source.filter(event => event.kind === "adjudication_context")) {
+    const context = adjudicationContextSchema.parse(event.payload);
+    adjudicationContexts.set(context.ruling_event_id, context);
+  }
   const completedRequests = new Set<string>();
+  const worldStateContexts = new Map(source.filter(event => event.kind === "world_state_context").map(event => {
+    const context = worldStateContextSchema.parse(event.payload);
+    return [context.source_observation_event_id, context] as const;
+  }));
   for (const event of source) {
     if (event.kind === "dungeon_master_review" && roundReview) {
-      const review = z.object({ verdict: z.enum(["continue", "defeat"]),
-        findings: z.array(z.object({ reason: z.string() })).min(1) }).parse(event.payload);
+      const review = supervisorReviewSchema.parse(event.payload);
+      const diagnostics = decisionDiagnostics(state, review);
       const round = event.round ?? event.cycle;
       const at = event.village_minute ?? round - 1;
       const detail = review.findings.map(finding => finding.reason).join(" ");
@@ -421,7 +494,10 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       roundReview.spans.push({
         start, end: turns ? round : start + 5, location: "", kind: "event",
         label: `Round ${round} / DM ${review.verdict}`,
-        detail, status: review.verdict
+        detail, status: review.verdict,
+        ...(diagnostics.model ? { model: diagnostics.model } : {}),
+        ...(diagnostics.promptFormat ? { promptFormat: diagnostics.promptFormat } : {}),
+        ...(diagnostics.debugFlags.length ? { debugFlags: diagnostics.debugFlags } : {})
       });
     }
     if (event.kind === "decision") {
@@ -474,13 +550,21 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           const position = row.positions.filter(item => item.order < event.sequence).at(-1);
           return position ? `${row.name} at ${state.world?.entities[position.location]?.name ?? position.location}` : null;
         }).filter((value): value is string => value !== null);
-        const detail = `${observation.narrative}\n\nCast state: ${occupied.join("; ") || "initializing"}.`;
+        const detail = `${observation.narrative}\n\nCast state: ${occupied.join(";") || "initializing"}.`;
+        const summary = worldStateContexts.get(event.id);
+        const diagnostics = summary ? decisionDiagnostics(state, summary) : undefined;
         const existing = worldState.spans.find(span => span.start === start);
-        if (existing) existing.detail = detail;
+        if (existing) {
+          existing.originalDetail = detail;
+          existing.detail = summary?.description ?? detail;
+        }
         else worldState.spans.push({
           start, end, location: "", kind: "event",
           label: `World state / Round ${round}`,
-          detail, status: "RECORDED"
+          detail: summary?.description ?? detail, originalDetail: detail, status: "RECORDED",
+          ...(diagnostics?.model ? { model: diagnostics.model } : {}),
+          ...(diagnostics?.promptFormat ? { promptFormat: diagnostics.promptFormat } : {}),
+          ...(diagnostics?.debugFlags.length ? { debugFlags: diagnostics.debugFlags } : {})
         });
       }
     } else if (event.kind === "action_result") {
@@ -546,6 +630,15 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       const recordedDetail = action === "look" && /\b(?:when|until|after|once)\b/i.test(result.explanation)
         ? `Inspection only; this is a future condition, not a completed outcome: ${result.explanation}`
         : villageClockText(result.explanation);
+      const diagnostics = decisionDiagnostics(state, linked.decision);
+      const actionContext = actionContexts.get(linked.request.request_id);
+      const contextDiagnostics = actionContext ? decisionDiagnostics(state, actionContext) : undefined;
+      const ruling = rulings.get(event.actor_id + ":" + event.cycle);
+      const adjudicationContext = ruling ? adjudicationContexts.get(
+        source.find(item => item.kind === "dungeon_master_ruling" && item.actor_id === event.actor_id
+          && item.cycle === event.cycle)?.id ?? "") : undefined;
+      const adjudicationDiagnostics = adjudicationContext
+        ? decisionDiagnostics(state, adjudicationContext) : undefined;
       if (kind !== "sleep") row.spans.push({
         start, end: Math.max(start, Math.min(now, end)), location: result.observation.self.location_id,
         label: waitLabel ? waitLabel
@@ -569,7 +662,15 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           : life?.work || /^village_(work|project|research|repair|maintain|craft|produce|load_goods|unload_goods)(_|$)/.test(action) ? "work" : undefined,
         ...(rulings.has(event.actor_id + ":" + event.cycle) ? {
           dmVerdict: rulings.get(event.actor_id + ":" + event.cycle)!.verdict,
-          dmComment: rulings.get(event.actor_id + ":" + event.cycle)!.reason
+          dmComment: rulings.get(event.actor_id + ":" + event.cycle)!.reason,
+          dmNarrative: adjudicationContext?.description,
+          dmModel: adjudicationDiagnostics?.model ?? rulings.get(event.actor_id + ":" + event.cycle)!.model ?? "engine",
+          dmPromptFormat: adjudicationDiagnostics?.promptFormat
+            ?? (rulings.get(event.actor_id + ":" + event.cycle)!.compression?.effective_mode as string | undefined)
+            ?? "deterministic",
+          dmDebugFlags: adjudicationDiagnostics?.debugFlags.length ? adjudicationDiagnostics.debugFlags
+            : Object.entries(((rulings.get(event.actor_id + ":" + event.cycle)!.compression?.options ?? {}) as object))
+            .filter((entry): entry is [string, true] => entry[1] === true).map(([name]) => name)
         } : {}),
         arguments: actionArguments(action, args, state, cast),
         ...(linked.observation ? { observation: linked.observation } : {}),
@@ -578,6 +679,13 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           toLocation: result.observation.self.location_id
         } : {}),
         ...(linked.decision?.justification.trim() ? { reasoning: linked.decision.justification.trim() } : {}),
+        ...(diagnostics.model ? { model: diagnostics.model } : {}),
+        ...(diagnostics.promptFormat ? { promptFormat: diagnostics.promptFormat } : {}),
+        ...(diagnostics.debugFlags.length ? { debugFlags: diagnostics.debugFlags } : {}),
+        ...(actionContext ? { contextualDescription: actionContext.description } : {}),
+        ...(contextDiagnostics?.model ? { contextualModel: contextDiagnostics.model } : {}),
+        ...(contextDiagnostics?.promptFormat ? { contextualPromptFormat: contextDiagnostics.promptFormat } : {}),
+        ...(contextDiagnostics?.debugFlags.length ? { contextualDebugFlags: contextDiagnostics.debugFlags } : {}),
         ...(linked.decision?.expected_outcome?.trim() ? { expectedOutcome: linked.decision.expected_outcome.trim() } : {}),
         ...(linked.decision?.subgoal?.trim() ? { subgoal: linked.decision.subgoal.trim() } : {}),
         ...(linked.decision?.plan?.length ? { plan: linked.decision.plan } : {})
@@ -632,18 +740,50 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
       ?? row.positions.filter(point => point.order < linked.event.sequence).at(-1)?.at ?? now;
     if (at > now) continue;
     const action = linked.request.action_id;
+    const diagnostics = decisionDiagnostics(state, linked.decision);
     row.spans.push({
       start: at, end: at,
       location: row.positions.filter(point => point.order < linked.event.sequence).at(-1)?.location ?? row.locationId,
       label: actionLabel(action, linked.request.arguments, state, linked.event.actor_id),
       detail: "Action in progress. Waiting for the world result.", status: "IN_PROGRESS",
       kind: "free",
+      ...(diagnostics.model ? { model: diagnostics.model } : {}),
+      ...(diagnostics.promptFormat ? { promptFormat: diagnostics.promptFormat } : {}),
+      ...(diagnostics.debugFlags.length ? { debugFlags: diagnostics.debugFlags } : {}),
       activity: ["say", "village_ask", "village_tell", "village_share_route", "village_meeting"].includes(action)
         ? "dialogue" : action === "go" || action === "village_plan_walk" ? "movement" : undefined,
       arguments: actionArguments(action, linked.request.arguments, state, cast),
       ...(linked.decision?.justification.trim() ? { reasoning: linked.decision.justification.trim() } : {}),
       ...(linked.decision?.subgoal?.trim() ? { subgoal: linked.decision.subgoal.trim() } : {}),
       ...(linked.decision?.plan?.length ? { plan: linked.decision.plan } : {})
+    });
+  }
+  const initialWorldStateContext = [...worldStateContexts.values()].at(0);
+  if (worldState && initialWorldStateContext) {
+    const diagnostics = decisionDiagnostics(state, initialWorldStateContext);
+    const initial = worldState.spans.at(0);
+    if (initial) {
+      initial.originalDetail ??= initial.detail;
+      initial.detail = initialWorldStateContext.description;
+      if (diagnostics.model) initial.model = diagnostics.model;
+      if (diagnostics.promptFormat) initial.promptFormat = diagnostics.promptFormat;
+      if (diagnostics.debugFlags.length) initial.debugFlags = diagnostics.debugFlags;
+    }
+  }
+  if (worldState && !worldState.spans.length && effectiveClockNow !== undefined) {
+    const width = village ? 5 : 1;
+    const start = Math.max(0, now - width);
+    const end = Math.max(now, start + Number.EPSILON);
+    const narrative = initialWorldStateContext?.description ?? (state.observation?.narrative
+      || (state.world ? "Initial world state recorded." : "Initial state recorded."));
+    const diagnostics = initialWorldStateContext ? decisionDiagnostics(state, initialWorldStateContext) : undefined;
+    worldState.spans.push({
+      start, end, location: "", kind: "event",
+      label: "World state / Initial observation",
+      detail: narrative, originalDetail: state.observation?.narrative, status: "RECORDED",
+      ...(diagnostics?.model ? { model: diagnostics.model } : {}),
+      ...(diagnostics?.promptFormat ? { promptFormat: diagnostics.promptFormat } : {}),
+      ...(diagnostics?.debugFlags.length ? { debugFlags: diagnostics.debugFlags } : {})
     });
   }
   for (const event of state.world?.village?.events ?? []) {
@@ -977,7 +1117,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const label = item.kind === "wait" && item.label === "Wait" ? "Waiting" : item.label;
       const summary = (row.id.startsWith("__dungeon_master")
         ? item.detail
-        : recordedActionRequest(label, item.arguments ?? "")
+        : item.contextualDescription ?? recordedActionRequest(label, item.arguments ?? "")
       ).replace(/\s+/g, " ").trim();
       const icon = activityIcon(item);
       const status = item.status ?? (item.kind === "sleep" || item.kind === "route" || item.kind === "wait" ? "Recorded" : "");
@@ -986,12 +1126,12 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const detailCharacters = Math.floor((tileWidth - 16) / 6);
       const dmNarrative = row.id.startsWith("__dungeon_master")
         ? wrap(summary, Math.max(18, detailCharacters), 7) : [];
-      const dmCommentLines = item.dmComment
-        ? wrap(item.dmComment, Math.max(16, detailCharacters), 3) : [];
+      const dmCommentLines = item.dmNarrative || item.dmComment
+        ? wrap(item.dmNarrative || item.dmComment!, Math.max(16, detailCharacters), 3) : [];
       const npcRequestLines = !row.id.startsWith("__dungeon_master")
         ? wrap(summary, Math.max(18, detailCharacters), 2) : [];
       const movementSplit = "";
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail)}"             aria-describedby="gantt-tooltip"             data-gantt-kind="${row.id.startsWith("__dungeon_master") ? "dm-state" : "npc"}" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}"       data-gantt-detail="${escape(item.detail)}"       data-gantt-observation="${escape(item.observation ?? "")}" data-gantt-dm-verdict="${escape(item.dmVerdict ?? "")}" data-gantt-dm-comment="${escape(item.dmComment ?? "")}" data-gantt-arguments="${escape(item.arguments ?? "")}" data-gantt-expected="${escape(item.expectedOutcome ?? "")}" data-gantt-subgoal="${escape(item.subgoal ?? "")}" data-gantt-plan="${escape(item.plan?.join("\n") ?? "")}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}${item.activity === "planning" ? " activity-planning" : ""}${matches(item) ? "" : " is-filtered-out"}">
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail)}"             aria-describedby="gantt-tooltip"             data-gantt-kind="${row.id.startsWith("__dungeon_master") ? "dm-state" : "npc"}" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-model="${escape(item.model ?? "engine")}" data-gantt-prompt="${escape(item.promptFormat ?? "deterministic")}" data-gantt-flags="${escape(item.debugFlags?.join(",") ?? "none")}" data-gantt-context-description="${escape(item.contextualDescription ?? "")}" data-gantt-context-model="${escape(item.contextualModel ?? "")}" data-gantt-context-prompt="${escape(item.contextualPromptFormat ?? "")}" data-gantt-context-flags="${escape(item.contextualDebugFlags?.join(",") ?? "")}" data-gantt-detail="${escape(item.detail)}" data-gantt-original-detail="${escape(item.originalDetail ?? "")}" data-gantt-observation="${escape(item.observation ?? "")}" data-gantt-dm-verdict="${escape(item.dmVerdict ?? "")}" data-gantt-dm-comment="${escape(item.dmComment ?? "")}" data-gantt-arguments="${escape(item.arguments ?? "")}" data-gantt-expected="${escape(item.expectedOutcome ?? "")}" data-gantt-subgoal="${escape(item.subgoal ?? "")}" data-gantt-plan="${escape(item.plan?.join("\n") ?? "")}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}${item.activity === "planning" ? " activity-planning" : ""}${matches(item) ? "" : " is-filtered-out"}">
         <clipPath id="${id}"><rect x="${left + inset + 6}" y="${y + 19}" width="${Math.max(0, tileWidth - 12)}" height="${primaryHeight}"/></clipPath>
         <rect x="${left + inset}" y="${y + 19}" width="${tileWidth}" height="${primaryHeight}" rx="7"/>
         ${movementSplit}
@@ -1002,7 +1142,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
           `<text x="${left + w / 2}" y="${y + 48 + lineIndex * 14}" text-anchor="middle" class="gantt-cell-detail" clip-path="url(#${id})">${escape(line)}</text>`).join("")
           : npcRequestLines.length ? npcRequestLines.map((line, lineIndex) =>
             `<text x="${left + w / 2}" y="${y + 61 + lineIndex * 14}" text-anchor="middle" class="gantt-cell-detail" clip-path="url(#${id})">${escape(line)}</text>`).join("") : ""}
-        ${item.dmComment ? `</g><g tabindex="0" role="img" aria-describedby="gantt-tooltip" data-gantt-focus="${escape(`${row.id}:dm:${item.start}:${item.label}`)}" data-gantt-kind="dm" data-gantt-title="Action Adjudication" data-gantt-icon="⚖" data-gantt-status="${escape(item.dmVerdict ?? "adjudication")}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-detail="${escape(item.dmComment)}" data-gantt-agent-name="Supervisor" class="gantt-dm-tile${matches(item) ? "" : " is-filtered-out"}"><rect x="${left + inset}" y="${y + 88}" width="${tileWidth}" height="64" rx="7" class="gantt-dm-box"/>${dmCommentLines.map((line, lineIndex) => `<text x="${left + w / 2}" y="${y + 104 + lineIndex * 15}" text-anchor="middle" class="gantt-dm-text gantt-dm-comment">${escape(line)}</text>`).join("")}` : ""}</g>`;
+        ${item.dmComment ? `</g><g tabindex="0" role="img" aria-describedby="gantt-tooltip" data-gantt-focus="${escape(`${row.id}:dm:${item.start}:${item.label}`)}" data-gantt-kind="dm" data-gantt-title="Action Adjudication" data-gantt-icon="⚖" data-gantt-status="${escape(item.dmVerdict ?? "adjudication")}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-model="${escape(item.dmModel ?? "engine")}" data-gantt-prompt="${escape(item.dmPromptFormat ?? "deterministic")}" data-gantt-flags="${escape(item.dmDebugFlags?.join(",") || "none")}" data-gantt-detail="${escape(item.dmNarrative || item.dmComment)}" data-gantt-original-detail="${escape(item.dmComment)}" data-gantt-agent-name="Supervisor" class="gantt-dm-tile${matches(item) ? "" : " is-filtered-out"}"><rect x="${left + inset}" y="${y + 88}" width="${tileWidth}" height="64" rx="7" class="gantt-dm-box"/>${dmCommentLines.map((line, lineIndex) => `<text x="${left + w / 2}" y="${y + 104 + lineIndex * 15}" text-anchor="middle" class="gantt-dm-text gantt-dm-comment">${escape(line)}</text>`).join("")}` : ""}</g>`;
     }).join("");
     const markers = new Map<number, GanttSpan[]>();
     for (const item of spans.filter(item => item.end === item.start)) {
@@ -1022,7 +1162,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const subgoal = items.map(item => item.subgoal).filter(Boolean).join("; ");
       const plan = items.flatMap(item => item.plan ?? []).join("\n");
       const observation = items.map(item => item.observation).filter(Boolean).join("\n");
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:marker:${at}`)}" aria-label="${escape(detail + (reasoning ? ` Reason: ${reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(items.length === 1 ? items[0].label : `${items.length} events`)}" data-gantt-icon="●" data-gantt-status="${escape(items.some(item => item.kind === "rejected") ? "REJECTED" : "Recorded")}" data-gantt-range="${escape(format(chart.turns ? at + 1 : at))}" data-gantt-place="${escape(items[0].location ? placeName(items[0].location) : "")}"       data-gantt-detail="${escape(items.map(item => `${item.label}: ${item.detail}`).join("\n"))}" data-gantt-observation="${escape(observation)}" data-gantt-arguments="${escape(argumentsText)}" data-gantt-expected="${escape(expected)}" data-gantt-subgoal="${escape(subgoal)}" data-gantt-plan="${escape(plan)}" data-gantt-reasoning="${escape(reasoning)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}${items.some(item => item.activity === "planning") ? " activity-planning" : ""}${items.some(matches) ? "" : " is-filtered-out"}">
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:marker:${at}`)}" aria-label="${escape(detail + (reasoning ? ` Reason: ${reasoning}` : ""))}" aria-describedby="gantt-tooltip" data-gantt-title="${escape(items.length === 1 ? items[0].label : `${items.length} events`)}" data-gantt-icon="●" data-gantt-status="${escape(items.some(item => item.kind === "rejected") ? "REJECTED" : "Recorded")}" data-gantt-range="${escape(format(chart.turns ? at + 1 : at))}" data-gantt-place="${escape(items[0].location ? placeName(items[0].location) : "")}" data-gantt-model="${escape(items.find(item => item.model)?.model ?? "engine")}" data-gantt-prompt="${escape(items.find(item => item.promptFormat)?.promptFormat ?? "deterministic")}" data-gantt-flags="${escape(items.flatMap(item => item.debugFlags ?? []).filter((value, index, values) => values.indexOf(value) === index).join(",") || "none")}" data-gantt-detail="${escape(items.map(item => `${item.label}: ${item.detail}`).join("\n"))}" data-gantt-observation="${escape(observation)}" data-gantt-arguments="${escape(argumentsText)}" data-gantt-expected="${escape(expected)}" data-gantt-subgoal="${escape(subgoal)}" data-gantt-plan="${escape(plan)}" data-gantt-reasoning="${escape(reasoning)}" data-gantt-agent-name="${escape(row.name)}" class="gantt-marker ${items.some(item => item.kind === "rejected") ? "rejected" : ""}${items.some(item => item.activity === "planning") ? " activity-planning" : ""}${items.some(matches) ? "" : " is-filtered-out"}">
         <path d="M ${x(at)} ${y + 88} l 4 4 l -4 4 l -4 -4 Z"/>
         ${items.length > 1 ? `<text x="${x(at) + 6}" y="${y + 95}">${items.length}</text>` : ""}</g>`;
     }).join("");

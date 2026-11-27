@@ -60,7 +60,9 @@ export const dungeonMasterConfigSchema = z.strictObject({
 export const dungeonMasterRulingSchema = z.object({
   name: z.string(), scope: z.enum(["action", "episode"]),
   verdict: z.enum(["allowed", "rejected", "continue", "defeat"]),
-  reason: z.string(), evidence_ids: z.array(z.string()), source: z.enum(["world", "validation", "ai"])
+  reason: z.string(), evidence_ids: z.array(z.string()), source: z.enum(["world", "validation", "ai"]),
+  model: z.string().nullable().optional(), compression: z.record(z.string(), z.unknown()).nullable().optional(),
+  contextual_description: z.string().optional()
 });
 export type DungeonMasterConfig = z.infer<typeof dungeonMasterConfigSchema>;
 export const clockSchema = z.object({
@@ -546,12 +548,37 @@ export const configSchema = z.object({
   schema_version: z.literal("1.0"),
   proxy: z.object({
     base_url: z.string(), model: z.string().nullable(), token_environment: z.string().nullable(),
+    text_generation_model: z.string().nullable().default(null),
+    decision_model: z.string().nullable().default(null),
+    reasoning_model: z.string().nullable().default(null),
+    evaluation_model: z.string().nullable().default(null),
+    text_generation_message_format: z.enum(["normal", "compact", "shorthand", "fact-shorthand"]).nullable().default(null),
+    decision_message_format: z.enum(["normal", "compact", "shorthand", "fact-shorthand"]).nullable().default(null),
+    reasoning_message_format: z.enum(["normal", "compact", "shorthand", "fact-shorthand"]).nullable().default(null),
+    evaluation_message_format: z.enum(["normal", "compact", "shorthand", "fact-shorthand"]).nullable().default(null),
+    text_generation_message_deduplicate: z.boolean().nullable().default(null),
+    decision_message_deduplicate: z.boolean().nullable().default(null),
+    reasoning_message_deduplicate: z.boolean().nullable().default(null),
+    evaluation_message_deduplicate: z.boolean().nullable().default(null),
+    text_generation_message_relevant_memory: z.boolean().nullable().default(null),
+    decision_message_relevant_memory: z.boolean().nullable().default(null),
+    reasoning_message_relevant_memory: z.boolean().nullable().default(null),
+    evaluation_message_relevant_memory: z.boolean().nullable().default(null),
+    text_generation_message_aggregate_events: z.boolean().nullable().default(null),
+    decision_message_aggregate_events: z.boolean().nullable().default(null),
+    reasoning_message_aggregate_events: z.boolean().nullable().default(null),
+    evaluation_message_aggregate_events: z.boolean().nullable().default(null),
+    text_generation_message_perception_delta: z.boolean().nullable().default(null),
+    decision_message_perception_delta: z.boolean().nullable().default(null),
+    reasoning_message_perception_delta: z.boolean().nullable().default(null),
+    evaluation_message_perception_delta: z.boolean().nullable().default(null),
     timeout_seconds: z.number(),
     message_format: z.enum(["normal", "compact", "shorthand", "fact-shorthand"]).default("normal"),
     message_deduplicate: z.boolean().default(false),
     message_relevant_memory: z.boolean().default(false),
     message_aggregate_events: z.boolean().default(false),
-    message_perception_delta: z.boolean().default(false)
+    message_perception_delta: z.boolean().default(false),
+    action_context_mode: z.enum(["structured", "both", "narrative"]).default("structured")
   }),
   world: z.object({
     transport: z.enum(["stdio", "streamable_http"]), scenario: z.string(),

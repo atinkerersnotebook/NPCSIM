@@ -46,6 +46,74 @@ async def test_openai_proxy_contract_and_no_auth(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_models_normalizes_windows_url_separator(monkeypatch):
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url))
+        return httpx.Response(200, json={"data": [{"id": "local-model"}]})
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(
+        **kwargs, transport=httpx.MockTransport(handler)))
+    proxy = Proxy(ProxyConfig(base_url=r"http://127.0.0.1:9901\v1"))
+
+    assert await proxy.models() == ["local-model"]
+    assert seen == ["http://127.0.0.1:9901/v1/models"]
+
+
+@pytest.mark.asyncio
+async def test_action_context_is_structured_text_generation(monkeypatch):
+    seen = []
+    original = httpx.AsyncClient
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append(body)
+        return httpx.Response(200, json={
+            "model": "story-model",
+            "usage": {"total_tokens": 8},
+            "choices": [{"message": {"content": '{"description":"The verified result leaves a clear next lead."}'}}],
+        })
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(
+        **kwargs, transport=httpx.MockTransport(handler)))
+    proxy = Proxy(ProxyConfig(model="story-model", action_context_mode="both"))
+    messages = proxy.action_context_context(
+        actor="otter", action={"action_id": "look", "arguments": {}},
+        result={"request_id": "r1", "outcome": "APPLIED", "code": "OBSERVED",
+                "explanation": "A key is visible.", "observation": {}},
+        memory={"recent": []})
+    context, metadata = await proxy.action_context("story-model", messages, "context", 5)
+    assert context.description == "The verified result leaves a clear next lead."
+    assert metadata["model"] == "story-model"
+    assert seen[0]["response_format"]["json_schema"]["name"] == "npcsim_action_context"
+
+
+@pytest.mark.asyncio
+async def test_adjudication_context_preserves_authoritative_ruling(monkeypatch):
+    seen = []
+    original = httpx.AsyncClient
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={
+            "model": "story-model",
+            "choices": [{"message": {"content": '{"description":"The world **rejected** the action because the `tool` was absent."}'}}],
+        })
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(
+        **kwargs, transport=httpx.MockTransport(handler)))
+    proxy = Proxy(ProxyConfig(model="story-model"))
+    ruling = {"name": "Supervisor", "scope": "action", "verdict": "rejected",
+              "reason": "The tool is not present.", "source": "world"}
+    messages = proxy.adjudication_context_context(ruling=ruling)
+    context, _ = await proxy.adjudication_context("story-model", messages, "ruling", 5)
+    assert context.description == "The world rejected the action because the tool was absent."
+    assert seen[0]["response_format"]["json_schema"]["name"] == "npcsim_adjudication_context"
+
+
+@pytest.mark.asyncio
 async def test_compressed_proxy_request_reports_prompt_savings(monkeypatch):
     original = httpx.AsyncClient
     seen = []
@@ -71,6 +139,10 @@ async def test_compressed_proxy_request_reports_prompt_savings(monkeypatch):
     _, metadata = await proxy.choose("local-model", messages, "run:compressed", 5)
     assert seen[0]["messages"][1]["content"].startswith('{"compression"')
     assert metadata["compression"]["effective_mode"] == "fact-shorthand"
+    assert metadata["compression"]["options"] == {
+        "deduplicate": True, "relevant_memory": False,
+        "aggregate_events": False, "perception_delta": False,
+    }
     assert metadata["compression"]["facts_encoded"] == 1
     assert metadata["compression"]["cache_read_tokens"] == 40
     assert metadata["compression"]["uncached_prompt_tokens"] == 80

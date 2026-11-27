@@ -292,12 +292,13 @@ async def prepare(controller: "Controller", run_id: str, *, allow_ended: bool = 
     controller.checkpoint()
 
 
-async def model(controller: "Controller", *, followup: bool = False) -> str:
+async def model(controller: "Controller", *, followup: bool = False,
+                task: Literal["text_generation", "reasoning"] = "text_generation") -> str:
     if controller.run is None:
         raise ValueError("No current adventure.")
     if not followup and not controller.run_until_complete and controller.run["model_calls"] >= controller.budgets.max_model_calls:
         raise ValueError("The adventure's model-call budget is exhausted.")
-    selected = controller.run["model"] or (controller.config.proxy.model if followup else None)
+    selected = controller.task_model(task)
     if not selected:
         models = await controller.proxy.models()
         if len(models) != 1:
@@ -306,7 +307,8 @@ async def model(controller: "Controller", *, followup: bool = False) -> str:
     if followup:
         controller.run["followup_model_calls"] = controller.run.get("followup_model_calls", 0) + 1
     else:
-        controller.run["model"] = selected
+        if task == "text_generation":
+            controller.run["model"] = selected
         controller.run["model_calls"] += 1
     return selected
 
@@ -440,7 +442,7 @@ async def handle(controller: "Controller", name: str, args: dict[str, Any]) -> N
                 actor_id: profile["name"] for actor_id, profile in run.get("agent_profiles", {}).items()}
             messages = controller.proxy.world_edit_context(request.instruction, snapshot)
             plan, metadata = await controller.proxy.propose_world_edit(
-                await model(controller), messages, f"{run['id']}:proposal:{uuid4().hex}",
+                await model(controller, task="reasoning"), messages, f"{run['id']}:proposal:{uuid4().hex}",
                 controller.config.proxy.timeout_seconds)
             await world.call(world.manifest["admin_validate_intervention"], {
                 "expected_revision": fresh["observation_revision"], "plan": plan.model_dump(mode="json")})

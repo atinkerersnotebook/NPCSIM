@@ -6,7 +6,7 @@ import pytest
 from npc_sim.assessment import Finding
 from npc_sim.dungeon_master import DungeonMasterConfig, DungeonMasterReview, validate_review
 from npc_sim.models import ProxyConfig
-from npc_sim.prompt_context import RECENT_ACTIONS, RECENT_MESSAGES, REVIEW_EVENTS, observation_delta, public_proxy_messages, review_context
+from npc_sim.prompt_context import RECENT_ACTIONS, RECENT_MESSAGES, REVIEW_EVENTS, memory_context, observation_delta, public_proxy_messages, review_context
 from npc_sim.proxy import Proxy
 
 from npc_sim.prompt_codec import encode_prompt_payload
@@ -283,6 +283,41 @@ def test_old_proxy_configuration_defaults_to_normal_compression():
     assert not config.message_aggregate_events
 
 
+def test_action_context_memory_modes_preserve_or_replace_engine_explanation():
+    memory = {"recent": [{"action_id": "look", "explanation": "Engine found a key.",
+                          "contextual_description": "The key becomes a practical lead."}]}
+    structured = memory_context({**memory, "action_context_mode": "structured"})
+    both = memory_context({**memory, "action_context_mode": "both"})
+    narrative = memory_context({**memory, "action_context_mode": "narrative"})
+    assert structured["recent"][0]["explanation"] == "Engine found a key."
+    assert "contextual_description" not in structured["recent"][0]
+    assert both["recent"][0]["contextual_description"] == "The key becomes a practical lead."
+    assert narrative["recent"][0]["explanation"] == "The key becomes a practical lead."
+    assert "contextual_description" not in narrative["recent"][0]
+
+
+def test_memory_tiers_limit_context_and_escalate_without_mutating_source():
+    memory = {
+        "recent": [{"action_id": f"action-{index}", "explanation": str(index)} for index in range(6)],
+        "discoveries": ["key"], "known_entities": {"key": {"id": "key", "name": "Brass key"}},
+        "event_summaries": [{"action_id": "look", "count": 1}],
+        "enduring_facts": [{"fact": "The key opens the chest."}],
+        "operator_conversation": [{"question": "Remember this", "answer": "Yes"}],
+    }
+    before = copy.deepcopy(memory)
+    short = memory_context(memory, "short")
+    medium = memory_context(memory, "medium")
+    long = memory_context(memory, "long")
+    assert short["memory_scope"] == "short"
+    assert len(short["recent"]) == 3
+    assert "known_entities" not in short and "enduring_facts" not in short
+    assert medium["memory_scope"] == "medium"
+    assert "known_entities" in medium and "enduring_facts" not in medium
+    assert long["memory_scope"] == "long"
+    assert "enduring_facts" in long and "operator_conversation" in long
+    assert memory == before
+
+
 def test_fact_shorthand_preserves_debt_direction_and_source_without_mutating_memory():
     payload = {"memory": {"facts": [{
         "type": "debt", "debtor": "Arin", "creditor": "Mara", "amount": 3,
@@ -328,6 +363,16 @@ def test_compression_deduplicates_repeated_strings_and_aggregates_identical_even
     assert diagnostics["events_aggregated"] == 3
     assert diagnostics["deduplicated_values"] >= 1
     assert encoded["compression"]["references"][0] == repeated
+
+
+def test_compression_preserves_json_schema_string_references():
+    payload = {
+        "schema": {"$defs": {"Choice": {"type": "string"}},
+                   "$ref": "#/$defs/Choice"}
+    }
+    encoded, diagnostics = encode_prompt_payload(payload, "shorthand", deduplicate=True)
+    assert diagnostics["fallback_reason"] is None
+    assert encoded["data"]["schema"]["$ref"] == "#/$defs/Choice"
 
 
 def test_relevant_memory_selection_keeps_recent_and_goal_related_facts():

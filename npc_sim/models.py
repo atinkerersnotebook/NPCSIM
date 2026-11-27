@@ -1769,6 +1769,10 @@ class WorldState(StrictModel):
 class ProxyConfig(StrictModel):
     base_url: str = "http://127.0.0.1:9901/v1"
     model: str | None = None
+    text_generation_model: str | None = None
+    decision_model: str | None = None
+    reasoning_model: str | None = None
+    evaluation_model: str | None = None
     token_environment: str | None = None
     timeout_seconds: float = Field(default=15, gt=0, le=120)
     message_format: Literal["normal", "compact", "shorthand", "fact-shorthand"] = "normal"
@@ -1776,6 +1780,50 @@ class ProxyConfig(StrictModel):
     message_relevant_memory: bool = False
     message_aggregate_events: bool = False
     message_perception_delta: bool = False
+    text_generation_message_format: Literal["normal", "compact", "shorthand", "fact-shorthand"] | None = None
+    decision_message_format: Literal["normal", "compact", "shorthand", "fact-shorthand"] | None = None
+    reasoning_message_format: Literal["normal", "compact", "shorthand", "fact-shorthand"] | None = None
+    evaluation_message_format: Literal["normal", "compact", "shorthand", "fact-shorthand"] | None = None
+    text_generation_message_deduplicate: bool | None = None
+    decision_message_deduplicate: bool | None = None
+    reasoning_message_deduplicate: bool | None = None
+    evaluation_message_deduplicate: bool | None = None
+    text_generation_message_relevant_memory: bool | None = None
+    decision_message_relevant_memory: bool | None = None
+    reasoning_message_relevant_memory: bool | None = None
+    evaluation_message_relevant_memory: bool | None = None
+    text_generation_message_aggregate_events: bool | None = None
+    decision_message_aggregate_events: bool | None = None
+    reasoning_message_aggregate_events: bool | None = None
+    evaluation_message_aggregate_events: bool | None = None
+    text_generation_message_perception_delta: bool | None = None
+    decision_message_perception_delta: bool | None = None
+    reasoning_message_perception_delta: bool | None = None
+    evaluation_message_perception_delta: bool | None = None
+    action_context_mode: Literal["structured", "both", "narrative"] = "structured"
+
+    def model_for(self, task: Literal["text_generation", "decision", "reasoning", "evaluation"]) -> str | None:
+        return {
+            "text_generation": self.text_generation_model,
+            "decision": self.decision_model,
+            "reasoning": self.reasoning_model,
+            "evaluation": self.evaluation_model,
+        }[task] or self.model
+
+    def message_format_for(self, task: Literal["text_generation", "decision", "reasoning", "evaluation"]) -> str:
+        selected = {
+            "text_generation": self.text_generation_message_format,
+            "decision": self.decision_message_format,
+            "reasoning": self.reasoning_message_format,
+            "evaluation": self.evaluation_message_format,
+        }[task]
+        return selected or self.message_format
+
+    def compression_option_for(self, task: Literal["text_generation", "decision", "reasoning", "evaluation"],
+                               option: Literal["deduplicate", "relevant_memory", "aggregate_events", "perception_delta"]) -> bool:
+        prefix = f"{task}_message_{option}"
+        selected = getattr(self, prefix)
+        return getattr(self, f"message_{option}") if selected is None else selected
 
 
 class WorldConfig(StrictModel):
@@ -1801,6 +1849,10 @@ class Decision(StrictModel):
     subgoal: str = ""
     plan: list[str] = Field(default_factory=list)
     plan_steps: list[VillagePlanStep] = Field(default_factory=list, max_length=12)
+
+
+class ActionContext(StrictModel):
+    description: str = Field(min_length=1, max_length=1200)
 
 
 class StartRequest(StrictModel):

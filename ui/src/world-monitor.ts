@@ -489,11 +489,22 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       if (!value) continue;
       facts.append(element("dt", "", label), element("dd", "", value));
     }
+    for (const [label, value] of [["Model", text("model")], ["Prompt format", text("prompt")],
+      ["Debug flags", text("flags")]]) {
+      if (!value) continue;
+      facts.append(element("dt", "", label), element("dd", "", value));
+    }
     bubble.append(facts);
     if (text("kind") === "dm-state") {
       const narrative = element("div", "gantt-tooltip-result", "");
       narrative.append(element("small", "", "World-state narrative"), element("p", "", text("detail")));
       bubble.append(narrative);
+      if (text("original-detail") && text("original-detail") !== text("detail")) {
+        const original = element("div", "gantt-tooltip-result", "");
+        original.append(element("small", "", "Authoritative engine observation"),
+          element("p", "", text("original-detail")));
+        bubble.append(original);
+      }
       bubble.hidden = false;
       const bounds = bar.getBoundingClientRect();
       const { width, height } = bubble.getBoundingClientRect();
@@ -504,8 +515,13 @@ export function startWorldMonitor(app: HTMLDivElement): void {
     }
     if (text("kind") === "dm") {
       const rationale = element("div", "gantt-tooltip-result", "");
-      rationale.append(element("small", "", "DM thought process"), element("p", "", text("detail")));
+      rationale.append(element("small", "", "Supervisor adjudication (LLM wording)"), element("p", "", text("detail")));
       bubble.append(rationale);
+      if (text("original-detail") && text("original-detail") !== text("detail")) {
+        const original = element("div", "gantt-tooltip-result", "");
+        original.append(element("small", "", "Authoritative engine ruling"), element("p", "", text("original-detail")));
+        bubble.append(original);
+      }
       bubble.hidden = false;
       const bounds = bar.getBoundingClientRect();
       const { width, height } = bubble.getBoundingClientRect();
@@ -519,6 +535,23 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       observation.append(element("small", "", "Observation"),
         element("p", "", text("observation")));
       bubble.append(observation);
+    }
+    if (text("context-description")) {
+      const contextual = element("div", "gantt-tooltip-result", "");
+      contextual.classList.add("gantt-context-description");
+      contextual.append(element("small", "", "Contextual description (non-authoritative)"),
+        element("p", "", text("context-description")));
+      const provenance = [["Model", text("context-model")], ["Prompt", text("context-prompt")],
+        ["Flags", text("context-flags")]].filter((entry): entry is [string, string] => Boolean(entry[1]));
+      if (provenance.length) contextual.append(element("small", "", provenance.map(([name, value]) =>
+        `${name}: ${value}`).join(" · ")));
+      bubble.append(contextual);
+    }
+    if (text("context-description") && text("detail")) {
+      const original = element("div", "gantt-tooltip-result", "");
+      original.append(element("small", "", "Authoritative engine result"),
+        element("p", "", text("detail")));
+      bubble.append(original);
     }
     for (const [name, label] of [["subgoal", "Current subgoal"], ["arguments", "Action details"],
       ["expected", "Expected outcome"]] as const) {

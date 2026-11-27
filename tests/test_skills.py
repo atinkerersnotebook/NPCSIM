@@ -12,6 +12,30 @@ from npc_sim.world import World
 
 ROOT = Path(__file__).resolve().parent.parent
 SOLUTIONS = {
+    "decision-gauntlet": [
+        ("benchmark-raven", "release_optical_head", {"target": "evidence-cache"}),
+        ("benchmark-raven", "take", {"target": "sensor-log"}),
+        ("benchmark-raven", "go", {"target": "archive-path"}),
+        ("benchmark-raven", "confirm_evidence", {"target": "evidence-board"}),
+        ("benchmark-raven", "drop", {"target": "sensor-log"}),
+        ("benchmark-raven", "go", {"target": "archive-path"}),
+        ("benchmark-raven", "take", {"target": "optical-head"}),
+        ("benchmark-raven", "go", {"target": "archive-path"}),
+        ("benchmark-badger", "take", {"target": "relay-brace"}),
+        ("benchmark-badger", "go", {"target": "depot-route"}),
+        ("benchmark-badger", "stabilize_frame", {"target": "power-frame"}),
+        ("benchmark-otter", "go", {"target": "inspection-channel"}),
+        ("benchmark-otter", "release_safety_module", {"target": "safety-chest"}),
+        ("benchmark-otter", "take", {"target": "safety-module"}),
+        ("benchmark-otter", "go", {"target": "inspection-channel"}),
+        ("benchmark-otter", "go", {"target": "flood-path"}),
+        ("benchmark-otter", "install_safety_module", {"target": "control-cradle"}),
+        ("benchmark-raven", "focus_relay", {"target": "optical-mount"}),
+        ("benchmark-otter", "verify_relay", {"target": "audit-console"}),
+        ("benchmark-raven", "go", {"target": "relay-gate"}),
+        ("benchmark-badger", "go", {"target": "relay-gate"}),
+        ("benchmark-otter", "go", {"target": "relay-gate"}),
+    ],
     "storm-signal": [
         ("raven", "release_lens", {"target": "optical-cache"}),
         ("raven", "take", {"target": "signal-lens"}),
@@ -312,6 +336,37 @@ def test_storm_signal_starts_separately_and_requires_local_handoffs(tmp_path):
     assert act(raven, "give", {"target": "signal-lens", "recipient": "badger"})["outcome"] == "REJECTED"
     assert raven.actor.inventory == ["signal-lens"]
     assert badger.actor.inventory == []
+    assert owner.evaluate_goal(scenario.goal_type)["status"] == "active"
+
+
+def test_decision_gauntlet_enforces_evidence_capacity_dependencies_and_audit(tmp_path):
+    scenario, owner, agents = team(tmp_path, "decision-gauntlet")
+    raven = agents["benchmark-raven"]
+    badger = agents["benchmark-badger"]
+    otter = agents["benchmark-otter"]
+
+    assert act(raven, "confirm_evidence", {"target": "evidence-board"})["code"] == "ACTION_UNAVAILABLE"
+    assert act(badger, "take", {"target": "oversize-brace"})["code"] == "CAPACITY_EXCEEDED"
+    assert act(otter, "release_safety_module", {"target": "safety-chest"})["code"] == "ACTION_UNAVAILABLE"
+
+    assert act(raven, "release_optical_head", {"target": "evidence-cache"})["outcome"] == "APPLIED"
+    assert act(raven, "take", {"target": "sensor-log"})["outcome"] == "APPLIED"
+    assert act(raven, "go", {"target": "archive-path"})["outcome"] == "APPLIED"
+    assert act(raven, "confirm_evidence", {"target": "evidence-board"})["outcome"] == "APPLIED"
+
+    assert act(badger, "take", {"target": "relay-brace"})["outcome"] == "APPLIED"
+    assert act(badger, "go", {"target": "depot-route"})["outcome"] == "APPLIED"
+    assert act(badger, "stabilize_frame", {"target": "power-frame"})["outcome"] == "APPLIED"
+    assert act(otter, "go", {"target": "inspection-channel"})["outcome"] == "APPLIED"
+    assert act(otter, "release_safety_module", {"target": "safety-chest"})["outcome"] == "APPLIED"
+    assert act(otter, "take", {"target": "safety-module"})["outcome"] == "APPLIED"
+    assert act(otter, "go", {"target": "inspection-channel"})["outcome"] == "APPLIED"
+    assert act(otter, "go", {"target": "flood-path"})["outcome"] == "APPLIED"
+    assert act(otter, "install_safety_module", {"target": "control-cradle"})["outcome"] == "APPLIED"
+    assert act(raven, "focus_relay", {"target": "optical-mount"})["code"] == "NOT_CARRIED"
+    assert act(otter, "verify_relay", {"target": "audit-console"})["code"] == "PREREQUISITE_REQUIRED"
+
+    assert "verify_relay" not in owner.state.skill_uses
     assert owner.evaluate_goal(scenario.goal_type)["status"] == "active"
 
 
