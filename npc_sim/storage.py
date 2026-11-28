@@ -289,10 +289,12 @@ class EventStore:
 class StoryStore:
     """Transactional narrative cursor and bounded, indexed pages for one episode."""
 
-    def __init__(self, directory: Path, run_id: str, *, team: bool = False):
+    def __init__(self, directory: Path, run_id: str, *, team: bool = False,
+                 actor_names: dict[str, str] | None = None):
         self.path = directory / "story.sqlite3"
         self.run_id = run_id
         self.team = team
+        self.actor_names = actor_names or {}
         with _story_locks_guard:
             self._lock = _story_locks.setdefault(self.path.resolve(), threading.RLock())
         with self._lock, self._connect() as db:
@@ -361,7 +363,7 @@ class StoryStore:
             if pending and not result:
                 state["pending"] = None
                 state["pending_cycle"] = None
-            paragraphs = build_narrative([event], actor, state)
+            paragraphs = build_narrative([event], actor, state, self.actor_names)
             merged = state.pop("merged", None)
             if merged:
                 pending_meta = context.get("pending_meta", {}).get(actor, {})
@@ -382,9 +384,12 @@ class StoryStore:
             db.execute("UPDATE progress SET sequence=?, context=? WHERE id=1",
                        (event["sequence"], json.dumps(context, ensure_ascii=True)))
 
-    @staticmethod
-    def _text(text: str, actor: str, meta: dict[str, Any]) -> str:
+    def _text(self, text: str, actor: str, meta: dict[str, Any]) -> str:
         minute = meta.get("village_minute")
+        slot_name = actor.replace("-", " ").replace("_", " ").title()
+        display_name = self.actor_names.get(actor, slot_name)
+        if display_name != slot_name:
+            text = re.sub(rf"\b{re.escape(slot_name)}\b", display_name, text)
         if minute is None:
             return text
 
@@ -395,7 +400,7 @@ class StoryStore:
 
         text = re.sub(r"\b(at|until|by|after|before|since|due) minute (\d{1,15})\b",
                       clock, text, flags=re.IGNORECASE)
-        name = meta.get("actor_name") or actor.replace("-", " ").replace("_", " ").title()
+        name = meta.get("actor_name") or display_name
         label = f"Day {minute // 1440 + 1} {minute % 1440 // 60:02}:{minute % 60:02} / {name}"
         return f"[{label}{' / FREE MILESTONE' if meta.get('free_action') else ''}] {text}"
 

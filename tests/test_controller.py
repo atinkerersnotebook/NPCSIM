@@ -162,6 +162,223 @@ def test_deterministic_village_candidate_bypasses_model_and_preserves_strict_sch
     assert controller.memory["active_typed_step"]["action_id"] == "go"
 
 
+def test_deterministic_decision_breaks_repeated_speech_at_open_final_exit(configuration):
+    data, config = configuration
+    config.world.scenario = "decision-gauntlet"
+    controller = Controller(ROOT, data, config)
+    run_directory = data / "runs" / ("a" * 32)
+    run_directory.mkdir(parents=True)
+    from npc_sim.storage import write_json
+    write_json(run_directory / "scenario.json", read_json(
+        ROOT / "data" / "scenarios" / "decision-gauntlet.json"))
+    controller.run = {
+        "id": "a" * 32, "actions": 10, "actor_id": "benchmark-badger",
+        "session_id": "session", "cycles": 0,
+        "goal": {"type": "all_actors_at_exit_location"},
+        "exit_location": "shelter",
+    }
+    controller.memory["recent"] = [
+        {"action_id": "say", "arguments": {"message": "Please verify the relay."}},
+        {"action_id": "say", "arguments": {"message": "The relay still needs verification."}},
+    ]
+    controller.observation = {
+        "self": {"actor_id": "benchmark-badger", "location_id": "relay-yard"},
+        "actions": [{"id": "go", "availability": "available", "targets": ["relay-gate"],
+                     "arguments_schema": {
+                         "type": "object", "properties": {"target": {
+                             "type": "string", "enum": ["relay-gate"]}},
+                         "required": ["target"], "additionalProperties": False}}],
+    }
+
+    class EventStub:
+        directory = run_directory
+
+        def __init__(self):
+            self.events = []
+
+        def append(self, event):
+            self.events.append(event)
+            return event
+
+    controller.events = EventStub()
+
+    decision = controller._deterministic_decision()
+
+    assert decision is not None
+    assert decision.action_id == "go"
+    assert decision.arguments == {"target": "relay-gate"}
+    assert controller.memory["active_typed_step"]["step_id"] == "exit-after-speech:relay-gate"
+
+
+@pytest.mark.parametrize("location,inventory,actions,expected", [
+    ("entry-hall", ["sun-medallion", "moss-seal"], ["drop"], ("drop", {"moss-seal", "sun-medallion"})),
+    ("crossed-gallery", ["sun-medallion", "moss-seal"], ["go"], ("go", "hall-arch")),
+])
+def test_treasure_policy_returns_carried_relics(configuration, location, inventory, actions, expected):
+    data, config = configuration
+    config.world.scenario = "zork"
+    controller = Controller(ROOT, data, config)
+    run_directory = data / "runs" / ("b" * 32)
+    run_directory.mkdir(parents=True)
+    from npc_sim.storage import write_json
+    write_json(run_directory / "scenario.json", read_json(ROOT / "data" / "scenarios" / "zork.json"))
+    controller.run = {
+        "id": "b" * 32, "actions": 10, "actor_id": "npc", "session_id": "session",
+        "cycles": 0, "goal": {"type": "treasures_returned"},
+    }
+    controller.observation = {
+        "self": {"actor_id": "npc", "location_id": location,
+                 "inventory": [{"id": item, "inventory_units": 1} for item in inventory]},
+        "visible_entities": [],
+        "actions": [{"id": "drop", "availability": "available", "targets": inventory,
+                     "arguments_schema": {"type": "object", "properties": {"target": {
+                         "type": "string", "enum": inventory}},
+                         "required": ["target"], "additionalProperties": False}},
+                    {"id": "go", "availability": "available", "targets": ["hall-arch"],
+                     "arguments_schema": {"type": "object", "properties": {"target": {
+                         "type": "string", "enum": ["hall-arch"]}},
+                         "required": ["target"], "additionalProperties": False}}],
+    }
+
+    class EventStub:
+        directory = run_directory
+
+        def __init__(self):
+            self.events = []
+
+        def append(self, event):
+            self.events.append(event)
+            return event
+
+    controller.events = EventStub()
+    decision = controller._deterministic_decision()
+    if isinstance(expected[1], set):
+        assert decision.action_id == expected[0]
+        assert decision.arguments["target"] in expected[1]
+    else:
+        assert (decision.action_id, decision.arguments["target"]) == expected
+
+
+def test_treasure_policy_drops_nonobjective_item_before_repeat_search(configuration):
+    data, config = configuration
+    config.world.scenario = "zork"
+    controller = Controller(ROOT, data, config)
+    run_directory = data / "runs" / ("c" * 32)
+    run_directory.mkdir(parents=True)
+    from npc_sim.storage import write_json
+    write_json(run_directory / "scenario.json", read_json(ROOT / "data" / "scenarios" / "zork.json"))
+    controller.run = {
+        "id": "c" * 32, "actions": 10, "actor_id": "npc", "session_id": "session",
+        "cycles": 0, "goal": {"type": "treasures_returned"},
+    }
+    controller.observation = {
+        "self": {"actor_id": "npc", "location_id": "root-cellar", "inventory": [
+            {"id": "tarnished-lantern", "inventory_units": 1},
+            {"id": "sun-medallion", "inventory_units": 1},
+        ]},
+        "visible_entities": [
+            {"id": "moss-seal", "takable": True, "location": "root-cellar", "inventory_units": 1}],
+        "actions": [
+            {"id": "take", "availability": "blocked", "targets": [], "arguments_schema": {
+                "type": "object", "properties": {"target": {"type": "string", "enum": ["moss-seal"]}},
+                "required": ["target"], "additionalProperties": False}},
+            {"id": "drop", "availability": "available", "targets": ["tarnished-lantern", "sun-medallion"],
+             "arguments_schema": {"type": "object", "properties": {"target": {
+                 "type": "string", "enum": ["tarnished-lantern", "sun-medallion"]}},
+                 "required": ["target"], "additionalProperties": False}},
+        ],
+    }
+
+    class EventStub:
+        directory = run_directory
+
+        def __init__(self):
+            self.events = []
+
+        def append(self, event):
+            self.events.append(event)
+            return event
+
+    controller.events = EventStub()
+    decision = controller._deterministic_decision()
+    assert decision.action_id == "drop"
+    assert decision.arguments == {"target": "tarnished-lantern"}
+
+
+def test_repeated_no_change_inspection_forces_available_travel(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.run = {
+        "id": "d" * 32, "actions": 10, "actor_id": "npc", "session_id": "session",
+        "cycles": 0, "goal": {"type": "actor_at_exit_location"},
+    }
+    controller.memory["recent"] = [
+        {"action_id": "look", "arguments": {}, "outcome": "NO_CHANGE", "location_id": "flood-wing"},
+        {"action_id": "search", "arguments": {"target": "flood-wing"},
+         "outcome": "NO_CHANGE", "location_id": "flood-wing"},
+    ]
+    controller.observation = {
+        "self": {"actor_id": "npc", "location_id": "flood-wing", "visited_locations": ["flood-wing"],
+                 "body": {"capabilities": ["swim"]}},
+        "visible_entities": [
+            {"id": "inspection-channel", "destination": "submerged-control-room", "kind": "door",
+             "traversal_capabilities": ["swim"]},
+            {"id": "flood-path", "destination": "relay-yard", "kind": "door"}],
+        "actions": [{"id": "go", "availability": "available",
+                     "targets": ["flood-path", "inspection-channel"],
+                     "arguments_schema": {"type": "object", "properties": {"target": {
+                         "type": "string", "enum": ["flood-path", "inspection-channel"]}},
+                         "required": ["target"], "additionalProperties": False}}],
+    }
+    controller.events = None
+
+    decision = controller._deterministic_decision()
+
+    assert decision is not None
+    assert decision.action_id == "go"
+    assert decision.arguments["target"] == "inspection-channel"
+    assert controller._repeats_confirmed_no_change(Decision(
+        action_id="search", arguments={"target": "flood-wing"},
+        justification="test", expected_outcome="test"))
+
+
+def test_loop_recovery_replaces_repeated_action_nonfatally(configuration):
+    data, config = configuration
+    controller = Controller(ROOT, data, config)
+    controller.run = {
+        "id": "e" * 32, "actions": 10, "actor_id": "npc", "session_id": "session",
+        "cycles": 0, "goal": {"type": "actor_at_exit_location"},
+    }
+    controller.memory["recent"] = [
+        {"action_id": "look", "arguments": {"target": "power-frame"},
+         "outcome": "NO_CHANGE", "location_id": "relay-yard"},
+    ]
+    controller.observation = {
+        "self": {"actor_id": "npc", "location_id": "relay-yard", "visited_locations": ["relay-yard"],
+                 "body": {"capabilities": []}},
+        "visible_entities": [{"id": "archive-path", "destination": "evidence-hub", "kind": "door"}],
+        "actions": [
+            {"id": "look", "availability": "available", "targets": ["power-frame"],
+             "arguments_schema": {"type": "object", "properties": {"target": {
+                 "type": "string", "enum": ["power-frame"]}},
+                 "additionalProperties": False}},
+            {"id": "go", "availability": "available", "targets": ["archive-path"],
+             "target_requirements": {"archive-path": None},
+             "arguments_schema": {"type": "object", "properties": {"target": {
+                 "type": "string", "enum": ["archive-path"]}},
+                 "required": ["target"], "additionalProperties": False}},
+        ],
+    }
+
+    rejected = Decision(action_id="look", arguments={"target": "power-frame"},
+                        justification="test", expected_outcome="test")
+    replacement = controller._loop_recovery_decision(rejected)
+
+    assert replacement is not None
+    assert replacement.action_id == "go"
+    assert replacement.arguments == {"target": "archive-path"}
+
+
 def test_deterministic_executor_rejects_unknown_schema_without_dispatch(configuration):
     data, config = configuration
     controller = Controller(ROOT, data, config)

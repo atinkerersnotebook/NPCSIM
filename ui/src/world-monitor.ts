@@ -489,21 +489,33 @@ export function startWorldMonitor(app: HTMLDivElement): void {
       if (!value) continue;
       facts.append(element("dt", "", label), element("dd", "", value));
     }
-    for (const [label, value] of [["Model", text("model")], ["Prompt format", text("prompt")],
+    for (const [label, value] of [["Reasoning model", text("model")],
+      ["Wording model", text("wording-model")], ["Prompt format", text("prompt")],
       ["Debug flags", text("flags")]]) {
       if (!value) continue;
       facts.append(element("dt", "", label), element("dd", "", value));
     }
     bubble.append(facts);
-    if (text("kind") === "dm-state") {
+    if (text("kind") === "dm-state" || text("kind") === "dm-review") {
       const narrative = element("div", "gantt-tooltip-result", "");
-      narrative.append(element("small", "", "World-state narrative"), element("p", "", text("detail")));
+      narrative.append(element("small", "", text("kind") === "dm-review"
+        ? "Supervisor review" : "World-state narrative"), element("p", "", text("detail")));
       bubble.append(narrative);
       if (text("original-detail") && text("original-detail") !== text("detail")) {
         const original = element("div", "gantt-tooltip-result", "");
         original.append(element("small", "", "Authoritative engine observation"),
           element("p", "", text("original-detail")));
         bubble.append(original);
+      }
+      let findings: { reason: string; evidence_ids: string[] }[] = [];
+      try { findings = JSON.parse(text("findings")); } catch { findings = []; }
+      if (findings.length) {
+        const evidence = element("div", "gantt-tooltip-result", "");
+        evidence.append(element("small", "", "Supervisor findings"));
+        for (const finding of findings) {
+          evidence.append(element("p", "", finding.reason));
+        }
+        bubble.append(evidence);
       }
       bubble.hidden = false;
       const bounds = bar.getBoundingClientRect();
@@ -521,6 +533,16 @@ export function startWorldMonitor(app: HTMLDivElement): void {
         const original = element("div", "gantt-tooltip-result", "");
         original.append(element("small", "", "Authoritative engine ruling"), element("p", "", text("original-detail")));
         bubble.append(original);
+      }
+      let findings: { reason: string; evidence_ids: string[] }[] = [];
+      try { findings = JSON.parse(text("findings")); } catch { findings = []; }
+      if (findings.length) {
+        const evidence = element("div", "gantt-tooltip-result", "");
+        evidence.append(element("small", "", "Supervisor findings"));
+        for (const finding of findings) {
+          evidence.append(element("p", "", finding.reason));
+        }
+        bubble.append(evidence);
       }
       bubble.hidden = false;
       const bounds = bar.getBoundingClientRect();

@@ -213,7 +213,10 @@ class Controller:
         frozen = AppConfig.model_validate(self.run["config"])
         self.proxy = Proxy(frozen.proxy)
         self.events = EventStore(paths[-1].parent, self.run["id"])
-        self.story = StoryStore(paths[-1].parent, self.run["id"], team=bool(self.run.get("agents")))
+        self.story = StoryStore(
+            paths[-1].parent, self.run["id"], team=bool(self.run.get("agents")),
+            actor_names={actor: profile["name"]
+                         for actor, profile in self.run.get("agent_profiles", {}).items()})
         self.memory = read_json(paths[-1].parent / "npc-memory.json")
         self.agents = self.run.get("agents", {})
         self.observation = self.run.get("observation")
@@ -531,7 +534,10 @@ class Controller:
                 self.world = None
             episode_saves.stage_branch(self.data, data)
             candidate.events = EventStore(directory, loaded_run["id"])
-            candidate.story = StoryStore(directory, loaded_run["id"], team=bool(loaded_run.get("agents")))
+            candidate.story = StoryStore(
+                directory, loaded_run["id"], team=bool(loaded_run.get("agents")),
+                actor_names={actor: profile["name"]
+                             for actor, profile in loaded_run.get("agent_profiles", {}).items()})
             await candidate._connect_saved_world(require_frozen=True)
             if candidate.world is None:
                 raise ValueError("The loaded world did not connect.")
@@ -741,16 +747,19 @@ class Controller:
         last_ruling = next((event["payload"] for event in reversed(self.events.events)
                             if event["kind"] == "dungeon_master_ruling"
                             and event["payload"].get("scope") == "episode"), {})
-        daily_defeat_recovery = (previous_status == "blocked"
-                                 and last_ruling.get("source") == "ai"
-                                 and last_ruling.get("verdict") == "defeat")
+        ai_defeat_recovery = (previous_status == "blocked"
+                              and last_ruling.get("source") == "ai"
+                              and last_ruling.get("verdict") == "defeat")
         deadline_extension = (previous_status == "blocked" and request.deadline_minute is not None
                               and self.run["goal"]["type"] == "village_snapshot_completed")
-        if self.run["goal"]["type"] not in {"village_restored", "village_snapshot_completed"} or not (
-                premature or timeout_recovery or scheduler_recovery or actor_selection_recovery
-                or restart_recovery or daily_defeat_recovery or storage_recovery or deadline_extension):
-            raise ValueError("Only a prematurely completed village adventure, a recoverable daily-village AI defeat, "
-                             "or a confirmed recoverable world error can be reopened.")
+        village_goal = self.run["goal"]["type"] in {"village_restored", "village_snapshot_completed"}
+        village_error_recovery = village_goal and any((
+            premature, timeout_recovery, scheduler_recovery, actor_selection_recovery,
+            restart_recovery, storage_recovery, deadline_extension,
+        ))
+        if not ai_defeat_recovery and not village_error_recovery:
+            raise ValueError("Only a prematurely completed village adventure, an AI-declared defeat contradicted by "
+                             "the active world, or a confirmed recoverable world error can be reopened.")
         config = AppConfig.model_validate(self.run["config"]).world
         if config.command or config.transport != "stdio":
             raise ValueError("Reopening requires the built-in saved local world.")
@@ -923,12 +932,15 @@ class Controller:
         verification = goal_result(await self.world.operation(
             "evaluate_goal", {"goal_type": self.run["goal"]["type"]}, 5))
         snapshot_goal = self.run["goal"]["type"] == "village_snapshot_completed"
-        if (verification["status"] != "active"
-                or (not snapshot_goal
-                    and verification.get("evidence", {}).get("completion_scope") != "full_village_day")):
-            raise ValueError("The world does not confirm unfinished daily-life requirements; no result was changed.")
-        if daily_defeat_recovery and not deadline_extension and not self._daily_requirements_recoverable(verification):
-            raise ValueError("The world does not confirm recoverable daily-village requirements; no result was changed.")
+        if verification["status"] != "active":
+            raise ValueError("The world does not confirm an active, recoverable objective; no result was changed.")
+        if village_goal and (
+                (not snapshot_goal
+                 and verification.get("evidence", {}).get("completion_scope") != "full_village_day")
+                or (ai_defeat_recovery and not deadline_extension
+                    and not self._daily_requirements_recoverable(verification))):
+            raise ValueError("The world does not confirm unfinished, recoverable daily-life requirements; "
+                             "no result was changed.")
         if pending_replay is not None:
             payload = pending_replay["payload"]
             if self.world.session_id != pending_replay["session_id"]:
@@ -954,9 +966,10 @@ class Controller:
                 "request_id": event["payload"]["request_id"], "request_event_id": event["id"],
                 "source": "durable_world_retry_history", "action_replayed": pending_replay is not None})
         self._reopen_attempt("Warehouse deadline extended. Continue when ready."
-                             if deadline_extension else "Saved village recovered. Continue when ready."
+                             if deadline_extension else "Saved world recovered. Continue when ready."
                              if timeout_recovery or scheduler_recovery or actor_selection_recovery or storage_recovery
-                             else "Daily routines are unfinished. Continue when ready.", reset_achieved=True)
+                             else "The world confirms the objective remains active. Continue when ready.",
+                             reset_achieved=True)
         if storage_recovery:
             self.run["safe_checkpoint"] = True
         self.run["verification"] = verification
@@ -972,7 +985,7 @@ class Controller:
                 self.run["pending_actor_id"] = self.run["actor_id"]
         self.emit("adventure_reopened", {"previous_status": previous_status, "verification": verification,
                                          "stop_at_minute": self.run.get("village_stop_minute"),
-                                         "recovered_ai_defeat": daily_defeat_recovery})
+                                         "recovered_ai_defeat": ai_defeat_recovery})
         self.checkpoint()
         self._summary()
 
@@ -1069,7 +1082,10 @@ class Controller:
             **({"village_minute": scenario.village.start_minute} if scenario.village else {}),
         }
         self.events = EventStore(directory, rid)
-        self.story = StoryStore(directory, rid, team=bool(self.run.get("agents")))
+        self.story = StoryStore(
+            directory, rid, team=bool(self.run.get("agents")),
+            actor_names={actor: profile["name"]
+                         for actor, profile in self.run.get("agent_profiles", {}).items()})
         self.memory = {"schema_version": "1.0", "recent": [], "discoveries": [], "plan": [], "subgoal": ""}
         self.memory["scenario_details"] = {
             "public": scenario.resolved_public_details,
@@ -1393,6 +1409,21 @@ class Controller:
                 descriptor = next((a for a in self.observation["actions"] if a["id"] == decision.action_id), None)
                 if descriptor is None:
                     raise ValueError("Select an action from the current advertised action IDs.")
+                if self._repeats_confirmed_no_change(decision):
+                    replacement = self._loop_recovery_decision(decision)
+                    if replacement is None:
+                        raise ValueError(
+                            "Do not repeat an action with arguments that already returned NO_CHANGE under the same conditions."
+                        )
+                    self.emit("loop_recovery", {
+                        "rejected_action_id": decision.action_id,
+                        "rejected_arguments": decision.arguments,
+                        "replacement_action_id": replacement.action_id,
+                        "replacement_arguments": replacement.arguments,
+                    })
+                    decision, deterministic = replacement, True
+                    descriptor = next((a for a in self.observation["actions"]
+                                       if a["id"] == decision.action_id), None)
                 if (self.world.manifest.get("village_full_rules") and descriptor["availability"] == "blocked"
                         and decision.action_id in {"village_work", "village_cook_fish", "village_grow_hay",
                                                   "village_gather_herbs", "village_fell_logs"}):
@@ -1574,6 +1605,15 @@ class Controller:
     def _deterministic_decision(self) -> Decision | None:
         if not self.run or not self.observation:
             return None
+        exit_decision = self._repeat_speech_exit_decision()
+        if exit_decision is not None:
+            return exit_decision
+        treasure_decision = self._treasure_return_decision()
+        if treasure_decision is not None:
+            return treasure_decision
+        travel_decision = self._nonprogress_travel_decision()
+        if travel_decision is not None:
+            return travel_decision
         village = self.observation.get("village") or {}
         policy = village.get("day_policy") or {}
         if not policy.get("typed_execution", False):
@@ -1650,6 +1690,248 @@ class Controller:
                             expected_outcome=step.intent)
         return None
 
+    def _repeat_speech_exit_decision(self) -> Decision | None:
+        if (not self.run or not self.events or not self.observation
+                or self.run.get("goal", {}).get("type") != "all_actors_at_exit_location"):
+            return None
+        recent = self.memory.get("recent") or []
+        if len(recent) < 2 or any(item.get("action_id") != "say" for item in recent[-2:]):
+            return None
+        exit_location = self.run.get("exit_location")
+        if not exit_location:
+            return None
+        scenario = Scenario.model_validate(read_json(self.events.directory / "scenario.json"))
+        go = next((action for action in self.observation.get("actions", [])
+                   if action.get("id") == "go" and action.get("availability") != "blocked"), None)
+        if go is None:
+            return None
+        location = self.observation.get("self", {}).get("location_id")
+        for target in set(go.get("targets") or []):
+            exit_entity = scenario.entities.get(target)
+            if exit_entity is None:
+                continue
+            if exit_location not in {exit_entity.location, exit_entity.destination} \
+                    or location not in {exit_entity.location, exit_entity.destination}:
+                continue
+            arguments = {"target": target}
+            try:
+                validate(arguments, go["arguments_schema"])
+            except (SchemaError, ValidationError):
+                continue
+            step = VillagePlanStep(
+                step_id=f"exit-after-speech:{target}", intent="travel",
+                action_id="go", arguments=arguments, status="active",
+                prerequisites=["Final exit is available after repeated speech without progress."],
+            )
+            self.memory["active_typed_step"] = step.model_dump(mode="json")
+            self.memory["replan_warning"] = (
+                "Repeated speech did not advance the objective. Use the authoritative open exit now."
+            )
+            self.emit("deterministic_plan_step", {
+                "step": step.model_dump(mode="json"), "source": "repeat_speech_exit_guard",
+            })
+            return Decision(
+                action_id="go", arguments=arguments,
+                justification="The authoritative final exit is open; stop repeating messages and enter it.",
+                expected_outcome="Reach the exit required by the shared objective.",
+            )
+        return None
+
+    def _repeats_confirmed_no_change(self, decision: Decision) -> bool:
+        signature = (decision.action_id, json.dumps(decision.arguments, sort_keys=True))
+        current_location = self.observation.get("self", {}).get("location_id") if self.observation else None
+        for item in reversed(self.memory.get("recent") or []):
+            if item.get("location_id") != current_location and item.get("location_id") is not None:
+                continue
+            if (item.get("action_id"), json.dumps(item.get("arguments") or {}, sort_keys=True)) == signature:
+                return item.get("outcome") == "NO_CHANGE"
+        return False
+
+    def _loop_recovery_decision(self, rejected: Decision) -> Decision | None:
+        if not self.observation:
+            return None
+        replacement = self._nonprogress_travel_decision(force=True)
+        if replacement is not None:
+            return replacement
+        rejected_signature = (rejected.action_id, json.dumps(rejected.arguments, sort_keys=True))
+        actions = self.observation.get("actions") or []
+        for action in actions:
+            if action.get("availability") == "blocked" or action.get("id") in {"look", "search", "say", "wait"}:
+                continue
+            for target in action.get("targets") or []:
+                arguments = {"target": target}
+                signature = (action["id"], json.dumps(arguments, sort_keys=True))
+                if signature == rejected_signature or (action.get("target_requirements") or {}).get(target):
+                    continue
+                replacement = self._validated_deterministic_action(
+                    action, action["id"], arguments,
+                    "Choose an available alternative after a repeated no-change action.",
+                    "loop-recovery",
+                )
+                if replacement is not None:
+                    return replacement
+            required = action.get("arguments_schema", {}).get("required") or []
+            if not required:
+                replacement = self._validated_deterministic_action(
+                    action, action["id"], {},
+                    "Choose an available alternative after a repeated no-change action.",
+                    "loop-recovery",
+                )
+                if replacement is not None:
+                    return replacement
+        return None
+
+    def _nonprogress_travel_decision(self, *, force: bool = False) -> Decision | None:
+        if not self.observation:
+            return None
+        recent = self.memory.get("recent") or []
+        if not force and (len(recent) < 2 or any(item.get("action_id") not in {"look", "search"}
+                                                or item.get("outcome") != "NO_CHANGE"
+                                                for item in recent[-2:])):
+            return None
+        go = next((action for action in self.observation.get("actions", [])
+                   if action.get("id") == "go" and action.get("availability") != "blocked"), None)
+        if go is None:
+            return None
+        requirements = go.get("target_requirements") or {}
+        targets = [target for target in go.get("targets") or [] if not requirements.get(target)]
+        if not targets:
+            return None
+        visited = set(self.observation.get("self", {}).get("visited_locations") or [])
+        visible = {entity.get("id"): entity for entity in self.observation.get("visible_entities", [])}
+        ranked = []
+        capabilities = set(self.observation.get("self", {}).get("body", {}).get("capabilities") or [])
+        for target in targets:
+            entity = visible.get(target) or {}
+            destination = entity.get("destination") or entity.get("leads_to")
+            required_capabilities = set(entity.get("traversal_capabilities") or [])
+            ranked.append((destination in visited if destination else True,
+                           -len(required_capabilities & capabilities), target))
+        target = min(ranked)[2]
+        return self._validated_deterministic_action(
+            go, "go", {"target": target},
+            "Repeated inspection produced no new information; use an available route instead of looping.",
+            "nonprogress-inspection-travel",
+        )
+
+    def _treasure_return_decision(self) -> Decision | None:
+        if (not self.run or not self.events or not self.observation
+                or self.run.get("goal", {}).get("type") != "treasures_returned"):
+            return None
+        scenario = Scenario.model_validate(read_json(self.events.directory / "scenario.json"))
+        treasure_ids = set(scenario.treasure_ids)
+        if not treasure_ids:
+            return None
+        actions = {action["id"]: action for action in self.observation.get("actions", [])}
+        inventory = {
+            item.get("id"): item for item in self.observation.get("self", {}).get("inventory", [])
+            if isinstance(item, dict) and item.get("id")
+        }
+        carried_treasures = treasure_ids & set(inventory)
+        exit_location = scenario.exit_location
+        location = self.observation.get("self", {}).get("location_id")
+        if location == exit_location and carried_treasures:
+            drop = actions.get("drop")
+            if drop is not None and drop.get("availability") != "blocked":
+                target = next((item for item in sorted(carried_treasures)
+                               if item in set(drop.get("targets") or [])), None)
+                decision = self._validated_deterministic_action(
+                    drop, "drop", {"target": target} if target is not None else {},
+                    "Drop a required treasure at its return location.",
+                    "treasure-return-drop",
+                )
+                if decision is not None:
+                    return decision
+        visible_treasures = {
+            entity.get("id") for entity in self.observation.get("visible_entities", [])
+            if entity.get("id") in treasure_ids and entity.get("takable")
+            and entity.get("location") == location
+        }
+        take = actions.get("take")
+        if take is not None and take.get("availability") != "blocked" and visible_treasures:
+            target = next((item for item in sorted(visible_treasures)
+                           if item not in inventory and item in set(take.get("targets") or [])), None)
+            decision = self._validated_deterministic_action(
+                take, "take", {"target": target} if target is not None else {},
+                "Take the visible required treasure.", "treasure-take")
+            if decision is not None:
+                return decision
+        if visible_treasures and treasure_ids - set(inventory):
+            drop = actions.get("drop")
+            if drop is not None and drop.get("availability") != "blocked":
+                target = next((item for item in sorted(inventory)
+                               if item not in treasure_ids and item in set(drop.get("targets") or [])), None)
+                decision = self._validated_deterministic_action(
+                    drop, "drop", {"target": target} if target is not None else {},
+                    "Free carrying capacity for a visible required treasure.",
+                    "treasure-capacity",
+                )
+                if decision is not None:
+                    return decision
+        if carried_treasures and location != exit_location:
+            go = actions.get("go")
+            if go is not None and go.get("availability") != "blocked":
+                distances = self._scenario_distances_to(scenario, exit_location)
+                candidates = []
+                for target in go.get("targets") or []:
+                    if (go.get("target_requirements") or {}).get(target):
+                        continue
+                    door = scenario.entities.get(target)
+                    if door is None:
+                        continue
+                    destinations = [door.location, door.destination]
+                    destination = next((endpoint for endpoint in destinations
+                                        if endpoint and endpoint != location), None)
+                    distance = distances.get(destination, len(distances) + 1)
+                    candidates.append((distance, target))
+                if candidates:
+                    target = min(candidates)[1]
+                    return self._validated_deterministic_action(
+                        go, "go", {"target": target},
+                        "Return carried treasures toward the required destination.",
+                        "treasure-return-route",
+                    )
+        return None
+
+    @staticmethod
+    def _scenario_distances_to(scenario: Scenario, destination: str) -> dict[str, int]:
+        graph: dict[str, set[str]] = {}
+        for entity in scenario.entities.values():
+            if entity.kind != "door" or not entity.location or not entity.destination:
+                continue
+            graph.setdefault(entity.location, set()).add(entity.destination)
+            graph.setdefault(entity.destination, set()).add(entity.location)
+        distances = {destination: 0}
+        pending = [destination]
+        while pending:
+            current = pending.pop(0)
+            for adjacent in graph.get(current, set()):
+                if adjacent not in distances:
+                    distances[adjacent] = distances[current] + 1
+                    pending.append(adjacent)
+        return distances
+
+    def _validated_deterministic_action(self, descriptor: dict[str, Any], action_id: str,
+                                        arguments: dict[str, Any], justification: str,
+                                        source: str) -> Decision | None:
+        try:
+            validate(arguments, descriptor["arguments_schema"])
+        except (SchemaError, ValidationError, KeyError):
+            return None
+        step = VillagePlanStep(
+            step_id=f"{source}:{arguments.get('target', action_id)}", intent=(
+                "travel" if action_id == "go" else "deliver" if action_id == "drop" else "acquire"),
+            action_id=action_id, arguments=arguments, status="active",
+            prerequisites=[justification],
+        )
+        self.memory["active_typed_step"] = step.model_dump(mode="json")
+        self.emit("deterministic_plan_step", {
+            "step": step.model_dump(mode="json"), "source": source,
+        })
+        return Decision(action_id=action_id, arguments=arguments,
+                        justification=justification,
+                        expected_outcome="Advance the verified treasure-return objective.")
+
     @staticmethod
     def _typed_meal_step_ready(village: dict[str, Any], step: VillagePlanStep) -> bool:
         policy = village.get("day_policy") or {}
@@ -1688,6 +1970,7 @@ class Controller:
         self.memory["recent"] = (self.memory["recent"] + [{
             "action_id": request["action_id"], "arguments": request["arguments"],
             "outcome": result["outcome"], "code": result["code"],
+            "location_id": (result.get("observation") or {}).get("self", {}).get("location_id"),
             "explanation": result["explanation"],
         }])[-12:]
         summaries = self.memory.setdefault("event_summaries", [])
@@ -1723,7 +2006,8 @@ class Controller:
 
     def dungeon_master_ruling(self, scope: str, verdict: str, reason: str,
                               evidence_ids: list[str], source: str,
-                              diagnostics: dict[str, Any] | None = None) -> None:
+                              diagnostics: dict[str, Any] | None = None,
+                              findings: list[dict[str, Any]] | None = None) -> None:
         if not self.run or not self.run.get("dungeon_master"):
             return
         config = DungeonMasterConfig.model_validate(self.run["dungeon_master"]["config"])
@@ -1732,6 +2016,7 @@ class Controller:
         self.emit("dungeon_master_ruling", {
             "name": config.name, "scope": scope, "verdict": verdict,
             "reason": reason, "evidence_ids": evidence_ids, "source": source,
+            **({"findings": findings} if findings is not None else {}),
             **(diagnostics if diagnostics else {"model": "engine"})})
 
     async def review_team_progress(self) -> None:
@@ -1815,7 +2100,8 @@ class Controller:
         reason = " ".join(finding.reason for finding in review.findings)
         self.dungeon_master_ruling("episode", review.verdict, reason,
                                   list(dict.fromkeys(eid for finding in review.findings for eid in finding.evidence_ids)),
-                                  "ai", metadata)
+                                  "ai", metadata,
+                                  [finding.model_dump(mode="json") for finding in review.findings])
         if review.verdict == "defeat":
             self.finish("blocked", f"{config.name} rules that the team must admit defeat. {reason}")
 
@@ -1938,9 +2224,14 @@ class Controller:
             verification_id = self.events.events[-1]["id"]
             analysis.final_verification = verification
             if self.agents:
-                analysis.story = build_narrative(self.events.events)
+                analysis.story = build_narrative(
+                    self.events.events, actor_names={actor: profile["name"]
+                    for actor, profile in self.run.get("agent_profiles", {}).items()})
             else:
-                analysis.story = build_narrative(self.events.events, self.run["actor_id"])
+                analysis.story = build_narrative(
+                    self.events.events, self.run["actor_id"], actor_names={
+                        actor: profile["name"]
+                        for actor, profile in self.run.get("agent_profiles", {}).items()})
             model = await self.require_task_model("evaluation")
             analysis.model = model
             messages = self.proxy.completion_context({

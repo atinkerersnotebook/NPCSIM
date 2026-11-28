@@ -1,5 +1,25 @@
 {
   "schema_version": "1.0",
   "scenario_id": "grand-theft-millhaven",
-  "failures": []
+  "failures": [
+    {
+      "run_id": "e7163c31c6f349dcbaf687feae511721",
+      "objective": "Investigate the reported 10:55 village-square coin-box theft by interviewing witnesses in person. Establish from independent testimony whether any theft occurred and explain what happened without accusing anyone without evidence.",
+      "recorded_at": "2026-11-28T13:00:01.945039+00:00",
+      "findings": [
+        {
+          "reason": "The investigator must interview all required witnesses, inspect the evidence and close the case.",
+          "evidence_ids": [
+            "e7163c31c6f349dcbaf687feae511721:19"
+          ]
+        },
+        {
+          "reason": "The investigator failed to interview all required witnesses, inspect physical evidence, or close the case as explicitly recorded in the final verification checks.",
+          "evidence_ids": [
+            "e7163c31c6f349dcbaf687feae511721:19"
+          ]
+        }
+      ]
+    }
+  ]
 }

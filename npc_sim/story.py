@@ -110,14 +110,16 @@ def intent(action: str, args: dict[str, Any], names: dict[str, str],
 
 
 def build_narrative(events: list[dict[str, Any]], actor_id: str | None = None,
-                    _state: dict[str, Any] | None = None) -> list[Paragraph]:
+                    _state: dict[str, Any] | None = None,
+                    actor_names: dict[str, str] | None = None) -> list[Paragraph]:
     if actor_id is None:
         ordered = sorted(events, key=lambda event: event["sequence"])
         actors = dict.fromkeys(event["actor_id"] for event in ordered)
         if len(actors) == 1:
-            return build_narrative(events, next(iter(actors)))
+            return build_narrative(events, next(iter(actors)), actor_names=actor_names)
         source = {event["id"]: event for event in ordered}
-        combined = [paragraph for actor in actors for paragraph in build_narrative(events, actor)]
+        combined = [paragraph for actor in actors for paragraph in build_narrative(
+            events, actor, actor_names=actor_names)]
         combined.sort(key=lambda paragraph: source[paragraph.id]["sequence"])
         openings: set[str] = set()
         result = []
@@ -131,7 +133,8 @@ def build_narrative(events: list[dict[str, Any]], actor_id: str | None = None,
             result.append(paragraph)
         return result
     team = _state.get("team", False) if _state is not None else team_narration(events)
-    actor_name = actor_id.replace("-", " ").replace("_", " ").title()
+    actor_name = (actor_names or {}).get(
+        actor_id, actor_id.replace("-", " ").replace("_", " ").title())
 
     def voice(text: str) -> str:
         return named_voice(text, actor_name) if team else text

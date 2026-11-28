@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "id": "zork",
+  "title": "Zork-Inspired: Beneath Hollow Hill",
+  "public_details": "An original text-adventure homage: explore a forgotten hill house, uncover hidden routes, solve mechanical puzzles, and return its lost relics to the entry hall.",
+  "private_details": "",
+  "start_location": "entry-hall",
+  "exit_location": "entry-hall",
+  "initial_objective": "Explore the hill house and discover the assignment left for the first visitor.",
+  "objective": "Find the sun medallion, moss seal and copper bell, then return to the entry hall and put all three relics on its floor.",
+  "goal_note_id": "visitor-ledger",
+  "opening_narrative": "The hill door closes behind you with a patient click. In the entry hall, a tarnished lantern waits beside a visitor ledger. Three empty hooks have left pale outlines on the wall, and passages descend beneath the house.",
+  "goal_type": "treasures_returned",
+  "treasure_ids": ["sun-medallion", "moss-seal", "copper-bell"],
+  "required_intact_entities": ["sun-medallion", "moss-seal", "copper-bell"],
+  "budgets": {"max_actions": 160, "max_model_calls": 200, "max_seconds": 2400, "repetition_window": 4},
+  "body": {
+    "description": "A resourceful explorer with hands and a practical satchel that can carry five inventory units.",
+    "capabilities": ["move", "manipulate", "mechanism_work"],
+    "capacity": 5
+  },
+  "needs": {},
+  "recovery": {},
+  "entities": {
+    "entry-hall": {"name": "Entry hall", "kind": "location", "description": "A circular hall beneath Hollow Hill. A visitor ledger rests below three empty relic hooks. The northern arch leads into the house; this is where every recovered relic must be put down."},
+    "crossed-gallery": {"name": "Crossed gallery", "kind": "location", "description": "Four passages meet beneath worn stone beams: a study to the east, a workshop to the west, and an iron stair descending south. The entry hall lies north."},
+    "quiet-study": {"name": "Quiet study", "kind": "location", "description": "Dusty instruments surround an old bookcase. A shallow lens drawer is closed beneath the desk, and the bookcase may conceal more than books."},
+    "old-workshop": {"name": "Old workshop", "kind": "location", "description": "A workbench holds a coil of climbing rope. A stout green chest is locked with an ordinary brass key."},
+    "iron-stair": {"name": "Iron stair", "kind": "location", "description": "The stair ends beside a collapsed crossing. A winch can pull a narrow bridge across the gap, if it is rigged with sound rope. The gallery remains above."},
+    "sun-chamber": {"name": "Sun chamber", "kind": "location", "description": "A white chamber contains an astronomical dial and a sealed reliquary. Fine brass lines converge on a missing lens."},
+    "root-cellar": {"name": "Root cellar", "kind": "location", "description": "Stone roots curl through the walls. A round bell case waits beyond the recovered bridge."},
+
+    "hall-arch": {"name": "Northern arch", "kind": "door", "description": "An open arch connects the entry hall and crossed gallery.", "location": "entry-hall", "destination": "crossed-gallery", "open": true, "health": null},
+    "study-door": {"name": "Study doorway", "kind": "door", "description": "A narrow doorway leads east into the quiet study.", "location": "crossed-gallery", "destination": "quiet-study", "open": true, "health": null},
+    "workshop-door": {"name": "Workshop doorway", "kind": "door", "description": "A low doorway leads west into the old workshop.", "location": "crossed-gallery", "destination": "old-workshop", "open": true, "health": null},
+    "cellar-door": {"name": "Iron cellar door", "kind": "door", "description": "A locked iron door leads down to the iron stair. Its brass lock matches the key in the entry hall.", "location": "crossed-gallery", "destination": "iron-stair", "open": false, "locked": true, "lock_id": "cellar-lock", "health": null},
+    "bookcase-stair": {"name": "Bookcase stair", "kind": "door", "description": "A steep concealed stair rises from behind the bookcase to the sun chamber.", "location": "quiet-study", "destination": "sun-chamber", "open": true, "hidden": true, "discovery_target": "ancient-bookcase", "health": null},
+    "recovered-bridge": {"name": "Recovered bridge", "kind": "door", "description": "A winched bridge spans the gap from the iron stair to the root cellar. Rope must be fitted to the winch before it can be lowered.", "location": "iron-stair", "destination": "root-cellar", "open": false, "required_challenges": ["rig_winched_bridge"], "health": null},
+
+    "visitor-ledger": {"name": "Visitor ledger", "kind": "item", "description": "A ledger left open to the latest assignment.", "location": "entry-hall", "health": null, "readable_text": "To whoever follows the old survey marks: recover the sun medallion, moss seal and copper bell. Bring each intact relic to this hall and put it down beneath its hook. Carrying them here is not enough."},
+    "tarnished-lantern": {"name": "Tarnished lantern", "kind": "item", "description": "A small lantern with a steady blue flame. It makes the stone passages feel less empty.", "location": "entry-hall", "takable": true, "health": null},
+    "brass-key": {"name": "Brass house key", "kind": "item", "description": "A long brass key hanging from the central hook.", "location": "entry-hall", "takable": true, "health": null},
+    "cellar-lock": {"name": "Cellar lock", "kind": "lock", "description": "A broad brass lock set into the iron cellar door.", "location": "cellar-door", "locked": true, "key_id": "brass-key", "health": null},
+
+    "lens-drawer": {"name": "Lens drawer", "kind": "container", "description": "A shallow wooden drawer beneath the study desk.", "location": "quiet-study", "open": false, "health": null},
+    "glass-lens": {"name": "Ground glass lens", "kind": "item", "description": "A precisely ground lens that fits the astronomical dial in the sun chamber.", "location": "lens-drawer", "takable": true, "health": null},
+    "ancient-bookcase": {"name": "Ancient bookcase", "kind": "item", "description": "A tall bookcase whose base sits slightly away from the wall. Searching it might reveal a concealed route.", "location": "quiet-study", "health": null},
+    "astral-dial": {"name": "Astronomical dial", "kind": "item", "description": "A brass mechanism that accepts the study's glass lens and can release the sun reliquary when correctly aligned.", "location": "sun-chamber", "health": null},
+    "sun-reliquary": {"name": "Sun reliquary", "kind": "container", "description": "A white stone casket held shut by interlocking brass teeth.", "location": "sun-chamber", "open": false, "required_challenges": ["align_astral_dial"], "health": null},
+    "sun-medallion": {"name": "Sun medallion", "kind": "item", "description": "A bright medallion engraved with a compass rose: one of the three lost relics.", "location": "sun-reliquary", "takable": true, "health": null},
+
+    "green-chest": {"name": "Green work chest", "kind": "container", "description": "A sturdy chest fitted with a brass lock.", "location": "old-workshop", "open": false, "locked": true, "lock_id": "chest-lock", "health": null},
+    "chest-lock": {"name": "Work chest lock", "kind": "lock", "description": "A small brass lock that matches the house key.", "location": "green-chest", "locked": true, "key_id": "brass-key", "health": null},
+    "climbing-rope": {"name": "Climbing rope", "kind": "item", "description": "A sound coil of rope suitable for rigging the collapsed crossing's winch.", "location": "old-workshop", "takable": true, "inventory_units": 2, "health": null},
+    "moss-seal": {"name": "Moss seal", "kind": "item", "description": "A square green seal cut from translucent stone: one of the three lost relics.", "location": "green-chest", "takable": true, "health": null},
+
+    "bridge-winch": {"name": "Bridge winch", "kind": "item", "description": "A mechanism for fitting rope and lowering the bridge to the root cellar.", "location": "iron-stair", "health": null},
+    "bell-case": {"name": "Bell case", "kind": "container", "description": "A circular case resting among the stone roots.", "location": "root-cellar", "open": false, "health": null},
+    "copper-bell": {"name": "Copper bell", "kind": "item", "description": "A small copper bell with no clapper visible: one of the three lost relics.", "location": "bell-case", "takable": true, "health": null}
+  },
+  "skill_challenges": [
+    {"id": "align_astral_dial", "description": "Fit the glass lens to the astronomical dial and align its brass lines to release the sun reliquary.", "target": "astral-dial", "capability": "mechanism_work", "carried": ["glass-lens"], "installs": ["glass-lens"], "opens": ["sun-reliquary"]},
+    {"id": "rig_winched_bridge", "description": "Rig the climbing rope through the winch and lower the bridge across the collapsed crossing.", "target": "bridge-winch", "capability": "mechanism_work", "carried": ["climbing-rope"], "installs": ["climbing-rope"], "opens": ["recovered-bridge"]}
+  ]
+}

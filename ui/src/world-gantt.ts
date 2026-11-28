@@ -44,7 +44,7 @@ const decisionSchema = z.object({
 const diagnosticCompressionSchema = decisionSchema.shape.compression.unwrap();
 const supervisorReviewSchema = z.object({
   verdict: z.enum(["continue", "defeat"]),
-  findings: z.array(z.object({ reason: z.string() })).min(1),
+  findings: z.array(z.object({ reason: z.string(), evidence_ids: z.array(z.string()).optional() })).min(1),
   model: z.string().nullable().optional(), compression: diagnosticCompressionSchema.optional()
 });
 const actionContextSchema = z.object({
@@ -167,6 +167,8 @@ export interface GanttSpan {
   dmComment?: string;
   dmNarrative?: string;
   dmModel?: string;
+  dmWordingModel?: string;
+  dmFindings?: { reason: string; evidence_ids: string[] }[];
   dmPromptFormat?: string;
   dmDebugFlags?: string[];
   status?: string;
@@ -495,6 +497,10 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
         start, end: turns ? round : start + 5, location: "", kind: "event",
         label: `Round ${round} / DM ${review.verdict}`,
         detail, status: review.verdict,
+        dmVerdict: review.verdict,
+        dmFindings: review.findings.map(finding => ({
+          reason: finding.reason, evidence_ids: finding.evidence_ids ?? []
+        })),
         ...(diagnostics.model ? { model: diagnostics.model } : {}),
         ...(diagnostics.promptFormat ? { promptFormat: diagnostics.promptFormat } : {}),
         ...(diagnostics.debugFlags.length ? { debugFlags: diagnostics.debugFlags } : {})
@@ -664,7 +670,9 @@ export function buildWorldTimeline(state: State, events: readonly RunEvent[], ag
           dmVerdict: rulings.get(event.actor_id + ":" + event.cycle)!.verdict,
           dmComment: rulings.get(event.actor_id + ":" + event.cycle)!.reason,
           dmNarrative: adjudicationContext?.description,
-          dmModel: adjudicationDiagnostics?.model ?? rulings.get(event.actor_id + ":" + event.cycle)!.model ?? "engine",
+          dmModel: rulings.get(event.actor_id + ":" + event.cycle)!.model ?? "engine",
+          dmWordingModel: adjudicationDiagnostics?.model,
+          dmFindings: rulings.get(event.actor_id + ":" + event.cycle)!.findings,
           dmPromptFormat: adjudicationDiagnostics?.promptFormat
             ?? (rulings.get(event.actor_id + ":" + event.cycle)!.compression?.effective_mode as string | undefined)
             ?? "deterministic",
@@ -1131,7 +1139,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
       const npcRequestLines = !row.id.startsWith("__dungeon_master")
         ? wrap(summary, Math.max(18, detailCharacters), 2) : [];
       const movementSplit = "";
-      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail)}"             aria-describedby="gantt-tooltip"             data-gantt-kind="${row.id.startsWith("__dungeon_master") ? "dm-state" : "npc"}" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-model="${escape(item.model ?? "engine")}" data-gantt-prompt="${escape(item.promptFormat ?? "deterministic")}" data-gantt-flags="${escape(item.debugFlags?.join(",") ?? "none")}" data-gantt-context-description="${escape(item.contextualDescription ?? "")}" data-gantt-context-model="${escape(item.contextualModel ?? "")}" data-gantt-context-prompt="${escape(item.contextualPromptFormat ?? "")}" data-gantt-context-flags="${escape(item.contextualDebugFlags?.join(",") ?? "")}" data-gantt-detail="${escape(item.detail)}" data-gantt-original-detail="${escape(item.originalDetail ?? "")}" data-gantt-observation="${escape(item.observation ?? "")}" data-gantt-dm-verdict="${escape(item.dmVerdict ?? "")}" data-gantt-dm-comment="${escape(item.dmComment ?? "")}" data-gantt-arguments="${escape(item.arguments ?? "")}" data-gantt-expected="${escape(item.expectedOutcome ?? "")}" data-gantt-subgoal="${escape(item.subgoal ?? "")}" data-gantt-plan="${escape(item.plan?.join("\n") ?? "")}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}${item.activity === "planning" ? " activity-planning" : ""}${matches(item) ? "" : " is-filtered-out"}">
+      return `<g tabindex="0" role="img" data-gantt-focus="${escape(`${row.id}:${item.kind}:${item.start}:${item.label}`)}" aria-label="${escape(detail)}"             aria-describedby="gantt-tooltip"             data-gantt-kind="${row.id === "__dungeon_master_review__" ? "dm-review" : row.id === "__dungeon_master__" ? "dm-state" : "npc"}" data-gantt-title="${escape(item.label)}" data-gantt-icon="${icon}" data-gantt-status="${escape(status)}" data-gantt-duration="${escape(duration)}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-model="${escape(item.model ?? "engine")}" data-gantt-prompt="${escape(item.promptFormat ?? "deterministic")}" data-gantt-flags="${escape(item.debugFlags?.join(",") ?? "none")}" data-gantt-context-description="${escape(item.contextualDescription ?? "")}" data-gantt-context-model="${escape(item.contextualModel ?? "")}"       data-gantt-context-prompt="${escape(item.contextualPromptFormat ?? "")}" data-gantt-context-flags="${escape(item.contextualDebugFlags?.join(",") ?? "")}" data-gantt-findings="${escape(JSON.stringify(item.dmFindings ?? []))}" data-gantt-detail="${escape(item.detail)}" data-gantt-original-detail="${escape(item.originalDetail ?? "")}" data-gantt-observation="${escape(item.observation ?? "")}" data-gantt-dm-verdict="${escape(item.dmVerdict ?? "")}" data-gantt-dm-comment="${escape(item.dmComment ?? "")}" data-gantt-arguments="${escape(item.arguments ?? "")}" data-gantt-expected="${escape(item.expectedOutcome ?? "")}" data-gantt-subgoal="${escape(item.subgoal ?? "")}" data-gantt-plan="${escape(item.plan?.join("\n") ?? "")}" data-gantt-reasoning="${escape(item.reasoning ?? "")}" data-gantt-agent-name="${escape(row.name)}" class="gantt-bar ${item.kind}${item.activity === "planning" ? " activity-planning" : ""}${matches(item) ? "" : " is-filtered-out"}">
         <clipPath id="${id}"><rect x="${left + inset + 6}" y="${y + 19}" width="${Math.max(0, tileWidth - 12)}" height="${primaryHeight}"/></clipPath>
         <rect x="${left + inset}" y="${y + 19}" width="${tileWidth}" height="${primaryHeight}" rx="7"/>
         ${movementSplit}
@@ -1142,7 +1150,7 @@ export function worldGanttMarkup(state: State, events: readonly RunEvent[], agen
           `<text x="${left + w / 2}" y="${y + 48 + lineIndex * 14}" text-anchor="middle" class="gantt-cell-detail" clip-path="url(#${id})">${escape(line)}</text>`).join("")
           : npcRequestLines.length ? npcRequestLines.map((line, lineIndex) =>
             `<text x="${left + w / 2}" y="${y + 61 + lineIndex * 14}" text-anchor="middle" class="gantt-cell-detail" clip-path="url(#${id})">${escape(line)}</text>`).join("") : ""}
-        ${item.dmComment ? `</g><g tabindex="0" role="img" aria-describedby="gantt-tooltip" data-gantt-focus="${escape(`${row.id}:dm:${item.start}:${item.label}`)}" data-gantt-kind="dm" data-gantt-title="Action Adjudication" data-gantt-icon="⚖" data-gantt-status="${escape(item.dmVerdict ?? "adjudication")}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-model="${escape(item.dmModel ?? "engine")}" data-gantt-prompt="${escape(item.dmPromptFormat ?? "deterministic")}" data-gantt-flags="${escape(item.dmDebugFlags?.join(",") || "none")}" data-gantt-detail="${escape(item.dmNarrative || item.dmComment)}" data-gantt-original-detail="${escape(item.dmComment)}" data-gantt-agent-name="Supervisor" class="gantt-dm-tile${matches(item) ? "" : " is-filtered-out"}"><rect x="${left + inset}" y="${y + 88}" width="${tileWidth}" height="64" rx="7" class="gantt-dm-box"/>${dmCommentLines.map((line, lineIndex) => `<text x="${left + w / 2}" y="${y + 104 + lineIndex * 15}" text-anchor="middle" class="gantt-dm-text gantt-dm-comment">${escape(line)}</text>`).join("")}` : ""}</g>`;
+        ${item.dmComment ? `</g><g tabindex="0" role="img" aria-describedby="gantt-tooltip" data-gantt-focus="${escape(`${row.id}:dm:${item.start}:${item.label}`)}" data-gantt-kind="dm" data-gantt-title="Action Adjudication" data-gantt-icon="⚖" data-gantt-status="${escape(item.dmVerdict ?? "adjudication")}" data-gantt-range="${escape(range)}" data-gantt-place="${escape(location)}" data-gantt-model="${escape(item.dmModel ?? "engine")}" data-gantt-wording-model="${escape(item.dmWordingModel ?? "")}" data-gantt-prompt="${escape(item.dmPromptFormat ?? "deterministic")}" data-gantt-flags="${escape(item.dmDebugFlags?.join(",") || "none")}" data-gantt-detail="${escape(item.dmNarrative || item.dmComment)}" data-gantt-original-detail="${escape(item.dmComment)}" data-gantt-findings="${escape(JSON.stringify(item.dmFindings ?? []))}" data-gantt-agent-name="Supervisor" class="gantt-dm-tile${matches(item) ? "" : " is-filtered-out"}"><rect x="${left + inset}" y="${y + 88}" width="${tileWidth}" height="64" rx="7" class="gantt-dm-box"/>${dmCommentLines.map((line, lineIndex) => `<text x="${left + w / 2}" y="${y + 104 + lineIndex * 15}" text-anchor="middle" class="gantt-dm-text gantt-dm-comment">${escape(line)}</text>`).join("")}` : ""}</g>`;
     }).join("");
     const markers = new Map<number, GanttSpan[]>();
     for (const item of spans.filter(item => item.end === item.start)) {

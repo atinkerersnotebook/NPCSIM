@@ -197,12 +197,13 @@ def apply(world: "World", action: str, args: dict[str, Any]) -> tuple[str, str, 
 
 def evaluate_goal(world: "World") -> dict[str, Any]:
     config = world.scenario.voyage
-    if config is None:
-        raise ValueError("Missing voyage configuration")
+    treasures = config.treasures if config is not None else world.scenario.treasure_ids
+    if not treasures:
+        raise ValueError("Missing treasure configuration")
     checks = {
         eid: not world.state.entities[eid].broken
         and world.state.entities[eid].location == world.scenario.exit_location
-        for eid in config.treasures}
+        for eid in treasures}
     home = world.actor.location_id == world.scenario.exit_location
     return {
         "status": "achieved" if home and all(checks.values()) else "active",

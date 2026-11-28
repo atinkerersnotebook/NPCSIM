@@ -1334,6 +1334,7 @@ class Scenario(StrictModel):
     recipes: list[Recipe] = Field(default_factory=list)
     bakery: BakeryConfig | None = None
     voyage: VoyageConfig | None = None
+    treasure_ids: list[str] = Field(default_factory=list)
     rps: RPSConfig | None = None
     erp: ERPConfig | None = None
     bbq: BBQConfig | None = None
@@ -1591,8 +1592,15 @@ class Scenario(StrictModel):
                     raise ValueError("Voyage passage rules must reference existing doors")
                 if not (set(rule.carried) | set(rule.requires)) <= prototypes.keys():
                     raise ValueError("Voyage passage requirements must reference existing items or outputs")
-        elif self.goal_type == "treasures_returned":
-            raise ValueError("Treasure goals require voyage configuration")
+        if self.goal_type == "treasures_returned":
+            treasures = self.voyage.treasures if self.voyage is not None else self.treasure_ids
+            if (not treasures or len(treasures) != len(set(treasures))
+                    or any(eid not in prototypes or not prototypes[eid].takable for eid in treasures)):
+                raise ValueError("Treasure goals require distinct existing portable treasure entities")
+            if self.voyage is None and self.agents:
+                raise ValueError("Non-voyage treasure scenarios require a single actor")
+        elif self.treasure_ids:
+            raise ValueError("Treasure entity references require the treasures_returned goal type")
         if self.rps is not None:
             if (self.goal_type != "rps_match_completed" or len(self.agents) != 2
                     or self.bakery is not None or self.voyage is not None):

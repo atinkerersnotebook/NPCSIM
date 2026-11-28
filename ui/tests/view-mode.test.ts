@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { adminTriage, adventureStatus, canAskQuestions, canExtendBudget, canReopenAdventure, dashboardTab, isAdminView, playerCommandVisible, playerPrimaryCommand, simulationClock, villageClockText, villageClockTime, viewMode, viewNavigation } from "../src/view-mode.ts";
+import { adminTriage, adventureStatus, canAskQuestions, canExtendBudget, canReopenAdventure, controlCommandDisabled, dashboardTab, isAdminView, playerCommandVisible, playerPrimaryCommand, simulationClock, villageClockText, villageClockTime, viewMode, viewNavigation } from "../src/view-mode.ts";
 import { budgetExtensionSchema, runModeSchema } from "../src/contracts.ts";
 
 test("Player highlights the safe next command, including eligible recovery", () => {
@@ -8,6 +8,14 @@ test("Player highlights the safe next command, including eligible recovery", () 
     ["start", "run", "pause", "resume", undefined]);
   assert.equal(playerPrimaryCommand("error", true), "reopen");
   assert.equal(playerPrimaryCommand("paused", true), "resume");
+});
+
+test("Pause remains available while a running turn is in flight", () => {
+  const controls = { playbackActive: false, busy: false, interactionBusy: false, inFlight: true };
+  assert.equal(controlCommandDisabled("pause", "running", controls), false);
+  assert.equal(controlCommandDisabled("run", "running", controls), true);
+  assert.equal(controlCommandDisabled("resume", "paused", controls), true);
+  assert.equal(controlCommandDisabled("pause", "running", {...controls, busy: true}), true);
 });
 
 test("Admin triage chooses the latest current-run rejection and the most-used frozen budget", () => {

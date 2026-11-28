@@ -294,6 +294,22 @@ def test_impossible_terrain_crossings_are_rejected(tmp_path, scenario_id, actor_
     assert actor.actor.location_id == before
 
 
+def test_open_usable_bidirectional_route_is_advertised_available(tmp_path):
+    _, owner, agents = team(tmp_path, "decision-gauntlet")
+    otter = agents["benchmark-otter"]
+
+    assert act(otter, "go", {"target": "inspection-channel"})["outcome"] == "APPLIED"
+    go = next(action for action in otter.actions() if action["id"] == "go")
+    assert go["targets"] == ["inspection-channel"]
+    assert go["availability"] == "available"
+    assert not go.get("target_requirements", {}).get("inspection-channel")
+
+    owner.state.entities["inspection-channel"].open = False
+    go = next(action for action in otter.actions() if action["id"] == "go")
+    assert go["availability"] == "blocked"
+    assert "must be unlocked and open" in go["target_requirements"]["inspection-channel"]
+
+
 def test_skill_tools_prerequisites_reach_and_idempotency(tmp_path):
     scenario, owner, agents = team(tmp_path, "river-crossing")
     fox, otter = agents["fox"], agents["otter"]

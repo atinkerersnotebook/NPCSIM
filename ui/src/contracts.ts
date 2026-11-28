@@ -61,6 +61,7 @@ export const dungeonMasterRulingSchema = z.object({
   name: z.string(), scope: z.enum(["action", "episode"]),
   verdict: z.enum(["allowed", "rejected", "continue", "defeat"]),
   reason: z.string(), evidence_ids: z.array(z.string()), source: z.enum(["world", "validation", "ai"]),
+  findings: z.array(z.object({ reason: z.string(), evidence_ids: z.array(z.string()) })).optional(),
   model: z.string().nullable().optional(), compression: z.record(z.string(), z.unknown()).nullable().optional(),
   contextual_description: z.string().optional()
 });

@@ -13,7 +13,7 @@ import { copyRecordedPages, villageTimeline } from "./story";
 import { actorPerspective, agentPerspectives, discoveredEntities, goalPresentation, inventoryUnitsUsed, locationNetwork, nutritionLabel, teamLocationNetwork } from "./world-view";
 import { batchTiming, clockHelp, clockTime } from "./bakery-view";
 import { villageDashboardMarkup, villageMarkup, villageSummaryMarkup } from "./village-view";
-import { adminTriage, adventureStatus, budgetSummary, canAskQuestions, canExtendBudget, canReopenAdventure, dashboardTab, isAdminView, playerCommandVisible, playerPrimaryCommand, simulationClock, villageClockText, viewMode, dashboardHeader, dashboardWorldSummary } from "./view-mode";
+import { adminTriage, adventureStatus, budgetSummary, canAskQuestions, canExtendBudget, canReopenAdventure, controlCommandDisabled, dashboardTab, isAdminView, playerCommandVisible, playerPrimaryCommand, simulationClock, villageClockText, viewMode, dashboardHeader, dashboardWorldSummary } from "./view-mode";
 import type { DashboardTab } from "./view-mode";
 import { startWorldMonitor } from "./world-monitor";
 import { startTownSupply } from "./town-supply";
@@ -675,6 +675,7 @@ function renderDocumentEditor(): void {
 
 function dungeonMasterMarkup(source: readonly RunEvent[]): string {
   const rulings = source.filter(event => event.kind === "dungeon_master_ruling").slice(-20).reverse();
+  const reviews = source.filter(event => event.kind === "dungeon_master_review");
   const adjudications = new Map(source.filter(event => event.kind === "adjudication_context").map(event => {
     const payload = record(event.payload);
     return [String(payload.ruling_event_id), payload] as const;
@@ -683,20 +684,28 @@ function dungeonMasterMarkup(source: readonly RunEvent[]): string {
   return rulings.map(event => {
     const ruling = dungeonMasterRulingSchema.parse(event.payload);
     const adjudication = adjudications.get(event.id);
+    const review = [...reviews].reverse().find(item => item.actor_id === event.actor_id
+      && item.cycle === event.cycle && item.sequence < event.sequence);
+    const reviewPayload = review ? record(review.payload) : undefined;
+    const reviewFindings = Array.isArray(reviewPayload?.findings)
+      ? reviewPayload.findings.flatMap(finding => {
+          const parsed = z.object({ reason: z.string(), evidence_ids: z.array(z.string()) }).safeParse(finding);
+          return parsed.success ? [parsed.data] : [];
+        }) : undefined;
     const displayedReason = typeof adjudication?.description === "string" ? adjudication.description : ruling.reason;
     const title = { allowed: "Action allowed", rejected: "Action rejected", continue: "Continue", defeat: "Admit defeat" }[ruling.verdict];
-    const adjudicationCompression = adjudication?.compression && typeof adjudication.compression === "object"
-      ? record(adjudication.compression) : undefined;
-    const compression = adjudicationCompression ?? (ruling.compression && typeof ruling.compression === "object"
-      ? ruling.compression : undefined);
+    const compression = ruling.compression && typeof ruling.compression === "object"
+      ? ruling.compression : undefined;
     const options = compression?.options && typeof compression.options === "object"
       ? Object.entries(compression.options).filter((entry): entry is [string, true] => entry[1] === true).map(([name]) => name)
       : [];
-    const model = typeof adjudication?.model === "string" ? adjudication.model : ruling.model ?? "engine";
-    const diagnostics = `<small>Model: ${escape(model)} · Prompt: ${escape(String(compression?.effective_mode ?? "deterministic"))} · Flags: ${escape(options.join(",") || "none")}</small>`;
+    const reasoningModel = ruling.model ?? "engine";
+    const wordingModel = typeof adjudication?.model === "string" ? adjudication.model : null;
+    const diagnostics = `<small>Reasoning: ${escape(reasoningModel)}${wordingModel ? ` · Wording: ${escape(wordingModel)}` : ""} · Prompt: ${escape(String(compression?.effective_mode ?? "deterministic"))} · Flags: ${escape(options.join(",") || "none")}</small>`;
+    const findings = (ruling.findings ?? reviewFindings)?.map(finding => `<article class="evidence-explanation"><p>${escape(finding.reason)}</p>${evidenceMarkup(finding.evidence_ids, source)}</article>`).join("") ?? "";
     return `<article class="dm-ruling"><strong>${escape(ruling.name)}: ${title}</strong>
       <span class="tag ${ruling.verdict === "defeat" || ruling.verdict === "rejected" ? "amber" : "green"}">${ruling.source === "ai" ? "AI JUDGMENT" : "WORLD / VALIDATION"}</span>
-      <p>${escape(displayedReason)}</p>${diagnostics}<details><summary>Authoritative engine detail / cycle ${event.cycle} / ${escape(event.actor_id)}</summary><p>${escape(ruling.reason)}</p>${evidenceMarkup(ruling.evidence_ids, source)}</details></article>`;
+      <p>${escape(displayedReason)}</p>${diagnostics}<details><summary>Reasoning and evidence / cycle ${event.cycle} / ${escape(event.actor_id)}</summary>${findings || `<p>${escape(ruling.reason)}</p>${evidenceMarkup(ruling.evidence_ids, source)}`}</details></article>`;
   }).join("");
 }
 
@@ -707,7 +716,6 @@ function evidenceMarkup(ids: readonly string[], source: readonly RunEvent[],
       ${evidence.actorId !== undefined ? `<span class="muted"> / ${escape(evidence.actorId)} / cycle ${evidence.cycle}</span>` : ""}
       <p>${escape(evidence.explanation)}</p>
       ${evidence.details.length ? `<ul>${evidence.details.map(detail => `<li>${escape(detail)}</li>`).join("")}</ul>` : ""}
-      <details class="evidence-reference"><summary>Technical reference</summary><code>${escape(evidence.id)}</code></details>
     </article>`).join("")}</div>`;
 }
 
@@ -787,7 +795,6 @@ function renderSupplierPolicy(): void {
 function renderControls(): void {
   renderSupplierPolicy();
   const status = state?.run?.status ?? "idle";
-  const terminal = ["idle", "succeeded", "error", "blocked", "stalled", "cancelled", "budget_exceeded"].includes(status);
   const canReopen = canReopenAdventure(state?.run ?? null, Boolean(state?.world));
   const primary = adminView ? undefined : playerPrimaryCommand(status, canReopen);
   document.querySelectorAll<HTMLButtonElement>("[data-command]").forEach(button => {
@@ -797,11 +804,12 @@ function renderControls(): void {
     button.hidden = (!adminView && !playerCommandVisible(command, status)) ||
       (command === "reopen" && !canReopen);
     if (!adminView && button.closest("#controls")) button.classList.toggle("primary", command === primary);
-    button.disabled = playback.active || busy || interactionBusy || Boolean(state?.in_flight) ||
-      ((command === "step" || command === "run") && (terminal || status === "running")) ||
-      (command === "pause" && status !== "running") ||
-      (command === "resume" && status !== "paused") ||
-      (command === "assess" && (!terminal || status === "idle"));
+    button.disabled = controlCommandDisabled(command, status, {
+      playbackActive: playback.active,
+      busy,
+      interactionBusy,
+      inFlight: Boolean(state?.in_flight),
+    });
   });
   if (adminView) {
     const budgetPanel = element<HTMLDetailsElement>("budget-controls");

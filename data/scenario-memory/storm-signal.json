@@ -328,6 +328,187 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "0c552200571345f69cf591cac6730ea9",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-28T11:18:52.639459+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "0c552200571345f69cf591cac6730ea9:954"
+          ]
+        },
+        {
+          "reason": "The cooperative work for 'mount_lens' and 'repair_wiring' is not completed, which is required to restore the storm beacon and open the refuge gate.",
+          "evidence_ids": [
+            "0c552200571345f69cf591cac6730ea9:954"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "bbe2e7dc5f7b4afe854e01dcc21fa8ae",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-28T11:36:37.867304+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "bbe2e7dc5f7b4afe854e01dcc21fa8ae:53"
+          ]
+        },
+        {
+          "reason": "The storm beacon was not restored; final verification shows only release_lens completed, with mount_lens, repair_wiring, and focus_signal all null.",
+          "evidence_ids": [
+            "bbe2e7dc5f7b4afe854e01dcc21fa8ae:53"
+          ]
+        },
+        {
+          "reason": "The companions were not brought to the hilltop refuge; final verification places Raven, Badger, and Otter at their starting locations.",
+          "evidence_ids": [
+            "bbe2e7dc5f7b4afe854e01dcc21fa8ae:53"
+          ]
+        },
+        {
+          "reason": "The attempt ended before the required cooperative restoration and refuge arrival could be completed.",
+          "evidence_ids": [
+            "bbe2e7dc5f7b4afe854e01dcc21fa8ae:50"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "5a0ea630ad4044a08039c68992ceb1e3",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-28T12:04:37.468582+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "5a0ea630ad4044a08039c68992ceb1e3:160"
+          ]
+        },
+        {
+          "reason": "Otter is still at river-landing and has not reached the signal-yard (hilltop refuge) with the other companions. The final_verification shows otter.location_id is 'river-landing' while the objective requires all three companions to be at the hilltop refuge.",
+          "evidence_ids": [
+            "5a0ea630ad4044a08039c68992ceb1e3:160"
+          ]
+        },
+        {
+          "reason": "The beacon restoration is incomplete. The cooperative_work shows mount_lens, repair_wiring, and focus_signal are all null, meaning the lens has not been mounted, wiring not repaired, and signal not focused. The refuge gate remains closed (open: false).",
+          "evidence_ids": [
+            "5a0ea630ad4044a08039c68992ceb1e3:160"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "42e8dd7bb2654e1ba1f36a2a363c079f",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-28T12:06:14.563965+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "42e8dd7bb2654e1ba1f36a2a363c079f:27"
+          ]
+        },
+        {
+          "reason": "The storm beacon was not restored; all cooperative_work fields (release_lens, release_coil, brace_mast, mount_lens, repair_wiring, focus_signal) are null in the final verification. No repair actions were performed.",
+          "evidence_ids": [
+            "42e8dd7bb2654e1ba1f36a2a363c079f:27"
+          ]
+        },
+        {
+          "reason": "All three companions remain at their starting locations (rookery, quarry, river-landing) and were not brought to the hilltop refuge.",
+          "evidence_ids": [
+            "42e8dd7bb2654e1ba1f36a2a363c079f:27"
+          ]
+        },
+        {
+          "reason": "The plan submission failed with a validation error (dict instead of string), preventing any repair steps from being executed.",
+          "evidence_ids": [
+            "42e8dd7bb2654e1ba1f36a2a363c079f:23",
+            "42e8dd7bb2654e1ba1f36a2a363c079f:24"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "0b0c52d8b4ca4e7babb783c0d11be58b",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-28T12:17:16.530305+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "0b0c52d8b4ca4e7babb783c0d11be58b:23"
+          ]
+        },
+        {
+          "reason": "The attempt was cancelled and replaced by a fresh episode, which means the objective was not completed.",
+          "evidence_ids": [
+            "0b0c52d8b4ca4e7babb783c0d11be58b:20"
+          ]
+        },
+        {
+          "reason": "The storm beacon was not restored using flight, strength, and underwater engineering as required.",
+          "evidence_ids": [
+            "0b0c52d8b4ca4e7babb783c0d11be58b:23"
+          ]
+        },
+        {
+          "reason": "All three companions (Raven, Badger, Otter) were not brought to the hilltop refuge.",
+          "evidence_ids": [
+            "0b0c52d8b4ca4e7babb783c0d11be58b:23"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "30f461310d734cc4b0958ce7f1780eba",
+      "objective": "Restore the storm beacon using flight, strength and underwater engineering, then bring all three companions to the hilltop refuge.",
+      "recorded_at": "2026-11-28T12:21:26.126719+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "30f461310d734cc4b0958ce7f1780eba:144"
+          ]
+        },
+        {
+          "reason": "The mast is not braced, which is a required step for restoring the storm beacon.",
+          "evidence_ids": [
+            "30f461310d734cc4b0958ce7f1780eba:144"
+          ]
+        },
+        {
+          "reason": "The signal lens is not mounted in the cradle, which is necessary for beacon restoration.",
+          "evidence_ids": [
+            "30f461310d734cc4b0958ce7f1780eba:144"
+          ]
+        },
+        {
+          "reason": "The wiring is not repaired, which is required to restore power to the beacon.",
+          "evidence_ids": [
+            "30f461310d734cc4b0958ce7f1780eba:144"
+          ]
+        },
+        {
+          "reason": "The signal is not focused, which is necessary to open the refuge gate and complete the objective.",
+          "evidence_ids": [
+            "30f461310d734cc4b0958ce7f1780eba:144"
+          ]
+        },
+        {
+          "reason": "Otter is not in the signal yard, which is required for all three companions to pass through the refuge gate.",
+          "evidence_ids": [
+            "30f461310d734cc4b0958ce7f1780eba:144"
+          ]
+        }
+      ]
     }
   ]
 }

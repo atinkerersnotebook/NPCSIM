@@ -417,7 +417,10 @@ async def recorded_story(run_id: str, request: Request, day: int | None = None,
     run = await asyncio.to_thread(read_json, directory / "run.json")
     if actor is not None and actor not in (run.get("agents") or {run["actor_id"]: {}}):
         raise HTTPException(422, "Unknown story actor")
-    store = StoryStore(directory, run_id, team=bool(run.get("agents")))
+    store = StoryStore(
+        directory, run_id, team=bool(run.get("agents")),
+        actor_names={actor: profile["name"]
+                     for actor, profile in run.get("agent_profiles", {}).items()})
     active = controller(request)
     count = (active.events.count if active.run and active.run["id"] == run_id and active.events
              else EventStore(directory, run_id).count)

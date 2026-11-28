@@ -195,6 +195,33 @@ async def test_completion_review_uses_the_same_local_proxy_and_structured_reason
     assert len(seen) == 1
 
 
+@pytest.mark.asyncio
+async def test_dungeon_master_review_constrains_citations_to_supplied_ids(monkeypatch):
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        body = json.loads(request.content)
+        assert body["response_format"]["json_schema"]["name"] == "npcsim_dungeon_master_review"
+        schema = body["response_format"]["json_schema"]["schema"]
+        assert schema["$defs"]["Finding"]["properties"]["evidence_ids"]["items"]["enum"] == ["run:1", "run:2"]
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({
+            "verdict": "continue", "findings": [{"reason": "Work remains possible.", "evidence_ids": ["run:1"]}]})}}]})
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(
+        **kwargs, transport=httpx.MockTransport(handler)))
+    proxy = Proxy(ProxyConfig())
+    messages = proxy.dungeon_master_context({
+        "config": {}, "goal": {"objective": "Continue"}, "team": {},
+        "evidence": [{"id": "run:1", "kind": "verification", "payload": {"status": "active"}},
+                     {"id": "run:2", "kind": "action_result", "payload": {"outcome": "APPLIED"}}],
+    })
+    review, _ = await proxy.review_progress("local-model", messages, "run:dm", 5)
+    assert review.findings[0].evidence_ids == ["run:1"]
+    assert len(seen) == 1
+
+
 def test_long_completion_story_keeps_start_recent_events_and_valid_evidence_ids():
     proxy = Proxy(ProxyConfig())
     story = [{"id": f"event:{index}", "text": "A confirmed result. " * 20}

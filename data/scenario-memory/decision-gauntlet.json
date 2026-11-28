@@ -349,6 +349,335 @@
           ]
         }
       ]
+    },
+    {
+      "run_id": "6fbe78a3db874a4fa086b86b0231243d",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T16:26:35.505482+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "6fbe78a3db874a4fa086b86b0231243d:238"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored or independently verified; final verification shows confirm_evidence, stabilize_frame, install_safety_module, focus_relay, and verify_relay all null.",
+          "evidence_ids": [
+            "6fbe78a3db874a4fa086b86b0231243d:238"
+          ]
+        },
+        {
+          "reason": "The shelter gate remained locked because verify_relay was not completed, so the specialists were not guided to the shelter.",
+          "evidence_ids": [
+            "6fbe78a3db874a4fa086b86b0231243d:238",
+            "6fbe78a3db874a4fa086b86b0231243d:120"
+          ]
+        },
+        {
+          "reason": "Not all three specialists were at the shelter; final verification places Otter in submerged-control-room and Raven/Badger in relay-yard.",
+          "evidence_ids": [
+            "6fbe78a3db874a4fa086b86b0231243d:238"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "9321e1f81f294a3685d7fb551e43a7c4",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T16:56:25.008829+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "9321e1f81f294a3685d7fb551e43a7c4:259"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored: the final verification shows confirm_evidence, stabilize_frame, install_safety_module, focus_relay, and verify_relay all incomplete.",
+          "evidence_ids": [
+            "9321e1f81f294a3685d7fb551e43a7c4:259"
+          ]
+        },
+        {
+          "reason": "The specialists were not guided to the shelter; the final verification places all three at the relay yard, and the relay gate remains closed pending verify_relay.",
+          "evidence_ids": [
+            "9321e1f81f294a3685d7fb551e43a7c4:259"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "07925d45a424457190388e661c39bf8e",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T23:36:46.549812+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "07925d45a424457190388e661c39bf8e:10"
+          ]
+        },
+        {
+          "reason": "The objective requires restoring the evacuation relay and guiding all three specialists to the shelter; final verification shows cooperative_work tasks are null and agents remain at starting locations.",
+          "evidence_ids": [
+            "07925d45a424457190388e661c39bf8e:10"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "4233b6dc4b3c4935ba8eea77f2f8dd8a",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T23:56:58.786579+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "4233b6dc4b3c4935ba8eea77f2f8dd8a:167"
+          ]
+        },
+        {
+          "reason": "Relay restoration incomplete; verify_relay remains null in cooperative_work, preventing shelter gate opening.",
+          "evidence_ids": [
+            "4233b6dc4b3c4935ba8eea77f2f8dd8a:167"
+          ]
+        },
+        {
+          "reason": "Specialists not guided to shelter; agents located at evidence-hub, relay-yard, and submerged-control-room.",
+          "evidence_ids": [
+            "4233b6dc4b3c4935ba8eea77f2f8dd8a:167"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "294c621cf7eb4fcfb94022942439a2ad",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T23:57:23.392029+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "294c621cf7eb4fcfb94022942439a2ad:10"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored or verified as required; the `cooperative_work` field in final_verification shows no evidence of completed tasks (e.g., `focus_relay`, `verify_relay`).",
+          "evidence_ids": [
+            "294c621cf7eb4fcfb94022942439a2ad:10"
+          ]
+        },
+        {
+          "reason": "No allocation of limited supplies was recorded; the objective required directing specialists to stabling/route/resource checks, but no such actions appear in final_verification.",
+          "evidence_ids": [
+            "294c621cf7eb4fcfb94022942439a2ad:10"
+          ]
+        },
+        {
+          "reason": "Specialists did not guide all three to the shelter; their locations remain in separate zones (`supply-depot`, `flood-wing`) without transition evidence.",
+          "evidence_ids": [
+            "294c621cf7eb4fcfb94022942439a2ad:10"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "a97f8f971f0540c19c947436af6e7ece",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-27T23:58:21.754329+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "a97f8f971f0540c19c947436af6e7ece:72"
+          ]
+        },
+        {
+          "reason": "Mira d'Raven did not allocate the correct limited supplies (replacement brace **B-2**) to restore the evacuation relay. The supply depot\u2019s risk docket explicitly approved **brace b-2** for installation, but no evidence shows it being carried or used.",
+          "evidence_ids": [
+            "a97f8f971f0540c19c947436af6e7ece:33"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not restored and independently verified before specialists converged. The final verification shows all agents are active in their zones, but no task confirms **focus_relay** or **verify_relay** completion.",
+          "evidence_ids": [
+            "a97f8f971f0540c19c947436af6e7ece:72"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "0e8d856d43e34701889e6bb6628ca6ae",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-28T00:05:34.668949+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "0e8d856d43e34701889e6bb6628ca6ae:179"
+          ]
+        },
+        {
+          "reason": "Nia d'Otter did not complete the required tasks in the flood-wing, and her attempt was interrupted.",
+          "evidence_ids": [
+            "0e8d856d43e34701889e6bb6628ca6ae:175",
+            "0e8d856d43e34701889e6bb6628ca6ae:176"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not fully restored and verified, as Nia d'Otter did not perform the final independent safety audit.",
+          "evidence_ids": [
+            "0e8d856d43e34701889e6bb6628ca6ae:119",
+            "0e8d856d43e34701889e6bb6628ca6ae:150"
+          ]
+        },
+        {
+          "reason": "The shelter gate did not open, as the completed relay was not independently verified.",
+          "evidence_ids": [
+            "0e8d856d43e34701889e6bb6628ca6ae:119",
+            "0e8d856d43e34701889e6bb6628ca6ae:150"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "696f32c3d897408190bc0c3dd7422b17",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-28T00:09:36.514533+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "696f32c3d897408190bc0c3dd7422b17:145"
+          ]
+        },
+        {
+          "reason": "Nia d'Otter failed to complete her assigned task of retrieving the approved safety module and performing underwater engineering.",
+          "evidence_ids": [
+            "696f32c3d897408190bc0c3dd7422b17:142"
+          ]
+        },
+        {
+          "reason": "The evacuation relay was not fully restored or independently verified, as Nia d'Otter did not perform the final independent safety audit.",
+          "evidence_ids": [
+            "696f32c3d897408190bc0c3dd7422b17:119",
+            "696f32c3d897408190bc0c3dd7422b17:145"
+          ]
+        },
+        {
+          "reason": "The shelter gate did not open, as the relay was not independently verified.",
+          "evidence_ids": [
+            "696f32c3d897408190bc0c3dd7422b17:119"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "1b8c8c6439a740a9abbb156cc2ef7275",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-28T00:20:25.208210+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "1b8c8c6439a740a9abbb156cc2ef7275:376"
+          ]
+        },
+        {
+          "reason": "The evacuation relay is not fully restored and verified. The cooperative work evidence shows that the optical head has been released by benchmark-raven, but there is no confirmation of the installation of the replacement brace or safety module, nor any independent verification of the relay.",
+          "evidence_ids": [
+            "1b8c8c6439a740a9abbb156cc2ef7275:376"
+          ]
+        },
+        {
+          "reason": "Nia d'Otter (benchmark-otter) is not at the relay yard or shelter, and her task of installing the safety module and performing the independent verification has not been completed.",
+          "evidence_ids": [
+            "1b8c8c6439a740a9abbb156cc2ef7275:376"
+          ]
+        },
+        {
+          "reason": "Bram d'Badger (benchmark-badger) is at the relay yard, but there is no evidence that he has installed the replacement brace or stabilized the power frame.",
+          "evidence_ids": [
+            "1b8c8c6439a740a9abbb156cc2ef7275:376"
+          ]
+        },
+        {
+          "reason": "Mira d'Raven (benchmark-raven) is at the evidence-hub, but she has not proceeded to focus the optical head or guide the team to the shelter.",
+          "evidence_ids": [
+            "1b8c8c6439a740a9abbb156cc2ef7275:376"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "3c67af2ba6b84792a4790587390524fe",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-28T00:28:17.987027+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "3c67af2ba6b84792a4790587390524fe:272"
+          ]
+        },
+        {
+          "reason": "Nia d'Otter did not complete her task of retrieving the approved safety module and performing the independent safety audit.",
+          "evidence_ids": [
+            "3c67af2ba6b84792a4790587390524fe:272"
+          ]
+        },
+        {
+          "reason": "Mira d'Raven did not successfully install the optical head OH-7 or confirm the evidence plan at the relay yard.",
+          "evidence_ids": [
+            "3c67af2ba6b84792a4790587390524fe:272"
+          ]
+        },
+        {
+          "reason": "Bram d'Badger did not install the replacement brace B-2 or stabilize the relay power frame.",
+          "evidence_ids": [
+            "3c67af2ba6b84792a4790587390524fe:272"
+          ]
+        }
+      ]
+    },
+    {
+      "run_id": "b47002ab3c9d414eb9db5b25956159a4",
+      "objective": "Select the supported response plan, allocate the correct limited supplies, restore the evacuation relay and guide all three specialists to the shelter.",
+      "recorded_at": "2026-11-28T00:38:52.614230+00:00",
+      "findings": [
+        {
+          "reason": "Final world verification did not confirm the objective.",
+          "evidence_ids": [
+            "b47002ab3c9d414eb9db5b25956159a4:233"
+          ]
+        },
+        {
+          "reason": "The evacuation relay is not restored or independently verified, as the relay gate remains closed and no verification action is recorded.",
+          "evidence_ids": [
+            "b47002ab3c9d414eb9db5b25956159a4:233"
+          ]
+        },
+        {
+          "reason": "Bram d'Badger's attempt to install the replacement brace B-2 resulted in an invalid decision, indicating a repeated action that did not change the state.",
+          "evidence_ids": [
+            "b47002ab3c9d414eb9db5b25956159a4:229",
+            "b47002ab3c9d414eb9db5b25956159a4:230"
+          ]
+        },
+        {
+          "reason": "Nia d'Otter is still in the submerged control room and has not reached the relay yard to perform the final independent safety audit.",
+          "evidence_ids": [
+            "b47002ab3c9d414eb9db5b25956159a4:233"
+          ]
+        },
+        {
+          "reason": "Mira d'Raven is in the evidence hub and has not reached the relay yard to focus the optical head OH-7.",
+          "evidence_ids": [
+            "b47002ab3c9d414eb9db5b25956159a4:233"
+          ]
+        }
+      ]
     }
   ]
 }

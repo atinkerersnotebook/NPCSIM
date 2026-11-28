@@ -269,6 +269,7 @@ def review_context(value: dict[str, Any]) -> dict[str, Any]:
             _trim_explanation(projected["payload"])
         evidence.append(projected)
     result["evidence"] = evidence
+    result["citation_ids"] = [event["id"] for event in evidence if isinstance(event.get("id"), str)]
     policies: list[str] = []
     notices: list[dict[str, Any]] = []
     for member in value.get("team", {}).values():

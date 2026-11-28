@@ -98,6 +98,21 @@ export function canExtendBudget(status: string, hasWorld: boolean): boolean {
   return hasWorld && ["ready", "running", "paused", "budget_exceeded"].includes(status);
 }
 
+export function controlCommandDisabled(command: string | undefined, status: string, input: {
+  playbackActive: boolean;
+  busy: boolean;
+  interactionBusy: boolean;
+  inFlight: boolean;
+}): boolean {
+  const terminal = ["idle", "succeeded", "error", "blocked", "stalled", "cancelled", "budget_exceeded"].includes(status);
+  return input.playbackActive || input.busy || input.interactionBusy ||
+    (input.inFlight && command !== "pause") ||
+    ((command === "step" || command === "run") && (terminal || status === "running")) ||
+    (command === "pause" && status !== "running") ||
+    (command === "resume" && status !== "paused") ||
+    (command === "assess" && (!terminal || status === "idle"));
+}
+
 export function canReopenAdventure(run: State["run"], hasWorld: boolean): boolean {
   return Boolean(hasWorld && run?.goal.type === "village_restored" && (
     (run.status === "succeeded" && run.completion_analysis?.status === "completed"

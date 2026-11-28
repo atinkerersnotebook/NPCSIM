@@ -52,7 +52,7 @@ def validate_review(review: DungeonMasterReview, evidence: list[dict[str, Any]],
                     config: DungeonMasterConfig) -> None:
     allowed = {event["id"] for event in evidence}
     if any(eid not in allowed for finding in review.findings for eid in finding.evidence_ids):
-        raise ValueError("Dungeon Master cited evidence outside the supplied world events")
+        raise ValueError("Dungeon Master cited evidence outside the supplied world events; copy an ID exactly from citation_ids")
     if review.verdict == "defeat" and "declare_defeat" not in config.capabilities:
         raise ValueError("Dungeon Master is not configured with declare_defeat authority")
     if review.village_configuration is not None and "configure_village" not in config.capabilities:

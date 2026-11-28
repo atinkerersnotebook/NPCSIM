@@ -171,6 +171,7 @@ def test_review_deduplicates_static_context_and_summarizes_evidence_without_losi
     assert value["validation_error"] == "Cite a supplied event."
     assert "omissions are not evidence of absence or futility" in messages[0]["content"]
     assert [event["id"] for event in value["evidence"]] == [event["id"] for event in payload["evidence"]]
+    assert value["citation_ids"] == [event["id"] for event in value["evidence"]]
     for event in value["evidence"]:
         result = event["payload"]
         assert result["outcome"] == "REJECTED" and result["code"] == "MISSING_IRON"

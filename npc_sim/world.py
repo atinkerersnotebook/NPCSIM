@@ -470,7 +470,7 @@ class World:
                 properties["item"] = ({"type": "string", "enum": self.actor.inventory}
                                       if self.actor.inventory else {"type": "string"})
                 required.append("item")
-            availability = "unknown" if verb in {"unlock", "open", "go"} else "available"
+            availability = "unknown" if verb in {"unlock", "open"} else "available"
             reason = None
             if verb == "take" and not any(
                     self.inventory_units_used() + self.state.entities[eid].inventory_units <= self.actor.body.capacity
@@ -482,9 +482,15 @@ class World:
                 availability, reason = "blocked", "An enabled need prevents movement."
             add(verb, description, properties, required, targets, availability, reason)
             if verb in {"go", "open"}:
-                constraints = {
-                    eid: skills.barrier_reason(self, self.state.entities[eid], moving=verb == "go")
-                    for eid in targets}
+                constraints = {}
+                for eid in targets:
+                    entity = self.state.entities[eid]
+                    constraints[eid] = skills.barrier_reason(self, entity, moving=verb == "go")
+                    if verb == "go" and constraints[eid] is None:
+                        if self.unusable_exit(entity):
+                            constraints[eid] = "The exit is permanently blocked by a broken door or lock."
+                        elif self.lock_for(entity).locked or not entity.open:
+                            constraints[eid] = "The exit must be unlocked and open."
                 if any(constraints.values()):
                     actions[-1]["target_requirements"] = constraints
                     if all(constraints.values()):

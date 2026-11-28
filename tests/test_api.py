@@ -146,6 +146,25 @@ def test_incremental_story_merges_confirmed_action_and_keeps_team_voice(tmp_path
     assert StoryStore(tmp_path, run_id).page()["paragraphs"] == actual
 
 
+def test_incremental_story_uses_profile_names_instead_of_slot_ids(tmp_path):
+    from npc_sim.storage import StoryStore
+
+    run_id = "c" * 32
+    initial = {"role": "A swimmer.", "narrative": "A room.", "self": {
+        "location_id": "room", "body": {"carrying": {"rule": "item_count", "limit": 1}}},
+        "visible_entities": []}
+    store = StoryStore(
+        tmp_path, run_id, team=True,
+        actor_names={"benchmark-otter": "Nia d'Otter"})
+    store.append({
+        "id": f"{run_id}:1", "sequence": 1, "actor_id": "benchmark-otter",
+        "cycle": 1, "kind": "observation", "payload": initial})
+
+    text = store.page()["paragraphs"][0]["text"]
+    assert "Nia d'Otter" in text
+    assert "Benchmark Otter" not in text
+
+
 def test_story_report_formats_are_projection_only(tmp_path):
     from npc_sim.storage import StoryStore
 

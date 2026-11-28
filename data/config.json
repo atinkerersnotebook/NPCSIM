@@ -2,11 +2,11 @@
   "schema_version": "1.0",
   "proxy": {
     "base_url": "http://127.0.0.1:1234/v1",
-    "model": "qwen/qwen3.8-27b",
-    "text_generation_model": "mistralai/ministral-3-3b",
-    "decision_model": "qwen/qwen3.8-27b",
-    "reasoning_model": "openai/gpt-oss-20b",
-    "evaluation_model": "qwen/qwen3.8-27b",
+    "model": "prism-ml/bonsai-27b",
+    "text_generation_model": "prism-ml/bonsai-27b",
+    "decision_model": "prism-ml/bonsai-27b",
+    "reasoning_model": "prism-ml/bonsai-27b",
+    "evaluation_model": "prism-ml/bonsai-27b",
     "token_environment": null,
     "timeout_seconds": 120.0,
     "message_format": "normal",
@@ -34,7 +34,7 @@
     "decision_message_perception_delta": false,
     "reasoning_message_perception_delta": false,
     "evaluation_message_perception_delta": false,
-    "action_context_mode": "narrative"
+    "action_context_mode": "structured"
   },
   "world": {
     "transport": "stdio",
